@@ -5,109 +5,71 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
-        <title>{{ config('app.name', 'Lifespan') }}</title>
+        <title>{{ config('app.name', 'Laravel') }}</title>
 
-        <!-- Fonts -->
-        <link rel="preconnect" href="https://fonts.bunny.net">
-        <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
-
-        <!-- Scripts -->
-        @vite(['resources/css/app.css', 'resources/js/app.js'])
+        <!-- Scripts and Styles -->
+        @vite(['resources/scss/app.scss', 'resources/js/app.js'])
     </head>
-    <body class="font-sans antialiased">
-        {{-- 
-        Main Layout Structure:
-        - Fixed header with navigation
-        - Optional sidebar (can be toggled)
-        - Main content area
-        - Footer with meta information
-        --}}
-        <div class="min-h-screen bg-gray-100">
-            {{-- Header Navigation --}}
-            <nav class="bg-white border-b border-gray-100">
-                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div class="flex justify-between h-16">
-                        {{-- Logo/Brand --}}
-                        <div class="flex">
-                            <div class="shrink-0 flex items-center">
-                                <a href="{{ route('home') }}">
-                                    {{-- TODO: Replace with actual logo --}}
-                                    <span class="text-xl font-bold">Lifespan</span>
+    <body>
+        <nav class="navbar navbar-expand-lg navbar-light bg-light">
+            <div class="container-fluid">
+                <a class="navbar-brand" href="{{ route('home') }}">Lifespan &beta;</a>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+                
+                <div class="collapse navbar-collapse" id="navbarNav">
+                    <ul class="navbar-nav ms-auto">
+                        @auth
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown">
+                                    {{ Auth::user()->name }}
                                 </a>
-                            </div>
-                        </div>
-
-                        {{-- Navigation Links --}}
-                        <div class="hidden sm:flex sm:items-center sm:ml-6">
-                            {{-- 
-                            TODO: Navigation items will include:
-                            - Spans
-                            - Search
-                            - Create New
-                            - User Menu
-                            --}}
-                            <div class="ml-3 relative">
-                                {{-- Placeholder for navigation items --}}
-                                <a href="#" class="text-gray-500 hover:text-gray-700 px-3 py-2">Spans</a>
-                            </div>
-                        </div>
-                    </div>
+                                <ul class="dropdown-menu dropdown-menu-end">
+                                    <li><a class="dropdown-item" href="{{ route('profile.edit') }}">Profile</a></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li>
+                                        <form method="POST" action="{{ route('logout') }}">
+                                            @csrf
+                                            <button type="submit" class="dropdown-item">Log Out</button>
+                                        </form>
+                                    </li>
+                                </ul>
+                            </li>
+                        @endauth
+                    </ul>
                 </div>
-            </nav>
-
-            {{-- 
-            Page Layout:
-            - Optional sidebar (sm:w-64)
-            - Main content area (flex-grow)
-            --}}
-            <div class="flex">
-                {{-- Sidebar (if needed) --}}
-                @hasSection('sidebar')
-                    <aside class="hidden sm:block w-64 border-r border-gray-200 min-h-screen">
-                        <div class="p-4">
-                            @yield('sidebar')
-                        </div>
-                    </aside>
-                @endif
-
-                {{-- Main Content --}}
-                <main class="flex-grow">
-                    <div class="py-12">
-                        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
-                            {{-- Page Header --}}
-                            @hasSection('header')
-                                <header class="mb-8">
-                                    @yield('header')
-                                </header>
-                            @endif
-
-                            {{-- Main Content Area --}}
-                            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
-                                <div class="p-6 text-gray-900">
-                                    @yield('content')
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </main>
             </div>
+        </nav>
 
-            {{-- Footer --}}
-            <footer class="bg-white border-t border-gray-200">
-                <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-                    <div class="text-center text-sm text-gray-500">
-                        {{-- TODO: Add footer content --}}
-                        &copy; {{ date('Y') }} Lifespan
+        <div class="container-fluid">
+            <div class="row">
+                @auth
+                    <div class="col-md-3 col-lg-2 bg-light border-end min-vh-100">
+                        <div class="pt-3">
+                            <ul class="nav flex-column">
+                                <li class="nav-item">
+                                    <a class="nav-link {{ request()->routeIs('home') ? 'active' : '' }}" href="{{ route('home') }}">
+                                        Home
+                                    </a>
+                                </li>
+                                <li class="nav-item">
+                                    <a class="nav-link {{ request()->routeIs('spans.*') ? 'active' : '' }}" href="{{ route('spans.index') }}">
+                                        Spans
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
                     </div>
-                </div>
-            </footer>
+                    <main class="col-md-9 col-lg-10 px-4 py-3">
+                        @yield('content')
+                    </main>
+                @else
+                    <main class="col-12 px-4 py-3">
+                        @yield('content')
+                    </main>
+                @endauth
+            </div>
         </div>
-
-        {{-- 
-        JavaScript Components:
-        - Alpine.js for interactivity
-        - Custom scripts
-        --}}
-        @stack('scripts')
     </body>
 </html>

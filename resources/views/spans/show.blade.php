@@ -30,49 +30,51 @@
     <div class="space-y-4">
         <div>
             <h3 class="font-medium text-gray-900">Type</h3>
-            <p class="text-gray-500">{{ $span->type }}</p>
+            <p class="text-gray-500">{{ $span->type_id }}</p>
         </div>
     </div>
 @endsection
 
 @section('content')
-    {{-- Main content area --}}
-    <div class="space-y-6">
-        {{-- Description --}}
-        @if($span->getBriefDescription())
-            <div>
-                <h2 class="text-lg font-medium text-gray-900 mb-2">Description</h2>
-                <p class="text-gray-500">
-                    {{ $span->getBriefDescription() }}
-                </p>
-            </div>
-        @endif
-
-        {{-- 
-            This section will eventually contain:
-            - Temporal information
-            - Relationships
-            - Type-specific content
-            But for now, just metadata
-        --}}
-        @if(!empty($span->metadata))
-            <div>
-                <h2 class="text-lg font-medium text-gray-900 mb-2">Details</h2>
-                <dl class="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
-                    @foreach($span->metadata as $key => $value)
-                        @if(is_string($value))
-                            <div class="sm:col-span-1">
-                                <dt class="text-sm font-medium text-gray-500">
-                                    {{ ucfirst($key) }}
-                                </dt>
-                                <dd class="mt-1 text-sm text-gray-900">
-                                    {{ $value }}
-                                </dd>
-                            </div>
-                        @endif
-                    @endforeach
-                </dl>
-            </div>
-        @endif
+<div class="container-fluid" data-span-id="{{ $span->id }}">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>{{ $span->name }}</h1>
+        <div>
+            <a href="{{ route('spans.edit', $span) }}" class="btn btn-outline-primary">Edit</a>
+            <a href="{{ route('spans.index') }}" class="btn btn-outline-secondary">Back to List</a>
+        </div>
     </div>
+
+    <div class="card">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <h3>Details</h3>
+                    <dl class="row">
+                        <dt class="col-sm-3">Type</dt>
+                        <dd class="col-sm-9">{{ $span->type }}</dd>
+
+                        <dt class="col-sm-3">Start Date</dt>
+                        <dd class="col-sm-9" data-year="{{ $span->start_year }}">
+                            {{ $span->start_year }}
+                            @if($span->start_month)-{{ str_pad($span->start_month, 2, '0', STR_PAD_LEFT) }}@endif
+                            @if($span->start_day)-{{ str_pad($span->start_day, 2, '0', STR_PAD_LEFT) }}@endif
+                        </dd>
+
+                        <dt class="col-sm-3">End Date</dt>
+                        <dd class="col-sm-9">
+                            @if($span->end_year)
+                                {{ $span->end_year }}
+                                @if($span->end_month)-{{ str_pad($span->end_month, 2, '0', STR_PAD_LEFT) }}@endif
+                                @if($span->end_day)-{{ str_pad($span->end_day, 2, '0', STR_PAD_LEFT) }}@endif
+                            @else
+                                Present
+                            @endif
+                        </dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 @endsection 
