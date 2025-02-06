@@ -17,7 +17,7 @@ Goal: "We can represent users and their data as spans with proper access control
 - [x] Basic error handling setup
 - [x] Basic test structure
 - [x] Logging foundation
-  - Multiple channels (security, performance, spans, relationships)
+  - Multiple channels (security, performance, spans, connections)
   - Telescope integration for debugging
   - Performance tracking
   - Security audit logging
@@ -37,6 +37,32 @@ Success Criteria:
 - [ ] Simple homepage with span listing
 - [ ] Basic span detail view
 Demo: "We can view a list of spans and their details"
+
+### Mini-Release 1.A.1: Code Hygiene Tests (1-2 days)
+- [ ] View Convention Tests
+  - Prevent inline styles
+  - Prevent inline JavaScript
+  - Ensure views extend layouts
+  - Enforce Bootstrap class usage
+- [ ] Route Health Tests
+  - Verify public route accessibility
+  - Ensure protected routes require auth
+  - Validate route naming conventions
+  - Check admin route protection
+  - Verify middleware usage
+- [ ] Database Hygiene Tests
+  - Verify timestamp columns
+  - Check foreign key naming conventions
+  - Ensure foreign keys have indexes
+  - Validate UUID column types
+  - Check soft delete implementations
+- [ ] Model Convention Tests
+  - Verify required trait usage (HasUuids, HasFactory)
+  - Check mass assignment protection
+  - Ensure property type definitions
+  - Validate relationship definitions
+  - Verify attribute casting
+Demo: "Our codebase follows Laravel best practices and conventions"
 
 ### Mini-Release 1.B: Person Spans (2-3 days)
 - [ ] Person span type implementation
@@ -59,12 +85,30 @@ Demo: "We can edit basic span details"
 - [ ] Type selection in editor
 Demo: "We can manage different types of spans"
 
+### Mini-Release 1.D.1: Span Validation Improvements
+- [ ] Validate date combinations (e.g., prevent February 31st)
+- [ ] Ensure birth dates are in the past
+- [ ] Validate end date is after start date when both are provided
+- [ ] Add month range validation (1-12)
+- [ ] Add day range validation based on month (1-28/29/30/31)
+- [ ] Add leap year handling for February
+- [ ] Add validation rules based on span type (e.g., birth dates for persons)
+Demo: "Spans have robust date validation"
+
 ### Mini-Release 1.E: User Integration (2-3 days)
 - [ ] User model with admin flag
 - [ ] Personal span creation on registration
 - [ ] Profile view backed by personal span
 - [ ] Basic user management
 Demo: "Users exist as spans in the system"
+
+### Mini-Release 1.E.1: Personal Span Management
+- [ ] Method to claim existing personal spans
+- [ ] Validation to prevent non-personal spans from being set as personal spans
+- [ ] Scope to easily query personal spans
+- [ ] Migration tool for legacy users without personal spans
+- [ ] Admin interface for managing unclaimed personal spans
+Demo: "Personal spans can be managed and claimed"
 
 ### Mini-Release 1.F: Basic Access Control (2-3 days)
 - [ ] User-span ownership
@@ -118,18 +162,18 @@ Demo: "Core functionality is available via API"
   - Gender and other basic attributes
 Demo: "We have a working span system with viewing and editing"
 
-### 1.2 Family Relationships
-- [ ] Family relationship types (parent/child)
+### 1.2 Family Connections
+- [ ] Family connection types (parent/child)
 - [ ] Person span editor family section
   - Add/edit parents
   - View/manage children
-  - Prevent circular relationships
+  - Prevent circular connections
 - [ ] Family tree visualization
   - Ancestors view
   - Descendants view
   - Siblings detection
-- [ ] Family relationship API endpoints
-- [ ] Tests for family relationships
+- [ ] Family connection API endpoints
+- [ ] Tests for family connections
 Demo: "We can build and visualize family trees"
 
 ### 1.3 User-Span Integration
@@ -163,14 +207,14 @@ Demo: "Users can control who sees their spans, with personal spans having specia
 - [ ] Admin dashboard layout
 - [ ] User management (list, edit, disable)
 - [ ] SpanType management (CRUD)
-- [ ] RelationshipType management (CRUD)
+- [ ] ConnectionType management (CRUD)
 - [ ] Bulk span operations (access levels, ownership)
 - [ ] Admin activity logging
 - [ ] Admin API endpoints
 - [ ] Tests for admin features
 - [ ] Admin-specific editor features
 - [ ] Bulk edit interface
-- [ ] Family relationship management tools
+- [ ] Family connection management tools
 - [ ] Bulk family tree operations
 Demo: "Admins can manage system configuration and user data"
 
@@ -183,8 +227,8 @@ These will be implemented as we build each feature:
    - Account creation
    - Permission changes
 
-2. **Relationship Logging** (Mini-Release 1.G)
-   - Relationship creation/modification
+2. **Connection Logging** (Mini-Release 1.G)
+   - Connection creation/modification
    - Family tree updates
    - Circular reference prevention
    - Validation failures
