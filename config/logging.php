@@ -157,6 +157,18 @@ return [
             'days' => 30,
             'replace_placeholders' => true,
         ],
+
+        'testing' => [
+            'driver' => 'single',
+            'path' => storage_path('logs/testing.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+        ],
+
+        'connections' => [
+            'driver' => 'single',
+            'path' => storage_path('logs/connections.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+        ],
     ],
 
 ];
