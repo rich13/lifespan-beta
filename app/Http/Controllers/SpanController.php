@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Span;
+use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Illuminate\Support\Facades\Log;
 
@@ -12,11 +13,13 @@ use Illuminate\Support\Facades\Log;
  */
 class SpanController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware('auth');
+    }
+
     /**
-     * List all spans
-     * Shows a paginated list of spans with basic filtering
-     *
-     * @return View
+     * Display a listing of the resource.
      */
     public function index(): View
     {
@@ -39,37 +42,79 @@ class SpanController extends Controller
     }
 
     /**
-     * Display a span
-     * This is our "hello world" endpoint that proves the basic system works
-     *
-     * @param Span $span The span to display (route model binding)
-     * @return View
+     * Show the form for creating a new resource.
      */
-    public function show(Span $span): View
+    public function create()
     {
-        // Log the view request with performance tracking
-        $startTime = microtime(true);
+        return view('spans.create');
+    }
 
-        // Log access attempt
-        Log::channel('security')->info('Span view attempted', [
-            'span_id' => $span->id,
-            'user_id' => auth()->id(),
-            'ip' => request()->ip()
+    /**
+     * Store a newly created resource in storage.
+     */
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'type_id' => 'required|string|max:255',
+            'start_year' => 'required|integer',
+            'start_month' => 'nullable|integer|between:1,12',
+            'start_day' => 'nullable|integer|between:1,31',
+            'end_year' => 'nullable|integer',
+            'end_month' => 'nullable|integer|between:1,12',
+            'end_day' => 'nullable|integer|between:1,31',
         ]);
 
-        // For now, just return the view with the span
-        // Later we'll add:
-        // - Access control
-        // - Related spans
-        // - Type-specific handling
-        $view = view('spans.show', compact('span'));
+        // Add creator_id from authenticated user
+        $validated['creator_id'] = auth()->id();
+        $validated['updater_id'] = auth()->id();
 
-        // Log performance metrics
-        Log::channel('performance')->info('Span view rendered', [
-            'span_id' => $span->id,
-            'render_time' => round((microtime(true) - $startTime) * 1000, 2) . 'ms'
+        $span = Span::create($validated);
+
+        return redirect()->route('spans.show', $span);
+    }
+
+    /**
+     * Display the specified resource.
+     */
+    public function show(Span $span)
+    {
+        return view('spans.show', compact('span'));
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     */
+    public function edit(Span $span)
+    {
+        return view('spans.edit', compact('span'));
+    }
+
+    /**
+     * Update the specified resource in storage.
+     */
+    public function update(Request $request, Span $span)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            // Add other validation rules as needed
         ]);
 
-        return $view;
+        // Add updater_id from authenticated user
+        $validated['updater_id'] = auth()->id();
+
+        $span->update($validated);
+
+        return redirect()->route('spans.show', $span);
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     */
+    public function destroy(Span $span)
+    {
+        $span->delete();
+
+        return redirect()->route('spans.index');
     }
 } 
