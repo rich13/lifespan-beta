@@ -16,6 +16,11 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        // Always create admin user first
+        $this->call(AdminUserSeeder::class);
+
+        // Add other seeders here
+
         // \App\Models\User::factory(10)->create();
 
         // \App\Models\User::factory()->create([
@@ -25,7 +30,6 @@ class DatabaseSeeder extends Seeder
 
         // Create test admin user
         $user = User::create([
-            'name' => 'Test Admin',
             'email' => 'admin@example.com',
             'password' => Hash::make('password'),
             'is_admin' => true,
@@ -34,7 +38,7 @@ class DatabaseSeeder extends Seeder
         // Create a test span
         Span::create([
             'name' => 'World War II',
-            'type' => 'war',
+            'type_id' => 'event',
             'slug' => 'world-war-2',
             'start_year' => 1939,
             'start_month' => 9,
@@ -47,8 +51,8 @@ class DatabaseSeeder extends Seeder
                 'is_public' => true,
                 'is_system' => true
             ],
-            'created_by' => $user->id,
-            'updated_by' => $user->id,
+            'creator_id' => $user->id,
+            'updater_id' => $user->id,
         ]);
     }
 }
