@@ -8,16 +8,12 @@ use Illuminate\Support\Facades\Event;
 
 class SimpleTest extends TestCase
 {
-    public function test_basic_math(): void
+    public function test_example(): void
     {
-        ray()->green('Starting test');
-        
+        Log::channel('testing')->info('Starting simple test');
         $result = 1 + 1;
-        ray()->blue()->text('Test calculation result:')->send($result);
-        
-        $this->assertTrue($result === 2, 'Basic math should work');
-        
-        ray()->purple('Test completed successfully')
-            ->notify('Test Complete');  // Should show a system notification
+        Log::channel('testing')->info('Test calculation result', ['result' => $result]);
+        $this->assertEquals(2, $result);
+        Log::channel('testing')->info('Test completed successfully');
     }
 } 
