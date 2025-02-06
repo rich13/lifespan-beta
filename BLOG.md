@@ -21,7 +21,7 @@
   - Learned: Laravel runs migrations alphabetically within same timestamp
 
 - **Problem 2**: Circular references in spans table
-  - Issue: Table needed to reference itself for parent/child relationships
+  - Issue: Table needed to reference itself for parent/child connections
   - Solution: Split foreign key creation into two steps
   - Created table first, then added self-referential constraints
 
@@ -46,12 +46,12 @@
 - Rich metadata support with JSONB
 - Careful indexing strategy
 - Temporal data with precision levels
-- Flexible relationship system
+- Flexible connection system
 
 ### Key Technical Decisions
 1. **UUID Usage**
    - All tables using UUID primary keys
-   - Consistent across relationships
+   - Consistent across connections
    - Better for future scaling
 
 2. **PostgreSQL Features**
@@ -64,10 +64,9 @@
    - Precision levels for dates
    - Nullable end dates for ongoing spans
 
-4. **Relationship Design**
-   - Type-based relationships
-   - Self-referential span structure
-   - Support for temporal relationships
+4. **Connection Design**
+   - Type-based connections
+   - Support for temporal connections
 
 ### Logging Strategy
 - Using Laravel's built-in logging system with multiple channels:
@@ -103,6 +102,7 @@
   - `relationships`: Monitor relationship changes
   - `security`: Auth and access control
   - `performance`: Query and cache metrics
+  - `connections`: Monitor connection changes
 
 ### Next Steps
 - Create test data

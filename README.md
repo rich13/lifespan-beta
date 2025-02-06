@@ -36,14 +36,14 @@ Beta is in early development, running alongside the Alpha version. It uses its o
 Span
 ├── UUID primary key
 ├── Belongs to SpanType
-├── Has many Relationships
+├── Has many Connections
 └── Belongs to many Users
 
 SpanType
 ├── String primary key
 └── Has many Spans
 
-Relationship
+Connection
 ├── UUID primary key
 ├── Belongs to Span (parent)
 └── Belongs to Span (child)
@@ -59,7 +59,7 @@ Relationship
 1. **Database Changes**
    - All schema changes through Laravel migrations
    - Document complex queries in model methods
-   - Use Eloquent relationships where possible
+   - Use Eloquent connections where possible
 
 2. **Testing**
    - Write tests for all new features
