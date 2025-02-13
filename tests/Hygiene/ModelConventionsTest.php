@@ -95,7 +95,13 @@ class ModelConventionsTest extends TestCase
     {
         $violations = [];
         $requiresCasts = [
-            'Span' => ['metadata' => 'array', 'is_personal_span' => 'boolean'],
+            'Span' => [
+                'metadata' => 'array',
+                'permissions' => 'integer',
+                'start_precision' => 'integer',
+                'end_precision' => 'integer',
+                'permission_mode' => 'string'
+            ],
             'User' => ['is_admin' => 'boolean'],
             'Connection' => ['metadata' => 'array'],
         ];
