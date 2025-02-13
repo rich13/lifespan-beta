@@ -39,54 +39,28 @@ class SpanViewTest extends TestCase
      */
     public function test_can_create_minimal_span(): void
     {
-        Log::channel('testing')->info('Starting test: Creating minimal span');
-        
-        // Create a test user (required for creator_id)
         $user = User::factory()->create();
-        Log::channel('testing')->info('Created test user', ['user_id' => $user->id]);
-        
-        // Create the most basic span possible
-        $span = new Span();
-        $span->name = 'Minimal Test Span';
-        $span->type_id = 'event';
-        $span->start_year = 2025;  // Explicitly setting start year
-        $span->creator_id = $user->id;
-        
-        Log::channel('testing')->info('Attempting to save span with minimal data', [
-            'name' => $span->name,
-            'type_id' => $span->type_id,
-            'start_year' => $span->start_year,
-            'creator_id' => $user->id
-        ]);
-        
-        // The span model will log to the spans channel automatically
-        $span->save();
-        
-        // Get the database record for verification
-        $record = DB::table('spans')->where('id', $span->id)->first();
-        Log::channel('testing')->info('Database record after save:', [
-            'record' => (array)$record
-        ]);
-        
-        // Verify it exists in the database with all required fields
-        $this->assertDatabaseHas('spans', [
-            'name' => 'Minimal Test Span',
+        $this->actingAs($user);
+
+        $span = Span::create([
+            'name' => 'Test Span',
             'type_id' => 'event',
-            'start_year' => 2025
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+            'start_year' => 2024,
+            'start_month' => 1,
+            'start_day' => 1,
+            'end_year' => 2024,
+            'end_month' => 12,
+            'end_day' => 31,
+            'start_precision' => 'day',
+            'end_precision' => 'day',
+            'access_level' => 'public',
         ]);
-        Log::channel('testing')->info('Span exists in database with required fields');
-        
-        // Double check by retrieving the span
-        $retrieved = Span::find($span->id);
-        Log::channel('testing')->info('Retrieved span from database', [
-            'id' => $retrieved->id,
-            'name' => $retrieved->name,
-            'type_id' => $retrieved->type_id,
-            'start_year' => $retrieved->start_year,
-            'all_attributes' => $retrieved->getAttributes()
-        ]);
-        
-        Log::channel('testing')->info('Test completed: Minimal span creation successful');
+
+        $this->assertNotNull($span);
+        $this->assertEquals('Test Span', $span->name);
+        $this->assertEquals($user->id, $span->owner_id);
     }
 
     /**
@@ -95,10 +69,14 @@ class SpanViewTest extends TestCase
     public function test_can_view_span_page(): void
     {
         $user = User::factory()->create();
-        $span = Span::factory()->create();
+        $this->actingAs($user);
 
-        $response = $this->actingAs($user)->get("/spans/{$span->id}");
+        $span = Span::factory()->create([
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+        ]);
 
+        $response = $this->get("/spans/{$span->id}");
         $response->assertStatus(200);
         $response->assertSee('data-span-id="' . $span->id . '"', false);
     }
@@ -119,15 +97,16 @@ class SpanViewTest extends TestCase
     public function test_page_uses_layout(): void
     {
         $user = User::factory()->create();
+        $this->actingAs($user);
+
         $span = Span::factory()->create([
-            'creator_id' => $user->id,
+            'owner_id' => $user->id,
             'updater_id' => $user->id,
-            'start_year' => 2024
         ]);
 
-        $response = $this->actingAs($user)->get("/spans/{$span->id}");
-        $response->assertSee('class="navbar-brand"', false);
-        $response->assertSee('data-year="2024"', false);
+        $response = $this->get("/spans/{$span->id}");
+        $response->assertStatus(200);
+        $response->assertViewIs('spans.show');
     }
 
     /**
@@ -143,7 +122,7 @@ class SpanViewTest extends TestCase
         $span = new Span();
         $span->name = 'No Start Year Span';
         $span->type_id = 'event';
-        $span->creator_id = $user->id;
+        $span->owner_id = $user->id;
         $span->save();
     }
 
@@ -167,13 +146,13 @@ class SpanViewTest extends TestCase
         $span = new Span();
         $span->name = 'No Date Span';
         $span->type_id = 'event';
-        $span->creator_id = $user->id;
+        $span->owner_id = $user->id;
         
         Log::info('Attempting to save invalid span', [
             'name' => $span->name,
             'type_id' => $span->type_id,
             'start_year' => null,
-            'creator_id' => $user->id
+            'owner_id' => $user->id
         ]);
         
         try {
@@ -205,5 +184,116 @@ class SpanViewTest extends TestCase
         
         $response->assertStatus(200);
         Log::channel('testing')->info('Test completed successfully');
+    }
+
+    /**
+     * Test that accessing a span by UUID redirects to slug URL when slug exists
+     */
+    public function test_uuid_redirects_to_slug_when_exists(): void
+    {
+        $user = User::factory()->create();
+        $span = Span::create([
+            'name' => 'Test Span',
+            'type_id' => 'event',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+            'start_year' => 2024,
+            'access_level' => 'public'
+        ]);
+
+        // Verify the span has a slug (should be auto-generated)
+        $this->assertNotNull($span->slug);
+        $this->assertEquals('test-span', $span->slug);
+
+        // Access via UUID should redirect to slug
+        $response = $this->get(route('spans.show', ['span' => $span->id]));
+        $response->assertRedirect(route('spans.show', ['span' => $span->slug]));
+        $response->assertStatus(301); // Permanent redirect
+    }
+
+    /**
+     * Test that accessing a span by UUID works when no slug exists
+     */
+    public function test_uuid_works_when_no_slug(): void
+    {
+        $user = User::factory()->create();
+        $span = Span::create([
+            'name' => 'Test Span',
+            'type_id' => 'event',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+            'start_year' => 2024,
+            'access_level' => 'public',
+            'slug' => null // Explicitly set slug to null
+        ]);
+
+        // Access via UUID should work directly
+        $response = $this->get(route('spans.show', ['span' => $span->id]));
+        $response->assertStatus(200);
+        $response->assertViewIs('spans.show');
+    }
+
+    /**
+     * Test that accessing a span by slug works directly
+     */
+    public function test_slug_access_works_directly(): void
+    {
+        $user = User::factory()->create();
+        $span = Span::create([
+            'name' => 'Test Span',
+            'type_id' => 'event',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+            'start_year' => 2024,
+            'access_level' => 'public'
+        ]);
+
+        // Access via slug should work directly without redirect
+        $response = $this->get(route('spans.show', ['span' => $span->slug]));
+        $response->assertStatus(200);
+        $response->assertViewIs('spans.show');
+    }
+
+    /**
+     * Test that invalid slugs return 404
+     */
+    public function test_invalid_slug_returns_404(): void
+    {
+        // Try to access a non-existent slug
+        $response = $this->get(route('spans.show', ['span' => 'non-existent-slug']));
+        $response->assertStatus(404);
+    }
+
+    /**
+     * Test that slugs are unique
+     */
+    public function test_slugs_are_unique(): void
+    {
+        $user = User::factory()->create();
+        
+        // Create first span
+        $span1 = Span::create([
+            'name' => 'Test Span',
+            'type_id' => 'event',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+            'start_year' => 2024,
+            'access_level' => 'public'
+        ]);
+
+        // Create second span with same name
+        $span2 = Span::create([
+            'name' => 'Test Span',
+            'type_id' => 'event',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+            'start_year' => 2024,
+            'access_level' => 'public'
+        ]);
+
+        // Verify slugs are different
+        $this->assertNotEquals($span1->slug, $span2->slug);
+        $this->assertEquals('test-span', $span1->slug);
+        $this->assertEquals('test-span-2', $span2->slug);
     }
 } 

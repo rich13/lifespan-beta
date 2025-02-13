@@ -154,7 +154,7 @@ class User extends Authenticatable
      */
     public function createdSpans(): HasMany
     {
-        return $this->hasMany(Span::class, 'creator_id');
+        return $this->hasMany(Span::class, 'owner_id');
     }
 
     /**
