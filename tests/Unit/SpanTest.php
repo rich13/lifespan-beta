@@ -15,7 +15,7 @@ class SpanTest extends TestCase
     {
         $user = User::factory()->create();
         $span = Span::factory()->create([
-            'creator_id' => $user->id,
+            'owner_id' => $user->id,
             'updater_id' => $user->id,
             'start_year' => 2024,
             'start_month' => 3,
@@ -33,7 +33,7 @@ class SpanTest extends TestCase
     {
         $user = User::factory()->create();
         $span = Span::factory()->create([
-            'creator_id' => $user->id,
+            'owner_id' => $user->id,
             'updater_id' => $user->id,
             'start_year' => 2024,
             'end_year' => null,
