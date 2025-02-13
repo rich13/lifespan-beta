@@ -30,12 +30,12 @@ return [
     /*
      * When enabled, all queries will automatically be sent to Ray.
      */
-    'send_queries_to_ray' => env('SEND_QUERIES_TO_RAY', false),
+    'send_queries_to_ray' => env('SEND_QUERIES_TO_RAY', true),
 
     /*
      * When enabled, all requests made to this app will automatically be sent to Ray.
      */
-    'send_requests_to_ray' => env('SEND_REQUESTS_TO_RAY', false),
+    'send_requests_to_ray' => env('SEND_REQUESTS_TO_RAY', true),
 
     /*
      * When enabled, all views that are rendered automatically be sent to Ray.
@@ -75,4 +75,13 @@ return [
      * Useful when you're debugging binary data or large arrays.
      */
     'always_send_raw_values' => false,
+
+    /*
+     * Ignore certain paths from sending data to Ray
+     */
+    'ignore_paths' => [
+        'vendor/laravel/telescope',
+        'vendor/laravel/framework/src/Illuminate/Database/Eloquent/Concerns',
+        'storage/logs',
+    ],
 ]; 
