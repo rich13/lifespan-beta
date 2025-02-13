@@ -36,7 +36,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         // Create a test span
-        Span::create([
+        $span = Span::create([
             'name' => 'World War II',
             'type_id' => 'event',
             'slug' => 'world-war-2',
@@ -51,8 +51,9 @@ class DatabaseSeeder extends Seeder
                 'is_public' => true,
                 'is_system' => true
             ],
-            'creator_id' => $user->id,
+            'owner_id' => $user->id,
             'updater_id' => $user->id,
+            'access_level' => 'public'
         ]);
     }
 }
