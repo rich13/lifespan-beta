@@ -30,12 +30,12 @@ class AdminUserSeeder extends Seeder
         $span = new Span();
         $span->name = 'Richard Northover';
         $span->type_id = 'person';
-        $span->is_personal_span = true;
         $span->start_year = 1976;
         $span->start_month = 2;
         $span->start_day = 13;
-        $span->creator_id = $user->id;
+        $span->owner_id = $user->id;
         $span->updater_id = $user->id;
+        $span->access_level = 'private';
         $span->save();
 
         // Step 3: Link user to personal span
