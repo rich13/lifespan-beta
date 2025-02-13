@@ -36,42 +36,92 @@
 @endsection
 
 @section('content')
-<div class="container-fluid" data-span-id="{{ $span->id }}">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1>{{ $span->name }}</h1>
-        <div>
-            <a href="{{ route('spans.edit', $span) }}" class="btn btn-outline-primary">Edit</a>
-            <a href="{{ route('spans.index') }}" class="btn btn-outline-secondary">Back to List</a>
+<div class="container py-4" data-span-id="{{ $span->id }}">
+    <div class="row">
+        <div class="col-12 d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h1 class="h3 mb-0">{{ $span->name }}</h1>
+            </div>
+            @can('update', $span)
+                <div>
+                    <a href="{{ route('spans.edit', $span) }}" class="btn btn-outline-primary">Edit</a>
+                    <a href="{{ route('spans.index') }}" class="btn btn-outline-secondary">Back to List</a>
+                </div>
+            @endcan
         </div>
     </div>
 
-    <div class="card">
-        <div class="card-body">
-            <div class="row">
-                <div class="col-md-6">
-                    <h3>Details</h3>
-                    <dl class="row">
+    <div class="row">
+        <div class="col-md-8">
+            <!-- Basic Information -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h2 class="card-title h5 mb-3">Details</h2>
+                    <dl class="row mb-0">
                         <dt class="col-sm-3">Type</dt>
-                        <dd class="col-sm-9">{{ $span->type }}</dd>
+                        <dd class="col-sm-9">{{ $span->type->name }}</dd>
 
                         <dt class="col-sm-3">Start Date</dt>
                         <dd class="col-sm-9" data-year="{{ $span->start_year }}">
-                            {{ $span->start_year }}
-                            @if($span->start_month)-{{ str_pad($span->start_month, 2, '0', STR_PAD_LEFT) }}@endif
-                            @if($span->start_day)-{{ str_pad($span->start_day, 2, '0', STR_PAD_LEFT) }}@endif
+                            {{ $span->formatted_start_date }}
+                            <small class="text-muted">({{ $span->start_precision }} precision)</small>
                         </dd>
 
                         <dt class="col-sm-3">End Date</dt>
-                        <dd class="col-sm-9">
-                            @if($span->end_year)
-                                {{ $span->end_year }}
-                                @if($span->end_month)-{{ str_pad($span->end_month, 2, '0', STR_PAD_LEFT) }}@endif
-                                @if($span->end_day)-{{ str_pad($span->end_day, 2, '0', STR_PAD_LEFT) }}@endif
+                        <dd class="col-sm-9" @if($span->end_year) data-year="{{ $span->end_year }}" @endif>
+                            @if($span->is_ongoing)
+                                <span class="text-muted">Ongoing</span>
                             @else
-                                Present
+                                {{ $span->formatted_end_date }}
+                                <small class="text-muted">({{ $span->end_precision }} precision)</small>
                             @endif
                         </dd>
+
+                        @if($span->description)
+                            <dt class="col-sm-3">Description</dt>
+                            <dd class="col-sm-9">{{ $span->description }}</dd>
+                        @endif
                     </dl>
+                </div>
+            </div>
+
+            <!-- Metadata -->
+            @if(!empty($span->metadata))
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h2 class="card-title h5 mb-3">Additional Information</h2>
+                    <dl class="row mb-0">
+                        @foreach($span->metadata as $key => $value)
+                            @if(!in_array($key, ['is_public', 'is_system']))
+                                <dt class="col-sm-3">{{ ucfirst(str_replace('_', ' ', $key)) }}</dt>
+                                <dd class="col-sm-9">
+                                    @if(is_array($value))
+                                        <pre class="mb-0"><code>{{ json_encode($value, JSON_PRETTY_PRINT) }}</code></pre>
+                                    @else
+                                        {{ $value }}
+                                    @endif
+                                </dd>
+                            @endif
+                        @endforeach
+                    </dl>
+                </div>
+            </div>
+            @endif
+        </div>
+
+        <div class="col-md-4">
+            <!-- Related Information -->
+            <div class="card">
+                <div class="card-body">
+                    <h2 class="card-title h5 mb-3">Related Information</h2>
+                    <p class="text-muted small">
+                        Created by {{ $span->owner ? $span->owner->name : 'Unknown' }} on {{ $span->created_at->format('Y-m-d') }}
+                    </p>
+                    @if($span->created_at != $span->updated_at)
+                        <p class="text-muted small mb-0">
+                            Last updated {{ $span->updated_at->diffForHumans() }}
+                        </p>
+                    @endif
                 </div>
             </div>
         </div>
