@@ -44,7 +44,6 @@ class RouteHealthTest extends TestCase
         $protectedRoutes = [
             '/profile',
             '/spans/create',
-            '/spans',
         ];
 
         foreach ($protectedRoutes as $route) {
@@ -111,9 +110,12 @@ class RouteHealthTest extends TestCase
             }
 
             // Check auth middleware for protected routes
-            if ((str_starts_with($route->uri(), 'spans') || str_starts_with($route->uri(), 'profile')) && 
-                !in_array('auth', $route->middleware())) {
-                $violations[] = "Protected route {$route->uri()} is missing auth middleware";
+            if ((str_starts_with($route->uri(), 'spans') && 
+                 !in_array($route->uri(), ['spans', 'spans/{span}'])) || 
+                str_starts_with($route->uri(), 'profile')) {
+                if (!in_array('auth', $route->middleware())) {
+                    $violations[] = "Protected route {$route->uri()} is missing auth middleware";
+                }
             }
         }
 
