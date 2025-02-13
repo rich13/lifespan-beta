@@ -136,8 +136,8 @@
     <div class="container-fluid">
         <div class="row">
             <div class="col-12">
-                <h2>Your Timeline</h2>
-                <p>Welcome back! Here's an overview of your life spans.</p>
+                <h2>Home</h2>
+                <p>This is the magic page.</p>
                 <!-- Timeline content will go here -->
             </div>
         </div>

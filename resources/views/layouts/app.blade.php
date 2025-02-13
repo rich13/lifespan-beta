@@ -27,11 +27,14 @@
                                 </a>
                                 <ul class="dropdown-menu dropdown-menu-end">
                                     <li><a class="dropdown-item" href="{{ route('profile.edit') }}">Profile</a></li>
+                                    @if(Auth::user()->is_admin)
+                                        <li><a class="dropdown-item" href="{{ route('admin.dashboard') }}">Admin Dashboard</a></li>
+                                    @endif
                                     <li><hr class="dropdown-divider"></li>
                                     <li>
                                         <form method="POST" action="{{ route('logout') }}">
                                             @csrf
-                                            <button type="submit" class="dropdown-item">Log Out</button>
+                                            <button type="submit" class="dropdown-item">Sign Out</button>
                                         </form>
                                     </li>
                                 </ul>
@@ -59,6 +62,30 @@
                                     </a>
                                 </li>
                             </ul>
+
+                            @if(Auth::user()->is_admin)
+                                <hr>
+                                <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-1 text-muted">
+                                    <span>Administration</span>
+                                </h6>
+                                <ul class="nav flex-column">
+                                    <li class="nav-item">
+                                        <a class="nav-link {{ request()->routeIs('admin.dashboard') ? 'active' : '' }}" href="{{ route('admin.dashboard') }}">
+                                            Dashboard
+                                        </a>
+                                    </li>
+                                    <li class="nav-item">
+                                        <a class="nav-link {{ request()->routeIs('admin.spans.*') ? 'active' : '' }}" href="{{ route('admin.spans.index') }}">
+                                            Manage Spans
+                                        </a>
+                                    </li>
+                                    <li class="nav-item">
+                                        <a class="nav-link {{ request()->routeIs('admin.users.*') ? 'active' : '' }}" href="{{ route('admin.users.index') }}">
+                                            Manage Users
+                                        </a>
+                                    </li>
+                                </ul>
+                            @endif
                         </div>
                     </div>
                     <main class="col-md-9 col-lg-10 px-4 py-3">

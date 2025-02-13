@@ -81,7 +81,7 @@ class ProfileController extends Controller
         }
 
         // Then transfer ownership of remaining spans to system user
-        Span::where('creator_id', $user->id)->update(['creator_id' => $systemUser->id]);
+        Span::where('owner_id', $user->id)->update(['owner_id' => $systemUser->id]);
         Span::where('updater_id', $user->id)->update(['updater_id' => $systemUser->id]);
 
         Auth::logout();
