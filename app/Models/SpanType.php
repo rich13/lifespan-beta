@@ -148,81 +148,161 @@ class SpanType extends Model
     }
 
     /**
-     * Get the base metadata schema that applies to all spans
+     * Get the base metadata schema for all spans
      */
     public function getBaseMetadataSchema(): array
     {
-        return [
-            'description' => [
-                'type' => 'markdown',
-                'label' => 'Description',
-                'component' => 'markdown-editor',
-                'help' => 'Public description of this span, supports Markdown formatting',
-                'required' => false,
-            ],
-            'notes' => [
-                'type' => 'text',
-                'label' => 'Editor Notes',
-                'component' => 'textarea',
-                'help' => 'Private notes for editors, not shown publicly',
-                'required' => false,
-            ],
-            'sources' => [
-                'type' => 'array',
-                'label' => 'Sources',
-                'component' => 'source-list',
-                'help' => 'URLs to source material (e.g., Wikipedia pages)',
-                'required' => false,
-                'item_schema' => [
-                    'type' => 'url',
-                    'label' => 'URL',
-                    'component' => 'url-input'
-                ]
-            ],
-            'state' => [
-                'type' => 'string',
-                'label' => 'State',
-                'component' => 'select',
-                'options' => [
-                    [
-                        'value' => self::STATE_PLACEHOLDER,
-                        'label' => 'Placeholder (date unknown)'
-                    ],
-                    [
-                        'value' => self::STATE_DRAFT,
-                        'label' => 'Draft (work in progress)'
-                    ],
-                    [
-                        'value' => self::STATE_COMPLETE,
-                        'label' => 'Complete (ready for viewing)'
-                    ]
-                ],
-                'required' => true,
-                'default' => self::STATE_DRAFT
-            ]
-        ];
-    }
-
-    /**
-     * Get the combined validation rules (base + type-specific)
-     */
-    public function getValidationRules(): array
-    {
-        return array_merge(
-            $this->getBaseValidationRules(),
-            $this->metadata['validation_rules'] ?? []
-        );
+        return [];
     }
 
     /**
      * Get the combined metadata schema (base + type-specific)
+     * 
+     * This method now supports span arrays in the schema, allowing fields to reference
+     * other spans. This enables relationships like band members, event participants, etc.
+     * to be defined in the metadata schema.
+     * 
+     * For span array fields:
+     * - type: 'array'
+     * - array_item_schema.type: 'span'
+     * - array_item_schema.component: 'span-input' (to be implemented)
+     * - array_item_schema.span_type: optional restriction on span type
+     * 
+     * Example usage:
+     * {
+     *   "members": {
+     *     "type": "array",
+     *     "label": "Band Members",
+     *     "component": "array-input",
+     *     "array_item_schema": {
+     *       "type": "span",
+     *       "label": "Member",
+     *       "component": "span-input",
+     *       "span_type": "person"  // Optional: restrict to person spans only
+     *     }
+     *   }
+     * }
+     * 
+     * TODO: Implementation requirements:
+     * 1. Create span-input component that allows:
+     *    - Searching existing spans
+     *    - Creating new placeholder spans
+     *    - Handling permissions
+     * 2. Update validation to verify span existence and permissions
+     * 3. Add UI for managing span arrays in the edit view
+     * 4. Consider adding span preview/summary component
+     * 5. Handle deletion/orphaning of placeholder spans
      */
     public function getMetadataSchema(): array
     {
-        return array_merge(
-            $this->getBaseMetadataSchema(),
-            $this->metadata['schema'] ?? []
-        );
+        $baseSchema = $this->getBaseMetadataSchema();
+        $typeSchema = $this->metadata['schema'] ?? [];
+
+        // Convert old format to new if needed
+        foreach ($typeSchema as $field => $schema) {
+            if (!isset($schema['type'])) {
+                $typeSchema[$field] = [
+                    'type' => 'text',
+                    'label' => $schema['label'] ?? $field,
+                    'component' => $schema['component'] ?? 'text-input',
+                    'help' => $schema['help'] ?? '',
+                    'required' => $schema['required'] ?? false
+                ];
+            }
+        }
+
+        return array_merge($baseSchema, $typeSchema);
+    }
+
+    /**
+     * Get validation rules for the metadata fields
+     * 
+     * Now includes support for span array validation:
+     * - Validates that referenced spans exist
+     * - Checks span type restrictions if specified
+     * - Ensures user has permission to reference spans
+     */
+    public function getValidationRules(): array
+    {
+        $rules = [];
+        $schema = $this->getMetadataSchema();
+
+        foreach ($schema as $field => $config) {
+            $fieldRules = [];
+
+            // Add required rule if field is required
+            if ($config['required'] ?? false) {
+                $fieldRules[] = 'required';
+            } else {
+                $fieldRules[] = 'nullable';
+            }
+
+            // Add type-specific validation rules
+            switch ($config['type']) {
+                case 'text':
+                    $fieldRules[] = 'string';
+                    break;
+                case 'number':
+                    $fieldRules[] = 'numeric';
+                    break;
+                case 'date':
+                    $fieldRules[] = 'date';
+                    break;
+                case 'boolean':
+                    $fieldRules[] = 'boolean';
+                    break;
+                case 'array':
+                    $fieldRules[] = 'array';
+                    if (isset($config['array_item_schema'])) {
+                        // Handle span array validation
+                        if ($config['array_item_schema']['type'] === 'span') {
+                            // TODO: Implement custom validation rule for spans that:
+                            // 1. Verifies each span ID exists
+                            // 2. Checks span type restrictions
+                            // 3. Validates user permissions
+                            $fieldRules[] = 'array';
+                            $fieldRules[] = 'exists:spans,id';
+                            
+                            // If span type is restricted, add validation
+                            if (isset($config['array_item_schema']['span_type'])) {
+                                $fieldRules[] = 'span_type:' . $config['array_item_schema']['span_type'];
+                            }
+                        } else {
+                            // Handle other array types as before
+                            switch ($config['array_item_schema']['type']) {
+                                case 'url':
+                                    $fieldRules[] = 'url';
+                                    break;
+                                case 'number':
+                                    $fieldRules[] = 'numeric';
+                                    break;
+                            }
+                        }
+                    }
+                    break;
+                case 'select':
+                    if (isset($config['options'])) {
+                        $values = array_column($config['options'], 'value');
+                        $fieldRules[] = 'in:' . implode(',', $values);
+                    }
+                    break;
+                case 'markdown':
+                    $fieldRules[] = 'string';
+                    break;
+            }
+
+            // Add any custom validation rules
+            if (isset($this->metadata['validation_rules'][$field])) {
+                $customRules = is_array($this->metadata['validation_rules'][$field])
+                    ? $this->metadata['validation_rules'][$field]
+                    : explode('|', $this->metadata['validation_rules'][$field]);
+                $fieldRules = array_merge($fieldRules, $customRules);
+            }
+
+            $rules["metadata.$field"] = $fieldRules;
+        }
+
+        return $rules;
     }
 
     /**

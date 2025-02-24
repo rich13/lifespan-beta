@@ -103,12 +103,12 @@ class User extends Authenticatable
         $span = new Span();
         $span->name = $attributes['name'] ?? 'Unknown User';
         $span->type_id = 'person';
-        $span->is_personal_span = true;
         $span->start_year = $attributes['birth_year'] ?? null;
         $span->start_month = $attributes['birth_month'] ?? null;
         $span->start_day = $attributes['birth_day'] ?? null;
-        $span->creator_id = $this->id;
+        $span->owner_id = $this->id;
         $span->updater_id = $this->id;
+        $span->access_level = 'private';
         $span->save();
 
         // Update user with personal span ID
