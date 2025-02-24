@@ -1,7 +1,7 @@
 @extends('layouts.app')
 
 @section('content')
-<div class="container py-4">
+<div class="py-4">
     <div class="row">
         <div class="col-12 d-flex justify-content-between align-items-center mb-4">
             <h1 class="h3 mb-0">Users</h1>
