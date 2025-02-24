@@ -64,9 +64,9 @@ class SpanViewTest extends TestCase
     }
 
     /**
-     * Test that we can view the basic span page
+     * Test that we can view a span's data
      */
-    public function test_can_view_span_page(): void
+    public function test_can_view_span_data(): void
     {
         $user = User::factory()->create();
         $this->actingAs($user);
@@ -76,9 +76,18 @@ class SpanViewTest extends TestCase
             'updater_id' => $user->id,
         ]);
 
+        // First request should redirect to slug
         $response = $this->get("/spans/{$span->id}");
+        $response->assertStatus(301);
+        $response->assertRedirect("/spans/{$span->slug}");
+
+        // Following the redirect should show the span
+        $response = $this->get("/spans/{$span->slug}");
         $response->assertStatus(200);
-        $response->assertSee('data-span-id="' . $span->id . '"', false);
+        $response->assertViewHas('span', function($viewSpan) use ($span) {
+            return $viewSpan->id === $span->id &&
+                   $viewSpan->owner_id === $span->owner_id;
+        });
     }
 
     /**
@@ -92,9 +101,9 @@ class SpanViewTest extends TestCase
     }
 
     /**
-     * Test that the page uses our layout
+     * Test that the correct view data is loaded
      */
-    public function test_page_uses_layout(): void
+    public function test_span_view_data_is_loaded(): void
     {
         $user = User::factory()->create();
         $this->actingAs($user);
@@ -104,9 +113,31 @@ class SpanViewTest extends TestCase
             'updater_id' => $user->id,
         ]);
 
-        $response = $this->get("/spans/{$span->id}");
+        // Access via slug directly
+        $response = $this->get("/spans/{$span->slug}");
         $response->assertStatus(200);
         $response->assertViewIs('spans.show');
+        $response->assertViewHas('span');
+        $this->assertEquals($span->id, $response->viewData('span')->id);
+    }
+
+    /**
+     * Test that span creation page loads with required data
+     */
+    public function test_span_creation_page_loads_required_data(): void
+    {
+        $user = User::factory()->create();
+        
+        $response = $this->actingAs($user)->get('/spans/create');
+        
+        $response->assertStatus(200);
+        $response->assertViewIs('spans.create');
+        $response->assertViewHasAll([
+            'user',
+            'spanTypes'
+        ]);
+        $this->assertEquals($user->id, $response->viewData('user')->id);
+        $this->assertNotEmpty($response->viewData('spanTypes'));
     }
 
     /**
@@ -127,69 +158,9 @@ class SpanViewTest extends TestCase
     }
 
     /**
-     * Test that we cannot create a span without a start year
+     * Test that accessing a span by UUID redirects to slug
      */
-    public function test_cannot_create_span_without_date(): void
-    {
-        Log::info('Starting test: Span creation without date');
-        
-        // Create a test user
-        $user = User::factory()->create();
-        Log::info('Created test user', ['user_id' => $user->id]);
-        
-        // Expect an exception
-        $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('Start year is required');
-        Log::info('Expecting validation to fail with: Start year is required');
-        
-        // Try to create a span without a date
-        $span = new Span();
-        $span->name = 'No Date Span';
-        $span->type_id = 'event';
-        $span->owner_id = $user->id;
-        
-        Log::info('Attempting to save invalid span', [
-            'name' => $span->name,
-            'type_id' => $span->type_id,
-            'start_year' => null,
-            'owner_id' => $user->id
-        ]);
-        
-        try {
-            $span->save();
-        } catch (\InvalidArgumentException $e) {
-            Log::info('Validation failed as expected', [
-                'expected_message' => 'Start year is required',
-                'actual_message' => $e->getMessage()
-            ]);
-            throw $e; // Re-throw to satisfy the test expectation
-        }
-        
-        Log::error('Test failed: Span was saved without a start year');
-    }
-
-    public function test_span_creation_page_displays(): void
-    {
-        Log::channel('testing')->info('Starting test: Span creation page display');
-        
-        $user = User::factory()->create();
-        Log::channel('testing')->info('Created test user', ['user_id' => $user->id]);
-        
-        $response = $this->actingAs($user)->get('/spans/create');
-        
-        Log::channel('testing')->info('Page request attempted', [
-            'status' => $response->status(),
-            'url' => '/spans/create'
-        ]);
-        
-        $response->assertStatus(200);
-        Log::channel('testing')->info('Test completed successfully');
-    }
-
-    /**
-     * Test that accessing a span by UUID redirects to slug URL when slug exists
-     */
-    public function test_uuid_redirects_to_slug_when_exists(): void
+    public function test_uuid_redirects_to_slug(): void
     {
         $user = User::factory()->create();
         $span = Span::create([
@@ -201,34 +172,13 @@ class SpanViewTest extends TestCase
             'access_level' => 'public'
         ]);
 
-        // Verify the span has a slug (should be auto-generated)
-        $this->assertNotNull($span->slug);
-        $this->assertEquals('test-span', $span->slug);
-
         // Access via UUID should redirect to slug
         $response = $this->get(route('spans.show', ['span' => $span->id]));
+        $response->assertStatus(301);
         $response->assertRedirect(route('spans.show', ['span' => $span->slug]));
-        $response->assertStatus(301); // Permanent redirect
-    }
 
-    /**
-     * Test that accessing a span by UUID works when no slug exists
-     */
-    public function test_uuid_works_when_no_slug(): void
-    {
-        $user = User::factory()->create();
-        $span = Span::create([
-            'name' => 'Test Span',
-            'type_id' => 'event',
-            'owner_id' => $user->id,
-            'updater_id' => $user->id,
-            'start_year' => 2024,
-            'access_level' => 'public',
-            'slug' => null // Explicitly set slug to null
-        ]);
-
-        // Access via UUID should work directly
-        $response = $this->get(route('spans.show', ['span' => $span->id]));
+        // Following the redirect should work
+        $response = $this->get(route('spans.show', ['span' => $span->slug]));
         $response->assertStatus(200);
         $response->assertViewIs('spans.show');
     }

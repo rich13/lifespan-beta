@@ -44,13 +44,18 @@ class SpanAccessTest extends TestCase
         $span->makePublic();
 
         // Test unauthenticated access
-        $this->get("/spans/{$span->id}")
-            ->assertStatus(200);
+        $response = $this->get("/spans/{$span->id}");
+        $response->assertStatus(301);
+        $response->assertRedirect("/spans/{$span->slug}");
+
+        // Follow redirect
+        $response = $this->get("/spans/{$span->slug}");
+        $response->assertStatus(200);
 
         // Test access with random user
         $user = User::factory()->create();
         $this->actingAs($user)
-            ->get("/spans/{$span->id}")
+            ->get("/spans/{$span->slug}")
             ->assertStatus(200);
     }
 
@@ -204,20 +209,26 @@ class SpanAccessTest extends TestCase
             'name' => 'Other User Private Span'
         ]);
 
-        // Test user's span listing
+        // Test authenticated user's span listing
         $response = $this->actingAs($user)->get('/spans');
         $response->assertStatus(200);
-        $response->assertSeeText('Public Test Span');
-        $response->assertSeeText('Private Test Span');
-        $response->assertSeeText('Shared Test Span');
-        $response->assertDontSeeText('Other User Private Span');
+        $response->assertViewHas('spans', function($spans) use ($publicSpan, $privateSpan, $sharedSpan, $otherUserSpan) {
+            $spanIds = $spans->pluck('id')->toArray();
+            return in_array($publicSpan->id, $spanIds) &&
+                   in_array($privateSpan->id, $spanIds) &&
+                   in_array($sharedSpan->id, $spanIds) &&
+                   !in_array($otherUserSpan->id, $spanIds);
+        });
 
         // Test unauthenticated user's span listing
         $response = $this->get('/spans');
         $response->assertStatus(200);
-        $response->assertSeeText('Public Test Span');
-        $response->assertDontSeeText('Private Test Span');
-        $response->assertDontSeeText('Shared Test Span');
-        $response->assertDontSeeText('Other User Private Span');
+        $response->assertViewHas('spans', function($spans) use ($publicSpan, $privateSpan, $sharedSpan, $otherUserSpan) {
+            $spanIds = $spans->pluck('id')->toArray();
+            return in_array($publicSpan->id, $spanIds) &&
+                   !in_array($privateSpan->id, $spanIds) &&
+                   !in_array($sharedSpan->id, $spanIds) &&
+                   !in_array($otherUserSpan->id, $spanIds);
+        });
     }
 } 

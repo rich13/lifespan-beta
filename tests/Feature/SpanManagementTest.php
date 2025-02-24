@@ -11,7 +11,7 @@ class SpanManagementTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_spans_index_is_public()
+    public function test_spans_index_shows_appropriate_spans()
     {
         // Create a public span
         $publicSpan = Span::factory()->create(['access_level' => 'public']);
@@ -23,9 +23,12 @@ class SpanManagementTest extends TestCase
         $response = $this->get('/spans');
         $response->assertStatus(200);
         
-        // But they can only see public spans
-        $response->assertSee($publicSpan->name);
-        $response->assertDontSee($privateSpan->name);
+        // Verify they can only see public spans
+        $response->assertViewHas('spans', function($spans) use ($publicSpan, $privateSpan) {
+            $spanIds = $spans->pluck('id')->toArray();
+            return in_array($publicSpan->id, $spanIds) &&
+                   !in_array($privateSpan->id, $spanIds);
+        });
     }
 
     public function test_user_can_create_span(): void
