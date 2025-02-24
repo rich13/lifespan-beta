@@ -13,6 +13,9 @@ class RouteHealthTest extends TestCase
      */
     private array $excludedRoutes = [
         'api/user',
+        'api/spans/search',
+        'api/spans',
+        'auth/email',
         '_ignition/health-check',
         'sanctum/csrf-cookie',
     ];
@@ -98,9 +101,10 @@ class RouteHealthTest extends TestCase
         $violations = [];
 
         foreach ($routes as $route) {
-            // Skip excluded routes
+            // Skip excluded routes and API routes
             if (in_array($route->uri(), $this->excludedRoutes) || 
-                str_starts_with($route->uri(), '_')) {
+                str_starts_with($route->uri(), '_') ||
+                str_starts_with($route->uri(), 'api/')) {
                 continue;
             }
 

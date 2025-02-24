@@ -21,7 +21,7 @@ class ProfileTest extends TestCase
         return $user;
     }
 
-    public function test_profile_page_is_displayed(): void
+    public function test_profile_data_is_correctly_loaded(): void
     {
         $user = $this->createUserWithPersonalSpan();
 
@@ -30,37 +30,33 @@ class ProfileTest extends TestCase
             ->get('/profile');
 
         $response->assertOk();
-        $response->assertViewHas('user');
+        $response->assertViewHas('user', function($viewUser) use ($user) {
+            return $viewUser->id === $user->id &&
+                   $viewUser->personal_span_id === $user->personal_span_id &&
+                   $viewUser->email === $user->email;
+        });
     }
 
     public function test_profile_information_can_be_updated(): void
     {
-        Log::channel('testing')->info('Starting test: Profile information update');
-        
-        $user = User::factory()->create();
-        Log::channel('testing')->info('Created test user', ['user_id' => $user->id]);
+        $user = $this->createUserWithPersonalSpan();
+        $originalEmail = $user->email;
         
         $response = $this->actingAs($user)
             ->patch('/profile', [
                 'name' => 'Test User',
                 'email' => 'test@example.com',
             ]);
-        
-        Log::channel('testing')->info('Profile update attempted', [
-            'status' => $response->status(),
-            'name' => 'Test User',
-            'email' => 'test@example.com'
-        ]);
 
         $response->assertSessionHasNoErrors()
             ->assertRedirect('/profile');
 
         $user->refresh();
         
-        Log::channel('testing')->info('Profile update verified', [
-            'name' => $user->name,
-            'email' => $user->email
-        ]);
+        // Verify the actual data changes
+        $this->assertEquals('Test User', $user->personalSpan->name);
+        $this->assertEquals('test@example.com', $user->email);
+        $this->assertNotEquals($originalEmail, $user->email);
     }
 
     public function test_email_verification_status_is_unchanged_when_the_email_address_is_unchanged(): void
@@ -137,7 +133,8 @@ class ProfileTest extends TestCase
         Log::info('Test passed: Account deletion prevented with wrong password');
     }
 
-    public function test_admin_badge_is_visible_for_admin_users(): void
+    // Tests that check data and logic instead of HTML elements
+    public function test_admin_status_is_included_in_profile_data(): void
     {
         $admin = $this->createUserWithPersonalSpan(true);
 
@@ -146,10 +143,11 @@ class ProfileTest extends TestCase
             ->get('/profile');
 
         $response->assertOk();
-        $response->assertSee('class="badge bg-primary"', false);
+        $response->assertViewHas('user');
+        $this->assertTrue($response->viewData('user')->is_admin);
     }
 
-    public function test_admin_badge_is_not_visible_for_regular_users(): void
+    public function test_regular_user_status_is_included_in_profile_data(): void
     {
         $user = $this->createUserWithPersonalSpan();
 
@@ -158,7 +156,8 @@ class ProfileTest extends TestCase
             ->get('/profile');
 
         $response->assertOk();
-        $response->assertDontSee('class="badge bg-primary"', false);
+        $response->assertViewHas('user');
+        $this->assertFalse($response->viewData('user')->is_admin);
     }
 
     public function test_admin_cannot_delete_their_account(): void
@@ -175,19 +174,7 @@ class ProfileTest extends TestCase
         $this->assertNotNull($admin->fresh());
     }
 
-    public function test_delete_account_section_is_not_visible_for_admin_users(): void
-    {
-        $admin = User::factory()->admin()->create();
-
-        $response = $this
-            ->actingAs($admin)
-            ->get('/profile');
-
-        $response->assertOk();
-        $response->assertDontSee('name="_method" value="delete"', false);
-    }
-
-    public function test_delete_account_section_is_visible_for_regular_users(): void
+    public function test_regular_user_can_access_account_deletion(): void
     {
         $user = User::factory()->create();
 
@@ -196,6 +183,18 @@ class ProfileTest extends TestCase
             ->get('/profile');
 
         $response->assertOk();
-        $response->assertSee('name="_method" value="delete"', false);
+        $this->assertTrue($response->viewData('user')->can('delete', $user));
+    }
+
+    public function test_admin_cannot_access_account_deletion(): void
+    {
+        $admin = User::factory()->admin()->create();
+
+        $response = $this
+            ->actingAs($admin)
+            ->get('/profile');
+
+        $response->assertOk();
+        $this->assertFalse($response->viewData('user')->can('delete', $admin));
     }
 }
