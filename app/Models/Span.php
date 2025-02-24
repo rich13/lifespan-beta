@@ -42,6 +42,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int|null $end_day Ending day (1-31)
  * @property string $end_precision Precision of end date ('year', 'month', 'day')
  * @property array $metadata JSON metadata specific to the span type
+ * @property array $sources Array of source information
  * @property \Carbon\Carbon $created_at When the span was created
  * @property \Carbon\Carbon $updated_at When the span was last updated
  * @property-read \Illuminate\Database\Eloquent\Collection<int, User> $users Users with access to this span
@@ -79,7 +80,8 @@ class Span extends Model
         'description',
         'notes',
         'start_precision',
-        'end_precision'
+        'end_precision',
+        'sources'
     ];
 
     /**
@@ -102,6 +104,7 @@ class Span extends Model
         'permissions' => 'integer',
         'permission_mode' => 'string',
         'metadata' => 'array',
+        'sources' => 'array',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
         'access_level' => 'string',
@@ -113,6 +116,39 @@ class Span extends Model
     protected static function boot()
     {
         parent::boot();
+
+        // Generate UUID if not set
+        static::creating(function ($span) {
+            if (!$span->id) {
+                $span->id = (string) Str::uuid();
+            }
+        });
+
+        // Validate required fields
+        static::saving(function ($span) {
+            if (!$span->start_year && $span->state !== 'placeholder') {
+                throw new \InvalidArgumentException(sprintf(
+                    'Start year is required for %s span "%s". Expected format: YYYY-MM-DD, YYYY-MM, or YYYY',
+                    $span->type_id ?? 'unknown type',
+                    $span->name ?? 'unnamed'
+                ));
+            }
+        });
+
+        // Generate slug if not set
+        static::saving(function ($span) {
+            if (!$span->slug && $span->name) {
+                $baseSlug = Str::slug($span->name);
+                $slug = $baseSlug;
+                $counter = 1;
+
+                while (static::where('slug', $slug)->where('id', '!=', $span->id)->exists()) {
+                    $slug = $baseSlug . '-' . ++$counter;
+                }
+
+                $span->slug = $slug;
+            }
+        });
 
         // Ensure required fields are set before saving
         static::saving(function ($span) {
@@ -145,15 +181,27 @@ class Span extends Model
 
             // Validate date requirements based on state
             if ($span->state !== 'placeholder' && $span->start_year === null) {
-                throw new \InvalidArgumentException('Start year is required unless span is in placeholder state');
+                throw new \InvalidArgumentException(sprintf(
+                    'Start year is required for %s span "%s". Expected format: YYYY-MM-DD, YYYY-MM, or YYYY',
+                    $span->type_id ?? 'unknown type',
+                    $span->name ?? 'unnamed'
+                ));
             }
 
             // Validate date consistency
             if (!$span->hasValidDateCombination('start')) {
-                throw new \InvalidArgumentException('Invalid start date combination');
+                throw new \InvalidArgumentException(sprintf(
+                    'Invalid start date combination for %s span "%s". Expected format: YYYY-MM-DD, YYYY-MM, or YYYY',
+                    $span->type_id ?? 'unknown type',
+                    $span->name ?? 'unnamed'
+                ));
             }
             if (!$span->hasValidDateCombination('end')) {
-                throw new \InvalidArgumentException('Invalid end date combination');
+                throw new \InvalidArgumentException(sprintf(
+                    'Invalid end date combination for %s span "%s". Expected format: YYYY-MM-DD, YYYY-MM, or YYYY',
+                    $span->type_id ?? 'unknown type',
+                    $span->name ?? 'unnamed'
+                ));
             }
 
             // Generate slug if not provided
@@ -249,12 +297,32 @@ class Span extends Model
                 }
             }
         });
+
+        static::saved(function ($span) {
+            // If this is a person span and dates have changed, update family connections
+            if ($span->type_id === 'person' && 
+                ($span->isDirty(['start_year', 'start_month', 'start_day', 'end_year', 'end_month', 'end_day']))) {
+                
+                // Get all family connections where this span is either parent or child
+                $connections = Connection::where('type_id', 'family')
+                    ->where(function ($query) use ($span) {
+                        $query->where('parent_id', $span->id)
+                            ->orWhere('child_id', $span->id);
+                    })
+                    ->get();
+
+                // Re-save each connection to trigger the date sync
+                foreach ($connections as $connection) {
+                    $connection->touch(); // This will trigger the saving event
+                }
+            }
+        });
     }
 
     /**
      * Infer the precision level based on provided date components
      */
-    protected function inferPrecisionLevel(?int $year, ?int $month, ?int $day): string
+    public function inferPrecisionLevel(?int $year, ?int $month, ?int $day): string
     {
         if ($day !== null && $month !== null && $year !== null) {
             return 'day';
@@ -503,6 +571,36 @@ class Span extends Model
     public function permissions(): HasMany
     {
         return $this->hasMany(SpanPermission::class);
+    }
+
+    /**
+     * Get all connections for this span
+     */
+    public function connections()
+    {
+        return Connection::with(['parent', 'child'])
+            ->where(function($query) {
+                $query->where('parent_id', $this->id)
+                      ->orWhere('child_id', $this->id);
+            });
+    }
+
+    /**
+     * Get all spans connected to this one
+     */
+    public function connectedSpans()
+    {
+        return Span::whereIn('id', function($query) {
+            $query->select('parent_id')
+                  ->from('connections')
+                  ->where('child_id', $this->id)
+                  ->union(
+                      $query->newQuery()
+                           ->select('child_id')
+                           ->from('connections')
+                           ->where('parent_id', $this->id)
+                  );
+        });
     }
 
     /**
