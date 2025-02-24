@@ -36,12 +36,9 @@
 @endsection
 
 @section('content')
-<div class="container py-4" data-span-id="{{ $span->id }}">
+<div data-span-id="{{ $span->id }}" class="px-4">
     <div class="row">
-        <div class="col-12 d-flex justify-content-between align-items-center mb-4">
-            <div>
-                <h1 class="h3 mb-0">{{ $span->name }}</h1>
-            </div>
+        <div class="col-12 d-flex justify-content-end mb-4">
             @can('update', $span)
                 <div>
                     <a href="{{ route('spans.edit', $span) }}" class="btn btn-outline-primary">Edit</a>
@@ -61,20 +58,9 @@
                         <dt class="col-sm-3">Type</dt>
                         <dd class="col-sm-9">{{ $span->type->name }}</dd>
 
-                        <dt class="col-sm-3">Start Date</dt>
-                        <dd class="col-sm-9" data-year="{{ $span->start_year }}">
-                            {{ $span->formatted_start_date }}
-                            <small class="text-muted">({{ $span->start_precision }} precision)</small>
-                        </dd>
-
-                        <dt class="col-sm-3">End Date</dt>
-                        <dd class="col-sm-9" @if($span->end_year) data-year="{{ $span->end_year }}" @endif>
-                            @if($span->is_ongoing)
-                                <span class="text-muted">Ongoing</span>
-                            @else
-                                {{ $span->formatted_end_date }}
-                                <small class="text-muted">({{ $span->end_precision }} precision)</small>
-                            @endif
+                        <dt class="col-sm-3">Date Range</dt>
+                        <dd class="col-sm-9">
+                            <x-spans.partials.date-range :span="$span" />
                         </dd>
 
                         @if($span->description)
@@ -92,7 +78,7 @@
                     <h2 class="card-title h5 mb-3">Additional Information</h2>
                     <dl class="row mb-0">
                         @foreach($span->metadata as $key => $value)
-                            @if(!in_array($key, ['is_public', 'is_system']))
+                            @if(!in_array($key, ['is_public', 'is_system', 'sources']))
                                 <dt class="col-sm-3">{{ ucfirst(str_replace('_', ' ', $key)) }}</dt>
                                 <dd class="col-sm-9">
                                     @if(is_array($value))
@@ -111,7 +97,7 @@
 
         <div class="col-md-4">
             <!-- Related Information -->
-            <div class="card">
+            <div class="card mb-4">
                 <div class="card-body">
                     <h2 class="card-title h5 mb-3">Related Information</h2>
                     <p class="text-muted small">
@@ -124,7 +110,34 @@
                     @endif
                 </div>
             </div>
+
+            <!-- Family Relationships -->
+            @if($span->type_id === 'person')
+                <x-spans.partials.family-relationships :span="$span" />
+            @endif
         </div>
     </div>
+
+    <!-- Sources -->
+    @if(!empty($span->sources))
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h2 class="card-title h5 mb-3">Sources</h2>
+                    <div class="d-flex flex-wrap gap-3">
+                        @foreach($span->sources as $url)
+                            <a href="{{ $url }}" target="_blank" rel="noopener noreferrer" class="text-primary text-decoration-none">
+                                <i class="bi bi-link-45deg"></i>
+                                {{ parse_url($url, PHP_URL_HOST) }}
+                                <i class="bi bi-box-arrow-up-right ms-1 small"></i>
+                            </a>
+                        @endforeach
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    @endif
 </div>
 @endsection 
