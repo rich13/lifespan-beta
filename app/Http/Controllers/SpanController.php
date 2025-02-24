@@ -11,6 +11,8 @@ use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Ray;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Handle span viewing and management
@@ -32,14 +34,18 @@ class SpanController extends Controller
      */
     public function index(Request $request): View|Response
     {
-        $query = Span::query();
+        $query = Span::query()
+            ->where('type_id', '!=', 'connection')  // Exclude connection spans
+            ->orderByRaw('COALESCE(start_year, 9999)')  // Order by start_year, putting nulls last
+            ->orderByRaw('COALESCE(start_month, 12)')   // Then by month
+            ->orderByRaw('COALESCE(start_day, 31)');    // Then by day
 
         if (Auth::check()) {
             $user = Auth::user();
             
             // Admin can see all spans
             if ($user->is_admin) {
-                $spans = $query->paginate(20);
+                $spans = $query->paginate(50);
                 return view('spans.index', compact('spans'));
             }
 
@@ -62,7 +68,7 @@ class SpanController extends Controller
             $query->where('access_level', 'public');
         }
 
-        $spans = $query->paginate(20);
+        $spans = $query->paginate(50);
         return view('spans.index', compact('spans'));
     }
 
@@ -72,7 +78,11 @@ class SpanController extends Controller
     public function create()
     {
         $this->authorize('create', Span::class);
-        return view('spans.create');
+        
+        $user = Auth::user();
+        $spanTypes = DB::table('span_types')->get();
+        
+        return view('spans.create', compact('user', 'spanTypes'));
     }
 
     /**
@@ -82,9 +92,11 @@ class SpanController extends Controller
     {
         $this->authorize('create', Span::class);
         $validated = $request->validate([
+            'id' => 'nullable|uuid|unique:spans,id',  // Allow UUID to be provided
             'name' => 'required|string|max:255',
             'type_id' => 'required|string|exists:span_types,type_id',
-            'start_year' => 'required|integer',
+            'state' => 'required|in:draft,placeholder,complete',
+            'start_year' => 'required_unless:state,placeholder|nullable|integer',
             'start_month' => 'nullable|integer|between:1,12',
             'start_day' => 'nullable|integer|between:1,31',
             'end_year' => 'nullable|integer',
@@ -96,11 +108,20 @@ class SpanController extends Controller
         $user = Auth::user();
         
         $span = new Span($validated);
+        if ($request->has('id')) {
+            $span->id = $request->id;
+        }
         $span->owner_id = $user->id;
         $span->updater_id = $user->id;
         $span->access_level = 'private'; // Default to private
         $span->save();
 
+        // If this is a programmatic call (e.g. from ImportService), return JSON response
+        if ($request->expectsJson() || $request->wantsJson()) {
+            return response()->json($span);
+        }
+
+        // Otherwise return the redirect for web requests
         return redirect()->route('spans.show', $span);
     }
 
@@ -131,7 +152,9 @@ class SpanController extends Controller
                 'from' => $routeParam,
                 'to' => $span->slug
             ]);
-            return redirect()->route('spans.show', ['span' => $span->slug], 301);
+            return redirect()
+                ->route('spans.show', ['span' => $span->slug], 301)
+                ->with('status', session('status')); // Preserve flash message
         }
 
         return view('spans.show', compact('span'));
@@ -143,6 +166,12 @@ class SpanController extends Controller
     public function edit(Span $span)
     {
         $this->authorize('update', $span);
+        
+        // Ensure metadata is always an array
+        if (!is_array($span->metadata)) {
+            $span->metadata = [];
+        }
+        
         return view('spans.edit', compact('span'));
     }
 
@@ -152,22 +181,110 @@ class SpanController extends Controller
     public function update(Request $request, Span $span)
     {
         $this->authorize('update', $span);
-        $validated = $request->validate([
-            'name' => 'sometimes|required|string|max:255',
-            'type_id' => 'sometimes|required|string|exists:span_types,type_id',
-            'start_year' => 'sometimes|required|integer',
-            'start_month' => 'nullable|integer|between:1,12',
-            'start_day' => 'nullable|integer|between:1,31',
-            'end_year' => 'nullable|integer',
-            'end_month' => 'nullable|integer|between:1,12',
-            'end_day' => 'nullable|integer|between:1,31',
-            'metadata' => 'nullable|array',
-        ]);
+        
+        try {
+            // Log the incoming request data
+            Log::channel('spans')->info('Updating span', [
+                'span_id' => $span->id,
+                'input' => $request->all()
+            ]);
+            
+            // Custom validation for date patterns
+            $validator = Validator::make($request->all(), [
+                'name' => 'sometimes|required|string|max:255',
+                'description' => 'nullable|string',
+                'notes' => 'nullable|string',
+                'state' => 'required|in:draft,placeholder,complete',
+                'start_year' => 'required_unless:state,placeholder|nullable|integer',
+                'start_month' => 'nullable|integer|between:1,12',
+                'start_day' => 'nullable|integer|between:1,31',
+                'end_year' => 'nullable|integer',
+                'end_month' => 'nullable|integer|between:1,12',
+                'end_day' => 'nullable|integer|between:1,31',
+                'metadata' => 'nullable|array',
+                'metadata.*' => 'nullable',
+                'sources' => 'nullable|array',
+                'sources.*' => 'nullable|url',
+            ]);
 
-        $span->updater_id = Auth::id();
-        $span->update($validated);
+            $validator->after(function ($validator) use ($request) {
+                // Validate start date pattern
+                if ($request->start_day && !$request->start_month) {
+                    $validator->errors()->add('start_day', 'Cannot specify day without month');
+                }
+                if ($request->start_month && !$request->start_year) {
+                    $validator->errors()->add('start_month', 'Cannot specify month without year');
+                }
 
-        return redirect()->route('spans.show', $span);
+                // Validate end date pattern
+                if ($request->end_day && !$request->end_month) {
+                    $validator->errors()->add('end_day', 'Cannot specify day without month');
+                }
+                if ($request->end_month && !$request->end_year) {
+                    $validator->errors()->add('end_month', 'Cannot specify month without year');
+                }
+            });
+
+            if ($validator->fails()) {
+                return back()
+                    ->withInput()
+                    ->withErrors($validator);
+            }
+
+            $validated = $validator->validated();
+
+            // Infer precision levels
+            $span->start_precision = $span->inferPrecisionLevel(
+                $validated['start_year'] ?? null,
+                $validated['start_month'] ?? null,
+                $validated['start_day'] ?? null
+            );
+
+            // Only infer end precision if end_year is present in the validated data
+            if (isset($validated['end_year'])) {
+                $span->end_precision = $span->inferPrecisionLevel(
+                    $validated['end_year'],
+                    $validated['end_month'] ?? null,
+                    $validated['end_day'] ?? null
+                );
+            }
+
+            // Log the validated data
+            Log::channel('spans')->info('Validated span data', [
+                'span_id' => $span->id,
+                'validated' => $validated
+            ]);
+
+            // Update the span
+            $span->updater_id = Auth::id();
+            $span->update($validated);
+
+            // Log the successful update
+            Log::channel('spans')->info('Span updated successfully', [
+                'span_id' => $span->id,
+                'changes' => $span->getChanges()
+            ]);
+
+            // If this is a programmatic call (e.g. from ImportService), return JSON response
+            if ($request->expectsJson() || $request->wantsJson()) {
+                return response()->json($span);
+            }
+
+            return redirect()->route('spans.show', $span)
+                ->with('status', 'Span updated successfully');
+
+        } catch (\Exception $e) {
+            // Log any errors that occur
+            Log::channel('spans')->error('Error updating span', [
+                'span_id' => $span->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return back()
+                ->withInput()
+                ->withErrors(['error' => 'An error occurred while saving the span. Please try again.']);
+        }
     }
 
     /**

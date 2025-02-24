@@ -6,6 +6,7 @@ use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Gate;
 use App\Models\Span;
 
 class SpanAccessMiddleware
@@ -51,6 +52,18 @@ class SpanAccessMiddleware
             // For shared spans, check permissions
             if ($span->access_level === 'shared' && !$span->permissions()->where('user_id', $user->id)->exists()) {
                 abort(403, 'You do not have permission to view this span.');
+            }
+
+            // Check view permission using policy
+            if (!Gate::allows('view', $span)) {
+                abort(403, 'You do not have permission to view this span.');
+            }
+
+            // For write operations, check edit permission
+            if (in_array($request->method(), ['PUT', 'PATCH', 'DELETE'])) {
+                if (!Gate::allows($request->method() === 'DELETE' ? 'delete' : 'update', $span)) {
+                    abort(403, 'You do not have permission to modify this span.');
+                }
             }
         }
 
