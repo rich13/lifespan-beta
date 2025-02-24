@@ -7,6 +7,9 @@ use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\SpanController as AdminSpanController;
 use App\Http\Controllers\Admin\SpanPermissionsController;
 use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\Admin\SpanTypeController;
+use App\Http\Controllers\Admin\ConnectionTypeController;
+use App\Http\Controllers\Admin\ConnectionController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
@@ -61,6 +64,22 @@ Route::middleware('web')->group(function () {
             Route::get('/', [DashboardController::class, 'index'])
                 ->name('dashboard');
 
+            // Import Management
+            Route::get('/import', [App\Http\Controllers\Admin\ImportController::class, 'index'])
+                ->name('import.index');
+            Route::get('/import/{id}', [App\Http\Controllers\Admin\ImportController::class, 'show'])
+                ->name('import.show');
+            Route::post('/import/{id}', [App\Http\Controllers\Admin\ImportController::class, 'import'])
+                ->name('import.import');
+            Route::post('/import/{id}/simulate', [App\Http\Controllers\Admin\ImportController::class, 'simulate'])
+                ->name('import.simulate');
+
+            // Span Types Management
+            Route::resource('span-types', SpanTypeController::class);
+
+            // Connection Types Management
+            Route::resource('connection-types', ConnectionTypeController::class);
+
             // Span Management
             Route::get('/spans', [AdminSpanController::class, 'index'])
                 ->name('spans.index');
@@ -90,6 +109,24 @@ Route::middleware('web')->group(function () {
                 ->name('users.edit');
             Route::put('/users/{user}', [UserController::class, 'update'])
                 ->name('users.update');
+
+            // Connection Management
+            Route::get('/connections', [ConnectionController::class, 'index'])
+                ->name('connections.index');
+            Route::get('/connections/{connection}', [ConnectionController::class, 'show'])
+                ->name('connections.show');
+            Route::get('/connections/{connection}/edit', [ConnectionController::class, 'edit'])
+                ->name('connections.edit');
+            Route::put('/connections/{connection}', [ConnectionController::class, 'update'])
+                ->name('connections.update');
+            Route::delete('/connections/{connection}', [ConnectionController::class, 'destroy'])
+                ->name('connections.destroy');
+
+            // Development routes (only in local environment)
+            if (app()->environment('local')) {
+                Route::get('/dev/components', [App\Http\Controllers\Dev\ComponentShowcaseController::class, 'index'])
+                    ->name('dev.components');
+            }
         });
     });
 
@@ -97,6 +134,9 @@ Route::middleware('web')->group(function () {
     Route::middleware('guest')->group(function () {
         Route::get('login', [EmailFirstAuthController::class, 'showEmailForm'])
             ->name('login');
+        Route::get('auth/email', function() {
+            return redirect()->route('login');
+        });
         Route::post('auth/email', [EmailFirstAuthController::class, 'handleEmail'])
             ->name('auth.email');
         Route::post('auth/login', [EmailFirstAuthController::class, 'login'])
