@@ -20,8 +20,9 @@ class SpanController extends Controller
         $spans = Span::with(['owner', 'updater', 'type'])
             ->select('spans.*')
             ->selectRaw('EXISTS(SELECT 1 FROM users WHERE users.personal_span_id = spans.id) as is_personal_span')
+            ->where('type_id', '!=', 'connection')
             ->orderBy('created_at', 'desc')
-            ->paginate(20);
+            ->paginate(50);
         $types = SpanType::all();
         return view('admin.spans.index', compact('spans', 'types'));
     }
