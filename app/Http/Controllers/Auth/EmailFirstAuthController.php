@@ -48,11 +48,11 @@ class EmailFirstAuthController extends Controller
             return redirect()->intended(RouteServiceProvider::HOME);
         }
 
-        // Instead of redirecting back, re-render the password form
-        return view('auth.password', [
-            'email' => $request->email,
-            'errors' => ['password' => 'The provided credentials do not match our records.']
-        ]);
+        return back()
+            ->withInput(['email' => $request->email])
+            ->withErrors([
+                'password' => 'The provided credentials do not match our records.'
+            ]);
     }
 
     public function register(Request $request)
