@@ -72,7 +72,6 @@ class SpanSearchController extends Controller
         $span = new Span($validated);
         $span->owner_id = Auth::id();
         $span->updater_id = Auth::id();
-        $span->start_year = date('Y'); // Default to current year for placeholders
         $span->save();
 
         return response()->json([

@@ -22,3 +22,6 @@ yarn-error.log
 /.cursor
 QUESTIONS.md
 ray.php
+
+# macOS system files
+.DS_Store
