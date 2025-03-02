@@ -3,11 +3,13 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Services\ImportService;
+use App\Services\Import\SpanImporterFactory;
 use Illuminate\Http\Request;
-use Symfony\Component\Yaml\Yaml;
-use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\File;
+use Symfony\Component\Yaml\Yaml;
 
 class ImportController extends Controller
 {
@@ -18,143 +20,112 @@ class ImportController extends Controller
 
     public function index()
     {
-        $files = collect(File::files(base_path('legacy_spans')))
+        // Get all YAML files from the storage/app/imports directory
+        $files = collect(Storage::files('imports'))
             ->filter(function ($file) {
-                return $file->getExtension() === 'yaml';
+                return pathinfo($file, PATHINFO_EXTENSION) === 'yaml';
             })
             ->map(function ($file) {
-                $yaml = Yaml::parseFile($file->getPathname());
-                $name = $yaml['name'] ?? 'Unknown';
+                try {
+                    $yaml = Yaml::parseFile(storage_path('app/' . $file));
+                    $name = $yaml['name'] ?? 'Unknown';
 
-                // Check if a span with this name already exists
-                $existingSpan = \App\Models\Span::where('name', $name)->first();
+                    // Check if a span with this name already exists
+                    $existingSpan = \App\Models\Span::where('name', $name)->first();
 
-                return [
-                    'id' => pathinfo($file->getFilename(), PATHINFO_FILENAME),
-                    'filename' => $file->getFilename(),
-                    'name' => $name,
-                    'type' => $yaml['type'] ?? 'Unknown',
-                    'size' => $file->getSize(),
-                    'modified' => $file->getMTime(),
-                    'has_education' => !empty($yaml['education']),
-                    'has_work' => !empty($yaml['work']),
-                    'has_places' => !empty($yaml['places']),
-                    'has_relationships' => !empty($yaml['relationships']),
-                    'existing_span' => $existingSpan ? [
-                        'id' => $existingSpan->id,
-                        'created_at' => $existingSpan->created_at,
-                        'updated_at' => $existingSpan->updated_at
-                    ] : null
-                ];
+                    return [
+                        'id' => pathinfo($file, PATHINFO_FILENAME),
+                        'filename' => basename($file),
+                        'name' => $name,
+                        'type' => $yaml['type'] ?? 'Unknown',
+                        'size' => Storage::size($file),
+                        'modified' => Storage::lastModified($file),
+                        'has_education' => !empty($yaml['education']),
+                        'has_work' => !empty($yaml['work']),
+                        'has_places' => !empty($yaml['places']),
+                        'has_relationships' => !empty($yaml['relationships']),
+                        'existing_span' => $existingSpan ? [
+                            'id' => $existingSpan->id,
+                            'created_at' => $existingSpan->created_at,
+                            'updated_at' => $existingSpan->updated_at
+                        ] : null
+                    ];
+                } catch (\Exception $e) {
+                    Log::error('Failed to parse YAML file', [
+                        'file' => $file,
+                        'error' => $e->getMessage()
+                    ]);
+                    return null;
+                }
             })
+            ->filter()
             ->sortBy('name')
             ->values();
 
         return view('admin.import.index', compact('files'));
     }
 
-    public function show($id)
-    {
-        $file = base_path("legacy_spans/{$id}.yaml");
-        if (!File::exists($file)) {
-            return redirect()
-                ->route('admin.import.index')
-                ->with('error', 'YAML file not found.');
-        }
-
-        $yaml = Yaml::parseFile($file);
-        return view('admin.import.show', [
-            'id' => $id,
-            'yaml' => $yaml,
-            'formatted' => json_encode($yaml, JSON_PRETTY_PRINT),
-            'report' => session('report'),
-            'status' => null
-        ]);
-    }
-
-    public function simulate($id)
+    public function show(Request $request, string $importId)
     {
         try {
-            $file = base_path("legacy_spans/{$id}.yaml");
-            if (!File::exists($file)) {
-                return redirect()
-                    ->route('admin.import.index')
-                    ->with('error', 'YAML file not found.');
+            // Get the YAML file path
+            $yamlPath = storage_path("app/imports/{$importId}.yaml");
+            if (!file_exists($yamlPath)) {
+                return redirect()->route('admin.import.index')
+                    ->with('error', 'Import file not found');
             }
 
-            $importService = new ImportService(auth()->user());
-            $report = $importService->simulate($file);
+            // Parse YAML for display
+            $yaml = Yaml::parseFile($yamlPath);
+            $formatted = json_encode($yaml, JSON_PRETTY_PRINT);
 
-            Log::info('Simulated YAML file import', [
-                'file' => $id,
-                'report' => $report
-            ]);
-
-            $yaml = Yaml::parseFile($file);
             return view('admin.import.show', [
-                'id' => $id,
+                'id' => $importId,
                 'yaml' => $yaml,
-                'formatted' => json_encode($yaml, JSON_PRETTY_PRINT),
-                'report' => $report,
-                'status' => 'Simulation completed successfully.'
+                'formatted' => $formatted,
+                'import_id' => $importId
             ]);
 
         } catch (\Exception $e) {
-            Log::error('Error simulating YAML file import', [
-                'file' => $id,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+            Log::error('Failed to show import', [
+                'import_id' => $importId,
+                'error' => $e->getMessage()
             ]);
 
-            return redirect()
-                ->route('admin.import.index')
-                ->with('error', 'Error simulating import: ' . $e->getMessage());
+            return redirect()->route('admin.import.index')
+                ->with('error', 'Failed to load import: ' . $e->getMessage());
         }
     }
 
-    public function import($id)
+    public function import(Request $request, string $importId)
     {
         try {
-            $file = base_path("legacy_spans/{$id}.yaml");
-            if (!File::exists($file)) {
-                return redirect()
-                    ->route('admin.import.index')
-                    ->with('error', 'YAML file not found.');
+            // Get the YAML file path
+            $yamlPath = storage_path("app/imports/{$importId}.yaml");
+            if (!file_exists($yamlPath)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Import file not found'
+                ], 404);
             }
 
-            $importService = new ImportService(auth()->user());
-            $report = $importService->import($file);
+            // Create appropriate importer using factory
+            $importer = SpanImporterFactory::create($yamlPath, Auth::user());
+            $report = $importer->import($yamlPath);
 
-            if (!$report['success']) {
-                Log::error('Error importing YAML file', [
-                    'file' => $id,
-                    'errors' => $report['errors']
-                ]);
-                return redirect()
-                    ->route('admin.import.show', $id)
-                    ->with('error', 'Import failed. See report for details.')
-                    ->with('report', $report);
-            } else {
-                Log::info('Successfully imported YAML file', [
-                    'file' => $id,
-                    'report' => $report
-                ]);
-                return redirect()
-                    ->route('admin.import.show', $id)
-                    ->with('status', 'Import completed successfully.')
-                    ->with('report', $report);
-            }
+            return response()->json($report);
 
         } catch (\Exception $e) {
-            Log::error('Error importing YAML file', [
-                'file' => $id,
+            Log::error('Import failed', [
+                'import_id' => $importId,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
 
-            return redirect()
-                ->route('admin.import.index')
-                ->with('error', 'Error importing file: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Import failed: ' . $e->getMessage()
+            ], 500);
         }
     }
 } 
