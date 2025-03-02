@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Models\Span;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
 
 class DatabaseSeeder extends Seeder
 {
@@ -16,44 +17,75 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // Always create admin user first
-        $this->call(AdminUserSeeder::class);
+        // Create required span types
+        $types = [
+            [
+                'type_id' => 'person',
+                'name' => 'Person',
+                'description' => 'A person or individual'
+            ],
+            [
+                'type_id' => 'organisation',
+                'name' => 'Organisation',
+                'description' => 'An organization or institution'
+            ],
+            [
+                'type_id' => 'event',
+                'name' => 'Event',
+                'description' => 'A historical or personal event'
+            ],
+            [
+                'type_id' => 'place',
+                'name' => 'Place',
+                'description' => 'A physical location or place'
+            ],
+            [
+                'type_id' => 'connection',
+                'name' => 'Connection',
+                'description' => 'A temporal connection between spans'
+            ]
+        ];
 
-        // Add other seeders here
+        foreach ($types as $type) {
+            DB::table('span_types')->updateOrInsert(
+                ['type_id' => $type['type_id']],
+                $type
+            );
+        }
 
-        // \App\Models\User::factory(10)->create();
-
-        // \App\Models\User::factory()->create([
-        //     'name' => 'Test User',
-        //     'email' => 'test@example.com',
-        // ]);
-
-        // Create test admin user
+        // Create admin user
         $user = User::create([
-            'email' => 'admin@example.com',
-            'password' => Hash::make('password'),
+            'email' => 'richard@northover.info',
+            'password' => Hash::make('lifespan'),
             'is_admin' => true,
+            'email_verified_at' => now(), // Pre-verify the admin email
         ]);
 
-        // Create a test span
-        $span = Span::create([
-            'name' => 'World War II',
-            'type_id' => 'event',
-            'slug' => 'world-war-2',
-            'start_year' => 1939,
-            'start_month' => 9,
-            'start_day' => 1,
-            'end_year' => 1945,
-            'end_month' => 9,
-            'end_day' => 2,
-            'metadata' => [
-                'description' => 'A global war that lasted from 1939 to 1945.',
-                'is_public' => true,
-                'is_system' => true
-            ],
-            'owner_id' => $user->id,
-            'updater_id' => $user->id,
-            'access_level' => 'public'
+        // Create personal span
+        $span = new Span();
+        $span->name = 'Richard Northover';
+        $span->type_id = 'person';
+        $span->start_year = 1976;
+        $span->start_month = 2;
+        $span->start_day = 13;
+        $span->owner_id = $user->id;
+        $span->updater_id = $user->id;
+        $span->access_level = 'private';
+        $span->state = 'complete';
+        $span->save();
+
+        // Link user to personal span
+        $user->personal_span_id = $span->id;
+        $user->save();
+
+        // Create user-span relationship
+        DB::table('user_spans')->insert([
+            'id' => Str::uuid(),
+            'user_id' => $user->id,
+            'span_id' => $span->id,
+            'access_level' => 'owner',
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
     }
 }

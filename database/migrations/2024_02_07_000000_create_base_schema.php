@@ -224,18 +224,18 @@ return new class extends Migration
             [
                 'type_id' => 'organisation',
                 'name' => 'Organisation',
-                'description' => 'An organization, institution, or company',
+                'description' => 'An organization or institution',
                 'metadata' => json_encode([
                     'schema' => [
-                        'type' => [
+                        'org_type' => [
                             'type' => 'select',
                             'label' => 'Organisation Type',
                             'component' => 'select',
                             'options' => [
-                                'business', 'educational', 'government', 
+                                'business', 'educational', 'government',
                                 'non-profit', 'religious', 'other'
                             ],
-                            'help' => 'Type of organisation',
+                            'help' => 'Type of organization',
                             'required' => true
                         ],
                         'industry' => [
@@ -245,18 +245,48 @@ return new class extends Migration
                             'help' => 'Primary industry or sector',
                             'required' => false
                         ],
-                        'headquarters' => [
+                        'size' => [
+                            'type' => 'select',
+                            'label' => 'Size',
+                            'component' => 'select',
+                            'options' => ['small', 'medium', 'large'],
+                            'help' => 'Size of organization',
+                            'required' => false
+                        ]
+                    ]
+                ]),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'type_id' => 'event',
+                'name' => 'Event',
+                'description' => 'A historical or personal event',
+                'metadata' => json_encode([
+                    'schema' => [
+                        'event_type' => [
+                            'type' => 'select',
+                            'label' => 'Event Type',
+                            'component' => 'select',
+                            'options' => [
+                                'personal', 'historical', 'cultural',
+                                'political', 'other'
+                            ],
+                            'help' => 'Type of event',
+                            'required' => true
+                        ],
+                        'significance' => [
                             'type' => 'text',
-                            'label' => 'Headquarters',
+                            'label' => 'Significance',
                             'component' => 'text-input',
-                            'help' => 'Location of main headquarters',
+                            'help' => 'Why this event is significant',
                             'required' => false
                         ],
-                        'website' => [
-                            'type' => 'url',
-                            'label' => 'Website',
-                            'component' => 'url-input',
-                            'help' => 'Official website',
+                        'location' => [
+                            'type' => 'text',
+                            'label' => 'Location',
+                            'component' => 'text-input',
+                            'help' => 'Where the event took place',
                             'required' => false
                         ]
                     ]
@@ -270,13 +300,13 @@ return new class extends Migration
                 'description' => 'A physical location or place',
                 'metadata' => json_encode([
                     'schema' => [
-                        'type' => [
+                        'place_type' => [
                             'type' => 'select',
                             'label' => 'Place Type',
                             'component' => 'select',
                             'options' => [
-                                'city', 'country', 'region', 'building',
-                                'landmark', 'natural-feature', 'other'
+                                'city', 'country', 'region',
+                                'building', 'landmark', 'other'
                             ],
                             'help' => 'Type of place',
                             'required' => true
@@ -285,7 +315,7 @@ return new class extends Migration
                             'type' => 'text',
                             'label' => 'Coordinates',
                             'component' => 'text-input',
-                            'help' => 'Geographic coordinates (latitude, longitude)',
+                            'help' => 'Geographic coordinates',
                             'required' => false
                         ],
                         'country' => [
@@ -293,96 +323,6 @@ return new class extends Migration
                             'label' => 'Country',
                             'component' => 'text-input',
                             'help' => 'Country where this place is located',
-                            'required' => false
-                        ],
-                        'current_name' => [
-                            'type' => 'text',
-                            'label' => 'Current Name',
-                            'component' => 'text-input',
-                            'help' => 'Current name if different from historical name',
-                            'required' => false
-                        ]
-                    ]
-                ]),
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'type_id' => 'event',
-                'name' => 'Event',
-                'description' => 'A specific event or occurrence',
-                'metadata' => json_encode([
-                    'schema' => [
-                        'type' => [
-                            'type' => 'select',
-                            'label' => 'Event Type',
-                            'component' => 'select',
-                            'options' => [
-                                'historical', 'personal', 'cultural',
-                                'political', 'natural', 'other'
-                            ],
-                            'help' => 'Type of event',
-                            'required' => true
-                        ],
-                        'location' => [
-                            'type' => 'text',
-                            'label' => 'Location',
-                            'component' => 'text-input',
-                            'help' => 'Where the event took place',
-                            'required' => false
-                        ],
-                        'significance' => [
-                            'type' => 'text',
-                            'label' => 'Significance',
-                            'component' => 'textarea',
-                            'help' => 'Historical or personal significance of this event',
-                            'required' => false
-                        ],
-                        'participants' => [
-                            'type' => 'array',
-                            'label' => 'Key Participants',
-                            'component' => 'array-input',
-                            'help' => 'Key people or organizations involved',
-                            'required' => false,
-                            'array_item_schema' => [
-                                'type' => 'span',
-                                'label' => 'Participant'
-                            ]
-                        ]
-                    ]
-                ]),
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'type_id' => 'period',
-                'name' => 'Time Period',
-                'description' => 'A defined period of time',
-                'metadata' => json_encode([
-                    'schema' => [
-                        'type' => [
-                            'type' => 'select',
-                            'label' => 'Period Type',
-                            'component' => 'select',
-                            'options' => [
-                                'historical', 'cultural', 'geological',
-                                'personal', 'other'
-                            ],
-                            'help' => 'Type of time period',
-                            'required' => true
-                        ],
-                        'era' => [
-                            'type' => 'text',
-                            'label' => 'Era',
-                            'component' => 'text-input',
-                            'help' => 'Historical era or epoch',
-                            'required' => false
-                        ],
-                        'significance' => [
-                            'type' => 'text',
-                            'label' => 'Significance',
-                            'component' => 'textarea',
-                            'help' => 'Historical or cultural significance of this period',
                             'required' => false
                         ]
                     ]
@@ -396,18 +336,29 @@ return new class extends Migration
                 'description' => 'A temporal connection between spans',
                 'metadata' => json_encode([
                     'schema' => [
+                        'connection_type' => [
+                            'type' => 'select',
+                            'label' => 'Connection Type',
+                            'component' => 'select',
+                            'options' => [
+                                'family', 'education', 'work',
+                                'residence', 'relationship', 'other'
+                            ],
+                            'help' => 'Type of connection',
+                            'required' => true
+                        ],
                         'role' => [
                             'type' => 'text',
                             'label' => 'Role',
                             'component' => 'text-input',
-                            'help' => 'Role or nature of the connection',
+                            'help' => 'Role or position in this connection',
                             'required' => false
                         ],
-                        'details' => [
-                            'type' => 'text',
-                            'label' => 'Details',
+                        'notes' => [
+                            'type' => 'textarea',
+                            'label' => 'Notes',
                             'component' => 'textarea',
-                            'help' => 'Additional details about the connection',
+                            'help' => 'Additional notes about this connection',
                             'required' => false
                         ]
                     ]
