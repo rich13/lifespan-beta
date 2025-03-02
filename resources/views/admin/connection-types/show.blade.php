@@ -4,7 +4,7 @@
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <h1 class="h2 mb-0">{{ $connectionType->name }}</h1>
+            <h1 class="h2 mb-0">{{ $connectionType->forward_predicate }}</h1>
             <div class="text-muted">
                 <code>{{ $connectionType->type }}</code>
             </div>
@@ -26,11 +26,11 @@
                 <div class="card-body">
                     <h3 class="card-title h5">Basic Information</h3>
                     <dl class="row mb-0">
-                        <dt class="col-sm-3">Description</dt>
-                        <dd class="col-sm-9">{{ $connectionType->description }}</dd>
+                        <dt class="col-sm-3">Forward Description</dt>
+                        <dd class="col-sm-9">{{ $connectionType->forward_description }}</dd>
 
-                        <dt class="col-sm-3">Inverse Name</dt>
-                        <dd class="col-sm-9">{{ $connectionType->inverse_name }}</dd>
+                        <dt class="col-sm-3">Inverse Predicate</dt>
+                        <dd class="col-sm-9">{{ $connectionType->inverse_predicate }}</dd>
 
                         <dt class="col-sm-3">Inverse Description</dt>
                         <dd class="col-sm-9">{{ $connectionType->inverse_description }}</dd>

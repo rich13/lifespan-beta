@@ -16,9 +16,9 @@
                     <thead>
                         <tr>
                             <th>Type ID</th>
-                            <th>Name</th>
-                            <th>Description</th>
-                            <th>Inverse Name</th>
+                            <th>Forward Predicate</th>
+                            <th>Forward Description</th>
+                            <th>Inverse Predicate</th>
                             <th>Inverse Description</th>
                             <th>Connections</th>
                             <th>Actions</th>
@@ -28,9 +28,9 @@
                         @foreach($types as $type)
                             <tr>
                                 <td><code>{{ $type->type }}</code></td>
-                                <td>{{ $type->name }}</td>
-                                <td>{{ Str::limit($type->description, 100) }}</td>
-                                <td>{{ $type->inverse_name }}</td>
+                                <td>{{ $type->forward_predicate }}</td>
+                                <td>{{ Str::limit($type->forward_description, 100) }}</td>
+                                <td>{{ $type->inverse_predicate }}</td>
                                 <td>{{ Str::limit($type->inverse_description, 100) }}</td>
                                 <td>
                                     <span class="badge bg-secondary">{{ $type->connections_count }}</span>

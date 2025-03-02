@@ -62,7 +62,11 @@
                                     <div class="btn-group" role="group">
                                         <a href="{{ route('admin.import.show', $file['id']) }}" 
                                            class="btn btn-sm btn-outline-primary">
-                                            {{ $file['existing_span'] ? 'Review Update' : 'Review Import' }}
+                                            @if($file['existing_span'])
+                                                <i class="bi bi-arrow-repeat"></i> Review & Re-import
+                                            @else
+                                                <i class="bi bi-eye"></i> Review & Import
+                                            @endif
                                         </a>
                                     </div>
                                 </td>

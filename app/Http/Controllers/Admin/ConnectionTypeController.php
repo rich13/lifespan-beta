@@ -17,7 +17,7 @@ class ConnectionTypeController extends Controller
     public function index(): View
     {
         $types = ConnectionType::withCount('connections')
-            ->orderBy('name')
+            ->orderBy('type')
             ->get();
             
         return view('admin.connection-types.index', compact('types'));
@@ -40,9 +40,9 @@ class ConnectionTypeController extends Controller
     public function update(Request $request, ConnectionType $connectionType)
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'description' => 'required|string',
-            'inverse_name' => 'required|string|max:255',
+            'forward_predicate' => 'required|string|max:255',
+            'forward_description' => 'required|string',
+            'inverse_predicate' => 'required|string|max:255',
             'inverse_description' => 'required|string',
         ]);
 
@@ -62,9 +62,9 @@ class ConnectionTypeController extends Controller
     {
         $validated = $request->validate([
             'type' => 'required|string|max:255|unique:connection_types,type',
-            'name' => 'required|string|max:255',
-            'description' => 'required|string',
-            'inverse_name' => 'required|string|max:255',
+            'forward_predicate' => 'required|string|max:255',
+            'forward_description' => 'required|string',
+            'inverse_predicate' => 'required|string|max:255',
             'inverse_description' => 'required|string',
         ]);
 
