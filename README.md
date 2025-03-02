@@ -1,84 +1,80 @@
-# Lifespan Beta
+# Lifespan
 
-A Laravel-based rewrite of the Lifespan application, focusing on maintainability, testability, and clean architecture.
+Lifespan is a sophisticated temporal data management system that allows you to track and connect entities across time. It provides a flexible framework for modeling historical data, relationships, and temporal connections with precise date handling and rich metadata support.
 
-## Current Status
+## Core Concepts
 
-Beta is in early development, running alongside the Alpha version. It uses its own database (`lifespan_beta`) to avoid affecting the production system.
+### Spans
 
-### Completed
-- [x] Initial Laravel setup
-- [x] Database schema migration to Laravel format
-- [x] Separate Beta database setup
+A span represents any entity that exists in time. The system supports several core types of spans:
 
-### In Progress
-- [ ] Model creation for core entities
-- [ ] Authentication system that works with both Alpha and Beta
-- [ ] Initial Beta routes (/beta/*)
+- **Person**: Individuals with birth dates, death dates, and biographical information
+- **Organisation**: Companies, institutions, and other organized groups
+- **Event**: Specific occurrences or happenings
+- **Place**: Physical locations or geographical entities
+- **Period**: Defined periods of time
+- **Connection**: Special spans that represent temporal relationships between other spans
 
-### Planned
-- [ ] Homepage reimplementation
-- [ ] Span viewing system
-- [ ] Modern UI with Blade components
-- [ ] Comprehensive test suite
-- [ ] Data migration tools
+Each span includes:
+- Temporal data (start/end dates with configurable precision)
+- Rich metadata specific to its type
+- Access control settings
+- Source documentation
+- Connection tracking
 
-## Architecture Decisions
+### Connections
 
-### Database
-- Using PostgreSQL with proper foreign keys and constraints
-- JSON fields for flexible metadata
-- Improved indexing for performance
-- Clear separation from Alpha database
+Connections represent relationships between spans. The system supports various types of connections, each with forward and inverse relationships:
 
-### Models (Planned)
-```php
-Span
-├── UUID primary key
-├── Belongs to SpanType
-├── Has many Connections
-└── Belongs to many Users
+- **Family**: Parent-child relationships
+- **Education**: Student-institution relationships
+- **Employment**: Employee-organization relationships
+- **Membership**: Member-group relationships
+- **Participation**: Participant-event relationships
+- **Residence**: Person-place relationships
+- **Travel**: Traveler-destination relationships
+- **General Relationships**: Other relationships between people
 
-SpanType
-├── String primary key
-└── Has many Spans
+Each connection can have its own temporal existence and metadata, allowing for precise tracking of when relationships began and ended.
 
-Connection
-├── UUID primary key
-├── Belongs to Span (parent)
-└── Belongs to Span (child)
-```
+## Key Features
 
-### Authentication
-- Shared authentication with Alpha (planned)
-- Laravel Breeze for auth scaffolding
-- Role-based access control
+### Temporal Precision
 
-## Development Guidelines
+- Flexible date handling (year, month, or day precision)
+- Support for ongoing spans (no end date)
+- Placeholder spans for entities with unknown dates
+- Validation of date patterns and combinations
 
-1. **Database Changes**
-   - All schema changes through Laravel migrations
-   - Document complex queries in model methods
-   - Use Eloquent connections where possible
+### Rich Metadata
 
-2. **Testing**
-   - Write tests for all new features
-   - Follow existing test patterns
-   - Use factories for test data
+- Type-specific metadata schemas
+- Customizable fields and validation
+- Support for arrays and nested data
+- Source documentation and notes
 
-3. **UI/UX**
-   - Use Blade components for consistency
-   - Follow Bootstrap 5 patterns
-   - Mobile-first approach
+### Access Control
+
+- Three access levels: private, shared, and public
+- Granular user permissions
+- Personal span management
+- Administrative controls
+
+### Connection Management
+
+- Bidirectional relationships
+- Temporal connection tracking
+- Materialized view for efficient querying
+- Automatic metadata synchronization
 
 ## Getting Started
 
-1. **Setup Database**
+1. **Database Setup**
    ```bash
-   createdb -h localhost -U your_user lifespan_beta
+   createdb -h localhost -U your_user lifespan
    ```
 
-2. **Environment**
+2. **Environment Configuration**
    ```bash
    cp .env.example .env
    php artisan key:generate
@@ -90,39 +86,46 @@ Connection
    npm install
    ```
 
-4. **Database**
+4. **Database Migration**
    ```bash
    php artisan migrate
    ```
 
-## Migration Plan
+## Development Guidelines
 
-The transition from Alpha to Beta will be gradual:
+1. **Database Changes**
+   - Use migrations for schema changes
+   - Follow established naming conventions
+   - Maintain foreign key relationships
+   - Consider indexing strategy
 
-1. **Phase 1 - Current**
-   - Set up Beta infrastructure
-   - Create core models and migrations
-   - Implement basic auth
+2. **Testing**
+   - Write tests for new features
+   - Use factories for test data
+   - Follow existing test patterns
+   - Ensure proper error handling
 
-2. **Phase 2 - Development**
-   - Build new features in Beta
-   - Create comprehensive test suite
-   - Document all architectural decisions
+3. **UI/UX**
+   - Use provided Blade components
+   - Follow Bootstrap patterns
+   - Maintain mobile responsiveness
+   - Consider accessibility
 
-3. **Phase 3 - Migration**
-   - Create data migration tools
-   - Test with production data copies
-   - Plan cutover strategy
+## API Documentation
 
-4. **Phase 4 - Launch**
-   - Final data migration
-   - Switch to Beta
-   - Archive Alpha
+The system provides a comprehensive API for:
+- Span management (CRUD operations)
+- Connection management
+- Metadata handling
+- Access control
+- Search and filtering
+
+Detailed API documentation is available at `/docs/api` when running in development mode.
 
 ## Contributing
 
-When working on Beta:
-1. Update this README with new features/changes
-2. Document architectural decisions
-3. Keep Alpha working throughout development
-4. Add tests for new functionality
+When contributing to Lifespan:
+1. Follow the established coding standards
+2. Add tests for new functionality
+3. Update documentation as needed
+4. Use type-specific importers for data migration
