@@ -73,25 +73,49 @@
 
             <!-- Metadata -->
             @if(!empty($span->metadata))
-            <div class="card mb-4">
-                <div class="card-body">
-                    <h2 class="card-title h5 mb-3">Additional Information</h2>
-                    <dl class="row mb-0">
-                        @foreach($span->metadata as $key => $value)
-                            @if(!in_array($key, ['is_public', 'is_system', 'sources']))
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h2 class="card-title h5 mb-3">Additional Information</h2>
+                        <dl class="row mb-0">
+                            @foreach($span->metadata as $key => $value)
                                 <dt class="col-sm-3">{{ ucfirst(str_replace('_', ' ', $key)) }}</dt>
-                                <dd class="col-sm-9">
-                                    @if(is_array($value))
-                                        <pre class="mb-0"><code>{{ json_encode($value, JSON_PRETTY_PRINT) }}</code></pre>
-                                    @else
-                                        {{ $value }}
-                                    @endif
-                                </dd>
-                            @endif
-                        @endforeach
-                    </dl>
+                                <dd class="col-sm-9">{{ is_array($value) ? implode(', ', $value) : $value }}</dd>
+                            @endforeach
+                        </dl>
+                    </div>
                 </div>
-            </div>
+            @endif
+
+            <!-- Connection Spans -->
+            @php
+                $parentConnections = $span->connections()
+                    ->where('parent_id', $span->id)
+                    ->whereNotNull('connection_span_id')
+                    ->whereHas('connectionSpan') // Only get connections where the connection span exists
+                    ->with(['connectionSpan', 'child', 'type'])
+                    ->get()
+                    ->sortBy(function ($connection) {
+                        $span = $connection->connectionSpan;
+                        return [
+                            $span->start_year ?? PHP_INT_MAX,
+                            $span->start_month ?? PHP_INT_MAX,
+                            $span->start_day ?? PHP_INT_MAX
+                        ];
+                    });
+            @endphp
+            @if($parentConnections->isNotEmpty())
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h2 class="card-title h5 mb-3">Connections</h2>
+                        <div class="connection-spans">
+                            @foreach($parentConnections as $connection)
+                                @if($connection->connectionSpan)
+                                    <x-connections.card :connection="$connection" />
+                                @endif
+                            @endforeach
+                        </div>
+                    </div>
+                </div>
             @endif
         </div>
 
