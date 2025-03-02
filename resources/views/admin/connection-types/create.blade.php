@@ -44,9 +44,7 @@
                         <div class="mb-3">
                             <label for="forward_predicate" class="form-label">Forward Predicate</label>
                             <input type="text" class="form-control @error('forward_predicate') is-invalid @enderror" 
-                                   id="forward_predicate" name="forward_predicate" 
-                                   x-model="forward"
-                                   value="{{ old('forward_predicate') }}" required>
+                                   id="forward_predicate" name="forward_predicate" required>
                             <div class="form-text">
                                 The predicate that describes how the subject relates to the object (e.g., "is parent of", "worked at").
                                 Use present tense and make it read naturally in a sentence.
@@ -59,9 +57,10 @@
                         <div class="mb-3">
                             <label for="forward_description" class="form-label">Forward Description</label>
                             <textarea class="form-control @error('forward_description') is-invalid @enderror" 
-                                    id="forward_description" name="forward_description" 
-                                    rows="2" required>{{ old('forward_description') }}</textarea>
-                            <div class="form-text">Explain when and how this predicate should be used from subject to object.</div>
+                                   id="forward_description" name="forward_description" required></textarea>
+                            <div class="form-text">
+                                A longer description of how the subject relates to the object.
+                            </div>
                             @error('forward_description')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
@@ -70,12 +69,9 @@
                         <div class="mb-3">
                             <label for="inverse_predicate" class="form-label">Inverse Predicate</label>
                             <input type="text" class="form-control @error('inverse_predicate') is-invalid @enderror" 
-                                   id="inverse_predicate" name="inverse_predicate" 
-                                   x-model="inverse"
-                                   value="{{ old('inverse_predicate') }}" required>
+                                   id="inverse_predicate" name="inverse_predicate" required>
                             <div class="form-text">
                                 The predicate that describes how the object relates back to the subject (e.g., "is child of", "employed").
-                                Should be the logical inverse of the forward predicate.
                             </div>
                             @error('inverse_predicate')
                                 <div class="invalid-feedback">{{ $message }}</div>
@@ -85,9 +81,10 @@
                         <div class="mb-3">
                             <label for="inverse_description" class="form-label">Inverse Description</label>
                             <textarea class="form-control @error('inverse_description') is-invalid @enderror" 
-                                    id="inverse_description" name="inverse_description" 
-                                    rows="2" required>{{ old('inverse_description') }}</textarea>
-                            <div class="form-text">Explain when and how this predicate should be used from object to subject.</div>
+                                   id="inverse_description" name="inverse_description" required></textarea>
+                            <div class="form-text">
+                                A longer description of how the object relates back to the subject.
+                            </div>
                             @error('inverse_description')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror

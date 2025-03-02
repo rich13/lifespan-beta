@@ -4,155 +4,162 @@
 <div class="py-4">
     <div class="row">
         <div class="col-12 d-flex justify-content-between align-items-center mb-4">
-            <h1 class="h3 mb-0">Import Preview: {{ isset($yaml['name']) ? $yaml['name'] : 'Unknown' }}</h1>
+            <h1 class="h3 mb-0">Import: {{ $yaml['name'] ?? 'Unknown' }}</h1>
             <div>
-                <a href="{{ route('admin.import.index') }}" class="btn btn-outline-secondary me-2">Back</a>
-                @if(!isset($report))
-                    <form action="{{ route('admin.import.simulate', $id) }}" method="POST" class="d-inline">
-                        @csrf
-                        <button type="submit" class="btn btn-primary">Simulate Import</button>
-                    </form>
-                @elseif(empty($report['errors']))
-                    <form action="{{ route('admin.import.import', $id) }}" method="POST" class="d-inline">
-                        @csrf
-                        <button type="submit" class="btn btn-primary">
-                            {{ isset($report['main_span']['existing']) && $report['main_span']['existing'] ? 'Update' : 'Import' }}
-                        </button>
-                    </form>
-                @endif
+                <a href="{{ route('admin.import.index') }}" class="btn btn-outline-secondary">Back</a>
             </div>
         </div>
     </div>
 
+    @if(session('error'))
+        <div class="alert alert-danger alert-dismissible fade show mb-4" role="alert">
+            {{ session('error') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    @endif
+
     <div class="card">
         <div class="card-body">
-            @if(isset($report))
-                @if(!empty($report['errors']))
-                    <div class="alert alert-danger">
-                        <h5 class="alert-heading">Errors Found</h5>
-                        <ul class="mb-0">
-                            @foreach($report['errors'] as $error)
-                                <li>{{ is_array($error) ? $error['message'] : $error }}</li>
-                            @endforeach
-                        </ul>
-                    </div>
+            <div class="alert alert-info mb-4">
+                @if(isset($yaml['name']) && \App\Models\Span::where('name', $yaml['name'])->exists())
+                    <p class="mb-0">This span already exists. Re-importing will update the existing span with any new information.</p>
+                @else
+                    <p class="mb-0">Please review the YAML content below. Click "Import" to begin the import process.</p>
                 @endif
+            </div>
 
-                @if(!empty($report['warnings']))
-                    <div class="alert alert-warning">
-                        <h5 class="alert-heading">Warnings</h5>
-                        <ul class="mb-0">
-                            @foreach($report['warnings'] as $warning)
-                                <li>{{ $warning }}</li>
-                            @endforeach
-                        </ul>
-                    </div>
-                @endif
-
-                <!-- Main Span -->
-                @if(isset($report['main_span']))
-                    <div class="mb-4">
-                        <h5>Main Span</h5>
-                        <div class="card">
-                            <div class="card-body">
-                                @if(isset($report['main_span']['existing']) && $report['main_span']['existing'])
-                                    <div class="alert alert-info">
-                                        This span already exists and will be updated with any new information.
-                                    </div>
-                                @endif
-                                <dl class="row mb-0">
-                                    <dt class="col-sm-3">Name</dt>
-                                    <dd class="col-sm-9">{{ $report['main_span']['name'] ?? $yaml['name'] ?? 'Unknown' }}</dd>
-                                    
-                                    <dt class="col-sm-3">Type</dt>
-                                    <dd class="col-sm-9">{{ $report['main_span']['type'] ?? $yaml['type'] ?? 'Unknown' }}</dd>
-                                    
-                                    @if(isset($report['main_span']['dates']))
-                                        <dt class="col-sm-3">Dates</dt>
-                                        <dd class="col-sm-9">{{ $report['main_span']['dates'] }}</dd>
-                                    @endif
-                                </dl>
-                            </div>
-                        </div>
-                    </div>
-                @endif
-
-                <!-- Related Data -->
-                @php
-                    $sections = [
-                        'family' => 'Family Connections',
-                        'education' => 'Education',
-                        'work' => 'Work History',
-                        'residences' => 'Places of Residence',
-                        'relationships' => 'Relationships'
-                    ];
-                @endphp
-
-                @foreach($sections as $key => $title)
-                    @if(isset($report[$key]) && isset($report[$key]['total']) && $report[$key]['total'] > 0)
-                        <div class="mb-4">
-                            <h5>{{ $title }}</h5>
-                            <div class="card">
-                                <div class="card-body">
-                                    <p class="card-text">
-                                        Total: {{ $report[$key]['total'] }}
-                                        @if(isset($report[$key]['existing']) && $report[$key]['existing'] > 0)
-                                            <br>
-                                            <span class="text-info">
-                                                {{ $report[$key]['existing'] }} existing items will be updated
-                                            </span>
-                                        @endif
-                                        @if(isset($report[$key]['will_create']) && $report[$key]['will_create'] > 0)
-                                            <br>
-                                            <span class="text-success">
-                                                {{ $report[$key]['will_create'] }} new items will be created
-                                            </span>
-                                        @endif
-                                    </p>
-                                    
-                                    @if(!empty($report[$key]['details']))
-                                        <div class="mt-3">
-                                            <h6>Details:</h6>
-                                            <ul class="list-unstyled mb-0">
-                                                @foreach($report[$key]['details'] as $detail)
-                                                    <li class="mb-2">
-                                                        {{ $detail['name'] ?? $detail['person'] ?? 'Unknown' }}
-                                                        @if(isset($detail['role']))
-                                                            ({{ $detail['role'] }})
-                                                        @endif
-                                                        - 
-                                                        @php
-                                                            $actionKey = isset($detail['person_action']) ? 'person_action' : 'action';
-                                                            $action = $detail[$actionKey] ?? 'unknown';
-                                                        @endphp
-                                                        @if($action === 'will_create')
-                                                            <span class="text-success">Will be created</span>
-                                                        @elseif($action === 'will_update' || $action === 'will_use_existing')
-                                                            <span class="text-info">Will use existing</span>
-                                                        @endif
-                                                    </li>
-                                                @endforeach
-                                            </ul>
-                                        </div>
-                                    @endif
-                                </div>
-                            </div>
-                        </div>
+            <div class="d-flex justify-content-end mb-4">
+                <button 
+                    id="importButton"
+                    class="btn btn-primary"
+                    onclick="startImport('{{ $import_id }}')"
+                >
+                    <i class="bi bi-box-arrow-in-down me-1"></i>
+                    @if(isset($yaml['name']) && \App\Models\Span::where('name', $yaml['name'])->exists())
+                        Import Again
+                    @else
+                        Import
                     @endif
-                @endforeach
-            @else
-                <div class="alert alert-info">
-                    Click "Import" to simulate the import process and see what changes will be made.
+                </button>
+            </div>
+
+            <div id="importProgress" class="d-none mb-4">
+                <div class="progress">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar"></div>
                 </div>
-                
-                <div class="card">
-                    <div class="card-header">YAML Content</div>
-                    <div class="card-body">
-                        <pre class="mb-0"><code>{{ $formatted }}</code></pre>
-                    </div>
+                <p class="text-muted small mt-2" id="progressText">Starting import...</p>
+            </div>
+
+            <div id="importResult" class="d-none mb-4">
+                <div id="successAlert" class="d-none alert alert-success">
+                    <i class="bi bi-check-circle me-1"></i> Import completed successfully!
                 </div>
-            @endif
+                <div id="errorAlert" class="d-none alert alert-danger">
+                    <i class="bi bi-exclamation-circle me-1"></i> <span id="errorMessage"></span>
+                </div>
+            </div>
+
+            <pre class="bg-light p-3 rounded"><code>{{ $formatted }}</code></pre>
         </div>
     </div>
 </div>
+
+<script>
+async function startImport(importId) {
+    console.log('Starting import process for ID:', importId);
+
+    // Disable import button
+    const importButton = document.getElementById('importButton');
+    importButton.disabled = true;
+    importButton.classList.add('opacity-50');
+    console.log('Import button disabled');
+
+    // Show progress
+    const progressDiv = document.getElementById('importProgress');
+    progressDiv.classList.remove('d-none');
+    console.log('Progress indicator shown');
+
+    try {
+        console.log('Preparing to send import request...');
+        const url = '{{ url("/") }}/admin/import/' + importId + '/import';
+        console.log('Import URL:', url);
+
+        // Get CSRF token
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        console.log('CSRF Token found:', !!csrfToken);
+
+        // Start import
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': csrfToken
+            },
+            credentials: 'same-origin'
+        });
+        console.log('Response status:', response.status);
+        console.log('Response headers:', Object.fromEntries(response.headers));
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
+        }
+
+        const result = await response.json();
+        console.log('Import result:', result);
+
+        // Hide progress
+        progressDiv.classList.add('d-none');
+        console.log('Progress indicator hidden');
+
+        // Show result
+        const resultDiv = document.getElementById('importResult');
+        resultDiv.classList.remove('d-none');
+
+        if (result.success) {
+            console.log('Import successful, showing success message');
+            document.getElementById('successAlert').classList.remove('d-none');
+            document.getElementById('errorAlert').classList.add('d-none');
+            
+            // Redirect after 2 seconds
+            console.log('Will redirect to index in 2 seconds');
+            setTimeout(() => {
+                window.location.href = '{{ route("admin.import.index") }}';
+            }, 2000);
+        } else {
+            console.log('Import failed:', result.message);
+            document.getElementById('successAlert').classList.add('d-none');
+            document.getElementById('errorAlert').classList.remove('d-none');
+            document.getElementById('errorMessage').textContent = result.message || 'Import failed';
+            
+            // Re-enable import button
+            importButton.disabled = false;
+            importButton.classList.remove('opacity-50');
+        }
+
+    } catch (error) {
+        console.error('Import error details:', {
+            name: error.name,
+            message: error.message,
+            stack: error.stack
+        });
+        
+        // Hide progress
+        progressDiv.classList.add('d-none');
+        console.log('Progress indicator hidden after error');
+
+        // Show error
+        const resultDiv = document.getElementById('importResult');
+        resultDiv.classList.remove('d-none');
+        document.getElementById('successAlert').classList.add('d-none');
+        document.getElementById('errorAlert').classList.remove('d-none');
+        document.getElementById('errorMessage').textContent = 'Import failed: ' + error.message;
+
+        // Re-enable import button
+        importButton.disabled = false;
+        importButton.classList.remove('opacity-50');
+        console.log('Import button re-enabled after error');
+    }
+}
+</script>
 @endsection 

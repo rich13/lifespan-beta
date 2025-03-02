@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\SpanTypeController;
 use App\Http\Controllers\Admin\ConnectionTypeController;
 use App\Http\Controllers\Admin\ConnectionController;
+use App\Http\Controllers\Admin\ImportController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
@@ -65,14 +66,14 @@ Route::middleware('web')->group(function () {
                 ->name('dashboard');
 
             // Import Management
-            Route::get('/import', [App\Http\Controllers\Admin\ImportController::class, 'index'])
+            Route::get('/import', [ImportController::class, 'index'])
                 ->name('import.index');
-            Route::get('/import/{id}', [App\Http\Controllers\Admin\ImportController::class, 'show'])
+            Route::get('/import/{id}', [ImportController::class, 'show'])
                 ->name('import.show');
-            Route::post('/import/{id}', [App\Http\Controllers\Admin\ImportController::class, 'import'])
+            Route::post('/import/{id}/import', [ImportController::class, 'import'])
                 ->name('import.import');
-            Route::post('/import/{id}/simulate', [App\Http\Controllers\Admin\ImportController::class, 'simulate'])
-                ->name('import.simulate');
+            Route::get('/import/progress/{importId}', [ImportController::class, 'progress'])
+                ->name('import.progress');
 
             // Span Types Management
             Route::resource('span-types', SpanTypeController::class);
