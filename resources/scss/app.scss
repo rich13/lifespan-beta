@@ -1,5 +1,7 @@
-// Import Bootstrap
-@import "bootstrap/scss/bootstrap";
+// Use modern SASS syntax
+@use "sass:color";
+@use "bootstrap/scss/bootstrap" as bootstrap;
+@use "bootstrap-icons/font/bootstrap-icons.css" as icons;
 
 // Custom styles can go here 
 
@@ -11,7 +13,7 @@
     left: 0;
     z-index: 100;
     padding: 0;
-    box-shadow: inset -1px 0 0 rgba(0, 0, 0, .1);
+    box-shadow: inset -1px 0 0 rgba(0, 0, 0, 0.1);
 }
 
 .sidebar .nav-link {
@@ -20,11 +22,11 @@
     padding: 0.5rem 1rem;
     
     &.active {
-        color: #0d6efd;
+        color: bootstrap.$primary;
     }
     
     &:hover {
-        color: #0d6efd;
+        color: bootstrap.$primary;
     }
 }
 
