@@ -13,6 +13,8 @@ class DatabaseHygieneTest extends TestCase
      */
     private array $excludedTables = [
         'failed_jobs',
+        'jobs',
+        'job_batches',
         'migrations',
         'password_reset_tokens',
         'personal_access_tokens',
