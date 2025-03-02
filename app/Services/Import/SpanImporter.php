@@ -6,13 +6,13 @@ use App\Models\User;
 use App\Models\Span;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\Yaml\Yaml;
+use Illuminate\Support\Facades\Log;
 
 abstract class SpanImporter
 {
     protected User $user;
     protected array $data;
     protected array $report;
-    protected bool $simulate;
 
     public function __construct(User $user)
     {
@@ -27,67 +27,45 @@ abstract class SpanImporter
             'errors' => [],
             'warnings' => [],
             'main_span' => [
-                'will_create' => false,
-                'will_update' => false,
-                'existing' => false,
+                'action' => null,
+                'id' => null,
+                'name' => null
             ],
             'family' => [
                 'total' => 0,
-                'will_create' => 0,
                 'existing' => 0,
-                'details' => [],
+                'created' => 0,
+                'details' => []
             ],
             'education' => [
                 'total' => 0,
-                'will_create' => 0,
                 'existing' => 0,
-                'details' => [],
+                'created' => 0,
+                'details' => []
             ],
             'work' => [
                 'total' => 0,
-                'will_create' => 0,
                 'existing' => 0,
-                'details' => [],
+                'created' => 0,
+                'details' => []
             ],
             'residences' => [
                 'total' => 0,
-                'will_create' => 0,
                 'existing' => 0,
-                'details' => [],
+                'created' => 0,
+                'details' => []
             ],
             'relationships' => [
                 'total' => 0,
-                'will_create' => 0,
                 'existing' => 0,
-                'details' => [],
-            ],
+                'created' => 0,
+                'details' => []
+            ]
         ];
-    }
-
-    public function simulate(string $yamlPath): array
-    {
-        $this->simulate = true;
-        $this->data = Yaml::parseFile($yamlPath);
-        
-        try {
-            DB::beginTransaction();
-            
-            $this->validateYaml();
-            $this->simulateImport();
-            
-            DB::rollBack();
-            return $this->report;
-            
-        } catch (\Exception $e) {
-            DB::rollBack();
-            $this->addError('general', $e->getMessage());
-            return $this->report;
-        }
     }
 
     public function import(string $yamlPath): array
     {
-        $this->simulate = false;
         $this->data = Yaml::parseFile($yamlPath);
         
         try {
@@ -108,30 +86,36 @@ abstract class SpanImporter
 
     abstract protected function validateYaml(): void;
     
-    abstract protected function simulateImport(): void;
-    
     abstract protected function performImport(): void;
 
-    protected function parseDate(?string $dateStr): ?array
+    /**
+     * Parse a date string into a Carbon instance.
+     * 
+     * @param string|null $dateStr The date string to parse (YYYY-MM-DD, YYYY-MM, or YYYY)
+     * @return \Carbon\Carbon|null The parsed date or null if invalid
+     */
+    protected function parseDate(?string $dateStr): ?\Carbon\Carbon
     {
         if (!$dateStr) {
             return null;
         }
 
-        $parts = explode('-', $dateStr);
-        $result = [];
+        try {
+            // Split the date string
+            $parts = explode('-', $dateStr);
+            $year = (int)$parts[0];
+            $month = isset($parts[1]) ? (int)$parts[1] : 1;
+            $day = isset($parts[2]) ? (int)$parts[2] : 1;
 
-        if (isset($parts[0])) {
-            $result['year'] = (int) $parts[0];
+            // Create a Carbon instance
+            return \Carbon\Carbon::createFromDate($year, $month, $day);
+        } catch (\Exception $e) {
+            Log::error('Failed to parse date', [
+                'date_str' => $dateStr,
+                'error' => $e->getMessage()
+            ]);
+            return null;
         }
-        if (isset($parts[1])) {
-            $result['month'] = (int) $parts[1];
-        }
-        if (isset($parts[2])) {
-            $result['day'] = (int) $parts[2];
-        }
-
-        return $result;
     }
 
     protected function addError(string $type, string $message, ?array $context = null): void

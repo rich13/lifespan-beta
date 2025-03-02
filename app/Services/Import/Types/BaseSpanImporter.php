@@ -4,9 +4,62 @@ namespace App\Services\Import\Types;
 
 use App\Models\Span;
 use App\Services\Import\SpanImporter;
+use App\Models\User;
+use Illuminate\Support\Facades\DB;
+use Symfony\Component\Yaml\Yaml;
 
 abstract class BaseSpanImporter extends SpanImporter
 {
+    protected User $user;
+    protected array $data;
+    protected array $report;
+
+    public function __construct(User $user)
+    {
+        $this->user = $user;
+        $this->report = $this->getBaseReport();
+    }
+
+    protected function getBaseReport(): array
+    {
+        return [
+            'success' => true,
+            'errors' => [],
+            'warnings' => [],
+            'main_span' => [
+                'action' => null,
+                'id' => null,
+                'name' => null
+            ],
+            'family' => [
+                'created' => 0,
+                'existing' => 0,
+                'total' => 0,
+                'details' => []
+            ]
+        ];
+    }
+
+    public function import(string $yamlPath): array
+    {
+        $this->data = Yaml::parseFile($yamlPath);
+        
+        try {
+            DB::beginTransaction();
+            
+            $this->validateYaml();
+            $this->performImport();
+            
+            DB::commit();
+            return $this->report;
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            $this->addError('general', $e->getMessage());
+            return $this->report;
+        }
+    }
+
     protected function validateYaml(): void
     {
         if (!isset($this->data['name'])) {
@@ -39,35 +92,6 @@ abstract class BaseSpanImporter extends SpanImporter
         $this->validateTypeSpecificFields();
     }
 
-    protected function simulateImport(): void
-    {
-        if ($this->report['errors']) {
-            return;
-        }
-
-        // Check if span already exists
-        $existingSpan = Span::where('name', $this->data['name'])
-            ->where('type_id', $this->getSpanType())
-            ->first();
-
-        if ($existingSpan) {
-            $this->updateReport('main_span', [
-                'will_update' => true,
-                'existing' => true,
-                'name' => $this->data['name'],
-                'type' => $this->getSpanType(),
-            ]);
-        } else {
-            $this->updateReport('main_span', [
-                'will_create' => true,
-                'name' => $this->data['name'],
-                'type' => $this->getSpanType(),
-            ]);
-        }
-
-        $this->simulateTypeSpecificImport();
-    }
-
     protected function performImport(): void
     {
         if ($this->report['errors']) {
@@ -76,29 +100,32 @@ abstract class BaseSpanImporter extends SpanImporter
 
         $span = Span::firstOrNew([
             'name' => $this->data['name'],
-            'type_id' => $this->getSpanType(),
+            'type_id' => $this->getSpanType()
         ]);
 
-        $dates = $this->parseDate($this->data['start']);
-        if ($dates) {
-            $span->start_year = $dates['year'];
-            $span->start_month = $dates['month'] ?? null;
-            $span->start_day = $dates['day'] ?? null;
+        // Parse start date and set state accordingly
+        $startDate = $this->parseDate($this->data['start'] ?? null);
+        $span->state = 'placeholder';  // Default to placeholder
+
+        if ($startDate) {
+            $span->start_year = $startDate->year;
+            $span->start_month = $startDate->month;
+            $span->start_day = $startDate->day;
+            $span->state = 'complete';  // Only set to complete if we have a start date
         }
 
         if (isset($this->data['end']) && $this->data['end'] !== null) {
-            $dates = $this->parseDate($this->data['end']);
-            if ($dates) {
-                $span->end_year = $dates['year'];
-                $span->end_month = $dates['month'] ?? null;
-                $span->end_day = $dates['day'] ?? null;
+            $endDate = $this->parseDate($this->data['end']);
+            if ($endDate) {
+                $span->end_year = $endDate->year;
+                $span->end_month = $endDate->month;
+                $span->end_day = $endDate->day;
             }
         }
 
         // Set common fields
         $span->owner_id = $this->user->id;
         $span->updater_id = $this->user->id;
-        $span->state = 'complete';  // Default to complete, can be overridden
 
         // Allow type-specific importers to set additional fields
         $this->setTypeSpecificFields($span);
@@ -113,9 +140,38 @@ abstract class BaseSpanImporter extends SpanImporter
     
     abstract protected function validateTypeSpecificFields(): void;
     
-    abstract protected function simulateTypeSpecificImport(): void;
-    
     abstract protected function setTypeSpecificFields(Span $span): void;
     
     abstract protected function importTypeSpecificRelationships(Span $span): void;
+
+    protected function addError(string $type, string $message, ?array $context = null): void
+    {
+        $error = ['type' => $type, 'message' => $message];
+        if ($context) {
+            $error['context'] = $context;
+        }
+        $this->report['errors'][] = $error;
+        $this->report['success'] = false;
+    }
+
+    protected function addWarning(string $message): void
+    {
+        $this->report['warnings'][] = $message;
+    }
+
+    protected function updateReport(string $section, array $data): void
+    {
+        foreach ($data as $key => $value) {
+            if (isset($this->report[$section][$key])) {
+                if (is_array($value) && isset($this->report[$section][$key])) {
+                    $this->report[$section][$key] = array_merge(
+                        $this->report[$section][$key],
+                        $value
+                    );
+                } else {
+                    $this->report[$section][$key] = $value;
+                }
+            }
+        }
+    }
 } 

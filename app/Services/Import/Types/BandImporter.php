@@ -4,9 +4,21 @@ namespace App\Services\Import\Types;
 
 use App\Models\Span;
 use App\Models\Connection;
+use App\Models\User;
+use App\Http\Controllers\SpanController;
 
 class BandImporter extends BaseSpanImporter
 {
+    protected ConnectionImporter $connectionImporter;
+    protected SpanController $spanController;
+
+    public function __construct(User $user)
+    {
+        parent::__construct($user);
+        $this->connectionImporter = new ConnectionImporter($user);
+        $this->spanController = new SpanController();
+    }
+
     protected function getSpanType(): string
     {
         return 'band';
@@ -14,111 +26,79 @@ class BandImporter extends BaseSpanImporter
 
     protected function validateTypeSpecificFields(): void
     {
-        // Validate members if present
-        if (isset($this->data['members'])) {
-            if (!is_array($this->data['members'])) {
-                $this->addError('validation', 'Members must be an array');
-            } else {
-                foreach ($this->data['members'] as $member) {
-                    if (!isset($member['name'])) {
-                        $this->addError('validation', 'Each member must have a name');
-                    }
-                    if (!isset($member['role'])) {
-                        $this->addError('validation', 'Each member must have a role');
-                    }
-                    if (!isset($member['start'])) {
-                        $this->addError('validation', 'Each member must have a start date');
-                    }
-                }
-            }
+        // Validate members array
+        if (!isset($this->data['members']) || !is_array($this->data['members'])) {
+            $this->addError('validation', 'Members must be an array');
+            return;
         }
-    }
 
-    protected function simulateTypeSpecificImport(): void
-    {
-        // Simulate member connections
-        if (isset($this->data['members'])) {
-            $memberCount = count($this->data['members']);
-            
-            foreach ($this->data['members'] as $member) {
-                $existingPerson = Span::where('name', $member['name'])
-                    ->where('type_id', 'person')
-                    ->first();
-
-                $this->updateReport('relationships', [
-                    'details' => [[
-                        'name' => $member['name'],
-                        'role' => $member['role'],
-                        'action' => $existingPerson ? 'will_use_existing' : 'will_create'
-                    ]]
-                ]);
-
-                if ($existingPerson) {
-                    $this->updateReport('relationships', ['existing' => 1]);
-                } else {
-                    $this->updateReport('relationships', ['will_create' => 1]);
-                }
+        foreach ($this->data['members'] as $member) {
+            if (!isset($member['name'])) {
+                $this->addError('validation', 'Member must have a name');
             }
-
-            $this->updateReport('relationships', ['total' => $memberCount]);
+            if (!isset($member['start'])) {
+                $this->addError('validation', 'Member must have a start date');
+            }
+            if (!isset($member['role'])) {
+                $this->addError('validation', 'Member must have a role');
+            }
         }
     }
 
     protected function setTypeSpecificFields(Span $span): void
     {
-        // No additional fields needed for band spans at this time
+        // No type-specific fields for bands yet
     }
 
-    protected function importTypeSpecificRelationships(Span $span): void
+    protected function importTypeSpecificRelationships(Span $bandSpan): void
     {
-        // Import band members
-        if (isset($this->data['members'])) {
-            foreach ($this->data['members'] as $member) {
-                $this->createMemberConnection($span, $member);
-            }
+        foreach ($this->data['members'] as $member) {
+            $this->importMemberConnection($bandSpan, $member);
         }
     }
 
-    protected function createMemberConnection(Span $bandSpan, array $member): void
+    protected function importMemberConnection(Span $bandSpan, array $member): void
     {
-        // Create or find the person span
-        $personSpan = Span::firstOrCreate(
-            ['name' => $member['name'], 'type_id' => 'person'],
-            [
-                'owner_id' => $this->user->id,
-                'updater_id' => $this->user->id,
-                'state' => 'placeholder'
-            ]
-        );
+        try {
+            // Parse dates using the ConnectionImporter
+            $dates = $this->connectionImporter->parseDatesFromStrings(
+                $member['start'],
+                $member['end'] ?? null
+            );
 
-        // Parse dates
-        $startDates = $this->parseDate($member['start']);
-        $endDates = isset($member['end']) ? $this->parseDate($member['end']) : null;
-
-        // Create a connection span
-        $connectionSpan = Span::create([
-            'name' => "{$member['name']}'s membership in {$bandSpan->name}",
-            'type_id' => 'connection',
-            'start_year' => $startDates['year'],
-            'start_month' => $startDates['month'] ?? null,
-            'start_day' => $startDates['day'] ?? null,
-            'end_year' => $endDates['year'] ?? null,
-            'end_month' => $endDates['month'] ?? null,
-            'end_day' => $endDates['day'] ?? null,
-            'owner_id' => $this->user->id,
-            'updater_id' => $this->user->id,
-            'state' => 'complete',
-            'metadata' => [
+            // Create metadata
+            $metadata = [
                 'role' => $member['role']
-            ]
-        ]);
+            ];
 
-        // Create the connection
-        Connection::firstOrCreate([
-            'parent_id' => $bandSpan->id,
-            'child_id' => $personSpan->id,
-            'type_id' => 'member_of',
-            'connection_span_id' => $connectionSpan->id
-        ]);
+            // Find or create the person span using the ConnectionImporter
+            $personSpan = $this->connectionImporter->findOrCreateConnectedSpan(
+                $member['name'],
+                'person',
+                $dates,
+                $metadata
+            );
+
+            // Create the connection using the ConnectionImporter
+            $this->connectionImporter->createConnection(
+                $bandSpan,
+                $personSpan,
+                'member_of',
+                $dates,
+                $metadata
+            );
+
+            // Update report
+            $this->report['members']['details'][] = [
+                'name' => $member['name'],
+                'role' => $member['role'],
+                'person_span_id' => $personSpan->id
+            ];
+        } catch (\Exception $e) {
+            $this->addError('member', $e->getMessage(), [
+                'data' => $member
+            ]);
+            throw $e;
+        }
     }
 } 
