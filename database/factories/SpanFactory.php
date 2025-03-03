@@ -17,23 +17,64 @@ class SpanFactory extends Factory
         $updater = User::factory()->create();
 
         $startYear = fake()->numberBetween(1900, 2024);
-        $endYear = fake()->numberBetween($startYear, 2024);
+        $hasEndDate = fake()->boolean();
+        $endYear = $hasEndDate ? fake()->numberBetween($startYear, 2024) : null;
+        
+        $startMonth = fake()->numberBetween(1, 12);
+        $startDay = fake()->numberBetween(1, 28); // Using 28 to avoid invalid dates
+        
+        // If end year is the same as start year, ensure end month is after start month
+        $endMonth = null;
+        if ($endYear !== null) {
+            $endMonth = $endYear > $startYear 
+                ? fake()->numberBetween(1, 12)
+                : fake()->numberBetween($startMonth, 12);
+        }
+        
+        // If end year and month are the same as start, ensure end day is after start day
+        $endDay = null;
+        if ($endMonth !== null) {
+            $endDay = ($endYear === $startYear && $endMonth === $startMonth)
+                ? fake()->numberBetween($startDay, 28)
+                : fake()->numberBetween(1, 28);
+        }
+
+        // Determine start precision based on provided fields
+        $startPrecision = 'year';
+        if ($startMonth !== null) {
+            $startPrecision = 'month';
+        }
+        if ($startDay !== null) {
+            $startPrecision = 'day';
+        }
+
+        // Determine end precision based on provided fields
+        $endPrecision = null;
+        if ($endYear !== null) {
+            $endPrecision = 'year';
+            if ($endMonth !== null) {
+                $endPrecision = 'month';
+            }
+            if ($endDay !== null) {
+                $endPrecision = 'day';
+            }
+        }
         
         return [
             'id' => Str::uuid(),
             'name' => fake()->name(),
-            'type_id' => 'event',
+            'type_id' => fake()->randomElement(['person', 'organisation', 'event', 'place', 'connection']),
             'start_year' => $startYear,
-            'start_month' => fake()->numberBetween(1, 12),
-            'start_day' => fake()->numberBetween(1, 28), // Using 28 to avoid invalid dates
+            'start_month' => $startMonth,
+            'start_day' => $startDay,
             'end_year' => $endYear,
-            'end_month' => fake()->numberBetween(1, 12),
-            'end_day' => fake()->numberBetween(1, 28), // Using 28 to avoid invalid dates
+            'end_month' => $endMonth,
+            'end_day' => $endDay,
             'owner_id' => $owner->id,
             'updater_id' => $updater->id,
             'metadata' => [],
-            'start_precision' => 'day',
-            'end_precision' => 'day',
+            'start_precision' => $startPrecision,
+            'end_precision' => $endPrecision,
             'slug' => Str::slug(fake()->name()),
             'access_level' => 'public',
         ];
@@ -58,7 +99,7 @@ class SpanFactory extends Factory
             'end_month' => null,
             'end_day' => null,
             'start_precision' => 'day',
-            'end_precision' => 'year',
+            'end_precision' => null,
             'slug' => fn (array $attributes) => \Str::slug($attributes['name']),
             'access_level' => 'private'  // Personal spans are private by default
         ]);
@@ -89,5 +130,14 @@ class SpanFactory extends Factory
         return $this->state(fn (array $attributes) => [
             'access_level' => 'public'
         ]);
+    }
+
+    public function type(string $type): self
+    {
+        return $this->state(function (array $attributes) use ($type) {
+            return [
+                'type_id' => $type
+            ];
+        });
     }
 } 
