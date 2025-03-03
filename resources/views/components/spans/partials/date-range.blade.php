@@ -1,7 +1,6 @@
 @props(['span'])
 
 <div class="text-muted d-flex align-items-center gap-2">
-    <i class="bi bi-calendar-event"></i>
     @php
         $startDate = '';
         if ($span->start_year) {
@@ -22,7 +21,8 @@
     {{ $startDate }}
     
     @if(!$span->is_ongoing)
-        <i class="bi bi-arrow-right"></i>
+    <i class="bi bi-dash"></i>
+
         @php
             $endDate = '';
             if ($span->end_year) {
@@ -42,6 +42,6 @@
         @endphp
         {{ $endDate }}
     @else
-        <span class="badge bg-success">Ongoing</span>
+        <span>(Ongoing)</span>
     @endif
 </div> 

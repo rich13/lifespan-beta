@@ -11,6 +11,14 @@
         <!-- jQuery -->
         <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 
+        <!-- Bootstrap -->
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+        <!-- Select2 -->
+        <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+        <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+        <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
         <!-- Scripts and Styles -->
         @viteReactRefresh
         @vite(['resources/scss/app.scss', 'resources/js/app.js'])
@@ -18,46 +26,43 @@
         <!-- Page-specific scripts -->
         @yield('scripts')
     </head>
-    <body>
-        <nav class="navbar navbar-expand-lg navbar-light bg-light">
-            <div class="container-fluid">
-                <a class="navbar-brand" href="{{ route('home') }}"><i class="bi bi-bar-chart-steps me-1"></i> Lifespan &beta;</a>
-                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                    <span class="navbar-toggler-icon"></span>
-                </button>
-                
-                <div class="collapse navbar-collapse" id="navbarNav">
-                    <ul class="navbar-nav ms-auto">
-                        @auth
-                            <li class="nav-item dropdown">
-                                <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown">
-                                    <i class="bi bi-person-circle me-1"></i> {{ Auth::user()->name }}
-                                </a>
-                                <ul class="dropdown-menu dropdown-menu-end">
-                                    <li><a class="dropdown-item" href="{{ route('profile.edit') }}">Profile</a></li>
-                                    @if(Auth::user()->is_admin)
-                                        <li><a class="dropdown-item" href="{{ route('admin.dashboard') }}">Admin Dashboard</a></li>
-                                    @endif
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li>
-                                        <form method="POST" action="{{ route('logout') }}">
-                                            @csrf
-                                            <button type="submit" class="dropdown-item">Sign Out</button>
-                                        </form>
-                                    </li>
-                                </ul>
-                            </li>
-                        @endauth
-                    </ul>
-                </div>
-            </div>
-        </nav>
-
+    <body class="bg-light">
         <div class="container-fluid">
             <div class="row">
                 @auth
-                    <div class="col-md-3 col-lg-2 bg-light border-end min-vh-100">
-                        <div class="pt-3">
+                    <div class="col-md-3 col-lg-2 bg-white border-end min-vh-100 px-0">
+                        <!-- Brand -->
+                        <div class="p-3 border-bottom bg-light">
+                            <a class="text-decoration-none" href="{{ route('home') }}">
+                                <h5 class="mb-0 text-dark">
+                                    <i class="bi bi-bar-chart-steps me-1"></i> Lifespan &beta;
+                                </h5>
+                            </a>
+                        </div>
+
+                        <!-- User Profile Section -->
+                        <div class="p-3 border-bottom">
+                            <div class="d-flex align-items-center">
+                            
+                                <div class="flex-grow-1 ms-3">
+                                    @if(Auth::user()->personalSpan)
+                                        <x-spans.display.micro-card :span="Auth::user()->personalSpan" />
+                                    @else
+                                        <h6 class="mb-0">{{ Auth::user()->name }}</h6>
+                                    @endif
+                                    <div class="btn-group mt-2">
+                                        <a href="{{ route('profile.edit') }}" class="btn btn-sm btn-outline-primary">Profile</a>
+                                        <form method="POST" action="{{ route('logout') }}" class="d-inline">
+                                            @csrf
+                                            <button type="submit" class="btn btn-sm btn-outline-primary">Sign Out</button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Navigation -->
+                        <div class="p-3">
                             <ul class="nav flex-column">
                                 <li class="nav-item">
                                     <a class="nav-link {{ request()->routeIs('home') ? 'active' : '' }}" href="{{ route('home') }}">
@@ -69,17 +74,26 @@
                                         <i class="bi bi-bar-chart-steps me-1"></i> Spans
                                     </a>
                                 </li>
+                                <li class="nav-item">
+                                    <a class="nav-link" href="#">
+                                        <i class="bi bi-collection-fill me-1"></i> Collections
+                                    </a>
+                                </li>
+                                <li class="nav-item">
+                                    <a class="nav-link" href="#">
+                                        <i class="bi bi-search me-1"></i> Explorer
+                                    </a>
+                                </li>
                             </ul>
 
                             @if(Auth::user()->is_admin)
-                                <hr>
-                                <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-1 text-muted">
+                                <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-2 text-muted text-uppercase">
                                     <span>Administration</span>
                                 </h6>
                                 <ul class="nav flex-column">
                                     <li class="nav-item">
                                         <a class="nav-link {{ request()->routeIs('admin.dashboard') ? 'active' : '' }}" href="{{ route('admin.dashboard') }}">
-                                        <i class="bi bi-speedometer2 me-1"></i> Dashboard
+                                            <i class="bi bi-speedometer2 me-1"></i> Dashboard
                                         </a>
                                     </li>
                                     <li class="nav-item">
@@ -109,8 +123,7 @@
                                     </li>
                                 </ul>
 
-                                <hr>
-                                <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-1 text-muted">
+                                <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-2 text-muted text-uppercase">
                                     <span>Tools</span>
                                 </h6>
                                 <ul class="nav flex-column">
@@ -119,20 +132,33 @@
                                             <i class="bi bi-box-arrow-in-down me-1"></i> Legacy Import
                                         </a>
                                     </li>
+                                    <li class="nav-item">
+                                        <a class="nav-link {{ request()->routeIs('admin.visualizer') ? 'active' : '' }}" href="{{ route('admin.visualizer') }}">
+                                            <i class="bi bi-graph-up me-1"></i> Network Visualizer
+                                        </a>
+                                    </li>
                                 </ul>
                             @endif
                         </div>
                     </div>
-                    <main class="col-md-9 col-lg-10 px-4 py-3">
-                        @yield('header')
-                        <x-flash-messages />
-                        @yield('content')
+                    <main class="col-md-9 col-lg-10 bg-white min-vh-100">
+                        <div class="p-3">
+                            <div class="header-section mb-4">
+                                @yield('header')
+                                <x-flash-messages />
+                            </div>
+                            @yield('content')
+                        </div>
                     </main>
                 @else
-                    <main class="col-12 px-4 py-3">
-                        @yield('header')
-                        <x-flash-messages />
-                        @yield('content')
+                    <main class="col-12 bg-white min-vh-100">
+                        <div class="p-3">
+                            <div class="header-section mb-4">
+                                @yield('header')
+                                <x-flash-messages />
+                            </div>
+                            @yield('content')
+                        </div>
                     </main>
                 @endauth
             </div>
