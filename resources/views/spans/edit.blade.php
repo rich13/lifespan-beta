@@ -213,9 +213,143 @@
                         />
                     </div>
                 </div>
+
+                <!-- Connections -->
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h2 class="card-title h5 mb-0">Connections</h2>
+                            <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#newConnectionModal">
+                                <i class="bi bi-plus-lg"></i> Add Connection
+                            </button>
+                        </div>
+
+                        @php
+                            $parentConnections = $span->connections()
+                                ->where('parent_id', $span->id)
+                                ->whereNotNull('connection_span_id')
+                                ->whereHas('connectionSpan')
+                                ->with(['connectionSpan', 'child', 'type'])
+                                ->get();
+
+                            $childConnections = $span->connections()
+                                ->where('child_id', $span->id)
+                                ->whereNotNull('connection_span_id')
+                                ->whereHas('connectionSpan')
+                                ->with(['connectionSpan', 'parent', 'type'])
+                                ->get();
+                        @endphp
+
+                        @if($parentConnections->isEmpty() && $childConnections->isEmpty())
+                            <p class="text-muted mb-0">No connections yet.</p>
+                        @else
+                            <div class="list-group list-group-flush">
+                                @foreach($parentConnections as $connection)
+                                    <div class="list-group-item px-0">
+                                        <x-connections.micro-card :connection="$connection" />
+                                    </div>
+                                @endforeach
+                                @foreach($childConnections as $connection)
+                                    <div class="list-group-item px-0">
+                                        <x-connections.micro-card :connection="$connection" />
+                                    </div>
+                                @endforeach
+                            </div>
+                        @endif
+                    </div>
+                </div>
             </div>
         </div>
     </form>
 </div>
 
+<!-- New Connection Modal -->
+<div class="modal fade" id="newConnectionModal" tabindex="-1" aria-labelledby="newConnectionModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="newConnectionModalLabel">Create New Connection</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="newConnectionForm" action="{{ route('admin.connections.store') }}" method="POST">
+                    @csrf
+                    <input type="hidden" name="parent_id" value="{{ $span->id }}">
+                    
+                    <div class="mb-3">
+                        <label for="connection_type" class="form-label">Connection Type</label>
+                        <select class="form-select" id="connection_type" name="type" required>
+                            <option value="">Select a type...</option>
+                            @foreach($connectionTypes as $type)
+                                <option value="{{ $type->type }}" 
+                                        data-forward="{{ $type->forward_predicate }}" 
+                                        data-inverse="{{ $type->inverse_predicate }}"
+                                        data-allowed-types='@json($type->allowed_span_types)'>
+                                    {{ $type->type }}
+                                </option>
+                            @endforeach
+                        </select>
+                        <div class="form-text connection-predicate"></div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Direction</label>
+                        <div class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check" name="direction" id="direction_forward" value="forward" checked>
+                            <label class="btn btn-outline-secondary" for="direction_forward">Forward</label>
+                            <input type="radio" class="btn-check" name="direction" id="direction_inverse" value="inverse">
+                            <label class="btn btn-outline-secondary" for="direction_inverse">Inverse</label>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="connected_span" class="form-label">Connected To</label>
+                        <select class="form-select" id="connected_span" name="child_id" required>
+                            <option value="">Select a span...</option>
+                            @foreach($availableSpans as $otherSpan)
+                                <option value="{{ $otherSpan->id }}" 
+                                        data-type="{{ $otherSpan->type_id }}"
+                                        data-name="{{ $otherSpan->name }}"
+                                        data-type-name="{{ $otherSpan->type->name }}">
+                                    {{ $otherSpan->name }} ({{ $otherSpan->type->name }})
+                                </option>
+                            @endforeach
+                        </select>
+                        <div class="form-text span-type-hint"></div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Preview</label>
+                        <div class="alert alert-secondary mb-0">
+                            <p class="mb-0">
+                                <strong>{{ $span->name }}</strong>
+                                <span class="text-muted connection-preview-predicate"></span>
+                                <strong class="connection-preview-target"></strong>
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Dates</label>
+                        <x-spans.forms.date-select 
+                            prefix="connection"
+                            label="Connection Date"
+                            :value="null"
+                            :showPrecision="false"
+                        />
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" form="newConnectionForm" class="btn btn-primary">Create Connection</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@endsection
+
+@section('scripts')
+<script src="{{ asset('js/spans/edit.js') }}"></script>
 @endsection 
