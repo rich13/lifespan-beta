@@ -81,7 +81,9 @@ class Span extends Model
         'notes',
         'start_precision',
         'end_precision',
-        'sources'
+        'sources',
+        'permissions_value',
+        'permission_mode'
     ];
 
     /**
@@ -93,21 +95,23 @@ class Span extends Model
         'id' => 'string',
         'owner_id' => 'string',
         'updater_id' => 'string',
+        'metadata' => 'array',
+        'sources' => 'array',
+        'is_personal_span' => 'boolean',
+        'permissions' => 'integer',
+        'permissions_value' => 'integer',
         'start_year' => 'integer',
         'start_month' => 'integer',
         'start_day' => 'integer',
         'end_year' => 'integer',
         'end_month' => 'integer',
         'end_day' => 'integer',
-        'start_precision' => 'integer',
-        'end_precision' => 'integer',
-        'permissions' => 'integer',
+        'start_precision' => 'string',
+        'end_precision' => 'string',
         'permission_mode' => 'string',
-        'metadata' => 'array',
-        'sources' => 'array',
+        'access_level' => 'string',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
-        'access_level' => 'string',
     ];
 
     /**
@@ -747,5 +751,47 @@ class Span extends Model
             return $this->where('id', $value)->first();
         }
         return $this->where('slug', $value)->first();
+    }
+
+    /**
+     * Get the effective permissions for this span, taking into account inheritance
+     */
+    public function getEffectivePermissions(): int
+    {
+        if ($this->permission_mode === 'inherit' && $this->parent) {
+            return $this->parent->getEffectivePermissions();
+        }
+
+        return $this->permissions_value ?? 0;
+    }
+
+    /**
+     * Get a string representation of the permissions (e.g. "rwxr--r--")
+     */
+    public function getPermissionsString(): string
+    {
+        if ($this->permission_mode === 'inherit' && $this->parent) {
+            return $this->parent->getPermissionsString();
+        }
+
+        $perms = $this->getEffectivePermissions();
+        $result = '';
+
+        // Owner permissions
+        $result .= ($perms & 0400) ? 'r' : '-';
+        $result .= ($perms & 0200) ? 'w' : '-';
+        $result .= ($perms & 0100) ? 'x' : '-';
+
+        // Group permissions
+        $result .= ($perms & 0040) ? 'r' : '-';
+        $result .= ($perms & 0020) ? 'w' : '-';
+        $result .= ($perms & 0010) ? 'x' : '-';
+
+        // Other permissions
+        $result .= ($perms & 0004) ? 'r' : '-';
+        $result .= ($perms & 0002) ? 'w' : '-';
+        $result .= ($perms & 0001) ? 'x' : '-';
+
+        return $result;
     }
 } 
