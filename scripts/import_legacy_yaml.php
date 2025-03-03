@@ -73,6 +73,17 @@ function createSubspan($db, $parentId, $data, $createdBy) {
     // Check if a similar span already exists
     $name = $data['institution'] ?? $data['employer'] ?? $data['location'];
 
+    // For places/residences, append the date range to make the name unique
+    if ($data['type'] === 'residence') {
+        $dateRange = $startDate['year'];
+        if ($endDate) {
+            $dateRange .= ' to ' . $endDate['year'];
+        } else {
+            $dateRange .= ' onwards';
+        }
+        $name = $name . ' (' . $dateRange . ')';
+    }
+
     // First check for an exact match (same name, type, dates)
     $stmt = $db->prepare("
         SELECT s.id 

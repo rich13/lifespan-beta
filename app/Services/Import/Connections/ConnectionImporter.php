@@ -68,6 +68,42 @@ class ConnectionImporter
         ?array $dates = null,
         ?array $metadata = null
     ): Connection {
+        // Validate dates if provided
+        if ($dates) {
+            $startTimestamp = mktime(
+                0, 0, 0,
+                $dates['start_month'] ?? 1,
+                $dates['start_day'] ?? 1,
+                $dates['start_year']
+            );
+            
+            if (isset($dates['end_year'])) {
+                $endTimestamp = mktime(
+                    0, 0, 0,
+                    $dates['end_month'] ?? 12,
+                    $dates['end_day'] ?? 31,
+                    $dates['end_year']
+                );
+                
+                if ($endTimestamp < $startTimestamp) {
+                    Log::warning('Invalid date range: end date before start date', [
+                        'start_date' => [
+                            'year' => $dates['start_year'],
+                            'month' => $dates['start_month'] ?? 1,
+                            'day' => $dates['start_day'] ?? 1
+                        ],
+                        'end_date' => [
+                            'year' => $dates['end_year'],
+                            'month' => $dates['end_month'] ?? 12,
+                            'day' => $dates['end_day'] ?? 31
+                        ]
+                    ]);
+                    // Remove invalid end date
+                    unset($dates['end_year'], $dates['end_month'], $dates['end_day']);
+                }
+            }
+        }
+
         // For residence connections, we need to allow multiple connections to the same place
         // but only if they have different date ranges
         if ($connectionType === 'residence') {

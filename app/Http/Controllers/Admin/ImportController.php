@@ -31,7 +31,9 @@ class ImportController extends Controller
                     $name = $yaml['name'] ?? 'Unknown';
 
                     // Check if a span with this name already exists
-                    $existingSpan = \App\Models\Span::where('name', $name)->first();
+                    $existingSpan = \App\Models\Span::where('name', $name)
+                        ->with(['type'])  // Eager load the type relationship
+                        ->first();
 
                     return [
                         'id' => pathinfo($file, PATHINFO_FILENAME),
@@ -44,11 +46,7 @@ class ImportController extends Controller
                         'has_work' => !empty($yaml['work']),
                         'has_places' => !empty($yaml['places']),
                         'has_relationships' => !empty($yaml['relationships']),
-                        'existing_span' => $existingSpan ? [
-                            'id' => $existingSpan->id,
-                            'created_at' => $existingSpan->created_at,
-                            'updated_at' => $existingSpan->updated_at
-                        ] : null
+                        'existing_span' => $existingSpan  // Pass the entire Span model
                     ];
                 } catch (\Exception $e) {
                     Log::error('Failed to parse YAML file', [
