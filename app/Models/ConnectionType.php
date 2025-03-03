@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string $forward_description Description of the forward relationship
  * @property string $inverse_predicate Predicate describing the inverse relationship
  * @property string $inverse_description Description of the inverse relationship
+ * @property string $constraint_type The temporal constraint type ('single' or 'non_overlapping')
  * @property \Carbon\Carbon $created_at When the connection type was created
  * @property \Carbon\Carbon $updated_at When the connection type was last updated
  * @property-read \Illuminate\Database\Eloquent\Collection<int, Connection> $connections Connections of this type
@@ -54,6 +55,17 @@ class ConnectionType extends Model
         'forward_description',
         'inverse_predicate',
         'inverse_description',
+        'constraint_type',
+        'allowed_span_types'
+    ];
+
+    /**
+     * The attributes that should be cast.
+     *
+     * @var array<string, string>
+     */
+    protected $casts = [
+        'allowed_span_types' => 'array'
     ];
 
     /**
@@ -98,5 +110,17 @@ class ConnectionType extends Model
         return $inverse 
             ? "Object {$this->inverse_predicate} Subject"
             : "Subject {$this->forward_predicate} Object";
+    }
+
+    /**
+     * Get the allowed span types for a given role (parent or child)
+     */
+    public function getAllowedSpanTypes(string $role): array
+    {
+        if (!in_array($role, ['parent', 'child'])) {
+            throw new \InvalidArgumentException("Role must be either 'parent' or 'child'");
+        }
+
+        return $this->allowed_span_types[$role] ?? [];
     }
 } 

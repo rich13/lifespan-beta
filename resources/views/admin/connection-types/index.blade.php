@@ -17,9 +17,10 @@
                         <tr>
                             <th>Type ID</th>
                             <th>Forward Predicate</th>
-                            <th>Forward Description</th>
                             <th>Inverse Predicate</th>
-                            <th>Inverse Description</th>
+                            <th>Temporal Constraint</th>
+                            <th>Allowed Parent Types</th>
+                            <th>Allowed Child Types</th>
                             <th>Connections</th>
                             <th>Actions</th>
                         </tr>
@@ -29,9 +30,24 @@
                             <tr>
                                 <td><code>{{ $type->type }}</code></td>
                                 <td>{{ $type->forward_predicate }}</td>
-                                <td>{{ Str::limit($type->forward_description, 100) }}</td>
                                 <td>{{ $type->inverse_predicate }}</td>
-                                <td>{{ Str::limit($type->inverse_description, 100) }}</td>
+                                <td>
+                                    @if($type->temporal_constraint === 'single')
+                                        <span class="badge bg-info">Single</span>
+                                    @else
+                                        <span class="badge bg-warning">Non-overlapping</span>
+                                    @endif
+                                </td>
+                                <td>
+                                    @foreach($type->getAllowedSpanTypes('parent') as $spanType)
+                                        <span class="badge bg-info">{{ $spanType }}</span>
+                                    @endforeach
+                                </td>
+                                <td>
+                                    @foreach($type->getAllowedSpanTypes('child') as $spanType)
+                                        <span class="badge bg-info">{{ $spanType }}</span>
+                                    @endforeach
+                                </td>
                                 <td>
                                     <span class="badge bg-secondary">{{ $type->connections_count }}</span>
                                 </td>

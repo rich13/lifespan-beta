@@ -13,6 +13,8 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Ray;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use App\Models\SpanType;
+use App\Models\ConnectionType;
 
 /**
  * Handle span viewing and management
@@ -166,13 +168,15 @@ class SpanController extends Controller
     public function edit(Span $span)
     {
         $this->authorize('update', $span);
-        
-        // Ensure metadata is always an array
-        if (!is_array($span->metadata)) {
-            $span->metadata = [];
-        }
-        
-        return view('spans.edit', compact('span'));
+
+        $spanTypes = SpanType::all();
+        $connectionTypes = ConnectionType::orderBy('forward_predicate')->get();
+        $availableSpans = Span::where('id', '!=', $span->id)
+            ->with('type')
+            ->orderBy('name')
+            ->get();
+
+        return view('spans.edit', compact('span', 'spanTypes', 'connectionTypes', 'availableSpans'));
     }
 
     /**

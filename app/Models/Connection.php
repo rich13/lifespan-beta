@@ -118,55 +118,140 @@ class Connection extends Model
                 }
             }
 
-            // Sync dates for family connections
-            if ($connection->type_id === 'family') {
-                $parent = Span::find($connection->parent_id);
-                $child = Span::find($connection->child_id);
-                $connectionSpan = Span::find($connection->connection_span_id);
+            // Get the spans involved
+            $parent = Span::find($connection->parent_id);
+            $child = Span::find($connection->child_id);
+            $connectionSpan = Span::find($connection->connection_span_id);
 
-                if ($parent && $child && $connectionSpan) {
-                    // Connection starts when child is born
-                    $connectionSpan->start_year = $child->start_year;
-                    $connectionSpan->start_month = $child->start_month;
-                    $connectionSpan->start_day = $child->start_day;
-                    $connectionSpan->start_precision = $child->start_precision;
+            if ($parent && $child && $connectionSpan) {
+                // Determine dates based on connection type
+                switch ($connection->type_id) {
+                    case 'family':
+                        // Connection starts when child is born
+                        $connectionSpan->start_year = $child->start_year;
+                        $connectionSpan->start_month = $child->start_month;
+                        $connectionSpan->start_day = $child->start_day;
+                        $connectionSpan->start_precision = $child->start_precision;
 
-                    // Connection ends when either parent or child dies
-                    if ($parent->end_year || $child->end_year) {
-                        // If both have end dates, use the earlier one
-                        if ($parent->end_year && $child->end_year) {
-                            $parentDate = $parent->end_year * 10000 + ($parent->end_month ?? 0) * 100 + ($parent->end_day ?? 0);
-                            $childDate = $child->end_year * 10000 + ($child->end_month ?? 0) * 100 + ($child->end_day ?? 0);
-                            
-                            if ($parentDate <= $childDate) {
-                                $connectionSpan->end_year = $parent->end_year;
-                                $connectionSpan->end_month = $parent->end_month;
-                                $connectionSpan->end_day = $parent->end_day;
-                                $connectionSpan->end_precision = $parent->end_precision;
+                        // Connection ends when either parent or child dies
+                        if ($parent->end_year || $child->end_year) {
+                            // Use the earlier of the two end dates
+                            if ($parent->end_year && $child->end_year) {
+                                if ($parent->end_year < $child->end_year) {
+                                    $connectionSpan->end_year = $parent->end_year;
+                                    $connectionSpan->end_month = $parent->end_month;
+                                    $connectionSpan->end_day = $parent->end_day;
+                                    $connectionSpan->end_precision = $parent->end_precision;
+                                } else {
+                                    $connectionSpan->end_year = $child->end_year;
+                                    $connectionSpan->end_month = $child->end_month;
+                                    $connectionSpan->end_day = $child->end_day;
+                                    $connectionSpan->end_precision = $child->end_precision;
+                                }
                             } else {
-                                $connectionSpan->end_year = $child->end_year;
-                                $connectionSpan->end_month = $child->end_month;
-                                $connectionSpan->end_day = $child->end_day;
-                                $connectionSpan->end_precision = $child->end_precision;
+                                // Use whichever end date exists
+                                $endSpan = $parent->end_year ? $parent : $child;
+                                $connectionSpan->end_year = $endSpan->end_year;
+                                $connectionSpan->end_month = $endSpan->end_month;
+                                $connectionSpan->end_day = $endSpan->end_day;
+                                $connectionSpan->end_precision = $endSpan->end_precision;
                             }
-                        } else {
-                            // Use whichever end date exists
-                            $endSpan = $parent->end_year ? $parent : $child;
-                            $connectionSpan->end_year = $endSpan->end_year;
-                            $connectionSpan->end_month = $endSpan->end_month;
-                            $connectionSpan->end_day = $endSpan->end_day;
-                            $connectionSpan->end_precision = $endSpan->end_precision;
                         }
-                    } else {
-                        // Neither has died, so connection is ongoing
-                        $connectionSpan->end_year = null;
-                        $connectionSpan->end_month = null;
-                        $connectionSpan->end_day = null;
-                        $connectionSpan->end_precision = null;
-                    }
+                        break;
 
-                    $connectionSpan->save();
+                    case 'education':
+                    case 'employment':
+                    case 'membership':
+                        // For institutional connections, use the organization's dates as bounds
+                        // Only set start/end if not explicitly provided
+                        if (!$connectionSpan->start_year && $child->start_year) {
+                            $connectionSpan->start_year = $child->start_year;
+                            $connectionSpan->start_month = $child->start_month;
+                            $connectionSpan->start_day = $child->start_day;
+                            $connectionSpan->start_precision = $child->start_precision;
+                        }
+                        if (!$connectionSpan->end_year && $child->end_year) {
+                            $connectionSpan->end_year = $child->end_year;
+                            $connectionSpan->end_month = $child->end_month;
+                            $connectionSpan->end_day = $child->end_day;
+                            $connectionSpan->end_precision = $child->end_precision;
+                        }
+                        break;
+
+                    case 'residence':
+                        // For residence connections, only set dates if not explicitly provided
+                        // This allows for multiple residences at the same place with different dates
+                        if (!$connectionSpan->start_year && $child->start_year) {
+                            $connectionSpan->start_year = $child->start_year;
+                            $connectionSpan->start_month = $child->start_month;
+                            $connectionSpan->start_day = $child->start_day;
+                            $connectionSpan->start_precision = $child->start_precision;
+                        }
+                        if (!$connectionSpan->end_year && $child->end_year) {
+                            $connectionSpan->end_year = $child->end_year;
+                            $connectionSpan->end_month = $child->end_month;
+                            $connectionSpan->end_day = $child->end_day;
+                            $connectionSpan->end_precision = $child->end_precision;
+                        }
+                        break;
+
+                    case 'relationship':
+                        // For relationships between people, use the overlap of their lifespans
+                        // Only set if not explicitly provided
+                        if (!$connectionSpan->start_year) {
+                            // Start date is the later of the two birth dates
+                            if ($parent->start_year && $child->start_year) {
+                                if ($parent->start_year > $child->start_year) {
+                                    $connectionSpan->start_year = $parent->start_year;
+                                    $connectionSpan->start_month = $parent->start_month;
+                                    $connectionSpan->start_day = $parent->start_day;
+                                    $connectionSpan->start_precision = $parent->start_precision;
+                                } else {
+                                    $connectionSpan->start_year = $child->start_year;
+                                    $connectionSpan->start_month = $child->start_month;
+                                    $connectionSpan->start_day = $child->start_day;
+                                    $connectionSpan->start_precision = $child->start_precision;
+                                }
+                            }
+                        }
+                        if (!$connectionSpan->end_year) {
+                            // End date is the earlier of the two death dates, if any
+                            if ($parent->end_year && $child->end_year) {
+                                if ($parent->end_year < $child->end_year) {
+                                    $connectionSpan->end_year = $parent->end_year;
+                                    $connectionSpan->end_month = $parent->end_month;
+                                    $connectionSpan->end_day = $parent->end_day;
+                                    $connectionSpan->end_precision = $parent->end_precision;
+                                } else {
+                                    $connectionSpan->end_year = $child->end_year;
+                                    $connectionSpan->end_month = $child->end_month;
+                                    $connectionSpan->end_day = $child->end_day;
+                                    $connectionSpan->end_precision = $child->end_precision;
+                                }
+                            }
+                        }
+                        break;
+
+                    case 'travel':
+                    case 'participation':
+                        // For event-based connections, use the event's dates
+                        // Only set if not explicitly provided
+                        if (!$connectionSpan->start_year && $child->start_year) {
+                            $connectionSpan->start_year = $child->start_year;
+                            $connectionSpan->start_month = $child->start_month;
+                            $connectionSpan->start_day = $child->start_day;
+                            $connectionSpan->start_precision = $child->start_precision;
+                        }
+                        if (!$connectionSpan->end_year && $child->end_year) {
+                            $connectionSpan->end_year = $child->end_year;
+                            $connectionSpan->end_month = $child->end_month;
+                            $connectionSpan->end_day = $child->end_day;
+                            $connectionSpan->end_precision = $child->end_precision;
+                        }
+                        break;
                 }
+
+                $connectionSpan->save();
             }
         });
     }

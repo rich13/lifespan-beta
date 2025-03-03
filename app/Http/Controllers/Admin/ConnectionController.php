@@ -8,13 +8,18 @@ use App\Models\ConnectionType;
 use App\Models\Span;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use App\Services\Temporal\TemporalService;
+use App\Services\Connection\ConnectionConstraintService;
 
 class ConnectionController extends Controller
 {
     /**
      * Create a new controller instance.
      */
-    public function __construct()
+    public function __construct(
+        private readonly TemporalService $temporalService,
+        private readonly ConnectionConstraintService $constraintService
+    )
     {
         $this->middleware(['auth', 'admin']);
     }
@@ -52,6 +57,103 @@ class ConnectionController extends Controller
         $types = ConnectionType::all();
 
         return view('admin.connections.index', compact('connections', 'types'));
+    }
+
+    /**
+     * Store a newly created connection.
+     */
+    public function store(Request $request)
+    {
+        try {
+            // Log the incoming request data
+            Log::info('Creating new connection', [
+                'request_data' => $request->all()
+            ]);
+
+            $validated = $request->validate([
+                'type' => 'required|exists:connection_types,type',
+                'parent_id' => 'required|exists:spans,id',
+                'child_id' => 'required|exists:spans,id|different:parent_id',
+                'connection_year' => 'nullable|integer',
+                'connection_month' => 'nullable|integer|between:1,12',
+                'connection_day' => 'nullable|integer|between:1,31'
+            ]);
+
+            // Get the spans and connection type
+            $parent = Span::findOrFail($validated['parent_id']);
+            $child = Span::findOrFail($validated['child_id']);
+            $connectionType = ConnectionType::findOrFail($validated['type']);
+
+            // Create connection span
+            $connectionSpan = Span::create([
+                'type_id' => 'connection',
+                'owner_id' => auth()->id(),
+                'updater_id' => auth()->id(),
+                'start_year' => $validated['connection_year'] ?? null,
+                'start_month' => $validated['connection_month'] ?? null,
+                'start_day' => $validated['connection_day'] ?? null,
+            ]);
+
+            // Validate span dates using temporal service
+            if (!$this->temporalService->validateSpanDates($connectionSpan)) {
+                $connectionSpan->delete();
+                return response()->json([
+                    'success' => false,
+                    'message' => 'End date cannot be before start date'
+                ], 422);
+            }
+
+            // Create the connection
+            $connection = new Connection([
+                'parent_id' => $validated['parent_id'],
+                'child_id' => $validated['child_id'],
+                'type_id' => $validated['type'],
+                'connection_span_id' => $connectionSpan->id
+            ]);
+
+            // Validate connection constraints
+            $constraintResult = $this->constraintService->validateConstraint(
+                $connection,
+                $connectionType->temporal_constraint
+            );
+
+            if (!$constraintResult->isValid()) {
+                $connectionSpan->delete();
+                return response()->json([
+                    'success' => false,
+                    'message' => $constraintResult->getError()
+                ], 422);
+            }
+
+            // Validate span types
+            if (!$connectionType->isSpanTypeAllowed($parent->type_id, 'parent')) {
+                $connectionSpan->delete();
+                throw new \InvalidArgumentException(
+                    "Invalid parent span type. Expected one of: " . 
+                    implode(', ', $connectionType->getAllowedSpanTypes('parent'))
+                );
+            }
+
+            // Save the connection
+            $connection->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Connection created successfully',
+                'data' => $connection
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error creating connection', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], 500);
+        }
     }
 
     /**

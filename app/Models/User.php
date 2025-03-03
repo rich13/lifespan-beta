@@ -15,8 +15,20 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
- * Represents a user in the system
+ * User Model
  * 
+ * Important Note on User Names:
+ * User names are NOT stored in the users table. Instead, each user has a personal span
+ * (a record in the spans table with type='person') that contains their name and other
+ * personal information. This design allows for:
+ * 1. Consistent handling of all person-related data through the spans system
+ * 2. Full history tracking of name changes
+ * 3. The same privacy and access control mechanisms used for other spans
+ * 
+ * The relationship is maintained through the personal_span_id column in this table,
+ * which points to the user's personal span. The personal span's name field is used
+ * as the user's display name throughout the application.
+ *
  * @property string $id UUID of the user
  * @property string $name User's full name
  * @property string $email User's email address
@@ -29,7 +41,7 @@ use Illuminate\Support\Str;
  * @property \Carbon\Carbon $updated_at When the user was last updated
  * @property-read \Illuminate\Notifications\DatabaseNotificationCollection<int, \Illuminate\Notifications\DatabaseNotification> $notifications
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \Laravel\Sanctum\PersonalAccessToken> $tokens
- * @property-read Span|null $personalSpan The user's personal span
+ * @property-read \App\Models\Span|null $personalSpan The user's personal span containing their name
  * @property-read \Illuminate\Database\Eloquent\Collection<int, Span> $spans Spans associated with this user
  */
 class User extends Authenticatable
@@ -71,9 +83,8 @@ class User extends Authenticatable
     ];
 
     /**
-     * Get the user's personal span
-     *
-     * @return BelongsTo<Span>
+     * Get the user's personal span that contains their name and other personal information.
+     * This is the primary way to access the user's name through $user->personalSpan->name
      */
     public function personalSpan(): BelongsTo
     {
@@ -82,13 +93,11 @@ class User extends Authenticatable
 
     /**
      * Get the user's name from their personal span.
+     * This is a convenience accessor that returns 'Unknown User' if no personal span exists.
      */
-    public function getNameAttribute()
+    public function getNameAttribute(): string
     {
-        if (!$this->personalSpan) {
-            return 'Unknown User';
-        }
-        return $this->personalSpan->name ?? 'Unknown User';
+        return $this->personalSpan?->name ?? 'Unknown User';
     }
 
     /**

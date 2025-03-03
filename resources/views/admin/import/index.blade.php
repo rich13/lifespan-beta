@@ -25,15 +25,16 @@
                         @foreach($files as $file)
                             <tr>
                                 <td>
-                                    {{ $file['name'] }}
                                     @if($file['existing_span'])
-                                        <span class="badge bg-info">Exists</span>
+                                        <x-spans.display.micro-card :span="$file['existing_span']" />
                                         <br>
                                         <small class="text-muted">
                                             Created: {{ \Carbon\Carbon::parse($file['existing_span']['created_at'])->format('Y-m-d') }}
                                             <br>
                                             Last updated: {{ \Carbon\Carbon::parse($file['existing_span']['updated_at'])->format('Y-m-d') }}
                                         </small>
+                                    @else
+                                        {{ $file['name'] }}
                                     @endif
                                 </td>
                                 <td>{{ $file['type'] }}</td>

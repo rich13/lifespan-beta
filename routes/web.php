@@ -114,6 +114,8 @@ Route::middleware('web')->group(function () {
             // Connection Management
             Route::get('/connections', [ConnectionController::class, 'index'])
                 ->name('connections.index');
+            Route::post('/connections', [ConnectionController::class, 'store'])
+                ->name('connections.store');
             Route::get('/connections/{connection}', [ConnectionController::class, 'show'])
                 ->name('connections.show');
             Route::get('/connections/{connection}/edit', [ConnectionController::class, 'edit'])
@@ -128,6 +130,9 @@ Route::middleware('web')->group(function () {
                 Route::get('/dev/components', [App\Http\Controllers\Dev\ComponentShowcaseController::class, 'index'])
                     ->name('dev.components');
             }
+
+            Route::get('/visualizer', [App\Http\Controllers\Admin\VisualizerController::class, 'index'])
+                ->name('visualizer');
         });
     });
 
