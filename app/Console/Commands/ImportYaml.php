@@ -36,11 +36,18 @@ class ImportYaml extends Command
             // Create a system user if none specified
             $user = User::firstOrCreate(
                 ['email' => 'system@lifespan.local'],
-                [
-                    'name' => 'System User',
-                    'password' => bcrypt(Str::random(32))
-                ]
+                ['password' => bcrypt(Str::random(32))]
             );
+
+            // Create personal span for system user if it doesn't exist
+            if (!$user->personal_span_id) {
+                $user->createPersonalSpan([
+                    'name' => 'System User',
+                    'birth_year' => now()->year,
+                    'birth_month' => now()->month,
+                    'birth_day' => now()->day,
+                ]);
+            }
         }
 
         try {
@@ -53,13 +60,15 @@ class ImportYaml extends Command
             }
 
             $importer = new PersonImporter($user);
-            $result = $importer->import($data);
+            $result = $importer->import($filePath);
 
             if ($result['success']) {
                 $this->info('Import completed successfully');
                 $this->table(
                     ['Section', 'Created', 'Existing'],
-                    collect($result['report'])->map(function ($details, $section) {
+                    collect($result)->filter(function ($details, $section) {
+                        return is_array($details) && isset($details['created']) && isset($details['existing']);
+                    })->map(function ($details, $section) {
                         return [
                             $section,
                             $details['created'] ?? 0,
@@ -69,7 +78,9 @@ class ImportYaml extends Command
                 );
             } else {
                 $this->error('Import failed');
-                $this->error($result['error']);
+                foreach ($result['errors'] as $error) {
+                    $this->error($error['type'] . ': ' . $error['message']);
+                }
                 return 1;
             }
 
