@@ -35,7 +35,7 @@ class ConnectionTemporalConstraintTest extends TestCase
         ]);
         
         $this->child = Span::factory()->create([
-            'type_id' => 'place',
+            'type_id' => 'person',
             'start_year' => 1990
         ]);
 
