@@ -1,17 +1,13 @@
 @props(['span'])
 
 @php
-use App\Services\FamilyTreeService;
-
-$familyTreeService = new FamilyTreeService();
-
-// Get all family relationships
-$ancestors = $familyTreeService->getAncestors($span, 2);
-$unclesAndAunts = $familyTreeService->getUnclesAndAunts($span);
-$siblings = $familyTreeService->getSiblings($span);
-$cousins = $familyTreeService->getCousins($span);
-$descendants = $familyTreeService->getDescendants($span, 2);
-$nephewsAndNieces = $familyTreeService->getNephewsAndNieces($span);
+// Get all family relationships using the span's capabilities
+$ancestors = $span->ancestors(2);
+$descendants = $span->descendants(2);
+$siblings = $span->siblings();
+$unclesAndAunts = $span->unclesAndAunts();
+$cousins = $span->cousins();
+$nephewsAndNieces = $span->nephewsAndNieces();
 $metadataChildren = $span->metadata['children'] ?? [];
 
 // Check if we have any family relationships to show
@@ -24,12 +20,13 @@ $hasFamily = $ancestors->isNotEmpty() || $descendants->isNotEmpty() ||
 @if($hasFamily)
     <div class="card-grid">
         {{-- Generation +2: Grandparents --}}
-        @if($ancestors->where('generation', 2)->isNotEmpty())
+        @php $grandparents = $ancestors->where('generation', 2); @endphp
+        @if($grandparents->isNotEmpty())
             <div class="card">
                 <div class="card-body">
                     <h3 class="h6 mb-2">Grandparents</h3>
                     <ul class="list-unstyled mb-0">
-                        @foreach($ancestors->where('generation', 2) as $ancestor)
+                        @foreach($grandparents as $ancestor)
                             <li class="mb-2">
                                 <x-spans.display.micro-card :span="$ancestor['span']" />
                             </li>
@@ -40,12 +37,13 @@ $hasFamily = $ancestors->isNotEmpty() || $descendants->isNotEmpty() ||
         @endif
 
         {{-- Generation +1: Parents, Uncles & Aunts --}}
-        @if($ancestors->where('generation', 1)->isNotEmpty())
+        @php $parents = $ancestors->where('generation', 1); @endphp
+        @if($parents->isNotEmpty())
             <div class="card">
                 <div class="card-body">
                     <h3 class="h6 mb-2">Parents</h3>
                     <ul class="list-unstyled mb-0">
-                        @foreach($ancestors->where('generation', 1) as $ancestor)
+                        @foreach($parents as $ancestor)
                             <li class="mb-2">
                                 <x-spans.display.micro-card :span="$ancestor['span']" />
                             </li>
@@ -102,12 +100,13 @@ $hasFamily = $ancestors->isNotEmpty() || $descendants->isNotEmpty() ||
         @endif
 
         {{-- Generation -1: Children, Nephews & Nieces --}}
-        @if($descendants->where('generation', 1)->isNotEmpty())
+        @php $children = $descendants->where('generation', 1); @endphp
+        @if($children->isNotEmpty())
             <div class="card">
                 <div class="card-body">
                     <h3 class="h6 mb-2">Children</h3>
                     <ul class="list-unstyled mb-0">
-                        @foreach($descendants->where('generation', 1) as $descendant)
+                        @foreach($children as $descendant)
                             <li class="mb-2">
                                 <x-spans.display.micro-card :span="$descendant['span']" />
                             </li>
@@ -133,12 +132,13 @@ $hasFamily = $ancestors->isNotEmpty() || $descendants->isNotEmpty() ||
         @endif
 
         {{-- Generation -2: Grandchildren --}}
-        @if($descendants->where('generation', 2)->isNotEmpty())
+        @php $grandchildren = $descendants->where('generation', 2); @endphp
+        @if($grandchildren->isNotEmpty())
             <div class="card">
                 <div class="card-body">
                     <h3 class="h6 mb-2">Grandchildren</h3>
                     <ul class="list-unstyled mb-0">
-                        @foreach($descendants->where('generation', 2) as $descendant)
+                        @foreach($grandchildren as $descendant)
                             <li class="mb-2">
                                 <x-spans.display.micro-card :span="$descendant['span']" />
                             </li>

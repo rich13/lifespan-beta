@@ -10,6 +10,11 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Models\SpanCapabilities\SpanCapabilityRegistry;
+use App\Models\SpanCapabilities\SpanCapability;
+use App\Models\Traits\HasSpanCapabilities;
+use App\Models\Traits\HasFamilyCapabilities;
+use App\Models\Traits\HasGeospatialCapabilities;
 
 /**
  * Represents a span of time or an entity that exists in time.
@@ -55,7 +60,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class Span extends Model
 {
-    use HasUuids, HasFactory;
+    use HasUuids, HasFactory, HasSpanCapabilities, HasFamilyCapabilities, HasGeospatialCapabilities;
 
     /**
      * The attributes that are mass assignable.
@@ -126,6 +131,22 @@ class Span extends Model
             if (!$span->id) {
                 $span->id = (string) Str::uuid();
             }
+        });
+
+        // Validate metadata for all capabilities
+        static::saving(function ($span) {
+            foreach ($span->getCapabilities() as $capability) {
+                $capability->validateMetadata();
+            }
+        });
+
+        // Load type-specific capabilities
+        static::created(function ($span) {
+            $span->loadTypeCapabilities();
+        });
+
+        static::retrieved(function ($span) {
+            $span->loadTypeCapabilities();
         });
 
         // Validate required fields
@@ -321,6 +342,28 @@ class Span extends Model
                 }
             }
         });
+    }
+
+    /**
+     * Load capabilities specific to this span's type
+     */
+    protected function loadTypeCapabilities()
+    {
+        // Only load capabilities if we have a type
+        if (!$this->type_id) {
+            return;
+        }
+
+        // No need for dynamic loading since traits are now statically declared
+        // Each span type will use the capabilities it needs through the traits
+    }
+
+    /**
+     * Dynamically add a trait to this instance
+     */
+    protected function addTrait(string $traitClass)
+    {
+        // Remove this method as we're not using dynamic trait loading
     }
 
     /**
@@ -793,5 +836,31 @@ class Span extends Model
         $result .= ($perms & 0001) ? 'x' : '-';
 
         return $result;
+    }
+
+    /**
+     * Get all capabilities for this span
+     *
+     * @return \Illuminate\Support\Collection<SpanCapability>
+     */
+    public function getCapabilities()
+    {
+        return SpanCapabilityRegistry::getCapabilities($this);
+    }
+
+    /**
+     * Get a specific capability
+     */
+    public function getCapability(string $name): ?SpanCapability
+    {
+        return SpanCapabilityRegistry::getCapability($this, $name);
+    }
+
+    /**
+     * Check if this span has a specific capability
+     */
+    public function hasCapability(string $name): bool
+    {
+        return SpanCapabilityRegistry::hasCapability($this, $name);
     }
 } 
