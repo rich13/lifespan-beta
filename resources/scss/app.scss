@@ -109,4 +109,22 @@ main {
         flex: 0 0 auto;
         width: calc(100% - #{$sidebar-width-md});
     }
+}
+
+// Utility classes
+.z-index-1 {
+    z-index: 5;
+}
+
+.search-width {
+    width: 200px;
+}
+
+.navbar-height {
+    height: 60px;
+}
+
+.user-dropdown-menu {
+    min-width: 220px;
+    z-index: 1050;
 } 

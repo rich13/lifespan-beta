@@ -1,3 +1,6 @@
+@php
+use Illuminate\Support\Facades\Route;
+@endphp
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
     <head>
@@ -22,19 +25,6 @@
         <!-- Scripts and Styles -->
         @viteReactRefresh
         @vite(['resources/scss/app.scss', 'resources/js/app.js'])
-        
-        <!-- Debug Script -->
-        <script>
-            // Check if Bootstrap is loaded
-            window.addEventListener('DOMContentLoaded', function() {
-                // Global error handler
-                window.addEventListener('error', function(e) {
-                    console.error('Global error caught:', e.message);
-                    console.error('Error source:', e.filename, 'line:', e.lineno);
-                    return false;
-                });
-            });
-        </script>
         
         <!-- Page-specific scripts -->
         @yield('scripts')
@@ -100,7 +90,7 @@
                 @auth
                     <!-- Top Navigation Bar -->
                     <div class="col-12 px-0">
-                        <div class="d-flex align-items-center bg-light border-bottom" style="height: 60px;">
+                        <div class="d-flex align-items-center bg-light border-bottom navbar-height">
                             <!-- Brand -->
                             <div class="h-100 d-flex align-items-center border-end bg-secondary col-md-3 col-lg-2">
                                 <a class="text-decoration-none px-3" href="{{ route('home') }}">
@@ -136,7 +126,7 @@
                                     <button class="btn btn-sm btn-secondary" type="button" id="customUserDropdownToggle">
                                         <i class="bi bi-person-circle me-1"></i>{{ Auth::user()->name }} <i class="bi bi-caret-down-fill"></i>
                                     </button>
-                                    <div class="position-absolute end-0 mt-1 bg-white shadow rounded" id="customUserDropdownMenu" style="display: none; min-width: 220px; z-index: 1050;">
+                                    <div class="position-absolute end-0 mt-1 bg-white shadow rounded d-none user-dropdown-menu" id="customUserDropdownMenu">
                                         <div class="p-2">
                                             <!-- User Info -->
                                             <div class="px-2 py-1 mb-2 border-bottom">
@@ -183,120 +173,6 @@
                                         </div>
                                     </div>
                                 </div>
-                                
-                                <script>
-                                    // Custom dropdown implementation using jQuery
-                                    $(document).ready(function() {
-                                        const $toggle = $('#customUserDropdownToggle');
-                                        const $menu = $('#customUserDropdownMenu');
-                                        
-                                        $toggle.on('click', function(e) {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            $menu.toggle();
-                                            
-                                            @if(Auth::user()->is_admin || Session::has('admin_user_id'))
-                                            // Load users when dropdown is shown (admin only)
-                                            const $userList = $('#userSwitcherList');
-                                            if ($menu.is(':visible') && $userList.length && !$userList.data('loaded')) {
-                                                loadUsers();
-                                            }
-                                            @endif
-                                        });
-                                        
-                                        // Close when clicking outside
-                                        $(document).on('click', function(e) {
-                                            if (!$toggle.is(e.target) && $toggle.has(e.target).length === 0 && 
-                                                !$menu.is(e.target) && $menu.has(e.target).length === 0) {
-                                                $menu.hide();
-                                            }
-                                        });
-                                        
-                                        @if(Auth::user()->is_admin || Session::has('admin_user_id'))
-                                        // Load users function (admin only)
-                                        function loadUsers() {
-                                            const $userList = $('#userSwitcherList');
-                                            if ($userList.data('loaded')) return;
-                                            
-                                            $.ajax({
-                                                url: '{{ route("admin.user-switcher.users") }}',
-                                                type: 'GET',
-                                                dataType: 'json',
-                                                success: function(users) {
-                                                    $userList.empty();
-                                                    
-                                                    if (users.length === 0) {
-                                                        $userList.html('<div class="px-2 py-1 text-center"><small>No users found</small></div>');
-                                                        return;
-                                                    }
-                                                    
-                                                    // Add users
-                                                    $.each(users, function(index, user) {
-                                                        // Skip the current user
-                                                        if (user.is_current && !user.is_switch_back) {
-                                                            return true; // Skip this iteration (continue)
-                                                        }
-                                                        
-                                                        const $form = $('<form>', {
-                                                            method: 'POST',
-                                                            action: '{{ route("admin.user-switcher.switch", ["userId" => "_ID_"]) }}'.replace('_ID_', user.id),
-                                                            class: 'user-switch-form'
-                                                        });
-                                                        
-                                                        // Add CSRF token
-                                                        $form.append(
-                                                            $('<input>', {
-                                                                type: 'hidden',
-                                                                name: '_token',
-                                                                value: '{{ csrf_token() }}'
-                                                            })
-                                                        );
-                                                        
-                                                        // Create button with appropriate styling
-                                                        let buttonClass = 'd-block w-100 text-start p-2 border-0 bg-transparent rounded hover-bg-light';
-                                                        let buttonHtml = '';
-                                                        
-                                                        // Special styling for "Switch back" option
-                                                        if (user.is_switch_back) {
-                                                            buttonClass += ' text-primary';
-                                                            buttonHtml = '<i class="bi bi-arrow-return-left me-2"></i>' + user.email;
-                                                        } else {
-                                                            buttonClass += ' text-dark';
-                                                            buttonHtml = '<i class="bi bi-person-fill me-2"></i>' + user.email;
-                                                            
-                                                            // Add indicators
-                                                            if (user.is_current) {
-                                                                buttonHtml += ' <span class="badge bg-info ms-1">Current</span>';
-                                                                buttonClass += ' disabled';
-                                                            }
-                                                            
-                                                            if (user.is_admin_user) {
-                                                                buttonHtml += ' <span class="badge bg-warning ms-1">Admin</span>';
-                                                            }
-                                                        }
-                                                        
-                                                        $form.append(
-                                                            $('<button>', {
-                                                                type: 'submit',
-                                                                class: buttonClass,
-                                                                html: buttonHtml
-                                                            })
-                                                        );
-                                                        
-                                                        $userList.append($form);
-                                                    });
-                                                    
-                                                    // Mark as loaded
-                                                    $userList.data('loaded', true);
-                                                },
-                                                error: function(xhr, status, error) {
-                                                    $userList.html('<div class="px-2 py-1 text-center text-danger"><small>Error loading users</small></div>');
-                                                }
-                                            });
-                                        }
-                                        @endif
-                                    });
-                                </script>
                             </div>
                         </div>
                     </div>
@@ -389,7 +265,7 @@
                                             <i class="bi bi-calendar-range me-1"></i> Temporal Visualizer
                                         </a>
                                     </li>
-                                    @if(app()->environment('local'))
+                                    @if(app()->environment('local') && Route::has('dev.components'))
                                     <li class="nav-item">
                                         <a class="nav-link {{ request()->routeIs('dev.components') ? 'active' : '' }}" href="{{ route('dev.components') }}">
                                             <i class="bi bi-grid-3x3-gap me-1"></i> Component Showcase
