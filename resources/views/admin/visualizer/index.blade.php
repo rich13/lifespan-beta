@@ -107,8 +107,8 @@ const graphData = {
 
 // Enhanced color scales
 const typeColors = d3.scaleOrdinal()
-    .domain(['person', 'organisation', 'place', 'event', 'connection'])
-    .range(['#ff7f0e', '#1f77b4', '#2ca02c', '#d62728', '#9467bd']);
+    .domain(['person', 'organisation', 'place', 'event'])
+    .range(['#ff7f0e', '#1f77b4', '#2ca02c', '#d62728']);
 
 const connectionColors = d3.scaleOrdinal()
     .domain(['family', 'work', 'education', 'residence', 'member_of'])
