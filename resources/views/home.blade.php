@@ -16,7 +16,7 @@
         <div class="col-md-12">
             <!-- You could also replicate a 'jumbotron' with utility classes since jumbotron is deprecated in BS5 -->
             <div class="text-center p-5 rounded">
-                <h1 class="display-4">Lifespan &beta;</h1>
+                <p class="lead mb-0">Your personal timeline management system</p>
             </div>
         </div>
     </div>
