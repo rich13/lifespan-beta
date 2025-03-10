@@ -42,6 +42,26 @@ class SpanController extends Controller
             ->orderByRaw('COALESCE(start_month, 12)')   // Then by month
             ->orderByRaw('COALESCE(start_day, 31)');    // Then by day
 
+        // Apply type filters if provided
+        if ($request->has('types') && !empty($request->types)) {
+            $query->whereIn('type_id', $request->types);
+        }
+        
+        // Apply search filter if provided
+        if ($request->has('search') && !empty($request->search)) {
+            $searchTerms = preg_split('/\s+/', strtolower(trim($request->search)));
+            
+            $query->where(function($q) use ($searchTerms) {
+                foreach ($searchTerms as $term) {
+                    $term = '%' . $term . '%';
+                    $q->where(function($subQuery) use ($term) {
+                        $subQuery->whereRaw('LOWER(name) LIKE ?', [$term])
+                                ->orWhereRaw('LOWER(description) LIKE ?', [$term]);
+                    });
+                }
+            });
+        }
+
         // For unauthenticated users, only show public spans
         if (!Auth::check()) {
             $query->where('access_level', 'public');

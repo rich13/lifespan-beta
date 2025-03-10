@@ -4,13 +4,120 @@
     Spans
 @endsection
 
+@section('page_filters')
+    <div class="d-flex align-items-center gap-3">
+        <!-- Type Filters -->
+        <form action="{{ route('spans.index') }}" method="GET" class="d-flex gap-2" id="type-filter-form">
+            <div class="btn-group" role="group" aria-label="Filter by type">
+                <input type="checkbox" class="btn-check" id="filter_person" name="types[]" value="person" {{ in_array('person', request('types', [])) ? 'checked' : '' }} autocomplete="off">
+                <label class="btn btn-sm {{ in_array('person', request('types', [])) ? 'btn-primary' : 'btn-outline-secondary' }}" for="filter_person" title="Person">
+                    <i class="bi bi-person-fill"></i>
+                </label>
+                
+                <input type="checkbox" class="btn-check" id="filter_organisation" name="types[]" value="organisation" {{ in_array('organisation', request('types', [])) ? 'checked' : '' }} autocomplete="off">
+                <label class="btn btn-sm {{ in_array('organisation', request('types', [])) ? 'btn-primary' : 'btn-outline-secondary' }}" for="filter_organisation" title="Organisation">
+                    <i class="bi bi-building"></i>
+                </label>
+                
+                <input type="checkbox" class="btn-check" id="filter_place" name="types[]" value="place" {{ in_array('place', request('types', [])) ? 'checked' : '' }} autocomplete="off">
+                <label class="btn btn-sm {{ in_array('place', request('types', [])) ? 'btn-primary' : 'btn-outline-secondary' }}" for="filter_place" title="Place">
+                    <i class="bi bi-geo-alt-fill"></i>
+                </label>
+                
+                <input type="checkbox" class="btn-check" id="filter_event" name="types[]" value="event" {{ in_array('event', request('types', [])) ? 'checked' : '' }} autocomplete="off">
+                <label class="btn btn-sm {{ in_array('event', request('types', [])) ? 'btn-primary' : 'btn-outline-secondary' }}" for="filter_event" title="Event">
+                    <i class="bi bi-calendar-event-fill"></i>
+                </label>
+            </div>
+            
+            @if(!empty(request('types')))
+                <a href="{{ route('spans.index') }}" class="btn btn-sm btn-outline-secondary" title="Clear all filters">
+                    <i class="bi bi-x-circle"></i>
+                </a>
+            @endif
+            
+            <!-- Hidden search field to preserve search when changing type filters -->
+            @if(request('search'))
+                <input type="hidden" name="search" value="{{ request('search') }}">
+            @endif
+        </form>
+        
+        <!-- Search Input -->
+        <div class="d-flex align-items-center position-relative">
+            <i class="bi bi-search position-absolute ms-2 {{ request('search') ? 'text-primary' : 'text-muted' }}" style="z-index: 5"></i>
+            <input type="text" id="span-search" class="form-control form-control-sm ps-4 {{ request('search') ? 'border-primary shadow-sm' : '' }}" placeholder="Search spans..." value="{{ request('search') }}" style="width: 200px;">
+            @if(request('search'))
+                <a href="#" id="clear-search" class="position-absolute end-0 me-2 text-primary" title="Clear search">
+                    <i class="bi bi-x"></i>
+                </a>
+            @endif
+        </div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Auto-submit form when any filter button is clicked
+            const filterCheckboxes = document.querySelectorAll('#type-filter-form .btn-check');
+            filterCheckboxes.forEach(checkbox => {
+                checkbox.addEventListener('change', function() {
+                    document.getElementById('type-filter-form').submit();
+                });
+            });
+            
+            // Live search functionality
+            const searchInput = document.getElementById('span-search');
+            let searchTimeout;
+            
+            searchInput.addEventListener('input', function() {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(function() {
+                    const searchValue = searchInput.value.trim();
+                    const currentUrl = new URL(window.location.href);
+                    
+                    // Update or remove search parameter
+                    if (searchValue) {
+                        currentUrl.searchParams.set('search', searchValue);
+                    } else {
+                        currentUrl.searchParams.delete('search');
+                    }
+                    
+                    // Navigate to the new URL
+                    window.location.href = currentUrl.toString();
+                }, 500); // 500ms debounce
+            });
+            
+            // Clear search button
+            const clearSearchBtn = document.getElementById('clear-search');
+            if (clearSearchBtn) {
+                clearSearchBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const currentUrl = new URL(window.location.href);
+                    currentUrl.searchParams.delete('search');
+                    window.location.href = currentUrl.toString();
+                });
+            }
+        });
+    </script>
+@endsection
+
+@section('page_tools')
+    @auth
+        <a href="{{ route('spans.create') }}" class="btn btn-sm btn-primary">
+            <i class="bi bi-plus-circle me-1"></i>New Span
+        </a>
+    @endauth
+@endsection
+
 @section('content')
 <div class="container-fluid">
-    <div class="d-flex justify-content-end mb-4">
-        @auth
-            <a href="{{ route('spans.create') }}" class="btn btn-primary">Create New Span</a>
-        @endauth
-    </div>
+    @if(request('search'))
+        <div class="alert alert-info alert-sm py-2 mb-3">
+            <small>
+                <i class="bi bi-info-circle me-1"></i>
+                Found {{ $spans->total() }} {{ Str::plural('result', $spans->total()) }} for "<strong>{{ request('search') }}</strong>"
+            </small>
+        </div>
+    @endif
 
     @if($spans->isEmpty())
         <div class="card">
@@ -26,7 +133,7 @@
         </div>
 
         <div class="mt-4">
-            {{ $spans->links() }}
+            {{ $spans->appends(request()->query())->links() }}
         </div>
     @endif
 </div>

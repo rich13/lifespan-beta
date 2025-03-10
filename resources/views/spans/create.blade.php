@@ -4,13 +4,22 @@
     Create New Span
 @endsection
 
+@section('page_tools')
+    <button type="submit" form="span-create-form" class="btn btn-sm btn-success">
+        <i class="bi bi-check-circle me-1"></i> Save Span
+    </button>
+    <a href="{{ route('spans.index') }}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-x-circle me-1"></i> Cancel
+    </a>
+@endsection
+
 @section('content')
 <div class="container-fluid">
     <div class="row">
         <div class="col-md-8">
             <div class="card">
                 <div class="card-body">
-                    <form action="{{ route('spans.store') }}" method="POST">
+                    <form action="{{ route('spans.store') }}" method="POST" id="span-create-form">
                         @csrf
                         
                         <div class="mb-3">
@@ -105,11 +114,6 @@
                                     <div class="invalid-feedback">{{ $message }}</div>
                                 @enderror
                             </div>
-                        </div>
-
-                        <div class="d-flex justify-content-between">
-                            <a href="{{ route('spans.index') }}" class="btn btn-outline-secondary">Cancel</a>
-                            <button type="submit" class="btn btn-primary">Create Span</button>
                         </div>
                     </form>
                 </div>
