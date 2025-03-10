@@ -17,6 +17,58 @@ class SpanAccessController extends Controller
     }
 
     /**
+     * Show the centralized span access management page
+     */
+    public function index(Request $request)
+    {
+        // Get all users
+        $users = User::all();
+        
+        // Get query parameters for filtering
+        $userId = $request->input('user_id');
+        $accessLevel = $request->input('access_level');
+        $spanType = $request->input('span_type');
+        
+        // Base query for user_spans with joins
+        $query = DB::table('user_spans')
+            ->join('spans', 'user_spans.span_id', '=', 'spans.id')
+            ->join('users', 'user_spans.user_id', '=', 'users.id')
+            ->join('span_types', 'spans.type_id', '=', 'span_types.type_id')
+            ->select(
+                'user_spans.id',
+                'user_spans.user_id',
+                'user_spans.span_id',
+                'user_spans.access_level',
+                'spans.name as span_name',
+                'spans.slug as span_slug',
+                'users.name as user_name',
+                'users.email as user_email',
+                'span_types.name as span_type'
+            );
+        
+        // Apply filters if provided
+        if ($userId) {
+            $query->where('user_spans.user_id', $userId);
+        }
+        
+        if ($accessLevel) {
+            $query->where('user_spans.access_level', $accessLevel);
+        }
+        
+        if ($spanType) {
+            $query->where('spans.type_id', $spanType);
+        }
+        
+        // Get the results with pagination
+        $accessEntries = $query->orderBy('spans.name')->paginate(20);
+        
+        // Get all span types for the filter dropdown
+        $spanTypes = DB::table('span_types')->get();
+        
+        return view('admin.span-access.index', compact('accessEntries', 'users', 'spanTypes', 'userId', 'accessLevel', 'spanType'));
+    }
+
+    /**
      * Show the access management page for a span
      */
     public function edit(Span $span)
