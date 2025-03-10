@@ -23,19 +23,10 @@
                     <i class="bi bi-trash me-1"></i> Delete
                 </a>
                 
-                <form id="delete-span-form" action="{{ route('spans.destroy', $span) }}" method="POST" style="display: none;">
+                <form id="delete-span-form" action="{{ route('spans.destroy', $span) }}" method="POST" class="d-none">
                     @csrf
                     @method('DELETE')
                 </form>
-                
-                <script>
-                    document.getElementById('delete-span-btn').addEventListener('click', function(e) {
-                        e.preventDefault();
-                        if (confirm('Are you sure you want to delete this span?')) {
-                            document.getElementById('delete-span-form').submit();
-                        }
-                    });
-                </script>
             @endcan
         @endif
     @endauth
