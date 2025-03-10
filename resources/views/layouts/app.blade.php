@@ -30,27 +30,32 @@
         <div class="container-fluid">
             <div class="row">
                 @auth
-                    <div class="col-md-3 col-lg-2 bg-white border-end min-vh-100 px-0">
-                        <!-- Brand -->
-                        <div class="p-3 border-bottom bg-light">
-                            <a class="text-decoration-none" href="{{ route('home') }}">
-                                <h5 class="mb-0 text-dark">
-                                    <i class="bi bi-bar-chart-steps me-1"></i> Lifespan &beta;
-                                </h5>
-                            </a>
-                        </div>
-
-                        <!-- User Profile Section -->
-                        <div class="p-3 border-bottom">
-                            <div class="d-flex align-items-center">
+                    <!-- Top Navigation Bar -->
+                    <div class="col-12 px-0">
+                        <div class="d-flex align-items-center bg-light border-bottom" style="height: 60px;">
+                            <!-- Brand -->
+                            <div class="px-3 h-100 d-flex align-items-center border-end">
+                                <a class="text-decoration-none" href="{{ route('home') }}">
+                                    <h5 class="mb-0 text-dark">
+                                        <i class="bi bi-bar-chart-steps me-1"></i> Lifespan &beta;
+                                    </h5>
+                                </a>
+                            </div>
                             
-                                <div class="flex-grow-1 ms-3">
+                            <!-- Page Title -->
+                            <div class="px-3 flex-grow-1">
+                                <h2 class="mb-0 h5">@yield('page_title')</h2>
+                            </div>
+                            
+                            <!-- User Profile Section -->
+                            <div class="px-3 d-flex align-items-center">
+                                <div class="d-flex align-items-center">
                                     @if(Auth::user()->personalSpan)
                                         <x-spans.display.micro-card :span="Auth::user()->personalSpan" />
                                     @else
-                                        <h6 class="mb-0">{{ Auth::user()->name }}</h6>
+                                        <h6 class="mb-0 me-3">{{ Auth::user()->name }}</h6>
                                     @endif
-                                    <div class="btn-group mt-2">
+                                    <div class="btn-group ms-3">
                                         <a href="{{ route('profile.edit') }}" class="btn btn-sm btn-secondary">
                                             <i class="bi bi-person me-1"></i>Profile
                                         </a>
@@ -64,7 +69,10 @@
                                 </div>
                             </div>
                         </div>
-
+                    </div>
+                    
+                    <!-- Sidebar and Main Content -->
+                    <div class="col-md-3 col-lg-2 bg-white border-end min-vh-100 px-0">
                         <!-- Navigation -->
                         <div class="p-3">
                             <ul class="nav flex-column">
@@ -152,7 +160,6 @@
                     <main class="col-md-9 col-lg-10 bg-white min-vh-100">
                         <div class="p-3">
                             <div class="header-section mb-4">
-                                @yield('header')
                                 <x-flash-messages />
                             </div>
                             @yield('content')

@@ -1,9 +1,12 @@
 @extends('layouts.app')
 
+@section('page_title')
+    Spans
+@endsection
+
 @section('content')
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1>Spans</h1>
+    <div class="d-flex justify-content-end mb-4">
         @auth
             <a href="{{ route('spans.create') }}" class="btn btn-primary">Create New Span</a>
         @endauth

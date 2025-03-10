@@ -1,5 +1,13 @@
 @extends('layouts.app')
 
+@section('page_title')
+    @guest
+        Welcome to Lifespan
+    @else
+        Home
+    @endguest
+@endsection
+
 @section('content')
 @guest
 <div class="container">
@@ -136,7 +144,6 @@
     <div class="container-fluid">
         <div class="row">
             <div class="col-12">
-                <h2>Home</h2>
                 <p>This is the magic page.</p>
                 <!-- Timeline content will go here -->
             </div>

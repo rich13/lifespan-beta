@@ -1,13 +1,16 @@
 @extends('layouts.app')
 
+@section('page_title')
+    New Connection Type
+@endsection
+
 @section('content')
 <div class="container-fluid" x-data="{
     forward: '',
     inverse: '',
     type: ''
 }">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1 class="h2 mb-0">New Connection Type</h1>
+    <div class="d-flex justify-content-end mb-4">
         <div>
             <a href="{{ route('admin.connection-types.index') }}" class="btn btn-outline-secondary">
                 Cancel

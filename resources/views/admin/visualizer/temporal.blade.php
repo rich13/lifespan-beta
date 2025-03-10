@@ -1,5 +1,9 @@
 @extends('layouts.app')
 
+@section('page_title')
+    Temporal Visualization
+@endsection
+
 @section('scripts')
 <script src="https://d3js.org/d3.v7.min.js"></script>
 @endsection

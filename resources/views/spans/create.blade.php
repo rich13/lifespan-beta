@@ -1,13 +1,14 @@
 @extends('layouts.app')
 
+@section('page_title')
+    Create New Span
+@endsection
+
 @section('content')
 <div class="container-fluid">
     <div class="row">
         <div class="col-md-8">
             <div class="card">
-                <div class="card-header">
-                    <h2>Create New Span</h2>
-                </div>
                 <div class="card-body">
                     <form action="{{ route('spans.store') }}" method="POST">
                         @csrf

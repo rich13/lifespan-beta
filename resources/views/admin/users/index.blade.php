@@ -1,5 +1,9 @@
 @extends('layouts.app')
 
+@section('page_title')
+    Users
+@endsection
+
 @section('content')
 <div class="py-4">
     <div class="row">
