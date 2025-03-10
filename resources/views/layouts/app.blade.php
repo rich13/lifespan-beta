@@ -23,8 +23,76 @@
         @viteReactRefresh
         @vite(['resources/scss/app.scss', 'resources/js/app.js'])
         
+        <!-- Debug Script -->
+        <script>
+            // Check if Bootstrap is loaded
+            window.addEventListener('DOMContentLoaded', function() {
+                // Global error handler
+                window.addEventListener('error', function(e) {
+                    console.error('Global error caught:', e.message);
+                    console.error('Error source:', e.filename, 'line:', e.lineno);
+                    return false;
+                });
+            });
+        </script>
+        
         <!-- Page-specific scripts -->
         @yield('scripts')
+        
+        <style>
+            /* Custom dropdown styles */
+            .hover-bg-light:hover {
+                background-color: #f8f9fa;
+            }
+            
+            #customUserDropdownMenu {
+                box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+                border: 1px solid rgba(0, 0, 0, 0.1);
+            }
+            
+            #customUserDropdownMenu .fw-bold {
+                font-size: 1rem;
+            }
+            
+            #customUserDropdownMenu .small {
+                font-size: 0.8rem;
+            }
+            
+            .max-height-200 {
+                max-height: 200px;
+                overflow-y: auto;
+            }
+            
+            .user-switch-form {
+                margin-bottom: 2px;
+            }
+            
+            .user-switch-form button {
+                font-size: 0.9rem;
+                text-overflow: ellipsis;
+                overflow: hidden;
+                white-space: nowrap;
+            }
+            
+            /* Button group styling */
+            .btn-group > .btn:not(:first-child):not(:last-child) {
+                border-radius: 0;
+            }
+            
+            .btn-group > .btn:first-child {
+                border-top-right-radius: 0;
+                border-bottom-right-radius: 0;
+            }
+            
+            .btn-group > .btn:last-child {
+                border-top-left-radius: 0;
+                border-bottom-left-radius: 0;
+            }
+            
+            .btn-group > .btn:only-child {
+                border-radius: 0.25rem;
+            }
+        </style>
     </head>
     <body class="bg-light">
         <div class="container-fluid">
@@ -34,9 +102,9 @@
                     <div class="col-12 px-0">
                         <div class="d-flex align-items-center bg-light border-bottom" style="height: 60px;">
                             <!-- Brand -->
-                            <div class="px-3 h-100 d-flex align-items-center border-end">
-                                <a class="text-decoration-none" href="{{ route('home') }}">
-                                    <h5 class="mb-0 text-dark">
+                            <div class="h-100 d-flex align-items-center border-end bg-secondary col-md-3 col-lg-2">
+                                <a class="text-decoration-none px-3" href="{{ route('home') }}">
+                                    <h5 class="mb-0 text-white">
                                         <i class="bi bi-bar-chart-steps me-1"></i> Lifespan &beta;
                                     </h5>
                                 </a>
@@ -47,26 +115,188 @@
                                 <h2 class="mb-0 h5">@yield('page_title')</h2>
                             </div>
                             
+                            <!-- Page Filters Section -->
+                            <div class="px-3 d-flex align-items-center">
+                                @yield('page_filters')
+                            </div>
+                            
+                            <!-- Page Tools Section -->
+                            <div class="px-3 d-flex align-items-center">
+                                @if(trim($__env->yieldContent('page_tools')))
+                                    <div class="btn-group">
+                                        @yield('page_tools')
+                                    </div>
+                                @endif
+                            </div>
+                            
                             <!-- User Profile Section -->
                             <div class="px-3 d-flex align-items-center">
-                                <div class="d-flex align-items-center">
-                                    @if(Auth::user()->personalSpan)
-                                        <x-spans.display.micro-card :span="Auth::user()->personalSpan" />
-                                    @else
-                                        <h6 class="mb-0 me-3">{{ Auth::user()->name }}</h6>
-                                    @endif
-                                    <div class="btn-group ms-3">
-                                        <a href="{{ route('profile.edit') }}" class="btn btn-sm btn-secondary">
-                                            <i class="bi bi-person me-1"></i>Profile
-                                        </a>
-                                        <form method="POST" action="{{ route('logout') }}" class="d-inline">
-                                            @csrf
-                                            <button type="submit" class="btn btn-sm btn-secondary">
-                                                <i class="bi bi-box-arrow-right me-1"></i>Sign Out
-                                            </button>
-                                        </form>
+                                <!-- Custom User Dropdown -->
+                                <div class="position-relative" id="customUserDropdown">
+                                    <button class="btn btn-sm btn-secondary" type="button" id="customUserDropdownToggle">
+                                        <i class="bi bi-person-circle me-1"></i>{{ Auth::user()->name }} <i class="bi bi-caret-down-fill"></i>
+                                    </button>
+                                    <div class="position-absolute end-0 mt-1 bg-white shadow rounded" id="customUserDropdownMenu" style="display: none; min-width: 220px; z-index: 1050;">
+                                        <div class="p-2">
+                                            <!-- User Info -->
+                                            <div class="px-2 py-1 mb-2 border-bottom">
+                                                <div class="fw-bold">{{ Auth::user()->name }}</div>
+                                                <div class="small text-muted">{{ Auth::user()->email }}</div>
+                                            </div>
+                                            
+                                            <!-- Menu Items -->
+                                            <a href="{{ route('profile.edit') }}" class="d-block p-2 text-decoration-none text-dark rounded hover-bg-light">
+                                                <i class="bi bi-person me-2"></i>Your Profile
+                                            </a>
+                                            
+                                            @if(Auth::user()->is_admin)
+                                                <div class="mt-2 mb-1">
+                                                    <div class="px-2 py-1 border-top border-bottom bg-light">
+                                                        <small class="text-muted fw-bold">SWITCH TO USER</small>
+                                                    </div>
+                                                    <div id="userSwitcherList" class="py-1 max-height-200 overflow-auto">
+                                                        <div class="px-2 py-1 text-center">
+                                                            <div class="spinner-border spinner-border-sm" role="status"></div>
+                                                            <small class="ms-2">Loading users...</small>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            @endif
+                                            
+                                            @if(Session::has('admin_user_id'))
+                                                <form method="POST" action="{{ route('admin.user-switcher.switch-back') }}">
+                                                    @csrf
+                                                    <button type="submit" class="d-block w-100 text-start p-2 border-0 bg-transparent text-primary rounded hover-bg-light">
+                                                        <i class="bi bi-arrow-return-left me-2"></i>Switch Back to Admin
+                                                    </button>
+                                                </form>
+                                            @endif
+                                            
+                                            <hr class="my-2">
+                                            
+                                            <form method="POST" action="{{ route('logout') }}">
+                                                @csrf
+                                                <button type="submit" class="d-block w-100 text-start p-2 border-0 bg-transparent text-danger rounded hover-bg-light">
+                                                    <i class="bi bi-box-arrow-right me-2"></i>Sign Out
+                                                </button>
+                                            </form>
+                                        </div>
                                     </div>
                                 </div>
+                                
+                                <script>
+                                    // Custom dropdown implementation using jQuery
+                                    $(document).ready(function() {
+                                        const $toggle = $('#customUserDropdownToggle');
+                                        const $menu = $('#customUserDropdownMenu');
+                                        
+                                        $toggle.on('click', function(e) {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            $menu.toggle();
+                                            
+                                            @if(Auth::user()->is_admin || Session::has('admin_user_id'))
+                                            // Load users when dropdown is shown (admin only)
+                                            const $userList = $('#userSwitcherList');
+                                            if ($menu.is(':visible') && $userList.length && !$userList.data('loaded')) {
+                                                loadUsers();
+                                            }
+                                            @endif
+                                        });
+                                        
+                                        // Close when clicking outside
+                                        $(document).on('click', function(e) {
+                                            if (!$toggle.is(e.target) && $toggle.has(e.target).length === 0 && 
+                                                !$menu.is(e.target) && $menu.has(e.target).length === 0) {
+                                                $menu.hide();
+                                            }
+                                        });
+                                        
+                                        @if(Auth::user()->is_admin || Session::has('admin_user_id'))
+                                        // Load users function (admin only)
+                                        function loadUsers() {
+                                            const $userList = $('#userSwitcherList');
+                                            if ($userList.data('loaded')) return;
+                                            
+                                            $.ajax({
+                                                url: '{{ route("admin.user-switcher.users") }}',
+                                                type: 'GET',
+                                                dataType: 'json',
+                                                success: function(users) {
+                                                    $userList.empty();
+                                                    
+                                                    if (users.length === 0) {
+                                                        $userList.html('<div class="px-2 py-1 text-center"><small>No users found</small></div>');
+                                                        return;
+                                                    }
+                                                    
+                                                    // Add users
+                                                    $.each(users, function(index, user) {
+                                                        // Skip the current user
+                                                        if (user.is_current && !user.is_switch_back) {
+                                                            return true; // Skip this iteration (continue)
+                                                        }
+                                                        
+                                                        const $form = $('<form>', {
+                                                            method: 'POST',
+                                                            action: '{{ route("admin.user-switcher.switch", ["userId" => "_ID_"]) }}'.replace('_ID_', user.id),
+                                                            class: 'user-switch-form'
+                                                        });
+                                                        
+                                                        // Add CSRF token
+                                                        $form.append(
+                                                            $('<input>', {
+                                                                type: 'hidden',
+                                                                name: '_token',
+                                                                value: '{{ csrf_token() }}'
+                                                            })
+                                                        );
+                                                        
+                                                        // Create button with appropriate styling
+                                                        let buttonClass = 'd-block w-100 text-start p-2 border-0 bg-transparent rounded hover-bg-light';
+                                                        let buttonHtml = '';
+                                                        
+                                                        // Special styling for "Switch back" option
+                                                        if (user.is_switch_back) {
+                                                            buttonClass += ' text-primary';
+                                                            buttonHtml = '<i class="bi bi-arrow-return-left me-2"></i>' + user.email;
+                                                        } else {
+                                                            buttonClass += ' text-dark';
+                                                            buttonHtml = '<i class="bi bi-person-fill me-2"></i>' + user.email;
+                                                            
+                                                            // Add indicators
+                                                            if (user.is_current) {
+                                                                buttonHtml += ' <span class="badge bg-info ms-1">Current</span>';
+                                                                buttonClass += ' disabled';
+                                                            }
+                                                            
+                                                            if (user.is_admin_user) {
+                                                                buttonHtml += ' <span class="badge bg-warning ms-1">Admin</span>';
+                                                            }
+                                                        }
+                                                        
+                                                        $form.append(
+                                                            $('<button>', {
+                                                                type: 'submit',
+                                                                class: buttonClass,
+                                                                html: buttonHtml
+                                                            })
+                                                        );
+                                                        
+                                                        $userList.append($form);
+                                                    });
+                                                    
+                                                    // Mark as loaded
+                                                    $userList.data('loaded', true);
+                                                },
+                                                error: function(xhr, status, error) {
+                                                    $userList.html('<div class="px-2 py-1 text-center text-danger"><small>Error loading users</small></div>');
+                                                }
+                                            });
+                                        }
+                                        @endif
+                                    });
+                                </script>
                             </div>
                         </div>
                     </div>
@@ -119,6 +349,11 @@
                                         </a>
                                     </li>
                                     <li class="nav-item">
+                                        <a class="nav-link {{ request()->routeIs('admin.span-access.index') ? 'active' : '' }}" href="{{ route('admin.span-access.index') }}">
+                                            <i class="bi bi-shield-lock me-1"></i> Manage Span Access
+                                        </a>
+                                    </li>
+                                    <li class="nav-item">
                                         <a class="nav-link {{ request()->routeIs('admin.connections.*') ? 'active' : '' }}" href="{{ route('admin.connections.index') }}">
                                             <i class="bi bi-arrow-left-right me-1"></i> Manage Connections
                                         </a>
@@ -153,6 +388,12 @@
                                         <a class="nav-link {{ request()->routeIs('admin.visualizer.temporal') ? 'active' : '' }}" href="{{ route('admin.visualizer.temporal') }}">
                                             <i class="bi bi-calendar-range me-1"></i> Temporal Visualizer
                                         </a>
+                                    </li>
+                                    <li class="nav-item">
+                                        <a class="nav-link {{ request()->routeIs('admin.dev.components') ? 'active' : '' }}" href="{{ route('admin.dev.components') }}">
+                                            <i class="bi bi-grid-3x3-gap me-1"></i> Component Showcase
+                                        </a>
+                                    </li>
                                 </ul>
                             @endif
                         </div>

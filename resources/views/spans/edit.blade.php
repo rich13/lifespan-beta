@@ -4,21 +4,34 @@
     Edit {{ $span->name }}
 @endsection
 
+@section('page_tools')
+    <button type="submit" form="span-edit-form" class="btn btn-sm btn-success">
+        <i class="bi bi-check-circle me-1"></i> Save Changes
+    </button>
+    <a href="{{ route('spans.show', $span) }}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-eye me-1"></i> View
+    </a>
+@endsection
+
 @section('content')
-<div class="py-4">
-    <form action="{{ route('spans.update', $span) }}" method="POST">
+<div class="container-fluid py-4">
+    <div class="row">
+        <!-- Removed the buttons row since it's now in the tools area -->
+    </div>
+
+    @if (session('status'))
+        <div class="alert alert-success">
+            {{ session('status') }}
+        </div>
+    @endif
+
+    <form action="{{ route('spans.update', $span) }}" method="POST" id="span-edit-form">
         @csrf
         @method('PUT')
 
         <div class="row">
-            <div class="col-12 d-flex justify-content-between align-items-center mb-4">
-                <h1 class="h3 mb-0">Edit: {{ $span->name }}</h1>
-                <div class="d-flex gap-2">
-                    <a href="{{ route('spans.show', $span) }}" class="btn btn-outline-secondary">Cancel</a>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="bi bi-check-lg"></i> Save Changes
-                    </button>
-                </div>
+            <div class="col-12 mb-4">
+                <!-- Removed duplicate save button -->
             </div>
         </div>
 
