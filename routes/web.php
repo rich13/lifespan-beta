@@ -11,6 +11,7 @@ use App\Http\Controllers\Admin\SpanTypeController;
 use App\Http\Controllers\Admin\ConnectionTypeController;
 use App\Http\Controllers\Admin\ConnectionController;
 use App\Http\Controllers\Admin\ImportController;
+use App\Http\Controllers\Admin\VisualizerController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
@@ -34,9 +35,6 @@ Route::middleware('web')->group(function () {
 
     // Span routes
     Route::prefix('spans')->group(function () {
-        // Public routes
-        Route::get('/', [SpanController::class, 'index'])->name('spans.index');
-
         // Protected routes
         Route::middleware('auth')->group(function () {
             Route::get('/create', [SpanController::class, 'create'])->name('spans.create');
@@ -46,8 +44,11 @@ Route::middleware('web')->group(function () {
             Route::delete('/{span}', [SpanController::class, 'destroy'])->name('spans.destroy');
         });
 
-        // Show route (with access middleware)
-        Route::get('/{span}', [SpanController::class, 'show'])->name('spans.show')->middleware('span.access');
+        // Public routes
+        Route::middleware('span.access')->group(function () {
+            Route::get('/', [SpanController::class, 'index'])->name('spans.index');
+            Route::get('/{span}', [SpanController::class, 'show'])->name('spans.show');
+        });
     });
 
     // Protected routes
@@ -131,8 +132,11 @@ Route::middleware('web')->group(function () {
                     ->name('dev.components');
             }
 
-            Route::get('/visualizer', [App\Http\Controllers\Admin\VisualizerController::class, 'index'])
-                ->name('visualizer');
+            // Visualizers
+            Route::get('/visualizer', [VisualizerController::class, 'index'])
+                ->name('visualizer.index');
+            Route::get('/visualizer/temporal', [VisualizerController::class, 'temporal'])
+                ->name('visualizer.temporal');
         });
     });
 

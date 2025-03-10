@@ -61,77 +61,85 @@ class SpanAccessTest extends TestCase
 
     public function test_private_spans_only_visible_to_owner_and_admin(): void
     {
-        $this->markTestSkipped('Access control implementation needs to be finalized');
+        $this->markTestSkipped('Skipping test until access control is fixed');
+        
         $owner = User::factory()->create();
         $otherUser = User::factory()->create();
-        $admin = User::factory()->admin()->create();
+        $admin = User::factory()->create(['is_admin' => true]);
 
         // Create a private span
         $span = Span::factory()->create([
             'owner_id' => $owner->id,
-            'updater_id' => $owner->id
+            'access_level' => 'private',
+            'name' => 'Private Test Span'
         ]);
-        $span->makePrivate();
 
         // Owner can see it
         $this->actingAs($owner)
-            ->get("/spans/{$span->id}")
+            ->get("/spans/{$span->slug}")
             ->assertStatus(200);
 
         // Other user cannot
         $this->actingAs($otherUser)
-            ->get("/spans/{$span->id}")
+            ->get("/spans/{$span->slug}")
             ->assertStatus(403);
 
         // Admin can see it
+        $response = $this->actingAs($admin)
+            ->get("/spans/{$span->id}");
+        $response->assertStatus(301);
+        $response->assertRedirect("/spans/{$span->slug}");
         $this->actingAs($admin)
-            ->get("/spans/{$span->id}")
+            ->get("/spans/{$span->slug}")
             ->assertStatus(200);
 
         // Unauthenticated cannot see it
-        $this->get("/spans/{$span->id}")
+        $this->get("/spans/{$span->slug}")
+            ->assertStatus(302)
             ->assertRedirect('/login');
     }
 
     public function test_shared_spans_visible_to_users_with_permission(): void
     {
-        $this->markTestSkipped('Using old permissions model - test needs to be rewritten for new access model');
+        $this->markTestSkipped('Skipping test until access control is fixed');
         
         $owner = User::factory()->create();
-        $otherUser = User::factory()->create();
+        $userWithPermission = User::factory()->create();
+        $userWithoutPermission = User::factory()->create();
 
+        // Create a shared span
         $span = Span::factory()->create([
             'owner_id' => $owner->id,
-            'updater_id' => $owner->id,
             'access_level' => 'shared',
+            'name' => 'Shared Test Span'
         ]);
 
-        // Create permission for other user
-        SpanPermission::create([
-            'span_id' => $span->id,
-            'user_id' => $otherUser->id,
-            'permission_type' => 'view',
-        ]);
-
-        // Owner can view
+        // Grant permission to the user
+        $span->grantPermission($userWithPermission, 'view');
+        
+        // Owner can see it
         $this->actingAs($owner)
-            ->get("/spans/{$span->id}")
+            ->get("/spans/{$span->slug}")
             ->assertStatus(200);
 
-        // Other user with permission can view
-        $this->actingAs($otherUser)
-            ->get("/spans/{$span->id}")
+        // User with permission can see it
+        $this->actingAs($userWithPermission)
+            ->get("/spans/{$span->slug}")
             ->assertStatus(200);
+
+        // User without permission cannot see it
+        $this->actingAs($userWithoutPermission)
+            ->get("/spans/{$span->slug}")
+            ->assertStatus(403);
 
         // Unauthenticated user cannot view
-        $this->get("/spans/{$span->id}")
+        $this->get("/spans/{$span->slug}")
+            ->assertStatus(302)
             ->assertRedirect('/login');
     }
 
     public function test_span_deletion_permissions(): void
     {
-        $this->markTestSkipped('Using old permissions model - test needs to be rewritten for new access model');
-        
         $owner = User::factory()->create();
         $editor = User::factory()->create();
         $admin = User::factory()->admin()->create();
@@ -139,99 +147,85 @@ class SpanAccessTest extends TestCase
         // Create a shared span
         $span = Span::factory()->create([
             'owner_id' => $owner->id,
-            'updater_id' => $owner->id
+            'updater_id' => $owner->id,
+            'access_level' => 'shared'
         ]);
-        $span->makeShared();
+
+        // Grant edit permission to editor
         $span->grantPermission($editor, 'edit');
 
-        // Editor cannot delete
+        // Editor cannot delete despite having edit permission
         $this->actingAs($editor)
             ->delete("/spans/{$span->id}")
             ->assertStatus(403);
 
-        // Create a new span since the first one will be deleted
-        $span2 = Span::factory()->create([
-            'owner_id' => $owner->id,
-            'updater_id' => $owner->id
-        ]);
-        $span2->makePrivate();
-
         // Owner can delete
         $this->actingAs($owner)
-            ->delete("/spans/{$span2->id}")
+            ->delete("/spans/{$span->id}")
             ->assertStatus(302); // Redirect after success
 
         // Create another span for admin test
-        $span3 = Span::factory()->create();
+        $span2 = Span::factory()->create([
+            'owner_id' => $owner->id,
+            'updater_id' => $owner->id,
+            'access_level' => 'private'
+        ]);
         
         // Admin can delete any span
         $this->actingAs($admin)
-            ->delete("/spans/{$span3->id}")
+            ->delete("/spans/{$span2->id}")
             ->assertStatus(302);
     }
 
     public function test_span_listing_respects_access(): void
     {
-        $this->markTestSkipped('Access control implementation needs to be finalized');
+        $this->markTestSkipped('Skipping test until access control is fixed');
+        
         $user = User::factory()->create();
         $otherUser = User::factory()->create();
-
+        
         // Create spans with different access levels
         $publicSpan = Span::factory()->create([
             'owner_id' => $otherUser->id,
-            'updater_id' => $otherUser->id,
             'access_level' => 'public',
             'name' => 'Public Test Span'
         ]);
-
+        
         $privateSpan = Span::factory()->create([
             'owner_id' => $user->id,
-            'updater_id' => $user->id,
             'access_level' => 'private',
             'name' => 'Private Test Span'
         ]);
-
+        
         $sharedSpan = Span::factory()->create([
             'owner_id' => $otherUser->id,
-            'updater_id' => $otherUser->id,
             'access_level' => 'shared',
             'name' => 'Shared Test Span'
         ]);
-
-        // Create permission for shared span
-        SpanPermission::create([
-            'span_id' => $sharedSpan->id,
-            'user_id' => $user->id,
-            'permission_type' => 'view',
-        ]);
-
-        $otherUserSpan = Span::factory()->create([
+        
+        // Grant permission to the user
+        $sharedSpan->grantPermission($user, 'view');
+        
+        $otherPrivateSpan = Span::factory()->create([
             'owner_id' => $otherUser->id,
-            'updater_id' => $otherUser->id,
             'access_level' => 'private',
-            'name' => 'Other User Private Span'
+            'name' => 'Other Private Span'
         ]);
 
         // Test authenticated user's span listing
         $response = $this->actingAs($user)->get('/spans');
         $response->assertStatus(200);
-        $response->assertViewHas('spans', function($spans) use ($publicSpan, $privateSpan, $sharedSpan, $otherUserSpan) {
-            $spanIds = $spans->pluck('id')->toArray();
-            return in_array($publicSpan->id, $spanIds) &&
-                   in_array($privateSpan->id, $spanIds) &&
-                   in_array($sharedSpan->id, $spanIds) &&
-                   !in_array($otherUserSpan->id, $spanIds);
-        });
+        $response->assertSee($publicSpan->name);
+        $response->assertSee($privateSpan->name);
+        $response->assertSee($sharedSpan->name);
+        $response->assertDontSee($otherPrivateSpan->name);
 
         // Test unauthenticated user's span listing
         $response = $this->get('/spans');
         $response->assertStatus(200);
-        $response->assertViewHas('spans', function($spans) use ($publicSpan, $privateSpan, $sharedSpan, $otherUserSpan) {
-            $spanIds = $spans->pluck('id')->toArray();
-            return in_array($publicSpan->id, $spanIds) &&
-                   !in_array($privateSpan->id, $spanIds) &&
-                   !in_array($sharedSpan->id, $spanIds) &&
-                   !in_array($otherUserSpan->id, $spanIds);
-        });
+        $response->assertSee($publicSpan->name);
+        $response->assertDontSee($privateSpan->name);
+        $response->assertDontSee($sharedSpan->name);
+        $response->assertDontSee($otherPrivateSpan->name);
     }
 } 
