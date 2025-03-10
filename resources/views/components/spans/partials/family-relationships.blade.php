@@ -20,7 +20,7 @@ $hasFamily = $ancestors->isNotEmpty() || $descendants->isNotEmpty() ||
 @if($hasFamily)
     <div class="card-grid">
         {{-- Generation +2: Grandparents --}}
-        @php $grandparents = $ancestors->where('generation', 2); @endphp
+        @php $grandparents = $ancestors->filter(function($item) { return $item['generation'] === 2; }); @endphp
         @if($grandparents->isNotEmpty())
             <div class="card">
                 <div class="card-body">
@@ -37,7 +37,7 @@ $hasFamily = $ancestors->isNotEmpty() || $descendants->isNotEmpty() ||
         @endif
 
         {{-- Generation +1: Parents, Uncles & Aunts --}}
-        @php $parents = $ancestors->where('generation', 1); @endphp
+        @php $parents = $ancestors->filter(function($item) { return $item['generation'] === 1; }); @endphp
         @if($parents->isNotEmpty())
             <div class="card">
                 <div class="card-body">
@@ -100,7 +100,7 @@ $hasFamily = $ancestors->isNotEmpty() || $descendants->isNotEmpty() ||
         @endif
 
         {{-- Generation -1: Children, Nephews & Nieces --}}
-        @php $children = $descendants->where('generation', 1); @endphp
+        @php $children = $descendants->filter(function($item) { return $item['generation'] === 1; }); @endphp
         @if($children->isNotEmpty())
             <div class="card">
                 <div class="card-body">
@@ -132,7 +132,7 @@ $hasFamily = $ancestors->isNotEmpty() || $descendants->isNotEmpty() ||
         @endif
 
         {{-- Generation -2: Grandchildren --}}
-        @php $grandchildren = $descendants->where('generation', 2); @endphp
+        @php $grandchildren = $descendants->filter(function($item) { return $item['generation'] === 2; }); @endphp
         @if($grandchildren->isNotEmpty())
             <div class="card">
                 <div class="card-body">

@@ -52,7 +52,8 @@ trait HasFamilyCapabilities
     public function parents()
     {
         return $this->belongsToMany(Span::class, 'connections', 'child_id', 'parent_id')
-            ->where('connections.type_id', 'family');
+            ->where('connections.type_id', 'family')
+            ->withPivot('connection_span_id');
     }
 
     /**
@@ -61,15 +62,16 @@ trait HasFamilyCapabilities
     public function children()
     {
         return $this->belongsToMany(Span::class, 'connections', 'parent_id', 'child_id')
-            ->where('connections.type_id', 'family');
+            ->where('connections.type_id', 'family')
+            ->withPivot('connection_span_id');
     }
 
     /**
      * Get all siblings of this person (same parents)
      */
-    public function siblings()
+    public function siblings(): Collection
     {
-        return $this->getFamilyTreeService()->getSiblings($this);
+        return new Collection($this->getFamilyTreeService()->getSiblings($this));
     }
 
     /**
@@ -77,10 +79,7 @@ trait HasFamilyCapabilities
      */
     public function ancestors(int $generations = 2): Collection
     {
-        $ancestors = $this->getFamilyTreeService()->getAncestors($this, $generations);
-        return Collection::make($ancestors->map(function($item) {
-            return $item['span'];
-        }));
+        return new Collection($this->getFamilyTreeService()->getAncestors($this, $generations));
     }
 
     /**
@@ -88,10 +87,7 @@ trait HasFamilyCapabilities
      */
     public function descendants(int $generations = 2): Collection
     {
-        $descendants = $this->getFamilyTreeService()->getDescendants($this, $generations);
-        return Collection::make($descendants->map(function($item) {
-            return $item['span'];
-        }));
+        return new Collection($this->getFamilyTreeService()->getDescendants($this, $generations));
     }
 
     /**
@@ -99,8 +95,7 @@ trait HasFamilyCapabilities
      */
     public function unclesAndAunts(): Collection
     {
-        $unclesAndAunts = $this->getFamilyTreeService()->getUnclesAndAunts($this);
-        return new Collection($unclesAndAunts->all());
+        return new Collection($this->getFamilyTreeService()->getUnclesAndAunts($this));
     }
 
     /**
@@ -108,8 +103,7 @@ trait HasFamilyCapabilities
      */
     public function cousins(): Collection
     {
-        $cousins = $this->getFamilyTreeService()->getCousins($this);
-        return new Collection($cousins->all());
+        return new Collection($this->getFamilyTreeService()->getCousins($this));
     }
 
     /**
@@ -117,8 +111,7 @@ trait HasFamilyCapabilities
      */
     public function nephewsAndNieces(): Collection
     {
-        $nephewsAndNieces = $this->getFamilyTreeService()->getNephewsAndNieces($this);
-        return new Collection($nephewsAndNieces->all());
+        return new Collection($this->getFamilyTreeService()->getNephewsAndNieces($this));
     }
 
     /**
@@ -139,11 +132,24 @@ trait HasFamilyCapabilities
             return;
         }
 
+        // Create the connection span
+        $connectionSpan = Span::create([
+            'name' => "{$parent->name} - {$this->name} Family Connection",
+            'type_id' => 'connection',
+            'owner_id' => $this->owner_id,
+            'updater_id' => $this->updater_id,
+            'start_year' => $this->start_year,
+            'start_month' => $this->start_month,
+            'start_day' => $this->start_day,
+            'access_level' => $this->access_level
+        ]);
+
         // Create the connection
         Connection::create([
             'type_id' => 'family',
             'parent_id' => $parent->id,
             'child_id' => $this->id,
+            'connection_span_id' => $connectionSpan->id,
             'metadata' => array_merge([
                 'relationship_type' => 'parent'
             ], $metadata)
@@ -174,11 +180,24 @@ trait HasFamilyCapabilities
             return;
         }
 
+        // Create the connection span
+        $connectionSpan = Span::create([
+            'name' => "{$this->name} - {$child->name} Family Connection",
+            'type_id' => 'connection',
+            'owner_id' => $this->owner_id,
+            'updater_id' => $this->updater_id,
+            'start_year' => $child->start_year,
+            'start_month' => $child->start_month,
+            'start_day' => $child->start_day,
+            'access_level' => $this->access_level
+        ]);
+
         // Create the connection
         Connection::create([
             'type_id' => 'family',
             'parent_id' => $this->id,
             'child_id' => $child->id,
+            'connection_span_id' => $connectionSpan->id,
             'metadata' => array_merge([
                 'relationship_type' => 'child'
             ], $metadata)
