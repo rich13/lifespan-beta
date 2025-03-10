@@ -625,11 +625,8 @@ class Span extends Model
      */
     public function connections()
     {
-        return Connection::with(['parent', 'child'])
-            ->where(function($query) {
-                $query->where('parent_id', $this->id)
-                      ->orWhere('child_id', $this->id);
-            });
+        return $this->hasMany(Connection::class, 'parent_id')
+            ->orWhere('child_id', $this->id);
     }
 
     /**

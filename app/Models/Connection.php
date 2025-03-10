@@ -89,6 +89,22 @@ class Connection extends Model
     }
 
     /**
+     * Get the formatted start date from the connection span
+     */
+    public function getFormattedStartDateAttribute(): ?string
+    {
+        return $this->connectionSpan?->formatted_start_date;
+    }
+
+    /**
+     * Get the formatted end date from the connection span
+     */
+    public function getFormattedEndDateAttribute(): ?string
+    {
+        return $this->connectionSpan?->formatted_end_date;
+    }
+
+    /**
      * Scope a query to only include connections where both spans are accessible to the user.
      * This is the main way to filter connections - if you can see both spans, you can see their connection.
      */
