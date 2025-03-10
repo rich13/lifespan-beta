@@ -1,21 +1,15 @@
 @extends('layouts.app')
 
+@section('page_title')
+    {{ $connectionType->forward_predicate }}
+@endsection
+
 @section('content')
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex justify-content-end mb-4">
         <div>
-            <h1 class="h2 mb-0">{{ $connectionType->forward_predicate }}</h1>
-            <div class="text-muted">
-                <code>{{ $connectionType->type }}</code>
-            </div>
-        </div>
-        <div>
-            <a href="{{ route('admin.connection-types.edit', $connectionType) }}" class="btn btn-primary">
-                <i class="bi bi-pencil"></i> Edit Type
-            </a>
-            <a href="{{ route('admin.connection-types.index') }}" class="btn btn-outline-secondary">
-                Back to List
-            </a>
+            <a href="{{ route('admin.connection-types.edit', $connectionType) }}" class="btn btn-primary">Edit</a>
+            <a href="{{ route('admin.connection-types.index') }}" class="btn btn-outline-secondary">Back to List</a>
         </div>
     </div>
 

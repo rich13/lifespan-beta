@@ -1,15 +1,24 @@
 @extends('layouts.app')
 
+@section('page_title')
+    Import: {{ $yaml['name'] ?? 'Unknown' }}
+@endsection
+
 @section('content')
 <div class="py-4">
     <div class="row">
-        <div class="col-12 d-flex justify-content-between align-items-center mb-4">
-            <h1 class="h3 mb-0">Import: {{ $yaml['name'] ?? 'Unknown' }}</h1>
+        <div class="col-12 d-flex justify-content-end mb-4">
             <div>
-                <a href="{{ route('admin.import.index') }}" class="btn btn-outline-secondary">Back</a>
+                <a href="{{ route('admin.import.index') }}" class="btn btn-outline-secondary">Back to List</a>
             </div>
         </div>
     </div>
+
+    @if (session('status'))
+        <div class="alert alert-success">
+            {{ session('status') }}
+        </div>
+    @endif
 
     @if(session('error'))
         <div class="alert alert-danger alert-dismissible fade show mb-4" role="alert">
@@ -162,4 +171,5 @@ async function startImport(importId) {
     }
 }
 </script>
+@endsection 
 @endsection 
