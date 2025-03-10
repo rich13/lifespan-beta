@@ -8,7 +8,7 @@
 <div class="py-4">
     <div class="row">
         <div class="col-12 d-flex justify-content-between align-items-center mb-4">
-            <h1 class="h3 mb-0">Admin Dashboard</h1>
+            <!-- Removing duplicate h1 heading -->
         </div>
     </div>
 

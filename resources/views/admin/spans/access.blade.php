@@ -1,11 +1,17 @@
 @extends('layouts.app')
 
+@section('page_title')
+    Manage Access: {{ $span->name }}
+@endsection
+
 @section('content')
-<div class="container py-4">
+<div class="py-4">
     <div class="row">
-        <div class="col-12 d-flex justify-content-between align-items-center mb-4">
-            <h1 class="h3 mb-0">Manage Access: {{ $span->name }}</h1>
-            <a href="{{ route('spans.show', $span) }}" class="btn btn-outline-secondary">Back to Span</a>
+        <div class="col-12 d-flex justify-content-end mb-4">
+            <div>
+                <a href="{{ route('admin.spans.show', $span) }}" class="btn btn-outline-secondary">View Span</a>
+                <a href="{{ route('admin.spans.index') }}" class="btn btn-outline-secondary">Back to List</a>
+            </div>
         </div>
     </div>
 

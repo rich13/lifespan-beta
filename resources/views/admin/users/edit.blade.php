@@ -1,10 +1,13 @@
 @extends('layouts.app')
 
+@section('page_title')
+    Edit User: {{ $user->name }}
+@endsection
+
 @section('content')
 <div class="container py-4">
     <div class="row">
-        <div class="col-12 d-flex justify-content-between align-items-center mb-4">
-            <h1 class="h3 mb-0">Edit User: {{ $user->name }}</h1>
+        <div class="col-12 d-flex justify-content-end mb-4">
             <div>
                 <a href="{{ route('admin.users.show', $user) }}" class="btn btn-outline-secondary">View User</a>
                 <a href="{{ route('admin.users.index') }}" class="btn btn-outline-secondary">Back to List</a>

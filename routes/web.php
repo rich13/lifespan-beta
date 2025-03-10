@@ -6,6 +6,8 @@ use App\Http\Controllers\Auth\EmailFirstAuthController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\SpanController as AdminSpanController;
 use App\Http\Controllers\Admin\SpanPermissionsController;
+use App\Http\Controllers\Admin\SpanAccessController;
+use App\Http\Controllers\Admin\SpanAccessManagerController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\SpanTypeController;
 use App\Http\Controllers\Admin\ConnectionTypeController;
@@ -101,6 +103,20 @@ Route::middleware('web')->group(function () {
                 ->name('spans.permissions.update');
             Route::put('/spans/{span}/permissions/mode', [SpanPermissionsController::class, 'updateMode'])
                 ->name('spans.permissions.mode');
+                
+            // Span Access
+            Route::get('/spans/{span}/access', [SpanAccessController::class, 'edit'])
+                ->name('spans.access.edit');
+            Route::put('/spans/{span}/access', [SpanAccessController::class, 'update'])
+                ->name('spans.access.update');
+            Route::put('/spans/{span}/visibility', [SpanAccessController::class, 'updateVisibility'])
+                ->name('spans.visibility.update');
+            
+            // Centralized Span Access Management
+            Route::get('/span-access', [SpanAccessManagerController::class, 'index'])
+                ->name('span-access.index');
+            Route::post('/span-access/{spanId}/make-public', [SpanAccessManagerController::class, 'makePublic'])
+                ->name('span-access.make-public');
 
             // User Management
             Route::get('/users', [UserController::class, 'index'])
@@ -137,6 +153,16 @@ Route::middleware('web')->group(function () {
                 ->name('visualizer.index');
             Route::get('/visualizer/temporal', [VisualizerController::class, 'temporal'])
                 ->name('visualizer.temporal');
+        });
+        
+        // User Switcher - moved outside admin middleware but still under auth
+        Route::middleware(['user.switcher'])->prefix('admin')->name('admin.')->group(function () {
+            Route::get('/user-switcher/users', [App\Http\Controllers\Admin\UserSwitcherController::class, 'getUserList'])
+                ->name('user-switcher.users');
+            Route::post('/user-switcher/switch/{userId}', [App\Http\Controllers\Admin\UserSwitcherController::class, 'switchToUser'])
+                ->name('user-switcher.switch');
+            Route::post('/user-switcher/switch-back', [App\Http\Controllers\Admin\UserSwitcherController::class, 'switchBack'])
+                ->name('user-switcher.switch-back');
         });
     });
 

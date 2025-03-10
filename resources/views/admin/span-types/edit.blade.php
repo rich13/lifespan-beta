@@ -1,5 +1,9 @@
 @extends('layouts.app')
 
+@section('page_title')
+    Edit: {{ $spanType->name }}
+@endsection
+
 @section('scripts')
 <script>
 $(document).ready(function() {
@@ -223,8 +227,7 @@ $(document).ready(function() {
 
 @section('content')
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1 class="h2 mb-0">Edit: {{ $spanType->name }}</h1>
+    <div class="d-flex justify-content-end mb-4">
         <div>
             <a href="{{ route('admin.span-types.index') }}" class="btn btn-outline-secondary">
                 Cancel
