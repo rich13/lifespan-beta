@@ -11,32 +11,34 @@
 @endsection
 
 @section('page_tools')
-    @if(auth()->user()->can('update', $span) || auth()->user()->can('delete', $span))
-        @can('update', $span)
-            <a href="{{ route('spans.edit', $span) }}" class="btn btn-sm btn-outline-primary">
-                <i class="bi bi-pencil me-1"></i> Edit
-            </a>
-        @endcan
-        @can('delete', $span)
-            <a href="#" class="btn btn-sm btn-outline-danger" id="delete-span-btn">
-                <i class="bi bi-trash me-1"></i> Delete
-            </a>
-            
-            <form id="delete-span-form" action="{{ route('spans.destroy', $span) }}" method="POST" style="display: none;">
-                @csrf
-                @method('DELETE')
-            </form>
-            
-            <script>
-                document.getElementById('delete-span-btn').addEventListener('click', function(e) {
-                    e.preventDefault();
-                    if (confirm('Are you sure you want to delete this span?')) {
-                        document.getElementById('delete-span-form').submit();
-                    }
-                });
-            </script>
-        @endcan
-    @endif
+    @auth
+        @if(auth()->user()->can('update', $span) || auth()->user()->can('delete', $span))
+            @can('update', $span)
+                <a href="{{ route('spans.edit', $span) }}" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-pencil me-1"></i> Edit
+                </a>
+            @endcan
+            @can('delete', $span)
+                <a href="#" class="btn btn-sm btn-outline-danger" id="delete-span-btn">
+                    <i class="bi bi-trash me-1"></i> Delete
+                </a>
+                
+                <form id="delete-span-form" action="{{ route('spans.destroy', $span) }}" method="POST" style="display: none;">
+                    @csrf
+                    @method('DELETE')
+                </form>
+                
+                <script>
+                    document.getElementById('delete-span-btn').addEventListener('click', function(e) {
+                        e.preventDefault();
+                        if (confirm('Are you sure you want to delete this span?')) {
+                            document.getElementById('delete-span-form').submit();
+                        }
+                    });
+                </script>
+            @endcan
+        @endif
+    @endauth
 @endsection
 
 @section('content')

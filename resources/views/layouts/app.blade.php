@@ -389,11 +389,13 @@
                                             <i class="bi bi-calendar-range me-1"></i> Temporal Visualizer
                                         </a>
                                     </li>
+                                    @if(app()->environment('local'))
                                     <li class="nav-item">
-                                        <a class="nav-link {{ request()->routeIs('admin.dev.components') ? 'active' : '' }}" href="{{ route('admin.dev.components') }}">
+                                        <a class="nav-link {{ request()->routeIs('dev.components') ? 'active' : '' }}" href="{{ route('dev.components') }}">
                                             <i class="bi bi-grid-3x3-gap me-1"></i> Component Showcase
                                         </a>
                                     </li>
+                                    @endif
                                 </ul>
                             @endif
                         </div>
