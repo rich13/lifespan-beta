@@ -4,13 +4,15 @@
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1>Spans</h1>
-        <a href="{{ route('spans.create') }}" class="btn btn-primary">Create New Span</a>
+        @auth
+            <a href="{{ route('spans.create') }}" class="btn btn-primary">Create New Span</a>
+        @endauth
     </div>
 
     @if($spans->isEmpty())
         <div class="card">
             <div class="card-body">
-                <p class="text-center text-muted my-5">No spans yet. Create your first one!</p>
+                <p class="text-center text-muted my-5">No spans found.</p>
             </div>
         </div>
     @else

@@ -51,10 +51,14 @@
                                         <h6 class="mb-0">{{ Auth::user()->name }}</h6>
                                     @endif
                                     <div class="btn-group mt-2">
-                                        <a href="{{ route('profile.edit') }}" class="btn btn-sm btn-outline-primary">Profile</a>
+                                        <a href="{{ route('profile.edit') }}" class="btn btn-sm btn-secondary">
+                                            <i class="bi bi-person me-1"></i>Profile
+                                        </a>
                                         <form method="POST" action="{{ route('logout') }}" class="d-inline">
                                             @csrf
-                                            <button type="submit" class="btn btn-sm btn-outline-primary">Sign Out</button>
+                                            <button type="submit" class="btn btn-sm btn-secondary">
+                                                <i class="bi bi-box-arrow-right me-1"></i>Sign Out
+                                            </button>
                                         </form>
                                     </div>
                                 </div>
@@ -133,10 +137,14 @@
                                         </a>
                                     </li>
                                     <li class="nav-item">
-                                        <a class="nav-link {{ request()->routeIs('admin.visualizer') ? 'active' : '' }}" href="{{ route('admin.visualizer') }}">
+                                        <a class="nav-link {{ request()->routeIs('admin.visualizer.index') ? 'active' : '' }}" href="{{ route('admin.visualizer.index') }}">
                                             <i class="bi bi-graph-up me-1"></i> Network Visualizer
                                         </a>
                                     </li>
+                                    <li class="nav-item">
+                                        <a class="nav-link {{ request()->routeIs('admin.visualizer.temporal') ? 'active' : '' }}" href="{{ route('admin.visualizer.temporal') }}">
+                                            <i class="bi bi-calendar-range me-1"></i> Temporal Visualizer
+                                        </a>
                                 </ul>
                             @endif
                         </div>
