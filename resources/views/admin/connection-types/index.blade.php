@@ -1,9 +1,12 @@
 @extends('layouts.app')
 
+@section('page_title')
+    Manage Connection Types
+@endsection
+
 @section('content')
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1>Manage Connection Types</h1>
+    <div class="d-flex justify-content-end mb-4">
         <a href="{{ route('admin.connection-types.create') }}" class="btn btn-primary">
             <i class="bi bi-plus-lg"></i> New Connection Type
         </a>

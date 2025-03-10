@@ -1,5 +1,9 @@
 @extends('layouts.app')
 
+@section('page_title')
+    Network Visualizer
+@endsection
+
 @section('scripts')
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>

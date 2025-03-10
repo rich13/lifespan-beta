@@ -1,9 +1,12 @@
 @extends('layouts.app')
 
+@section('page_title')
+    Create New Span Type
+@endsection
+
 @section('content')
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1 class="h2 mb-0">Create New Span Type</h1>
+    <div class="d-flex justify-content-end mb-4">
         <div>
             <a href="{{ route('admin.span-types.index') }}" class="btn btn-outline-secondary">
                 Cancel

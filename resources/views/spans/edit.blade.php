@@ -1,5 +1,9 @@
 @extends('layouts.app')
 
+@section('page_title')
+    Edit {{ $span->name }}
+@endsection
+
 @section('content')
 <div class="py-4">
     <form action="{{ route('spans.update', $span) }}" method="POST">
