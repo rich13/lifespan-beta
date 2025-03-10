@@ -4,10 +4,13 @@
 use Illuminate\Support\Str;
 @endphp
 
+@section('page_title')
+    Component Showcase
+@endsection
+
 @section('content')
 <div class="container-fluid">
     <div class="mb-4">
-        <h1>Component Showcase</h1>
         <p class="text-muted">This page automatically renders all available span components with dummy data for testing and preview purposes.</p>
     </div>
 
