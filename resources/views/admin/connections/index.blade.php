@@ -54,6 +54,8 @@
                         <tr>
                             <th>Connection</th>
                             <th>Connection Span</th>
+                            <th>Start Date</th>
+                            <th>End Date</th>
                             <th>Created</th>
                             <th></th>
                         </tr>
@@ -84,6 +86,8 @@
                                         <span class="text-muted">Direct Connection</span>
                                     @endif
                                 </td>
+                                <td>{{ $connection->formatted_start_date }}</td>
+                                <td>{{ $connection->formatted_end_date }}</td>
                                 <td>{{ $connection->created_at->format('Y-m-d') }}</td>
                                 <td class="text-end">
                                     <a href="{{ route('admin.connections.edit', $connection) }}" 
@@ -102,7 +106,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="4" class="text-center text-muted py-4">
+                                <td colspan="6" class="text-center text-muted py-4">
                                     No connections found matching your criteria
                                 </td>
                             </tr>
