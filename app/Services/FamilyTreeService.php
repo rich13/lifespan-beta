@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Span;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 
 class FamilyTreeService
 {
@@ -14,7 +15,9 @@ class FamilyTreeService
     {
         $ancestors = collect();
         $this->traverseAncestors($span, $ancestors, $generations);
-        return $ancestors;
+        return $ancestors->unique(function ($item) {
+            return $item['span']->id;
+        })->values();
     }
 
     /**
@@ -24,7 +27,19 @@ class FamilyTreeService
     {
         $descendants = collect();
         $this->traverseDescendants($span, $descendants, $generations);
-        return $descendants;
+        if (env('APP_DEBUG')) {
+            Log::debug("Descendants of {$span->name}:");
+            foreach ($descendants as $descendant) {
+                Log::debug(sprintf("- %s (ID: %s, Generation: %d)", 
+                    $descendant['span']->name, 
+                    $descendant['span']->id, 
+                    $descendant['generation']
+                ));
+            }
+        }
+        return $descendants->unique(function ($item) {
+            return $item['span']->id;
+        })->values();
     }
 
     /**
@@ -36,41 +51,49 @@ class FamilyTreeService
         $parents = $this->getParents($span);
         
         // Get all children of these parents except the current span
-        return $parents->flatMap(function ($parent) use ($span) {
+        return $parents->flatMap(function ($parent) {
             return $this->getChildren($parent);
-        })->unique('id')->reject(function ($sibling) use ($span) {
+        })->reject(function ($sibling) use ($span) {
             return $sibling->id === $span->id;
-        });
+        })->unique('id')->values();
     }
 
     /**
      * Get immediate parents of a span
      */
-    protected function getParents(Span $span): Collection
+    public function getParents(Span $span): Collection
     {
-        return $span->connections()
-            ->where('type_id', 'family')
-            ->where('child_id', $span->id)
-            ->get()
-            ->map(function ($connection) {
-                return $connection->parent;
-            })
-            ->filter();
+        return $span->parents()->get();
+    }
+
+    /**
+     * Get grandparents of a span (parents of parents)
+     */
+    public function getGrandparents(Span $span): Collection
+    {
+        $parents = $this->getParents($span);
+        if (env('APP_DEBUG')) {
+            Log::debug("Parents:");
+            foreach ($parents as $parent) {
+                Log::debug(sprintf("- %s (ID: %s)", $parent->name, $parent->id));
+                $parentParents = $this->getParents($parent);
+                Log::debug("  Parents of {$parent->name}:");
+                foreach ($parentParents as $grandparent) {
+                    Log::debug(sprintf("  - %s (ID: %s)", $grandparent->name, $grandparent->id));
+                }
+            }
+        }
+        return $parents->flatMap(function ($parent) {
+            return $this->getParents($parent);
+        })->unique('id')->values();
     }
 
     /**
      * Get immediate children of a span
      */
-    protected function getChildren(Span $span): Collection
+    public function getChildren(Span $span): Collection
     {
-        return $span->connections()
-            ->where('type_id', 'family')
-            ->where('parent_id', $span->id)
-            ->get()
-            ->map(function ($connection) {
-                return $connection->child;
-            })
-            ->filter();
+        return $span->children()->get();
     }
 
     /**
@@ -120,7 +143,7 @@ class FamilyTreeService
     {
         return $this->getParents($span)->flatMap(function ($parent) {
             return $this->getSiblings($parent);
-        })->unique('id');
+        })->unique('id')->values();
     }
 
     /**
@@ -130,7 +153,7 @@ class FamilyTreeService
     {
         return $this->getUnclesAndAunts($span)->flatMap(function ($uncleAunt) {
             return $this->getChildren($uncleAunt);
-        })->unique('id');
+        })->unique('id')->values();
     }
 
     /**
@@ -140,6 +163,14 @@ class FamilyTreeService
     {
         return $this->getSiblings($span)->flatMap(function ($sibling) {
             return $this->getChildren($sibling);
-        })->unique('id');
+        })->unique('id')->values();
+    }
+
+    /**
+     * Helper method to compare spans by ID
+     */
+    protected function compareSpans(Span $a, Span $b): bool
+    {
+        return $a->id === $b->id;
     }
 } 
