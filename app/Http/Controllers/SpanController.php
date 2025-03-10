@@ -42,40 +42,50 @@ class SpanController extends Controller
             ->orderByRaw('COALESCE(start_month, 12)')   // Then by month
             ->orderByRaw('COALESCE(start_day, 31)');    // Then by day
 
-        if (Auth::check()) {
-            $user = Auth::user();
-            
-            // Admin can see all spans
-            if ($user->is_admin) {
-                $spans = $query->paginate(50);
-                return view('spans.index', compact('spans'));
-            }
-
-            // Regular users can see:
-            // 1. Public spans
-            // 2. Their own spans
-            // 3. Shared spans they have permission for
-            $query->where(function ($query) use ($user) {
-                $query->where('access_level', 'public')
-                    ->orWhere('owner_id', $user->id)
-                    ->orWhere(function ($query) use ($user) {
-                        $query->where('access_level', 'shared')
-                            ->whereHas('permissions', function ($query) use ($user) {
-                                $query->where('user_id', $user->id);
-                            });
-                    });
-            });
-        } else {
-            // Unauthenticated users can only see public spans
+        // For unauthenticated users, only show public spans
+        if (!Auth::check()) {
             $query->where('access_level', 'public');
+        } else {
+            // For authenticated users
+            $user = Auth::user();
+            if (!$user->is_admin) {
+                // Show:
+                // 1. Public spans
+                // 2. User's own spans
+                // 3. Shared spans where user has permission
+                $query->where(function ($query) use ($user) {
+                    $query->where('access_level', 'public')
+                        ->orWhere('owner_id', $user->id)
+                        ->orWhere(function ($query) use ($user) {
+                            $query->where('access_level', 'shared')
+                                ->whereExists(function ($subquery) use ($user) {
+                                    $subquery->select('id')
+                                        ->from('span_permissions')
+                                        ->whereColumn('span_permissions.span_id', 'spans.id')
+                                        ->where('span_permissions.user_id', $user->id);
+                                });
+                        });
+                });
+            }
         }
 
         $spans = $query->paginate(50);
+
+        // For debugging
+        ray('=== Span Index Debug ===');
+        ray([
+            'is_authenticated' => Auth::check(),
+            'query_sql' => $query->toSql(),
+            'query_bindings' => $query->getBindings(),
+            'spans_count' => $spans->count(),
+            'spans' => $spans->items()
+        ]);
+
         return view('spans.index', compact('spans'));
     }
 
     /**
-     * Show the form for creating a new resource.
+     * Show the form for creating a new span.
      */
     public function create()
     {
@@ -157,6 +167,11 @@ class SpanController extends Controller
             return redirect()
                 ->route('spans.show', ['span' => $span->slug], 301)
                 ->with('status', session('status')); // Preserve flash message
+        }
+
+        // Check if the span is private and the user is not authenticated
+        if ($span->access_level !== 'public' && !Auth::check()) {
+            return redirect()->route('login');
         }
 
         return view('spans.show', compact('span'));
