@@ -6,6 +6,7 @@ import './debug';
 // Import page-specific scripts
 import './spans/show';
 import './spans/index';
+import './spans/edit';
 import './layouts/user-dropdown';
 
 import Alpine from 'alpinejs';
