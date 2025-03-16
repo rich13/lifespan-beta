@@ -24,28 +24,43 @@ class SpanAccessManagerController extends Controller
         // Get all users
         $users = User::all();
         
-        // Get query parameters for filtering
-        $userId = $request->input('user_id');
-        $spanType = $request->input('span_type');
-        
         // Base query for all spans (excluding personal spans and connection spans)
         $baseQuery = Span::with('owner')
             ->where('is_personal_span', false) // Exclude personal spans
             ->where('type_id', '!=', 'connection') // Exclude connection spans
-            ->whereNull('parent_id'); // Only top-level spans
+            ->whereNull('parent_id') // Only top-level spans
+            ->where('state', '!=', 'placeholder'); // Exclude placeholders from access management
         
-        // Apply common filters if provided
-        if ($userId) {
-            $baseQuery->where(function($q) use ($userId) {
-                $q->where('owner_id', $userId)
-                  ->orWhereHas('users', function($query) use ($userId) {
-                      $query->where('users.id', $userId);
-                  });
-            });
+        // Apply type filters
+        if ($request->filled('types')) {
+            $types = explode(',', $request->types);
+            $baseQuery->whereIn('type_id', $types);
+
+            // Apply subtype filters if any
+            foreach ($types as $type) {
+                if ($request->filled($type . '_subtype')) {
+                    $subtypes = explode(',', $request->input($type . '_subtype'));
+                    $baseQuery->orWhere(function($q) use ($type, $subtypes) {
+                        $q->where('type_id', $type)
+                          ->whereIn(DB::raw("metadata->>'subtype'"), $subtypes);
+                    });
+                }
+            }
         }
         
-        if ($spanType) {
-            $baseQuery->where('type_id', $spanType);
+        // Apply visibility filter
+        if ($request->filled('visibility')) {
+            switch ($request->visibility) {
+                case 'public':
+                    $baseQuery->where('access_level', 'public');
+                    break;
+                case 'private':
+                    $baseQuery->where('access_level', 'private');
+                    break;
+                case 'group':
+                    $baseQuery->where('access_level', 'shared');
+                    break;
+            }
         }
         
         // Clone the query for public spans
@@ -69,9 +84,7 @@ class SpanAccessManagerController extends Controller
             'publicSpans', 
             'privateSharedSpans', 
             'users', 
-            'spanTypes', 
-            'userId', 
-            'spanType'
+            'spanTypes'
         ));
     }
 
@@ -81,10 +94,30 @@ class SpanAccessManagerController extends Controller
     public function makePublic(Request $request, $spanId)
     {
         $span = Span::findOrFail($spanId);
+        
+        // Don't allow making placeholders public
+        if ($span->state === 'placeholder') {
+            return redirect()->route('admin.span-access.index')
+                ->with('error', "Cannot make placeholder span '{$span->name}' public. Complete the span details first.");
+        }
+
         $span->access_level = 'public';
         $span->save();
 
-        return redirect()->route('admin.span-access.index')
+        // Preserve all query parameters when redirecting
+        $queryParams = $request->only(['types', 'visibility', 'private_page', 'public_page']);
+        
+        // Also preserve any subtype filters
+        if ($request->filled('types')) {
+            $types = explode(',', $request->types);
+            foreach ($types as $type) {
+                if ($request->filled($type . '_subtype')) {
+                    $queryParams[$type . '_subtype'] = $request->input($type . '_subtype');
+                }
+            }
+        }
+
+        return redirect()->route('admin.span-access.index', $queryParams)
             ->with('status', "Span '{$span->name}' has been made public.");
     }
 
@@ -105,7 +138,61 @@ class SpanAccessManagerController extends Controller
             ->whereIn('access_level', ['private', 'shared'])
             ->update(['access_level' => 'public']);
         
-        return redirect()->route('admin.span-access.index')
+        // Preserve all query parameters when redirecting
+        $queryParams = $request->only(['types', 'visibility', 'private_page', 'public_page']);
+        
+        // Also preserve any subtype filters
+        if ($request->filled('types')) {
+            $types = explode(',', $request->types);
+            foreach ($types as $type) {
+                if ($request->filled($type . '_subtype')) {
+                    $queryParams[$type . '_subtype'] = $request->input($type . '_subtype');
+                }
+            }
+        }
+
+        return redirect()->route('admin.span-access.index', $queryParams)
             ->with('status', "{$count} spans of type '{$typeId}' have been made public.");
+    }
+
+    /**
+     * Make multiple spans public
+     */
+    public function makePublicBulk(Request $request)
+    {
+        $validated = $request->validate([
+            'span_ids' => 'required|string'
+        ]);
+
+        $spanIds = explode(',', $validated['span_ids']);
+        
+        // Update all selected spans to public, excluding placeholders
+        $count = Span::whereIn('id', $spanIds)
+            ->where('is_personal_span', false)
+            ->where('state', '!=', 'placeholder')
+            ->whereIn('access_level', ['private', 'shared'])
+            ->update(['access_level' => 'public']);
+
+        // Get count of skipped placeholders
+        $placeholderCount = Span::whereIn('id', $spanIds)
+            ->where('state', 'placeholder')
+            ->count();
+
+        // Preserve all query parameters when redirecting
+        $queryParams = $request->only(['types', 'visibility', 'private_page', 'public_page']);
+        
+        // Also preserve any subtype filters
+        if ($request->filled('types')) {
+            $types = explode(',', $request->types);
+            foreach ($types as $type) {
+                if ($request->filled($type . '_subtype')) {
+                    $queryParams[$type . '_subtype'] = $request->input($type . '_subtype');
+                }
+            }
+        }
+
+        return redirect()->route('admin.span-access.index', $queryParams)
+            ->with('status', "{$count} spans have been made public." . 
+                ($placeholderCount > 0 ? " {$placeholderCount} placeholder spans were skipped." : ""));
     }
 } 

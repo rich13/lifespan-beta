@@ -36,7 +36,11 @@ class ConnectionViewTest extends TestCase
 
         $this->parent = Span::factory()->create(['type_id' => 'person']);
         $this->child = Span::factory()->create(['type_id' => 'event']);
-        $this->connectionSpan = Span::factory()->create(['type_id' => 'connection']);
+        $this->connectionSpan = Span::factory()->create([
+            'type_id' => 'connection',
+            'name' => "{$this->parent->name} {$this->type->forward_predicate} {$this->child->name}",
+            'metadata' => ['connection_type' => $this->type->type]
+        ]);
     }
 
     public function test_index_view_loads_with_empty_connections(): void

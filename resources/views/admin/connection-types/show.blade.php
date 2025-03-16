@@ -13,6 +13,11 @@
         </div>
     </div>
 
+    <div class="alert alert-info mb-4">
+        <h5 class="alert-heading">Connection Type and SPO Triples</h5>
+        <p class="mb-0">This connection type represents a subject-predicate-object (SPO) triple. The subject is typically a person, and the predicate describes how the subject relates to the object. For example: "Albert Einstein (subject) worked at (predicate) Princeton University (object)".</p>
+    </div>
+
     <div class="row">
         <div class="col-md-8">
             <!-- Basic Information -->
@@ -20,6 +25,9 @@
                 <div class="card-body">
                     <h3 class="card-title h5">Basic Information</h3>
                     <dl class="row mb-0">
+                        <dt class="col-sm-3">Forward Predicate</dt>
+                        <dd class="col-sm-9">{{ $connectionType->forward_predicate }}</dd>
+
                         <dt class="col-sm-3">Forward Description</dt>
                         <dd class="col-sm-9">{{ $connectionType->forward_description }}</dd>
 

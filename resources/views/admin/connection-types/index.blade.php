@@ -14,6 +14,11 @@
 
     <div class="card">
         <div class="card-body">
+            <div class="alert alert-info mb-4">
+                <h5 class="alert-heading">Connection Types and SPO Triples</h5>
+                <p class="mb-0">Each connection represents a subject-predicate-object (SPO) triple. The subject is typically a person, and the predicate describes how the subject relates to the object. For example: "Albert Einstein (subject) worked at (predicate) Princeton University (object)".</p>
+            </div>
+
             <div class="table-responsive">
                 <table class="table table-hover">
                     <thead>
@@ -22,8 +27,8 @@
                             <th>Forward Predicate</th>
                             <th>Inverse Predicate</th>
                             <th>Temporal Constraint</th>
-                            <th>Allowed Parent Types</th>
-                            <th>Allowed Child Types</th>
+                            <th>Allowed Subject Types</th>
+                            <th>Allowed Object Types</th>
                             <th>Connections</th>
                             <th>Actions</th>
                         </tr>
@@ -32,10 +37,18 @@
                         @foreach($types as $type)
                             <tr>
                                 <td><code>{{ $type->type }}</code></td>
-                                <td>{{ $type->forward_predicate }}</td>
-                                <td>{{ $type->inverse_predicate }}</td>
                                 <td>
-                                    @if($type->temporal_constraint === 'single')
+                                    <span class="badge bg-subject text-white">subject</span>
+                                    <span class="badge bg-secondary">{{ $type->forward_predicate }}</span>
+                                    <span class="badge bg-object text-white">object</span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-object text-white">object</span>
+                                    <span class="badge bg-secondary">{{ $type->inverse_predicate }}</span>
+                                    <span class="badge bg-subject text-white">subject</span>
+                                </td>
+                                <td>
+                                    @if($type->constraint_type === 'single')
                                         <span class="badge bg-info">Single</span>
                                     @else
                                         <span class="badge bg-warning">Non-overlapping</span>
@@ -43,12 +56,12 @@
                                 </td>
                                 <td>
                                     @foreach($type->getAllowedSpanTypes('parent') as $spanType)
-                                        <span class="badge bg-info">{{ $spanType }}</span>
+                                        <span class="badge bg-subject text-white">{{ $spanType }}</span>
                                     @endforeach
                                 </td>
                                 <td>
                                     @foreach($type->getAllowedSpanTypes('child') as $spanType)
-                                        <span class="badge bg-info">{{ $spanType }}</span>
+                                        <span class="badge bg-object text-white">{{ $spanType }}</span>
                                     @endforeach
                                 </td>
                                 <td>

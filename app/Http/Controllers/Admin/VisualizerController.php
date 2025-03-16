@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Span;
 use App\Models\Connection;
+use App\Models\ConnectionType;
+use App\Models\SpanType;
 use Illuminate\Http\Request;
 
 class VisualizerController extends Controller
@@ -17,6 +19,10 @@ class VisualizerController extends Controller
             ->get();
         $connections = Connection::with(['parent', 'child', 'type', 'connectionSpan'])->get();
 
+        // Get all span types and connection types
+        $spanTypes = SpanType::where('type_id', '!=', 'connection')->get();
+        $connectionTypes = ConnectionType::all();
+
         // Format data for D3
         $nodes = $spans->map(function ($span) {
             return [
@@ -24,6 +30,7 @@ class VisualizerController extends Controller
                 'name' => $span->name,
                 'type' => $span->type->name,
                 'typeId' => $span->type_id,
+                'subtype' => $span->subtype,
                 'startYear' => $span->start_year,
                 'startMonth' => $span->start_month,
                 'startDay' => $span->start_day,
@@ -48,9 +55,30 @@ class VisualizerController extends Controller
             ];
         });
 
+        // Format type data for D3
+        $formattedSpanTypes = $spanTypes->map(function ($type) {
+            return [
+                'id' => $type->type_id,
+                'name' => $type->name,
+                'subtypes' => $type->metadata['subtypes'] ?? [],
+            ];
+        });
+
+        $formattedConnectionTypes = $connectionTypes->map(function ($type) {
+            return [
+                'id' => $type->type,
+                'name' => $type->name,
+                'forwardPredicate' => $type->forward_predicate,
+                'inversePredicate' => $type->inverse_predicate,
+                'constraintType' => $type->constraint_type,
+            ];
+        });
+
         return view('admin.visualizer.index', [
             'nodes' => $nodes,
             'links' => $links,
+            'spanTypes' => $formattedSpanTypes,
+            'connectionTypes' => $formattedConnectionTypes,
         ]);
     }
 

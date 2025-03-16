@@ -4,6 +4,8 @@ namespace App\Providers;
 
 use App\Models\SpanCapabilities\GeospatialCapability;
 use App\Models\SpanCapabilities\FamilyCapability;
+use App\Models\SpanCapabilities\ThingCapability;
+use App\Models\SpanCapabilities\BandCapability;
 use App\Models\SpanCapabilities\SpanCapabilityRegistry;
 use Illuminate\Support\ServiceProvider;
 
@@ -36,6 +38,16 @@ class SpanCapabilityServiceProvider extends ServiceProvider
         // Person spans have family relationship features
         'person' => [
             FamilyCapability::class,
+        ],
+
+        // Thing spans have thing-specific features
+        'thing' => [
+            ThingCapability::class,
+        ],
+
+        // Band spans have band-specific features
+        'band' => [
+            BandCapability::class,
         ],
 
         // Add more mappings as capabilities are created
