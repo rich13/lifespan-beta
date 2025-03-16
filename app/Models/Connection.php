@@ -14,7 +14,7 @@ use Illuminate\Database\Eloquent\Builder;
  * @property string $id UUID of the connection
  * @property string $parent_id UUID of the parent span
  * @property string $child_id UUID of the child span
- * @property string $type_id UUID of the connection type
+ * @property string $type The connection type (e.g. 'family', 'membership', etc.)
  * @property string $connection_span_id UUID of the span representing this connection
  * @property \Carbon\Carbon $created_at When the connection was created
  * @property \Carbon\Carbon $updated_at When the connection was last updated
@@ -30,13 +30,13 @@ class Connection extends Model
     /**
      * The attributes that are mass assignable.
      *
-     * @var array<string>
+     * @var array<int, string>
      */
     protected $fillable = [
-        'parent_id',
-        'child_id',
         'type_id',
-        'connection_span_id',
+        'parent_id', // @deprecated Use subject_id instead
+        'child_id',  // @deprecated Use object_id instead
+        'connection_span_id'
     ];
 
     /**
@@ -45,27 +45,73 @@ class Connection extends Model
      * @var array<string, string>
      */
     protected $casts = [
-        'metadata' => 'array',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'metadata' => 'array'
     ];
 
     /**
-     * Get the parent span in the connection
-     *
-     * @return BelongsTo<Span>
+     * Get the subject of the connection.
      */
-    public function parent(): BelongsTo
+    public function subject(): BelongsTo
     {
         return $this->belongsTo(Span::class, 'parent_id');
     }
 
     /**
-     * Get the child span in the connection
-     *
-     * @return BelongsTo<Span>
+     * Get the object of the connection.
+     */
+    public function object(): BelongsTo
+    {
+        return $this->belongsTo(Span::class, 'child_id');
+    }
+
+    /**
+     * Get the subject ID of the connection.
+     */
+    public function getSubjectIdAttribute(): string
+    {
+        return $this->parent_id;
+    }
+
+    /**
+     * Set the subject ID of the connection.
+     */
+    public function setSubjectIdAttribute(string $value): void
+    {
+        $this->parent_id = $value;
+    }
+
+    /**
+     * Get the object ID of the connection.
+     */
+    public function getObjectIdAttribute(): string
+    {
+        return $this->child_id;
+    }
+
+    /**
+     * Set the object ID of the connection.
+     */
+    public function setObjectIdAttribute(string $value): void
+    {
+        $this->child_id = $value;
+    }
+
+    /**
+     * @deprecated Use subject() instead
+     */
+    public function parent(): BelongsTo
+    {
+        return $this->subject();
+    }
+
+    /**
+     * @deprecated Use object() instead
      */
     public function child(): BelongsTo
     {
-        return $this->belongsTo(Span::class, 'child_id');
+        return $this->object();
     }
 
     /**
@@ -75,7 +121,7 @@ class Connection extends Model
      */
     public function type(): BelongsTo
     {
-        return $this->belongsTo(ConnectionType::class, 'type_id');
+        return $this->belongsTo(ConnectionType::class, 'type_id', 'type');
     }
 
     /**
@@ -265,6 +311,25 @@ class Connection extends Model
                             $connectionSpan->end_precision = $child->end_precision;
                         }
                         break;
+                }
+
+                $connectionSpan->save();
+
+                // Update the connection span's metadata with the connection type
+                $metadata = $connectionSpan->metadata ?? [];
+                $metadata['connection_type'] = $connection->type_id;
+                $connectionSpan->metadata = $metadata;
+
+                // Update the span name in SPO format
+                $connectionType = ConnectionType::find($connection->type_id);
+                if ($connectionType) {
+                    // Get the latest names from the database to ensure we have current values
+                    $subject = Span::find($connection->parent_id);
+                    $object = Span::find($connection->child_id);
+                    
+                    if ($subject && $object) {
+                        $connectionSpan->name = "{$subject->name} {$connectionType->forward_predicate} {$object->name}";
+                    }
                 }
 
                 $connectionSpan->save();

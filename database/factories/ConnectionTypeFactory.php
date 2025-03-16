@@ -12,15 +12,15 @@ class ConnectionTypeFactory extends Factory
     public function definition(): array
     {
         return [
-            'type' => $this->faker->unique()->slug(2),
-            'forward_predicate' => $this->faker->words(3, true),
-            'forward_description' => $this->faker->sentence(),
-            'inverse_predicate' => $this->faker->words(3, true),
-            'inverse_description' => $this->faker->sentence(),
-            'constraint_type' => $this->faker->randomElement(['single', 'non_overlapping']),
+            'type' => fake()->unique()->word(),
+            'forward_predicate' => fake()->words(2, true),
+            'forward_description' => fake()->sentence(),
+            'inverse_predicate' => fake()->words(2, true),
+            'inverse_description' => fake()->sentence(),
+            'constraint_type' => fake()->randomElement(['single', 'non_overlapping']),
             'allowed_span_types' => [
-                'parent' => ['person', 'organisation'],
-                'child' => ['event', 'place']
+                'parent' => ['person'],
+                'child' => ['organisation']
             ]
         ];
     }

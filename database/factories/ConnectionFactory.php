@@ -17,7 +17,18 @@ class ConnectionFactory extends Factory
             'type_id' => ConnectionType::factory(),
             'parent_id' => Span::factory(),
             'child_id' => Span::factory(),
-            'connection_span_id' => Span::factory()->type('connection')
+            'connection_span_id' => Span::factory()->type('connection')->state(function (array $attributes) {
+                return [
+                    'start_year' => 2000,
+                    'start_month' => 1,
+                    'start_day' => 1,
+                    'start_precision' => 'day',
+                    'end_year' => 2010,
+                    'end_month' => 12,
+                    'end_day' => 31,
+                    'end_precision' => 'day'
+                ];
+            })
         ];
     }
 } 
