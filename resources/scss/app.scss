@@ -3,6 +3,10 @@
 @use "bootstrap/scss/bootstrap" as bootstrap;
 @use "bootstrap-icons/font/bootstrap-icons.css" as icons;
 
+// Custom colors
+$subject: #0d6efd;  // Bootstrap primary
+$object: #0dcaf0;   // Bootstrap info
+
 // Variables
 $sidebar-width-lg: 280px;
 $sidebar-width-md: 240px;
@@ -127,4 +131,13 @@ main {
 .user-dropdown-menu {
     min-width: 220px;
     z-index: 1050;
+}
+
+// Custom badge styles
+.bg-subject {
+    background-color: $subject !important;
+}
+
+.bg-object {
+    background-color: $object !important;
 } 

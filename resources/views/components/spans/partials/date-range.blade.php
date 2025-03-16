@@ -41,7 +41,5 @@
             }
         @endphp
         {{ $endDate }}
-    @else
-        <span>(Ongoing)</span>
     @endif
 </div> 

@@ -4,6 +4,14 @@ document.addEventListener('DOMContentLoaded', function() {
     if (filterCheckboxes.length > 0) {
         filterCheckboxes.forEach(checkbox => {
             checkbox.addEventListener('change', function() {
+                // If a main type is unchecked, uncheck all its subtype filters
+                if (!this.checked && this.name === 'types') {
+                    const typeId = this.value;
+                    const subtypeCheckboxes = document.querySelectorAll(`input[name="${typeId}_subtype"]`);
+                    subtypeCheckboxes.forEach(subtypeCheckbox => {
+                        subtypeCheckbox.checked = false;
+                    });
+                }
                 document.getElementById('type-filter-form').submit();
             });
         });

@@ -1,3 +1,16 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+    --bs-subject: #0d6efd;  /* Bootstrap primary */
+    --bs-object: #0dcaf0;   /* Bootstrap info */
+}
+
+.bg-subject {
+    background-color: var(--bs-subject) !important;
+}
+
+.bg-object {
+    background-color: var(--bs-object) !important;
+}

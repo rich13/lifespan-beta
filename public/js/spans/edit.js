@@ -213,6 +213,36 @@ document.addEventListener('DOMContentLoaded', function() {
         form.insertBefore(errorAlert, form.firstChild);
     }
 
+    // Handle span type change
+    const typeSelect = document.getElementById('type_id');
+    if (typeSelect) {
+        typeSelect.addEventListener('change', function() {
+            console.log('Type changed to:', this.value);
+            // Show confirmation dialog
+            if (confirm('Changing the span type will reload the form to show type-specific fields. Any unsaved changes will be lost. Continue?')) {
+                // Submit the form with the new type
+                const form = document.getElementById('span-edit-form');
+                console.log('Form found:', !!form);
+                if (form) {
+                    console.log('Submitting form...');
+                    form.submit();
+                } else {
+                    console.log('Form not found, falling back to page reload');
+                    // Fallback to page reload if form not found
+                    window.location.reload();
+                }
+            } else {
+                console.log('User cancelled, resetting to:', this.getAttribute('data-original-value'));
+                // Reset the select to the previous value
+                this.value = this.getAttribute('data-original-value');
+            }
+        });
+
+        // Store the original value
+        typeSelect.setAttribute('data-original-value', typeSelect.value);
+        console.log('Initial type value:', typeSelect.value);
+    }
+
     // Modal event listeners
     modal.addEventListener('show.bs.modal', initializeConnectionModal);
     modal.addEventListener('shown.bs.modal', () => connectionTypeSelect?.select2('focus'));

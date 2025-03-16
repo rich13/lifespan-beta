@@ -18,6 +18,9 @@
         @case('connection')
             <i class="bi bi-link-45deg"></i>
             @break
+        @case('band')
+            <i class="bi bi-cassette"></i>
+            @break
         @default
             <i class="bi bi-box"></i>
     @endswitch
