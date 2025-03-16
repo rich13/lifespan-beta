@@ -82,6 +82,23 @@ use Illuminate\Support\Facades\Route;
             .btn-group > .btn:only-child {
                 border-radius: 0.25rem;
             }
+
+            #customUserDropdownToggle .spans-micro-card {
+                color: inherit;
+            }
+
+            #customUserDropdownToggle .spans-micro-card:hover {
+                text-decoration: none;
+                color: inherit;
+            }
+
+            #customUserDropdownMenu .spans-micro-card {
+                color: inherit;
+            }
+
+            #customUserDropdownMenu .spans-micro-card:hover {
+                color: var(--bs-primary);
+            }
         </style>
     </head>
     <body class="bg-light">
@@ -124,13 +141,18 @@ use Illuminate\Support\Facades\Route;
                                 <!-- Custom User Dropdown -->
                                 <div class="position-relative" id="customUserDropdown">
                                     <button class="btn btn-sm btn-secondary" type="button" id="customUserDropdownToggle">
-                                        <i class="bi bi-person-circle me-1"></i>{{ Auth::user()->name }} <i class="bi bi-caret-down-fill"></i>
+                                        <i class="bi bi-person-circle me-1"></i>                     
+                                        <i class="bi bi-caret-down-fill ms-1"></i>
                                     </button>
                                     <div class="position-absolute end-0 mt-1 bg-white shadow rounded d-none user-dropdown-menu" id="customUserDropdownMenu">
                                         <div class="p-2">
                                             <!-- User Info -->
                                             <div class="px-2 py-1 mb-2 border-bottom">
-                                                <div class="fw-bold">{{ Auth::user()->name }}</div>
+                                                @if(Auth::user()->personalSpan)
+                                                    <x-spans.display.micro-card :span="Auth::user()->personalSpan" />
+                                                @else
+                                                    <div class="fw-bold">{{ Auth::user()->name }}</div>
+                                                @endif
                                                 <div class="small text-muted">{{ Auth::user()->email }}</div>
                                             </div>
                                             
@@ -247,38 +269,45 @@ use Illuminate\Support\Facades\Route;
                                 </ul>
 
                                 <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-2 text-muted text-uppercase">
-                                    <span>Tools</span>
+                                    <span>Import</span>
                                 </h6>
                                 <ul class="nav flex-column">
                                     <li class="nav-item">
-                                        <a class="nav-link {{ request()->routeIs('admin.import.*') ? 'active' : '' }}" href="{{ route('admin.import.index') }}">
-                                            <i class="bi bi-box-arrow-in-down me-1"></i> Legacy Import
+                                        <a class="nav-link {{ request()->routeIs('admin.import.index') ? 'active' : '' }}" href="{{ route('admin.import.index') }}">
+                                            <i class="bi bi-file-earmark-text me-1"></i> YAML Import
                                         </a>
                                     </li>
                                     <li class="nav-item">
+                                        <a class="nav-link {{ request()->routeIs('admin.import.musicbrainz.*') ? 'active' : '' }}" href="{{ route('admin.import.musicbrainz.index') }}">
+                                            <i class="bi bi-music-note-list me-1"></i> MusicBrainz Import
+                                        </a>
+                                    </li>
+                                </ul>
+
+                                <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-2 text-muted text-uppercase">
+                                    <span>Visualizers</span>
+                                </h6>
+                                <ul class="nav flex-column">
+                                    <li class="nav-item">
                                         <a class="nav-link {{ request()->routeIs('admin.visualizer.index') ? 'active' : '' }}" href="{{ route('admin.visualizer.index') }}">
-                                            <i class="bi bi-graph-up me-1"></i> Network Visualizer
+                                            <i class="bi bi-graph-up me-1"></i> Network Explorer
                                         </a>
                                     </li>
                                     <li class="nav-item">
                                         <a class="nav-link {{ request()->routeIs('admin.visualizer.temporal') ? 'active' : '' }}" href="{{ route('admin.visualizer.temporal') }}">
-                                            <i class="bi bi-calendar-range me-1"></i> Temporal Visualizer
+                                            <i class="bi bi-calendar-range me-1"></i> Temporal Explorer
                                         </a>
                                     </li>
-                                    @if(app()->environment('local') && Route::has('dev.components'))
-                                    <li class="nav-item">
-                                        <a class="nav-link {{ request()->routeIs('dev.components') ? 'active' : '' }}" href="{{ route('dev.components') }}">
-                                            <i class="bi bi-grid-3x3-gap me-1"></i> Component Showcase
-                                        </a>
-                                    </li>
-                                    @endif
                                 </ul>
                             @endif
                         </div>
                     </div>
+
+                    <!-- Main Content Area -->
                     <main class="col-md-9 col-lg-10 bg-white min-vh-100">
                         <div class="p-3">
                             <div class="header-section mb-4">
+                                @yield('header')
                                 <x-flash-messages />
                             </div>
                             @yield('content')
@@ -297,5 +326,9 @@ use Illuminate\Support\Facades\Route;
                 @endauth
             </div>
         </div>
+        
+        <!-- Modals -->
+        @stack('modals')
+        
     </body>
 </html>
