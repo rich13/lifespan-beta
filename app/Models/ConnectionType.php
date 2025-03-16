@@ -107,20 +107,40 @@ class ConnectionType extends Model
      */
     public function getExample(bool $inverse = false): string
     {
-        return $inverse 
-            ? "Object {$this->inverse_predicate} Subject"
-            : "Subject {$this->forward_predicate} Object";
+        $predicate = $inverse ? $this->inverse_predicate : $this->forward_predicate;
+        $subject = 'Subject';
+        $object = 'Object';
+
+        return $inverse
+            ? "$object $predicate $subject"
+            : "$subject $predicate $object";
     }
 
     /**
-     * Get the allowed span types for a given role (parent or child)
+     * Get the allowed subject types for this connection type.
+     */
+    public function getAllowedSubjectTypes(): array
+    {
+        return $this->allowed_span_types['parent'] ?? [];
+    }
+
+    /**
+     * Get the allowed object types for this connection type.
+     */
+    public function getAllowedObjectTypes(): array
+    {
+        return $this->allowed_span_types['child'] ?? [];
+    }
+
+    /**
+     * @deprecated Use getAllowedSubjectTypes() or getAllowedObjectTypes() instead
      */
     public function getAllowedSpanTypes(string $role): array
     {
-        if (!in_array($role, ['parent', 'child'])) {
-            throw new \InvalidArgumentException("Role must be either 'parent' or 'child'");
-        }
-
-        return $this->allowed_span_types[$role] ?? [];
+        return match ($role) {
+            'parent' => $this->getAllowedSubjectTypes(),
+            'child' => $this->getAllowedObjectTypes(),
+            default => []
+        };
     }
 } 
