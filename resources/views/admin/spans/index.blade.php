@@ -1,19 +1,28 @@
 @extends('layouts.app')
 
 @section('page_title')
-    Spans Administration
+    <x-spans.filter-title 
+        :selected-types="request('types') ? explode(',', request('types')) : []"
+        :permission-mode="request('permission_mode')"
+        :visibility="request('visibility')"
+        :state="request('state')"
+    />
+@endsection
+
+@section('page_filters')
+    <x-spans.filters 
+        :route="route('admin.spans.index')"
+        :selected-types="request('types') ? explode(',', request('types')) : []"
+        :show-search="true"
+        :show-type-filters="true"
+        :show-permission-mode="true"
+        :show-visibility="true"
+        :show-state="true"
+    />
 @endsection
 
 @section('content')
 <div class="py-4">
-    <div class="row">
-        <div class="col-12 d-flex justify-content-between align-items-center mb-4">
-            <div>
-                <a href="{{ route('admin.dashboard') }}" class="btn btn-outline-secondary">Back to Dashboard</a>
-            </div>
-        </div>
-    </div>
-
     @if (session('status'))
         <div class="alert alert-success">
             {{ session('status') }}
@@ -22,67 +31,6 @@
 
     <div class="card">
         <div class="card-body">
-            <!-- Search and Filters -->
-            <form action="{{ route('admin.spans.index') }}" method="GET" class="row g-3 mb-4">
-                <div class="col-md-4">
-                    <div class="input-group">
-                        <input type="text" class="form-control" placeholder="Search spans..." 
-                               name="search" value="{{ request('search') }}">
-                        <button class="btn btn-outline-secondary" type="submit">Search</button>
-                    </div>
-                </div>
-                <div class="col-md-auto">
-                    <select class="form-select" name="type" onchange="this.form.submit()">
-                        <option value="">All Types</option>
-                        @foreach($types as $type)
-                            <option value="{{ $type->type_id }}" 
-                                    {{ request('type') == $type->type_id ? 'selected' : '' }}>
-                                {{ $type->name }}
-                            </option>
-                        @endforeach
-                    </select>
-                </div>
-                <div class="col-md-auto">
-                    <select class="form-select" name="permission_mode" onchange="this.form.submit()">
-                        <option value="">All Permission Modes</option>
-                        <option value="own" {{ request('permission_mode') === 'own' ? 'selected' : '' }}>
-                            Own Permissions
-                        </option>
-                        <option value="inherit" {{ request('permission_mode') === 'inherit' ? 'selected' : '' }}>
-                            Inherited Permissions
-                        </option>
-                    </select>
-                </div>
-                <div class="col-md-auto">
-                    <select class="form-select" name="visibility" onchange="this.form.submit()">
-                        <option value="">All Visibility</option>
-                        <option value="public" {{ request('visibility') === 'public' ? 'selected' : '' }}>
-                            Public
-                        </option>
-                        <option value="private" {{ request('visibility') === 'private' ? 'selected' : '' }}>
-                            Private
-                        </option>
-                        <option value="group" {{ request('visibility') === 'group' ? 'selected' : '' }}>
-                            Group Access
-                        </option>
-                    </select>
-                </div>
-                <div class="col-md-auto">
-                    <select class="form-select" name="state" onchange="this.form.submit()">
-                        <option value="">All States</option>
-                        <option value="placeholder" {{ request('state') === 'placeholder' ? 'selected' : '' }}>
-                            Placeholder
-                        </option>
-                        <option value="draft" {{ request('state') === 'draft' ? 'selected' : '' }}>
-                            Draft
-                        </option>
-                        <option value="complete" {{ request('state') === 'complete' ? 'selected' : '' }}>
-                            Complete
-                        </option>
-                    </select>
-                </div>
-            </form>
-
             <!-- Spans Table -->
             <div class="table-responsive">
                 <table class="table table-hover">
@@ -90,6 +38,7 @@
                         <tr>
                             <th>Name</th>
                             <th>Type</th>
+                            <th>Subtype</th>
                             <th>Owner</th>
                             <th>Permissions</th>
                             <th>Mode</th>
@@ -109,6 +58,11 @@
                                     @endif
                                 </td>
                                 <td>{{ $span->type->name }}</td>
+                                <td>
+                                    @if($span->subtype)
+                                        <span class="badge bg-secondary">{{ ucfirst($span->subtype) }}</span>
+                                    @endif
+                                </td>
                                 <td>
                                     <a href="{{ route('admin.users.show', $span->owner) }}"
                                         class="text-decoration-none">

@@ -48,7 +48,9 @@
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             z-index: 1000;
-            min-width: 200px;
+            min-width: 250px;
+            max-height: calc(100vh - 100px);
+            overflow-y: auto;
         }
         .legend-item {
             display: flex;
@@ -66,6 +68,7 @@
             height: 12px;
             border-radius: 50%;
             margin-right: 8px;
+            flex-shrink: 0;
         }
         .legend-section {
             margin-bottom: 15px;
@@ -84,6 +87,12 @@
             width: 20px;
             height: 2px;
             margin-right: 8px;
+            flex-shrink: 0;
+        }
+        .subtype-list {
+            margin-left: 24px;
+            font-size: 0.9em;
+            color: #666;
         }
     </style>
 @endsection
@@ -109,14 +118,18 @@ const graphData = {
     links: {!! json_encode($links) !!}
 };
 
-// Enhanced color scales
-const typeColors = d3.scaleOrdinal()
-    .domain(['person', 'organisation', 'place', 'event'])
-    .range(['#ff7f0e', '#1f77b4', '#2ca02c', '#d62728']);
+const spanTypes = {!! json_encode($spanTypes) !!};
+const connectionTypes = {!! json_encode($connectionTypes) !!};
 
+// Generate colors for all span types
+const typeColors = d3.scaleOrdinal()
+    .domain(spanTypes.map(t => t.id))
+    .range(d3.schemeCategory10);
+
+// Generate colors for all connection types
 const connectionColors = d3.scaleOrdinal()
-    .domain(['family', 'work', 'education', 'residence', 'member_of'])
-    .range(['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00']);
+    .domain(connectionTypes.map(t => t.id))
+    .range(d3.schemeSet3);
 
 // Calculate node degrees (number of connections)
 const nodeDegrees = {};
@@ -125,47 +138,71 @@ graphData.links.forEach(link => {
     nodeDegrees[link.target] = (nodeDegrees[link.target] || 0) + 1;
 });
 
-// Get counts for each node type
+// Get counts for each node type and subtype
 const typeCounts = {};
+const subtypeCounts = {};
 graphData.nodes.forEach(node => {
     typeCounts[node.typeId] = (typeCounts[node.typeId] || 0) + 1;
+    if (node.subtype) {
+        const key = `${node.typeId}:${node.subtype}`;
+        subtypeCounts[key] = (subtypeCounts[key] || 0) + 1;
+    }
 });
 
 // Create filters for node types
 const nodeFilters = d3.select('#node-filters')
-    .selectAll('.legend-item')
-    .data(typeColors.domain())
+    .selectAll('.type-group')
+    .data(spanTypes)
     .join('div')
+    .attr('class', 'type-group');
+
+// Add main type checkbox
+const typeItem = nodeFilters.append('div')
     .attr('class', 'legend-item');
 
-nodeFilters.append('input')
+typeItem.append('input')
     .attr('type', 'checkbox')
     .attr('checked', true)
-    .attr('id', d => `filter-${d}`);
+    .attr('id', d => `filter-${d.id}`);
 
-nodeFilters.append('div')
+typeItem.append('div')
     .attr('class', 'legend-color')
-    .style('background-color', d => typeColors(d));
+    .style('background-color', d => typeColors(d.id));
 
-nodeFilters.append('label')
+typeItem.append('label')
     .attr('class', 'legend-label')
-    .attr('for', d => `filter-${d}`)
-    .text(d => `${d.charAt(0).toUpperCase() + d.slice(1)} (${typeCounts[d] || 0})`);
+    .attr('for', d => `filter-${d.id}`)
+    .text(d => `${d.name} (${typeCounts[d.id] || 0})`);
+
+// Add subtypes if they exist
+nodeFilters.each(function(d) {
+    if (d.subtypes && d.subtypes.length > 0) {
+        const subtypeDiv = d3.select(this).append('div')
+            .attr('class', 'subtype-list');
+        
+        d.subtypes.forEach(subtype => {
+            const count = subtypeCounts[`${d.id}:${subtype}`] || 0;
+            if (count > 0) {
+                subtypeDiv.append('div')
+                    .text(`${subtype} (${count})`);
+            }
+        });
+    }
+});
 
 // Create legend for connection types
-const connectionTypes = d3.select('#connection-types')
+const connectionTypesList = d3.select('#connection-types')
     .selectAll('.connection-type')
-    .data(connectionColors.domain())
+    .data(connectionTypes)
     .join('div')
     .attr('class', 'connection-type');
 
-connectionTypes.append('div')
+connectionTypesList.append('div')
     .attr('class', 'connection-line')
-    .style('background-color', d => connectionColors(d))
-    .style('height', '2px');
+    .style('background-color', d => connectionColors(d.id));
 
-connectionTypes.append('span')
-    .text(d => d.charAt(0).toUpperCase() + d.slice(1));
+connectionTypesList.append('span')
+    .text(d => d.name);
 
 // Set up the SVG
 const width = document.getElementById('graph').clientWidth;
@@ -196,14 +233,14 @@ const simulation = d3.forceSimulation(graphData.nodes)
     .force('link', d3.forceLink(graphData.links)
         .id(d => d.id)
         .distance(d => {
-            // Adjust link distance based on node types
-            if (d.typeId === 'family') return 80;
-            if (d.source.typeId === d.target.typeId) return 120;
+            const sourceType = d.source.typeId;
+            const targetType = d.target.typeId;
+            // Adjust distance based on node types
+            if (sourceType === targetType) return 100;
             return 150;
         }))
     .force('charge', d3.forceManyBody()
         .strength(d => {
-            // Adjust repulsion based on node type and connections
             const degree = nodeDegrees[d.id] || 0;
             return -100 - (degree * 20);
         }))
@@ -215,7 +252,7 @@ const simulation = d3.forceSimulation(graphData.nodes)
 
 // Create arrow markers for directed relationships
 svg.append('defs').selectAll('marker')
-    .data(['family', 'work', 'education', 'residence', 'member_of'])
+    .data(connectionTypes.map(t => t.id))
     .join('marker')
     .attr('id', d => `arrow-${d}`)
     .attr('viewBox', '0 -3 6 6')
@@ -235,7 +272,7 @@ const link = g.append('g')
     .join('line')
     .attr('class', 'link')
     .attr('stroke', d => connectionColors(d.typeId))
-    .attr('stroke-width', d => d.typeId === 'family' ? 2 : 1)
+    .attr('stroke-width', 1.5)
     .attr('marker-end', d => `url(#arrow-${d.typeId})`);
 
 // Create the nodes with enhanced styling
@@ -301,7 +338,7 @@ node.on('mouseover', function(event, d) {
     
     let tooltipContent = `
         <strong>${d.name}</strong><br/>
-        Type: ${d.type}<br/>
+        Type: ${d.type}${d.subtype ? ` (${d.subtype})` : ''}<br/>
         Total Connections: ${connectedLinks.length}<br/>
         <small>Connection Types:</small><br/>
     `;
@@ -355,7 +392,7 @@ function dragended(event) {
 
 // Filter function
 function filterNodes(type, isVisible) {
-    const visibleTypes = typeColors.domain().filter(t => 
+    const visibleTypes = spanTypes.map(t => t.id).filter(t => 
         document.getElementById(`filter-${t}`).checked
     );
     
@@ -375,7 +412,7 @@ function filterNodes(type, isVisible) {
 // Add filter event listeners
 nodeFilters.select('input')
     .on('change', function(event, d) {
-        filterNodes(d, this.checked);
+        filterNodes(d.id, this.checked);
     });
 </script>
 @endsection 

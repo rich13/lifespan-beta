@@ -68,6 +68,14 @@ class ConnectionImporter
         ?array $dates = null,
         ?array $metadata = null
     ): Connection {
+        Log::info('Creating connection', [
+            'parent' => $parent->toArray(),
+            'child' => $child->toArray(),
+            'type' => $connectionType,
+            'dates' => $dates,
+            'metadata' => $metadata
+        ]);
+
         // Validate dates if provided
         if ($dates) {
             $startTimestamp = mktime(
@@ -132,6 +140,7 @@ class ConnectionImporter
         }
 
         if ($existingConnection) {
+            Log::info('Found existing connection', ['connection' => $existingConnection->toArray()]);
             // If connection exists, update its connection span with new dates/metadata
             $connectionSpan = $existingConnection->connectionSpan;
             if ($dates || $metadata) {
@@ -152,6 +161,12 @@ class ConnectionImporter
         }
 
         // Create a connection span to represent the temporal relationship
+        Log::info('Creating connection span with dates', [
+            'dates' => $dates,
+            'parent' => $parent->name,
+            'child' => $child->name,
+            'type' => $connectionType
+        ]);
         $connectionSpan = Span::create([
             'name' => $this->generateConnectionName($parent, $child, $connectionType),
             'type_id' => 'connection',
@@ -167,14 +182,25 @@ class ConnectionImporter
             'state' => $dates ? 'complete' : 'placeholder',
             'metadata' => $metadata
         ]);
+        Log::info('Created connection span', [
+            'connection_span' => $connectionSpan->toArray(),
+            'start_precision' => $connectionSpan->start_precision,
+            'end_precision' => $connectionSpan->end_precision
+        ]);
 
         // Create the actual connection
-        return Connection::create([
+        $connection = Connection::create([
             'parent_id' => $parent->id,
             'child_id' => $child->id,
             'type_id' => $connectionType,
             'connection_span_id' => $connectionSpan->id
         ]);
+        Log::info('Created connection', [
+            'connection' => $connection->toArray(),
+            'connection_span' => $connection->connectionSpan
+        ]);
+
+        return $connection;
     }
 
     public function parseDatesFromStrings(

@@ -12,6 +12,13 @@ abstract class TestCase extends BaseTestCase
     protected function setUp(): void
     {
         parent::setUp();
+        $this->artisan('migrate:fresh');
+        
+        // Run specific migrations that add connection types
+        $this->artisan('migrate', [
+            '--path' => 'database/migrations/2024_03_21_000001_add_contains_connection_type.php',
+            '--force' => true
+        ]);
         
         // Disable CSRF token verification during tests
         Config::set('session.driver', 'array');

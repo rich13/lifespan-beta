@@ -18,6 +18,11 @@
         </div>
     </div>
 
+    <div class="alert alert-info mb-4">
+        <h5 class="alert-heading">Connection Types and SPO Triples</h5>
+        <p class="mb-0">Each connection represents a subject-predicate-object (SPO) triple. The subject is typically a person, and the predicate describes how the subject relates to the object. For example: "Albert Einstein (subject) worked at (predicate) Princeton University (object)".</p>
+    </div>
+
     <form action="{{ route('admin.connection-types.update', $connectionType) }}" method="POST">
         @csrf
         @method('PUT')
@@ -42,7 +47,7 @@
                                    x-model="forward"
                                    value="{{ old('forward_predicate', $connectionType->forward_predicate) }}" required>
                             <div class="form-text">
-                                The predicate that describes how the subject relates to the object (e.g., "is parent of", "worked at").
+                                The predicate that describes how the subject relates to the object (e.g., "worked at", "lived in").
                                 Use present tense and make it read naturally in a sentence.
                             </div>
                             @error('forward_predicate')
@@ -69,7 +74,7 @@
                                    x-model="inverse"
                                    value="{{ old('inverse_predicate', $connectionType->inverse_predicate) }}" required>
                             <div class="form-text">
-                                The predicate that describes how the object relates back to the subject (e.g., "is child of", "employed").
+                                The predicate that describes how the object relates back to the subject (e.g., "employed", "was home to").
                             </div>
                             @error('inverse_predicate')
                                 <div class="invalid-feedback">{{ $message }}</div>
@@ -94,10 +99,10 @@
                                 <h4 class="h6 mb-3">Live Example</h4>
                                 <div class="text-muted">
                                     <p class="mb-2">
-                                        Forward: "Albert Einstein <strong x-text="forward || '[forward predicate]'"></strong> Princeton University"
+                                        Forward: "Albert Einstein (subject) <strong x-text="forward || '[forward predicate]'"></strong> Princeton University (object)"
                                     </p>
                                     <p class="mb-0">
-                                        Inverse: "Princeton University <strong x-text="inverse || '[inverse predicate]'"></strong> Albert Einstein"
+                                        Inverse: "Princeton University (object) <strong x-text="inverse || '[inverse predicate]'"></strong> Albert Einstein (subject)"
                                     </p>
                                 </div>
                             </div>

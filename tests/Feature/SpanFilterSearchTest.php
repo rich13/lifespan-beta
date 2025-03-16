@@ -105,7 +105,7 @@ class SpanFilterSearchTest extends TestCase
         $this->actingAs($this->user);
 
         // Test single type filter
-        $response = $this->get('/spans?types[]=person');
+        $response = $this->get('/spans?types=person');
         $response->assertStatus(200);
         $response->assertSee('Richard Northover');
         $response->assertDontSee('Acme Corporation');
@@ -113,7 +113,7 @@ class SpanFilterSearchTest extends TestCase
         $response->assertDontSee('Company Picnic');
 
         // Test multiple type filters
-        $response = $this->get('/spans?types[]=person&types[]=organisation');
+        $response = $this->get('/spans?types=person,organisation');
         $response->assertStatus(200);
         $response->assertSee('Richard Northover');
         $response->assertSee('Acme Corporation');
@@ -168,13 +168,13 @@ class SpanFilterSearchTest extends TestCase
         $this->actingAs($this->user);
 
         // Test search + type filter
-        $response = $this->get('/spans?search=Richard&types[]=person');
+        $response = $this->get('/spans?search=Richard&types=person');
         $response->assertStatus(200);
         $response->assertSee('Richard Northover');
         $response->assertDontSee('Acme Corporation');
         
         // Test search that matches multiple types but filtered to one
-        $response = $this->get('/spans?search=London&types[]=place');
+        $response = $this->get('/spans?search=London&types=place');
         $response->assertStatus(200);
         $response->assertSee('London Bridge');
         $response->assertDontSee('Company Picnic'); // Has "London" in description
@@ -220,7 +220,7 @@ class SpanFilterSearchTest extends TestCase
         $response->assertSee('placeholder="Search spans..."', false);
         
         // Test that active filter buttons are highlighted
-        $response = $this->get('/spans?types[]=person');
+        $response = $this->get('/spans?types=person');
         $response->assertStatus(200);
         $response->assertSee('btn-primary', false); // Active filter button class
         

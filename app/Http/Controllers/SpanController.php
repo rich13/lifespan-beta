@@ -37,26 +37,38 @@ class SpanController extends Controller
     public function index(Request $request): View|Response
     {
         $query = Span::query()
-            ->where('type_id', '!=', 'connection')  // Exclude connection spans
+            ->whereNot('type_id', 'connection')
             ->orderByRaw('COALESCE(start_year, 9999)')  // Order by start_year, putting nulls last
             ->orderByRaw('COALESCE(start_month, 12)')   // Then by month
             ->orderByRaw('COALESCE(start_day, 31)');    // Then by day
 
-        // Apply type filters if provided
-        if ($request->has('types') && !empty($request->types)) {
-            $query->whereIn('type_id', $request->types);
+        // Handle type filtering
+        if ($request->has('types')) {
+            $types = is_array($request->types) ? $request->types : explode(',', $request->types);
+            $query->whereIn('type_id', $types);
+
+            // Handle subtype filtering
+            foreach ($types as $typeId) {
+                $subtypeParam = $request->input($typeId . '_subtype');
+                if ($subtypeParam) {
+                    $subtypes = explode(',', $subtypeParam);
+                    $query->where(function($q) use ($typeId, $subtypes) {
+                        foreach ($subtypes as $subtype) {
+                            $q->orWhereJsonContains('metadata->subtype', $subtype);
+                        }
+                    });
+                }
+            }
         }
-        
-        // Apply search filter if provided
-        if ($request->has('search') && !empty($request->search)) {
-            $searchTerms = preg_split('/\s+/', strtolower(trim($request->search)));
-            
+
+        // Handle search
+        if ($request->has('search')) {
+            $searchTerms = preg_split('/\s+/', trim($request->search));
             $query->where(function($q) use ($searchTerms) {
                 foreach ($searchTerms as $term) {
-                    $term = '%' . $term . '%';
-                    $q->where(function($subQuery) use ($term) {
-                        $subQuery->whereRaw('LOWER(name) LIKE ?', [$term])
-                                ->orWhereRaw('LOWER(description) LIKE ?', [$term]);
+                    $q->where(function($subq) use ($term) {
+                        $subq->where('name', 'ilike', "%{$term}%")
+                             ->orWhere('description', 'ilike', "%{$term}%");
                     });
                 }
             });
@@ -89,7 +101,7 @@ class SpanController extends Controller
             }
         }
 
-        $spans = $query->paginate(50);
+        $spans = $query->paginate(20);
 
         // For debugging
         ray('=== Span Index Debug ===');
@@ -210,8 +222,13 @@ class SpanController extends Controller
             ->with('type')
             ->orderBy('name')
             ->get();
+        
+        // Get the current span type, or if type_id is provided in the query, get that type
+        $spanType = request('type_id') 
+            ? SpanType::where('type_id', request('type_id'))->firstOrFail() 
+            : $span->type;
 
-        return view('spans.edit', compact('span', 'spanTypes', 'connectionTypes', 'availableSpans'));
+        return view('spans.edit', compact('span', 'spanTypes', 'connectionTypes', 'availableSpans', 'spanType'));
     }
 
     /**
@@ -225,12 +242,16 @@ class SpanController extends Controller
             // Log the incoming request data
             Log::channel('spans')->info('Updating span', [
                 'span_id' => $span->id,
-                'input' => $request->all()
+                'input' => $request->all(),
+                'current_type' => $span->type_id,
+                'requested_type' => $request->type_id,
+                'has_type_change' => $request->has('type_id') && $request->type_id !== $span->type_id
             ]);
             
             // Custom validation for date patterns
             $validator = Validator::make($request->all(), [
                 'name' => 'sometimes|required|string|max:255',
+                'type_id' => 'sometimes|required|string|exists:span_types,type_id',
                 'description' => 'nullable|string',
                 'notes' => 'nullable|string',
                 'state' => 'required|in:draft,placeholder,complete',
@@ -246,59 +267,92 @@ class SpanController extends Controller
                 'sources.*' => 'nullable|url',
             ]);
 
-            $validator->after(function ($validator) use ($request) {
-                // Validate start date pattern
-                if ($request->start_day && !$request->start_month) {
-                    $validator->errors()->add('start_day', 'Cannot specify day without month');
-                }
-                if ($request->start_month && !$request->start_year) {
-                    $validator->errors()->add('start_month', 'Cannot specify month without year');
-                }
-
-                // Validate end date pattern
-                if ($request->end_day && !$request->end_month) {
-                    $validator->errors()->add('end_day', 'Cannot specify day without month');
-                }
-                if ($request->end_month && !$request->end_year) {
-                    $validator->errors()->add('end_month', 'Cannot specify month without year');
-                }
-            });
-
             if ($validator->fails()) {
+                Log::channel('spans')->error('Validation failed', [
+                    'errors' => $validator->errors()->toArray()
+                ]);
                 return back()
-                    ->withInput()
-                    ->withErrors($validator);
+                    ->withErrors($validator)
+                    ->withInput();
             }
 
             $validated = $validator->validated();
 
-            // Infer precision levels
-            $span->start_precision = $span->inferPrecisionLevel(
-                $validated['start_year'] ?? null,
-                $validated['start_month'] ?? null,
-                $validated['start_day'] ?? null
-            );
+            // Handle type transition if type is changing
+            if ($request->has('type_id') && $request->type_id !== $span->type_id) {
+                Log::channel('spans')->info('Starting type transition', [
+                    'span_id' => $span->id,
+                    'old_type' => $span->type_id,
+                    'new_type' => $request->type_id
+                ]);
 
-            // Only infer end precision if end_year is present in the validated data
-            if (isset($validated['end_year'])) {
-                $span->end_precision = $span->inferPrecisionLevel(
-                    $validated['end_year'],
-                    $validated['end_month'] ?? null,
-                    $validated['end_day'] ?? null
-                );
+                $result = $span->transitionToType($request->type_id, $request->metadata);
+                
+                Log::channel('spans')->info('Type transition result', [
+                    'success' => $result['success'],
+                    'messages' => $result['messages'],
+                    'warnings' => $result['warnings']
+                ]);
+                
+                if (!$result['success']) {
+                    return back()
+                        ->withErrors(['type_id' => $result['messages']])
+                        ->withInput();
+                }
+                
+                // If there are warnings about lost fields, show them to the user
+                if (!empty($result['warnings'])) {
+                    session()->flash('warnings', $result['warnings']);
+                }
+                
+                // Update other fields
+                $span->fill($request->except(['type_id', 'metadata']));
+                $span->save();
+                
+                Log::channel('spans')->info('Span type transition completed', [
+                    'span_id' => $span->id,
+                    'old_type' => $span->type_id,
+                    'new_type' => $request->type_id,
+                    'warnings' => $result['warnings']
+                ]);
+                
+                return redirect()->route('spans.edit', $span)
+                    ->with('status', $result['messages'][0]);
             }
 
-            // Log the validated data
-            Log::channel('spans')->info('Validated span data', [
-                'span_id' => $span->id,
-                'validated' => $validated
-            ]);
+            // If this is a connection span and the connection type is being updated
+            if ($span->type_id === 'connection') {
+                // Find the associated connection
+                $connection = DB::table('connections')
+                    ->join('connection_types', 'connections.type_id', '=', 'connection_types.type')
+                    ->join('spans as subject', 'connections.parent_id', '=', 'subject.id')
+                    ->join('spans as object', 'connections.child_id', '=', 'object.id')
+                    ->where('connections.connection_span_id', $span->id)
+                    ->select([
+                        'connections.id',
+                        'subject.name as subject_name',
+                        'connection_types.forward_predicate',
+                        'object.name as object_name'
+                    ])
+                    ->first();
 
-            // Update the span
-            $span->updater_id = Auth::id();
+                if ($connection) {
+                    // Update the connection's type if it's being changed
+                    if (isset($validated['metadata']['connection_type'])) {
+                        DB::table('connections')
+                            ->where('id', $connection->id)
+                            ->update(['type_id' => $validated['metadata']['connection_type']]);
+                    }
+
+                    // Update the span name in SPO format
+                    $newName = "{$connection->subject_name} {$connection->forward_predicate} {$connection->object_name}";
+                    $validated['name'] = $newName;
+                }
+            }
+
+            // Regular update without type change
             $span->update($validated);
 
-            // Log the successful update
             Log::channel('spans')->info('Span updated successfully', [
                 'span_id' => $span->id,
                 'changes' => $span->getChanges()

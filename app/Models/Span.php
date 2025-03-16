@@ -15,6 +15,7 @@ use App\Models\SpanCapabilities\SpanCapability;
 use App\Models\Traits\HasSpanCapabilities;
 use App\Models\Traits\HasFamilyCapabilities;
 use App\Models\Traits\HasGeospatialCapabilities;
+use App\Models\Traits\HasBandCapabilities;
 
 /**
  * Represents a span of time or an entity that exists in time.
@@ -60,7 +61,7 @@ use App\Models\Traits\HasGeospatialCapabilities;
  */
 class Span extends Model
 {
-    use HasUuids, HasFactory, HasSpanCapabilities, HasFamilyCapabilities, HasGeospatialCapabilities;
+    use HasUuids, HasFactory, HasSpanCapabilities, HasFamilyCapabilities, HasGeospatialCapabilities, HasBandCapabilities;
 
     /**
      * The attributes that are mass assignable.
@@ -621,30 +622,28 @@ class Span extends Model
     }
 
     /**
-     * Get all connections for this span
+     * Get the connections where this span is the subject (parent)
      */
-    public function connections()
+    public function connectionsAsSubject(): HasMany
     {
-        return $this->hasMany(Connection::class, 'parent_id')
-            ->orWhere('child_id', $this->id);
+        return $this->hasMany(Connection::class, 'parent_id');
     }
 
     /**
-     * Get all spans connected to this one
+     * Get the connections where this span is the object (child)
      */
-    public function connectedSpans()
+    public function connectionsAsObject(): HasMany
     {
-        return Span::whereIn('id', function($query) {
-            $query->select('parent_id')
-                  ->from('connections')
-                  ->where('child_id', $this->id)
-                  ->union(
-                      $query->newQuery()
-                           ->select('child_id')
-                           ->from('connections')
-                           ->where('parent_id', $this->id)
-                  );
-        });
+        return $this->hasMany(Connection::class, 'child_id');
+    }
+
+    /**
+     * Get all connections for this span (either as subject or object)
+     */
+    public function connections(): HasMany
+    {
+        return $this->hasMany(Connection::class, 'parent_id')
+            ->orWhere('child_id', $this->id);
     }
 
     /**
@@ -859,5 +858,66 @@ class Span extends Model
     public function hasCapability(string $name): bool
     {
         return SpanCapabilityRegistry::hasCapability($this, $name);
+    }
+
+    /**
+     * Handle transitioning from one type to another
+     * 
+     * @param string $newTypeId The new type ID to transition to
+     * @param array $newMetadata Optional metadata to set for the new type
+     * @return array Array containing success status and any warnings/messages
+     */
+    public function transitionToType(string $newTypeId, ?array $newMetadata = null): array
+    {
+        $oldType = $this->type;
+        $newType = SpanType::findOrFail($newTypeId);
+        
+        $result = [
+            'success' => true,
+            'warnings' => [],
+            'messages' => []
+        ];
+
+        // Get the old and new metadata schemas
+        $oldSchema = $oldType->getMetadataSchema() ?? [];
+        $newSchema = $newType->getMetadataSchema() ?? [];
+        
+        // Store current metadata
+        $currentMetadata = $this->metadata ?? [];
+        
+        // Track fields that will be lost
+        $lostFields = array_diff_key($currentMetadata, $newSchema);
+        if (!empty($lostFields)) {
+            $result['warnings'][] = "The following fields will be lost during type transition: " . implode(', ', array_keys($lostFields));
+        }
+
+        // Validate required fields from new schema
+        foreach ($newSchema as $field => $schema) {
+            if (isset($schema['required']) && $schema['required']) {
+                if (!isset($newMetadata[$field]) && !isset($currentMetadata[$field])) {
+                    $result['success'] = false;
+                    $result['messages'][] = "Required field '{$field}' is missing for {$newType->name} spans";
+                }
+            }
+        }
+
+        if (!$result['success']) {
+            return $result;
+        }
+
+        // Merge metadata, preferring new values over old ones
+        $mergedMetadata = array_merge($currentMetadata, $newMetadata ?? []);
+        
+        // Filter out fields that don't exist in new schema
+        $finalMetadata = array_intersect_key($mergedMetadata, $newSchema);
+        
+        // Update the span
+        $this->type_id = $newTypeId;
+        $this->metadata = $finalMetadata;
+        $this->save();
+
+        $result['messages'][] = "Successfully transitioned from {$oldType->name} to {$newType->name}";
+        
+        return $result;
     }
 } 

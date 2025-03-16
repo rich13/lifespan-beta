@@ -14,6 +14,7 @@ use App\Http\Controllers\Admin\ConnectionTypeController;
 use App\Http\Controllers\Admin\ConnectionController;
 use App\Http\Controllers\Admin\ImportController;
 use App\Http\Controllers\Admin\VisualizerController;
+use App\Http\Controllers\Admin\MusicBrainzImportController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
@@ -69,14 +70,26 @@ Route::middleware('web')->group(function () {
                 ->name('dashboard');
 
             // Import Management
-            Route::get('/import', [ImportController::class, 'index'])
-                ->name('import.index');
-            Route::get('/import/{id}', [ImportController::class, 'show'])
-                ->name('import.show');
-            Route::post('/import/{id}/import', [ImportController::class, 'import'])
-                ->name('import.import');
-            Route::get('/import/progress/{importId}', [ImportController::class, 'progress'])
-                ->name('import.progress');
+            Route::prefix('import')->name('import.')->group(function () {
+                // MusicBrainz Import
+                Route::prefix('musicbrainz')->name('musicbrainz.')->group(function () {
+                    Route::get('/', [MusicBrainzImportController::class, 'index'])->name('index');
+                    Route::post('/search', [MusicBrainzImportController::class, 'search'])->name('search');
+                    Route::post('/discography', [MusicBrainzImportController::class, 'showDiscography'])->name('show-discography');
+                    Route::post('/tracks', [MusicBrainzImportController::class, 'showTracks'])->name('show-tracks');
+                    Route::post('/import', [MusicBrainzImportController::class, 'import'])->name('import');
+                });
+
+                // Legacy YAML Import
+                Route::get('/', [ImportController::class, 'index'])
+                    ->name('index');
+                Route::get('/{id}', [ImportController::class, 'show'])
+                    ->name('show');
+                Route::post('/{id}/import', [ImportController::class, 'import'])
+                    ->name('import');
+                Route::get('/progress/{importId}', [ImportController::class, 'progress'])
+                    ->name('progress');
+            });
 
             // Span Types Management
             Route::resource('span-types', SpanTypeController::class);
@@ -117,6 +130,8 @@ Route::middleware('web')->group(function () {
                 ->name('span-access.index');
             Route::post('/span-access/{spanId}/make-public', [SpanAccessManagerController::class, 'makePublic'])
                 ->name('span-access.make-public');
+            Route::post('/span-access/make-public-bulk', [SpanAccessManagerController::class, 'makePublicBulk'])
+                ->name('span-access.make-public-bulk');
 
             // User Management
             Route::get('/users', [UserController::class, 'index'])

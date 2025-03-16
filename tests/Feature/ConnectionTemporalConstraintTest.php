@@ -196,6 +196,7 @@ class ConnectionTemporalConstraintTest extends TestCase
         ]);
 
         $this->expectException(\Illuminate\Database\QueryException::class);
+        $this->expectExceptionMessage('Only one connection of this type is allowed between these spans');
         Connection::create([
             'parent_id' => $this->parent->id,
             'child_id' => $this->child->id,
