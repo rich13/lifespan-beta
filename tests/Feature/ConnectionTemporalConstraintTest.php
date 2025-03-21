@@ -170,13 +170,17 @@ class ConnectionTemporalConstraintTest extends TestCase
     {
         $this->actingAs($this->user);
 
-        // Create first connection span
+        // Create first connection span with complete dates
         $span1 = Span::factory()->create([
             'type_id' => 'connection',
             'start_year' => 2000,
+            'start_month' => 1,
+            'start_day' => 1,
             'end_year' => 2005,
-            'start_precision' => 'year',
-            'end_precision' => 'year'
+            'end_month' => 12,
+            'end_day' => 31,
+            'start_precision' => 'day',
+            'end_precision' => 'day'
         ]);
 
         Connection::create([
@@ -186,13 +190,17 @@ class ConnectionTemporalConstraintTest extends TestCase
             'connection_span_id' => $span1->id
         ]);
 
-        // Try to create second connection span
+        // Try to create second connection span with complete dates
         $span2 = Span::factory()->create([
             'type_id' => 'connection',
             'start_year' => 2001,
+            'start_month' => 1,
+            'start_day' => 1,
             'end_year' => 2006,
-            'start_precision' => 'year',
-            'end_precision' => 'year'
+            'end_month' => 12,
+            'end_day' => 31,
+            'start_precision' => 'day',
+            'end_precision' => 'day'
         ]);
 
         $this->expectException(\Illuminate\Database\QueryException::class);

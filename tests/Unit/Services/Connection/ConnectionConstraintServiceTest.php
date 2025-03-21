@@ -92,7 +92,7 @@ class ConnectionConstraintServiceTest extends TestCase
 
     public function test_validates_single_constraint_with_existing_connection(): void
     {
-        // Create existing connection
+        // Create existing connection with valid dates
         $existingSpan = Span::factory()->create([
             'type_id' => 'connection',
             'start_year' => 2000,
@@ -112,20 +112,18 @@ class ConnectionConstraintServiceTest extends TestCase
             'connection_span_id' => $existingSpan->id
         ]);
 
-        // Try to create second connection with a different type
+        // Create second connection with valid dates that are after the first connection
         $newSpan = Span::factory()->create([
             'type_id' => 'connection',
-            'start_year' => 2001,
+            'start_year' => 2006,  // Start after the first connection ends
             'start_month' => 1,
             'start_day' => 1,
             'start_precision' => 'day',
-            'end_year' => 2006,
+            'end_year' => 2010,
             'end_month' => 12,
             'end_day' => 31,
             'end_precision' => 'day'
         ]);
-
-        print_r($newSpan->toArray());
 
         $connection = new Connection([
             'parent_id' => $this->parent->id,
