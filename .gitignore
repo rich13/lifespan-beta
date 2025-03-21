@@ -4,10 +4,16 @@
 /public/hot
 /public/storage
 /storage/*.key
+/storage/*.log
+/storage/app/public/*
+/storage/framework/cache/*
+/storage/framework/sessions/*
+/storage/framework/views/*
 /vendor
 .env
 .env.backup
 .env.production
+.env.testing
 .phpunit.result.cache
 Homestead.json
 Homestead.yaml
@@ -22,7 +28,20 @@ yarn-error.log
 /.cursor
 QUESTIONS.md
 ray.php
+notepad.md
+
+# Database
+*.sqlite
+*.sqlite-journal
 
 # macOS system files
 .DS_Store
-thinking/
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Local development directories
+/thinking/
