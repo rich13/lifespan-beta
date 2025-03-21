@@ -78,18 +78,49 @@ class RouteHealthTest extends TestCase
 
     /**
      * Test that admin routes are protected
-     * 
-     * @todo This test will be implemented when admin routes are added
-     * Currently, admin functionality is planned but not yet implemented.
-     * When implemented, this will test that:
-     * - Admin routes require authentication
-     * - Admin routes require admin role
-     * - Non-admin users cannot access admin routes
      */
     public function test_admin_routes_are_protected(): void
     {
-        // Admin routes not yet implemented
-        $this->markTestSkipped('Admin routes not yet implemented');
+        $adminRoutes = [
+            '/admin',  // Dashboard
+            '/admin/import',  // Import management
+            '/admin/span-types',  // Span types management
+            '/admin/connection-types',  // Connection types management
+        ];
+
+        // Test unauthenticated access
+        foreach ($adminRoutes as $route) {
+            $response = $this->get($route);
+            $this->assertTrue(
+                $response->status() === 302 && 
+                str_contains($response->headers->get('Location'), '/login'),
+                "Route {$route} should redirect to login when unauthenticated"
+            );
+        }
+
+        // Test non-admin user access
+        $user = User::factory()->create(['is_admin' => false]);
+        $this->actingAs($user);
+
+        foreach ($adminRoutes as $route) {
+            $response = $this->get($route);
+            $this->assertTrue(
+                $response->status() === 403,
+                "Route {$route} should return 403 for non-admin users"
+            );
+        }
+
+        // Test admin user access
+        $admin = User::factory()->create(['is_admin' => true]);
+        $this->actingAs($admin);
+
+        foreach ($adminRoutes as $route) {
+            $response = $this->get($route);
+            $this->assertTrue(
+                $response->status() === 200,
+                "Route {$route} should be accessible to admin users"
+            );
+        }
     }
 
     /**
