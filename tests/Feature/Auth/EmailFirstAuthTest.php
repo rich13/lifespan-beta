@@ -39,5 +39,30 @@ class EmailFirstAuthTest extends TestCase
         $response->assertViewHas('email', 'new@example.com');
     }
 
+    public function test_session_lifetime_is_one_year(): void
+    {
+        // Get the session lifetime from config
+        $lifetime = config('session.lifetime');
+        
+        // 525600 minutes = 1 year
+        $this->assertEquals(525600, $lifetime, 'Session lifetime should be set to 1 year (525600 minutes)');
+        
+        // Test that the session actually persists
+        $user = User::factory()->create();
+        
+        $response = $this->post('/auth/login', [
+            'email' => $user->email,
+            'password' => 'password'
+        ]);
+        
+        // Get the session cookie
+        $cookie = $response->headers->getCookies()[0];
+        
+        // Cookie should expire in approximately 1 year (allow 5 minutes variance)
+        $expectedExpiry = time() + (525600 * 60);
+        $this->assertEqualsWithDelta($expectedExpiry, $cookie->getExpiresTime(), 300, 
+            'Session cookie should expire in approximately 1 year');
+    }
+
     // More tests needed...
 } 
