@@ -3,22 +3,25 @@
 namespace Tests;
 
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Config;
 
 abstract class TestCase extends BaseTestCase
 {
-    use CreatesApplication;
+    use CreatesApplication, RefreshDatabase;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->artisan('migrate:fresh');
-        
+
         // Run specific migrations that add connection types
         $this->artisan('migrate', [
             '--path' => 'database/migrations/2024_03_21_000001_add_contains_connection_type.php',
             '--force' => true
         ]);
+        
+        // Seed common test data
+        $this->seed(\Database\Seeders\TestDatabaseSeeder::class);
         
         // Disable CSRF token verification during tests
         Config::set('session.driver', 'array');
