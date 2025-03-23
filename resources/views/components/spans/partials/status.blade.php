@@ -21,6 +21,20 @@
                     {{ ucfirst($span->state) }}
                 </span>
             </dd>
+
+            <dt class="col-sm-3">Created</dt>
+            <dd class="col-sm-9">
+                <span class="text-muted">
+                    By {{ $span->owner ? $span->owner->name : 'Unknown' }} on {{ $span->created_at->format('Y-m-d') }}
+                </span>
+            </dd>
+
+            @if($span->created_at != $span->updated_at)
+                <dt class="col-sm-3">Updated</dt>
+                <dd class="col-sm-9">
+                    <span class="text-muted">{{ $span->updated_at->diffForHumans() }}</span>
+                </dd>
+            @endif
         </dl>
     </div>
 </div> 
