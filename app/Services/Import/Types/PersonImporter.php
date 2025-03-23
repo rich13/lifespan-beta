@@ -128,18 +128,28 @@ class PersonImporter extends BaseSpanImporter
                 if (isset($familyData['mother'])) {
                     Log::info('Processing mother connection', ['mother' => $familyData['mother']]);
                     try {
-                        $motherSpan = $this->connectionImporter->findOrCreateConnectedSpan(
+                        $parentSpan = $this->connectionImporter->findOrCreateConnectedSpan(
                             $familyData['mother'],
                             'person',
-                            null,  // Don't set dates on the mother span
+                            null,  // Don't set dates on parent spans
                             ['gender' => 'female']
                         );
-                        
+
+                        // For parent connections, we use the child's birth date as the start date
+                        $childDates = null;
+                        if ($mainSpan->start_year) {
+                            $childDates = [
+                                'start_year' => $mainSpan->start_year,
+                                'start_month' => $mainSpan->start_month,
+                                'start_day' => $mainSpan->start_day
+                            ];
+                        }
+
                         $connection = $this->connectionImporter->createConnection(
-                            $motherSpan,
+                            $parentSpan,
                             $mainSpan,
                             'family',
-                            $dates,  // Use child's birth date for connection start
+                            $childDates,  // Use child's birth date for connection start
                             ['relationship' => 'mother']
                         );
                         Log::info('Mother connection processed', ['connection' => $connection->toArray()]);
@@ -147,10 +157,10 @@ class PersonImporter extends BaseSpanImporter
                         $this->report['family']['details'][] = [
                             'name' => $familyData['mother'],
                             'relationship' => 'mother',
-                            'person_span_id' => $motherSpan->id
+                            'person_span_id' => $parentSpan->id
                         ];
 
-                        if ($motherSpan->wasRecentlyCreated) {
+                        if ($parentSpan->wasRecentlyCreated) {
                             $this->report['family']['created']++;
                         } else {
                             $this->report['family']['existing']++;
@@ -168,18 +178,28 @@ class PersonImporter extends BaseSpanImporter
                 if (isset($familyData['father'])) {
                     Log::info('Processing father connection', ['father' => $familyData['father']]);
                     try {
-                        $fatherSpan = $this->connectionImporter->findOrCreateConnectedSpan(
+                        $parentSpan = $this->connectionImporter->findOrCreateConnectedSpan(
                             $familyData['father'],
                             'person',
-                            null,  // Don't set dates on the father span
+                            null,  // Don't set dates on parent spans
                             ['gender' => 'male']
                         );
-                        
+
+                        // For parent connections, we use the child's birth date as the start date
+                        $childDates = null;
+                        if ($mainSpan->start_year) {
+                            $childDates = [
+                                'start_year' => $mainSpan->start_year,
+                                'start_month' => $mainSpan->start_month,
+                                'start_day' => $mainSpan->start_day
+                            ];
+                        }
+
                         $connection = $this->connectionImporter->createConnection(
-                            $fatherSpan,
+                            $parentSpan,
                             $mainSpan,
                             'family',
-                            $dates,  // Use child's birth date for connection start
+                            $childDates,  // Use child's birth date for connection start
                             ['relationship' => 'father']
                         );
                         Log::info('Father connection processed', ['connection' => $connection->toArray()]);
@@ -187,10 +207,10 @@ class PersonImporter extends BaseSpanImporter
                         $this->report['family']['details'][] = [
                             'name' => $familyData['father'],
                             'relationship' => 'father',
-                            'person_span_id' => $fatherSpan->id
+                            'person_span_id' => $parentSpan->id
                         ];
 
-                        if ($fatherSpan->wasRecentlyCreated) {
+                        if ($parentSpan->wasRecentlyCreated) {
                             $this->report['family']['created']++;
                         } else {
                             $this->report['family']['existing']++;
@@ -216,13 +236,22 @@ class PersonImporter extends BaseSpanImporter
                                 null  // Don't set dates on child spans
                             );
                             
-                            // For child connections, we create placeholder connections without dates
-                            // The dates will be set when the child's birth date is known
+                            // For child connections, we use the child's birth date as the start date
+                            // If we don't have it yet, we'll create a placeholder connection
+                            $childDates = null;
+                            if ($childSpan->start_year) {
+                                $childDates = [
+                                    'start_year' => $childSpan->start_year,
+                                    'start_month' => $childSpan->start_month,
+                                    'start_day' => $childSpan->start_day
+                                ];
+                            }
+
                             $connection = $this->connectionImporter->createConnection(
                                 $mainSpan,
                                 $childSpan,
                                 'family',
-                                null,  // No dates for child connections until birth date is known
+                                $childDates,  // Use child's birth date for connection start
                                 ['relationship' => 'child']
                             );
                             Log::info('Child connection processed', ['connection' => $connection->toArray()]);

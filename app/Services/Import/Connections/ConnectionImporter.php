@@ -153,8 +153,7 @@ class ConnectionImporter
                     'end_day' => $dates['end_day'] ?? $connectionSpan->end_day,
                     'metadata' => array_merge($connectionSpan->metadata ?? [], $metadata ?? []),
                     'updater_id' => $this->user->id,
-                    // Only update state to complete if we have dates
-                    'state' => $dates ? 'complete' : $connectionSpan->state
+                    'state' => 'placeholder'  // Always use placeholder state
                 ]);
             }
             return $existingConnection;
@@ -178,8 +177,7 @@ class ConnectionImporter
             'end_day' => $dates['end_day'] ?? null,
             'owner_id' => $this->user->id,
             'updater_id' => $this->user->id,
-            // Set state to placeholder if we don't have dates
-            'state' => $dates ? 'complete' : 'placeholder',
+            'state' => 'placeholder',  // Always start as placeholder
             'metadata' => $metadata
         ]);
         Log::info('Created connection span', [
