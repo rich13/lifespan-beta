@@ -6,6 +6,11 @@ use Illuminate\Support\ServiceProvider;
 use App\Services\Temporal\TemporalService;
 use App\Services\Temporal\PrecisionValidator;
 use App\Services\Connection\ConnectionConstraintService;
+use App\Services\Comparison\Comparers\ConnectionComparer;
+use App\Services\Comparison\Comparers\HistoricalContextComparer;
+use App\Services\Comparison\Comparers\SignificantEventComparer;
+use App\Services\Comparison\Contracts\SpanComparerInterface;
+use App\Services\Comparison\SpanComparisonService;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -29,6 +34,13 @@ class AppServiceProvider extends ServiceProvider
                 $app->make(PrecisionValidator::class)
             );
         });
+
+        // Register comparison services
+        $this->app->singleton(SignificantEventComparer::class);
+        $this->app->singleton(HistoricalContextComparer::class);
+        $this->app->singleton(ConnectionComparer::class);
+        
+        $this->app->singleton(SpanComparerInterface::class, SpanComparisonService::class);
     }
 
     /**

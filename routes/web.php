@@ -45,6 +45,7 @@ Route::middleware('web')->group(function () {
             Route::get('/{span}/edit', [SpanController::class, 'edit'])->name('spans.edit');
             Route::put('/{span}', [SpanController::class, 'update'])->name('spans.update');
             Route::delete('/{span}', [SpanController::class, 'destroy'])->name('spans.destroy');
+            Route::get('/{span}/compare', [SpanController::class, 'compare'])->name('spans.compare');
         });
 
         // Public routes
