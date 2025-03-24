@@ -16,17 +16,6 @@ return new class extends Migration
         DB::statement('DROP TRIGGER IF EXISTS enforce_temporal_constraint ON connections;');
         DB::statement('DROP FUNCTION IF EXISTS check_temporal_constraint;');
 
-        // Drop the temporal_constraints table and its dependencies
-        Schema::dropIfExists('temporal_constraints');
-        Schema::dropIfExists('validation_monitoring');
-
-        // Add constraint_type column if it doesn't exist
-        if (!Schema::hasColumn('connection_types', 'constraint_type')) {
-            Schema::table('connection_types', function (Blueprint $table) {
-                $table->string('constraint_type')->default('single');
-            });
-        }
-
         // Create a simpler trigger function
         DB::statement(<<<'SQL'
             CREATE OR REPLACE FUNCTION check_temporal_constraint()
@@ -34,6 +23,7 @@ return new class extends Migration
             DECLARE
                 connection_span RECORD;
                 constraint_type TEXT;
+                span_state TEXT;
                 is_placeholder BOOLEAN;
             BEGIN
                 -- Get the connection span record
@@ -44,6 +34,12 @@ return new class extends Migration
                     RAISE EXCEPTION 'Connection span % not found', NEW.connection_span_id;
                 END IF;
 
+                -- Get the span state
+                SELECT state INTO span_state FROM spans WHERE id = NEW.connection_span_id;
+
+                -- Check if this is a placeholder
+                is_placeholder := span_state = 'placeholder';
+
                 -- Get the constraint type directly from connection_types
                 SELECT ct.constraint_type INTO constraint_type 
                 FROM connection_types ct
@@ -53,9 +49,6 @@ return new class extends Migration
                 IF constraint_type IS NULL THEN
                     RAISE EXCEPTION 'Connection type % not found', NEW.type_id;
                 END IF;
-
-                -- Check if this is a placeholder (all date fields null)
-                is_placeholder := connection_span.start_year IS NULL;
 
                 -- If not a placeholder, validate date precision hierarchy
                 IF NOT is_placeholder THEN
@@ -137,27 +130,8 @@ return new class extends Migration
                         RAISE EXCEPTION 'End year is required when end month is provided';
                     END IF;
 
-                    -- Only validate the date range if both start and end years are present
-                    IF connection_span.start_year IS NOT NULL AND connection_span.end_year IS NOT NULL THEN
-                        IF connection_span.end_year < connection_span.start_year THEN
-                            RAISE EXCEPTION 'End date cannot be before start date';
-                        END IF;
-
-                        IF connection_span.end_year = connection_span.start_year AND 
-                           connection_span.end_month IS NOT NULL AND 
-                           connection_span.start_month IS NOT NULL AND
-                           connection_span.end_month < connection_span.start_month THEN
-                            RAISE EXCEPTION 'End date cannot be before start date';
-                        END IF;
-
-                        IF connection_span.end_year = connection_span.start_year AND 
-                           connection_span.end_month = connection_span.start_month AND 
-                           connection_span.end_day IS NOT NULL AND
-                           connection_span.start_day IS NOT NULL AND
-                           connection_span.end_day < connection_span.start_day THEN
-                            RAISE EXCEPTION 'End date cannot be before start date';
-                        END IF;
-                    END IF;
+                    -- For placeholders, we don't validate that end dates must be after start dates
+                    -- This allows dates to be added in any order during the placeholder phase
                 END IF;
 
                 -- Apply constraint-specific validation
@@ -224,15 +198,6 @@ return new class extends Migration
             FOR EACH ROW
             EXECUTE FUNCTION check_temporal_constraint();
         ');
-
-        // Update existing connection types to use the correct constraint type
-        DB::table('connection_types')
-            ->whereIn('type', ['employment', 'residence', 'attendance', 'ownership', 'membership', 'travel', 'participation', 'education'])
-            ->update(['constraint_type' => 'non_overlapping']);
-
-        DB::table('connection_types')
-            ->whereIn('type', ['family', 'relationship'])
-            ->update(['constraint_type' => 'single']);
     }
 
     /**
@@ -243,12 +208,5 @@ return new class extends Migration
         // Drop the trigger and function
         DB::statement('DROP TRIGGER IF EXISTS enforce_temporal_constraint ON connections;');
         DB::statement('DROP FUNCTION IF EXISTS check_temporal_constraint;');
-
-        // Remove the constraint_type column if we added it
-        if (Schema::hasColumn('connection_types', 'constraint_type')) {
-            Schema::table('connection_types', function (Blueprint $table) {
-                $table->dropColumn('constraint_type');
-            });
-        }
     }
-};
+}; 
