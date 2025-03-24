@@ -18,7 +18,6 @@ class BandImporter extends BaseSpanImporter
     {
         parent::__construct($user);
         $this->connectionImporter = new ConnectionImporter($user);
-        $this->spanController = new SpanController();
     }
 
     protected function getSpanType(): string

@@ -5,6 +5,7 @@ namespace App\Services\Import\Connections;
 use App\Models\User;
 use App\Models\Span;
 use App\Models\Connection;
+use App\Models\ConnectionType;
 use Illuminate\Support\Facades\Log;
 
 class ConnectionImporter
@@ -267,16 +268,10 @@ class ConnectionImporter
 
     protected function generateConnectionName(Span $parent, Span $child, string $connectionType): string
     {
-        $typeMap = [
-            'education' => 'education at',
-            'employment' => 'employment at',
-            'residence' => 'residence in',
-            'relationship' => 'relationship with',
-            'family' => 'family relationship with',
-            'member_of' => 'membership in'
-        ];
-
-        $description = $typeMap[$connectionType] ?? 'connection with';
-        return "{$parent->name}'s {$description} {$child->name}";
+        // Get the connection type model
+        $type = ConnectionType::findOrFail($connectionType);
+        
+        // Use the forward predicate from the model
+        return "{$parent->name} {$type->forward_predicate} {$child->name}";
     }
 } 
