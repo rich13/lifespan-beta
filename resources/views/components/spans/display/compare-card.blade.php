@@ -100,6 +100,9 @@
                 <i class="bi bi-arrow-left-right text-primary me-2"></i>
                 Comparing Lives
             </h2>
+            <a href="{{ route('spans.compare', $span) }}" class="btn btn-sm btn-outline-primary">
+                View Full Comparison
+            </a>
         </div>
         
         <div class="comparison-timeline position-relative">

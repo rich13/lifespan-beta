@@ -1,0 +1,40 @@
+/* Timeline container and bar styles */
+.timeline-container {
+    position: relative;
+    width: 100%;
+}
+
+.timeline-bar {
+    position: relative;
+    height: 120px;
+}
+
+/* Height utilities */
+.h-120 { height: 120px; }
+.h-20 { height: 20px; }
+
+/* Position utilities */
+.top-n20 { top: -20px; }
+.top-40 { top: 40px; }
+.top-80 { top: 80px; }
+
+/* Comparison marker styles */
+.comparison-marker {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    position: absolute;
+}
+
+.comparison-marker i {
+    font-size: 14px;
+}
+
+/* Timeline bar positioning */
+.timeline-bar {
+    position: absolute;
+    background-color: rgba(0, 0, 0, 0.1);
+} 
