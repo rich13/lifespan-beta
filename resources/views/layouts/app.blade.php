@@ -26,8 +26,12 @@ use Illuminate\Support\Facades\Route;
         @viteReactRefresh
         @vite(['resources/scss/app.scss', 'resources/js/app.js'])
         
+        <!-- Page-specific styles -->
+        @stack('styles')
+        
         <!-- Page-specific scripts -->
         @yield('scripts')
+        @stack('scripts')
         
         <style>
             /* Custom dropdown styles */
