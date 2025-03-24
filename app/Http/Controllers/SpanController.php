@@ -15,6 +15,8 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use App\Models\SpanType;
 use App\Models\ConnectionType;
+use App\Services\Comparison\SpanComparisonService;
+use InvalidArgumentException;
 
 /**
  * Handle span viewing and management
@@ -22,13 +24,16 @@ use App\Models\ConnectionType;
  */
 class SpanController extends Controller
 {
+    protected $comparisonService;
+
     /**
      * Create a new controller instance.
      */
-    public function __construct()
+    public function __construct(SpanComparisonService $comparisonService)
     {
         // Require auth for all routes except show and index
         $this->middleware('auth')->except(['show', 'index']);
+        $this->comparisonService = $comparisonService;
     }
 
     /**
@@ -207,6 +212,49 @@ class SpanController extends Controller
         }
 
         return view('spans.show', compact('span'));
+    }
+
+    /**
+     * Show the full-page comparison view for a span
+     */
+    public function compare(Span $span)
+    {
+        if ($span->is_private && !auth()->check()) {
+            return redirect()->route('login');
+        }
+
+        $user = auth()->user();
+        $personalSpan = $user->personalSpan;
+
+        if (!$personalSpan) {
+            return redirect()->back()->with('error', 'Please set your personal span first.');
+        }
+
+        if ($personalSpan->id === $span->id) {
+            return redirect()->back()->with('error', 'Cannot compare a span with itself.');
+        }
+
+        try {
+            // Get all comparisons from the service
+            $comparisons = $this->comparisonService->compare($personalSpan, $span);
+            $yearRange = $this->comparisonService->getComparisonYearRange($personalSpan, $span);
+            
+            // Group comparisons by type for the view
+            $groupedComparisons = $comparisons->groupBy('type')->map(function($group) {
+                return $group->sortBy('year');
+            });
+            
+            return view('spans.compare', [
+                'span' => $span,
+                'personalSpan' => $personalSpan,
+                'comparisons' => $comparisons,
+                'groupedComparisons' => $groupedComparisons,
+                'minYear' => $yearRange['min'],
+                'maxYear' => $yearRange['max']
+            ]);
+        } catch (InvalidArgumentException $e) {
+            return redirect()->back()->with('error', $e->getMessage());
+        }
     }
 
     /**
