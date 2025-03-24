@@ -146,8 +146,8 @@ class ConnectionTemporalConstraintTest extends TestCase
         ConnectionType::firstOrCreate(
             ['type' => 'employment'],
             [
-                'forward_predicate' => 'employed at',
-                'forward_description' => 'Was employed at',
+                'forward_predicate' => 'worked at',
+                'forward_description' => 'Worked at',
                 'inverse_predicate' => 'employed',
                 'inverse_description' => 'Employed',
                 'constraint_type' => 'non_overlapping'

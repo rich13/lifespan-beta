@@ -79,7 +79,6 @@ class ImportService
     {
         $this->user = $user;
         $this->report = $this->getBaseReport();
-        $this->spanController = new SpanController();
         $this->connectionImporter = new Import\Connections\ConnectionImporter($user);
     }
 
