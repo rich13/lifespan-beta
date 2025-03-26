@@ -87,5 +87,40 @@ class DatabaseSeeder extends Seeder
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+
+        // Create test user
+        $testUser = User::create([
+            'email' => 'test@example.com',
+            'password' => Hash::make('lifespan'),
+            'is_admin' => false,
+            'email_verified_at' => now(),
+        ]);
+
+        // Create personal span for test user
+        $testSpan = new Span();
+        $testSpan->name = 'Test User';
+        $testSpan->type_id = 'person';
+        $testSpan->start_year = 1990;
+        $testSpan->start_month = 1;
+        $testSpan->start_day = 1;
+        $testSpan->owner_id = $testUser->id;
+        $testSpan->updater_id = $testUser->id;
+        $testSpan->access_level = 'private';
+        $testSpan->state = 'complete';
+        $testSpan->save();
+
+        // Link test user to personal span
+        $testUser->personal_span_id = $testSpan->id;
+        $testUser->save();
+
+        // Create user-span relationship for test user
+        DB::table('user_spans')->insert([
+            'id' => Str::uuid(),
+            'user_id' => $testUser->id,
+            'span_id' => $testSpan->id,
+            'access_level' => 'owner',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 }
