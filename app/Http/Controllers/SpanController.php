@@ -17,6 +17,7 @@ use App\Models\SpanType;
 use App\Models\ConnectionType;
 use App\Services\Comparison\SpanComparisonService;
 use InvalidArgumentException;
+use App\Models\Connection;
 
 /**
  * Handle span viewing and management
@@ -313,6 +314,9 @@ class SpanController extends Controller
                 'metadata.*' => 'nullable',
                 'sources' => 'nullable|array',
                 'sources.*' => 'nullable|url',
+                'subject_id' => 'required_if:type_id,connection|exists:spans,id',
+                'object_id' => 'required_if:type_id,connection|exists:spans,id|different:subject_id',
+                'connection_type' => 'required_if:type_id,connection|exists:connection_types,type'
             ]);
 
             if ($validator->fails()) {
@@ -368,33 +372,25 @@ class SpanController extends Controller
                     ->with('status', $result['messages'][0]);
             }
 
-            // If this is a connection span and the connection type is being updated
-            if ($span->type_id === 'connection') {
-                // Find the associated connection
-                $connection = DB::table('connections')
-                    ->join('connection_types', 'connections.type_id', '=', 'connection_types.type')
-                    ->join('spans as subject', 'connections.parent_id', '=', 'subject.id')
-                    ->join('spans as object', 'connections.child_id', '=', 'object.id')
-                    ->where('connections.connection_span_id', $span->id)
-                    ->select([
-                        'connections.id',
-                        'subject.name as subject_name',
-                        'connection_types.forward_predicate',
-                        'object.name as object_name'
-                    ])
-                    ->first();
-
+            // If connection fields are provided, update the connection
+            if ($request->has(['subject_id', 'object_id', 'connection_type'])) {
+                // Get the connection where this span is the connection span
+                $connection = Connection::where('connection_span_id', $span->id)->first();
                 if ($connection) {
-                    // Update the connection's type if it's being changed
-                    if (isset($validated['metadata']['connection_type'])) {
-                        DB::table('connections')
-                            ->where('id', $connection->id)
-                            ->update(['type_id' => $validated['metadata']['connection_type']]);
-                    }
+                    // Update the connection
+                    $connection->update([
+                        'parent_id' => $validated['subject_id'],
+                        'child_id' => $validated['object_id'],
+                        'type_id' => $validated['connection_type']
+                    ]);
+
+                    // Get the updated connection type and spans
+                    $connectionType = $connection->type;
+                    $subject = $connection->subject;
+                    $object = $connection->object;
 
                     // Update the span name in SPO format
-                    $newName = "{$connection->subject_name} {$connection->forward_predicate} {$connection->object_name}";
-                    $validated['name'] = $newName;
+                    $validated['name'] = "{$subject->name} {$connectionType->forward_predicate} {$object->name}";
                 }
             }
 
