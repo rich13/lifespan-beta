@@ -22,7 +22,12 @@
         <div class="col-md-8">
             <x-spans.forms.basic-info :span="$span" :span-types="$spanTypes" />
             <x-spans.forms.dates :span="$span" />
-            <x-spans.forms.metadata :span="$span" :span-type="$spanType" />
+            <x-spans.forms.metadata 
+                :span="$span" 
+                :span-type="$spanType" 
+                :connection-types="$connectionTypes"
+                :available-spans="$availableSpans" 
+            />
         </div>
 
         <div class="col-md-4">

@@ -1,8 +1,16 @@
-@props(['span', 'spanType'])
+@props(['span', 'spanType', 'connectionTypes', 'availableSpans'])
 
 <div class="card mb-4">
     <div class="card-body">
         <h2 class="card-title h5 mb-3">Type-Specific Fields</h2>
+
+        @if($span->type_id === 'connection')
+            <x-spans.forms.connection 
+                :span="$span" 
+                :connection-types="$connectionTypes" 
+                :available-spans="$availableSpans" 
+            />
+        @endif
 
         @if($spanType->metadata['schema'] ?? false)
             @foreach($spanType->metadata['schema'] as $fieldName => $field)
