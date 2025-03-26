@@ -62,8 +62,10 @@ class UserSwitcherController extends Controller
      */
     public function getUserList()
     {
-        // Get all users
-        $users = User::orderBy('email')->get();
+        // Get all users except the system user
+        $users = User::where('email', '!=', 'system@example.com')
+            ->orderBy('email')
+            ->get();
         
         // Mark the current user
         $currentUserId = auth()->id();

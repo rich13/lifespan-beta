@@ -173,11 +173,11 @@ Route::middleware('web')->group(function () {
         
         // User Switcher - moved outside admin middleware but still under auth
         Route::middleware(['user.switcher'])->prefix('admin')->name('admin.')->group(function () {
-            Route::get('/user-switcher/users', [App\Http\Controllers\Admin\UserSwitcherController::class, 'getUserList'])
+            Route::get('user-switcher/users', [App\Http\Controllers\Admin\UserSwitcherController::class, 'getUserList'])
                 ->name('user-switcher.users');
-            Route::post('/user-switcher/switch/{userId}', [App\Http\Controllers\Admin\UserSwitcherController::class, 'switchToUser'])
+            Route::post('user-switcher/switch/{userId}', [App\Http\Controllers\Admin\UserSwitcherController::class, 'switchToUser'])
                 ->name('user-switcher.switch');
-            Route::post('/user-switcher/switch-back', [App\Http\Controllers\Admin\UserSwitcherController::class, 'switchBack'])
+            Route::post('user-switcher/switch-back', [App\Http\Controllers\Admin\UserSwitcherController::class, 'switchBack'])
                 ->name('user-switcher.switch-back');
         });
     });

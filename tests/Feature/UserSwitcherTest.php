@@ -21,6 +21,12 @@ class UserSwitcherTest extends TestCase
             'is_admin' => true,
         ]);
 
+        // Create a test user
+        $testUser = User::factory()->create([
+            'email' => 'test@example.com',
+            'is_admin' => false,
+        ]);
+
         // Act as the admin user
         $response = $this->actingAs($admin)->get('/admin/user-switcher/users');
 
@@ -31,6 +37,12 @@ class UserSwitcherTest extends TestCase
                 'id',
                 'email',
             ]
+        ]);
+
+        // Assert that the test user is in the response
+        $response->assertJsonFragment([
+            'email' => 'test@example.com',
+            'is_admin' => false,
         ]);
     }
 
