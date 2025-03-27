@@ -168,8 +168,38 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Close modal and show success message
                 bsModal.hide();
                 showSuccessToast();
-                // Reload the page to show new connection
-                window.location.reload();
+                
+                // Update the connections list
+                const listGroup = document.querySelector('.list-group');
+                if (listGroup) {
+                    // Create a new list group item
+                    const listItem = document.createElement('div');
+                    listItem.className = 'list-group-item px-0';
+                    
+                    // Create the micro-card content
+                    const microCard = document.createElement('div');
+                    microCard.className = 'd-flex justify-content-between align-items-center';
+                    microCard.innerHTML = `
+                        <div>
+                            <strong>${result.data.type.forward_predicate}</strong>
+                            <span class="text-muted">${result.data.object.name}</span>
+                        </div>
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-sm btn-outline-danger delete-connection" data-connection-id="${result.data.id}">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    `;
+                    
+                    listItem.appendChild(microCard);
+                    listGroup.appendChild(listItem);
+                    
+                    // If this was the first connection, remove the "No connections yet" message
+                    const noConnectionsMessage = document.querySelector('.text-muted');
+                    if (noConnectionsMessage && noConnectionsMessage.textContent === 'No connections yet.') {
+                        noConnectionsMessage.remove();
+                    }
+                }
             } else {
                 // Show error message from server
                 showErrorMessage(form, result.message || 'Failed to create connection');
