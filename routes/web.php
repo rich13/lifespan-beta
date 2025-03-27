@@ -169,6 +169,16 @@ Route::middleware('web')->group(function () {
                 ->name('visualizer.index');
             Route::get('/visualizer/temporal', [VisualizerController::class, 'temporal'])
                 ->name('visualizer.temporal');
+
+            // Import routes
+            Route::get('/import', [ImportController::class, 'index'])
+                ->name('import.index');
+            Route::get('/import/musicbrainz', [MusicbrainzImportController::class, 'index'])
+                ->name('import.musicbrainz.index');
+            Route::post('/import/musicbrainz/search', [MusicbrainzImportController::class, 'search'])
+                ->name('import.musicbrainz.search');
+            Route::post('/import/musicbrainz/import', [MusicbrainzImportController::class, 'import'])
+                ->name('import.musicbrainz.import');
         });
         
         // User Switcher - moved outside admin middleware but still under auth

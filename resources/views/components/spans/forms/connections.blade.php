@@ -129,7 +129,13 @@
                         <label class="form-label">Dates</label>
                         <x-spans.forms.date-select 
                             prefix="connection"
-                            label="Connection Date"
+                            label="Start Date"
+                            :value="null"
+                            :showPrecision="false"
+                        />
+                        <x-spans.forms.date-select 
+                            prefix="connection_end"
+                            label="End Date (Optional)"
                             :value="null"
                             :showPrecision="false"
                         />

@@ -22,7 +22,34 @@
     @endswitch
     <span>
         <x-spans.display.micro-card :span="$connection->parent" />
-        <span class="text-muted">{{ strtolower($connection->type->forward_predicate) }}</span>
+        @if($connection->type_id === 'family')
+            @php
+                $parentGender = $connection->parent->getMeta('gender');
+                $childGender = $connection->child->getMeta('gender');
+                $isParent = $connection->parent->start_year < $connection->child->start_year;
+                
+                if ($isParent) {
+                    if ($parentGender === 'male') {
+                        $relation = 'is father of';
+                    } elseif ($parentGender === 'female') {
+                        $relation = 'is mother of';
+                    } else {
+                        $relation = 'is parent of';
+                    }
+                } else {
+                    if ($childGender === 'male') {
+                        $relation = 'is son of';
+                    } elseif ($childGender === 'female') {
+                        $relation = 'is daughter of';
+                    } else {
+                        $relation = 'is child of';
+                    }
+                }
+            @endphp
+            <span class="text-muted">{{ $relation }}</span>
+        @else
+            <span class="text-muted">{{ strtolower($connection->type->forward_predicate) }}</span>
+        @endif
         <x-spans.display.micro-card :span="$connection->child" />
     </span>
 </span> 
