@@ -98,10 +98,10 @@
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h2 class="card-title h5 mb-0">
                 <i class="bi bi-arrow-left-right text-primary me-2"></i>
-                Comparing Lives
+                Compare
             </h2>
             <a href="{{ route('spans.compare', $span) }}" class="btn btn-sm btn-outline-primary">
-                View Full Comparison
+                Full Comparison
             </a>
         </div>
         
@@ -139,14 +139,14 @@
                     
                     <!-- Your timeline -->
                     <div class="position-absolute" style="top: 0; left: {{ $personalStartPos }}%; width: {{ $personalEndPos - $personalStartPos }}%; height: 20px;">
-                        <div class="h-100 rounded" style="background: rgba(13, 110, 253, 0.2); border: 2px solid #0d6efd;">
+                        <div class="h-100 rounded" style="background: rgba(13, 110, 253, 0.2); border: 1px solid #0d6efd;">
                             <div class="small text-primary position-absolute" style="top: -20px; white-space: nowrap;">You</div>
                         </div>
                     </div>
                     
                     <!-- Their timeline -->
                     <div class="position-absolute" style="top: 30px; left: {{ $spanStartPos }}%; width: {{ $spanEndPos - $spanStartPos }}%; height: 20px;">
-                        <div class="h-100 rounded" style="background: rgba(13, 110, 253, 0.1); border: 2px solid #0d6efd;">
+                        <div class="h-100 rounded" style="background: rgba(13, 110, 253, 0.1); border: 1px solid #0d6efd;">
                             <div class="small text-primary position-absolute" style="top: -20px; white-space: nowrap;">{{ $span->name }}</div>
                         </div>
                     </div>
