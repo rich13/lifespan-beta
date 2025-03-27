@@ -133,14 +133,22 @@ class ConnectionType extends Model
     }
 
     /**
-     * @deprecated Use getAllowedSubjectTypes() or getAllowedObjectTypes() instead
+     * Check if a span type is allowed for a given direction
      */
-    public function getAllowedSpanTypes(string $role): array
+    public function isSpanTypeAllowed(string $spanType, string $direction): bool
     {
-        return match ($role) {
-            'parent' => $this->getAllowedSubjectTypes(),
-            'child' => $this->getAllowedObjectTypes(),
-            default => []
-        };
+        if (!isset($this->allowed_span_types[$direction])) {
+            return false;
+        }
+
+        return in_array($spanType, $this->allowed_span_types[$direction]);
+    }
+
+    /**
+     * Get allowed span types for a given direction
+     */
+    public function getAllowedSpanTypes(string $direction): array
+    {
+        return $this->allowed_span_types[$direction] ?? [];
     }
 } 
