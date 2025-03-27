@@ -74,9 +74,13 @@ class ConnectionController extends Controller
                 'type' => 'required|exists:connection_types,type',
                 'parent_id' => 'required|exists:spans,id',
                 'child_id' => 'required|exists:spans,id|different:parent_id',
+                'direction' => 'required|in:forward,inverse',
                 'connection_year' => 'nullable|integer',
                 'connection_month' => 'nullable|integer|between:1,12',
-                'connection_day' => 'nullable|integer|between:1,31'
+                'connection_day' => 'nullable|integer|between:1,31',
+                'connection_end_year' => 'nullable|integer',
+                'connection_end_month' => 'nullable|integer|between:1,12',
+                'connection_end_day' => 'nullable|integer|between:1,31'
             ]);
 
             // Get the spans and connection type
@@ -84,15 +88,72 @@ class ConnectionController extends Controller
             $child = Span::findOrFail($validated['child_id']);
             $connectionType = ConnectionType::findOrFail($validated['type']);
 
-            // Create connection span
-            $connectionSpan = Span::create([
+            // If direction is inverse, swap parent and child
+            if ($validated['direction'] === 'inverse') {
+                $temp = $parent;
+                $parent = $child;
+                $child = $temp;
+            }
+
+            // Validate span types
+            if (!$connectionType->isSpanTypeAllowed($parent->type_id, 'parent')) {
+                throw new \InvalidArgumentException(
+                    "Invalid parent span type. Expected one of: " . 
+                    implode(', ', $connectionType->getAllowedSpanTypes('parent'))
+                );
+            }
+
+            if (!$connectionType->isSpanTypeAllowed($child->type_id, 'child')) {
+                throw new \InvalidArgumentException(
+                    "Invalid child span type. Expected one of: " . 
+                    implode(', ', $connectionType->getAllowedSpanTypes('child'))
+                );
+            }
+
+            // Determine connection span dates based on connection type
+            $spanData = [
                 'type_id' => 'connection',
                 'owner_id' => auth()->id(),
                 'updater_id' => auth()->id(),
-                'start_year' => $validated['connection_year'] ?? null,
-                'start_month' => $validated['connection_month'] ?? null,
-                'start_day' => $validated['connection_day'] ?? null,
-            ]);
+                'name' => "{$parent->name} {$connectionType->getPredicate($validated['direction'] === 'inverse')} {$child->name}"
+            ];
+
+            // For family connections, use child's birth date as start and earliest death date as end
+            if ($connectionType->type === 'family') {
+                $spanData['start_year'] = $child->start_year;
+                $spanData['start_month'] = $child->start_month;
+                $spanData['start_day'] = $child->start_day;
+
+                if ($parent->end_year || $child->end_year) {
+                    if ($parent->end_year && $child->end_year) {
+                        if ($parent->end_year < $child->end_year) {
+                            $spanData['end_year'] = $parent->end_year;
+                            $spanData['end_month'] = $parent->end_month;
+                            $spanData['end_day'] = $parent->end_day;
+                        } else {
+                            $spanData['end_year'] = $child->end_year;
+                            $spanData['end_month'] = $child->end_month;
+                            $spanData['end_day'] = $child->end_day;
+                        }
+                    } else {
+                        $endSpan = $parent->end_year ? $parent : $child;
+                        $spanData['end_year'] = $endSpan->end_year;
+                        $spanData['end_month'] = $endSpan->end_month;
+                        $spanData['end_day'] = $endSpan->end_day;
+                    }
+                }
+            } else {
+                // For other connections, use provided dates
+                $spanData['start_year'] = $validated['connection_year'] ?? null;
+                $spanData['start_month'] = $validated['connection_month'] ?? null;
+                $spanData['start_day'] = $validated['connection_day'] ?? null;
+                $spanData['end_year'] = $validated['connection_end_year'] ?? null;
+                $spanData['end_month'] = $validated['connection_end_month'] ?? null;
+                $spanData['end_day'] = $validated['connection_end_day'] ?? null;
+            }
+
+            // Create connection span
+            $connectionSpan = Span::create($spanData);
 
             // Validate span dates using temporal service
             if (!$this->temporalService->validateSpanDates($connectionSpan)) {
@@ -105,8 +166,8 @@ class ConnectionController extends Controller
 
             // Create the connection
             $connection = new Connection([
-                'parent_id' => $validated['parent_id'],
-                'child_id' => $validated['child_id'],
+                'parent_id' => $parent->id,
+                'child_id' => $child->id,
                 'type_id' => $validated['type'],
                 'connection_span_id' => $connectionSpan->id
             ]);
@@ -114,7 +175,7 @@ class ConnectionController extends Controller
             // Validate connection constraints
             $constraintResult = $this->constraintService->validateConstraint(
                 $connection,
-                $connectionType->temporal_constraint
+                $connectionType->constraint_type
             );
 
             if (!$constraintResult->isValid()) {
@@ -123,15 +184,6 @@ class ConnectionController extends Controller
                     'success' => false,
                     'message' => $constraintResult->getError()
                 ], 422);
-            }
-
-            // Validate span types
-            if (!$connectionType->isSpanTypeAllowed($parent->type_id, 'parent')) {
-                $connectionSpan->delete();
-                throw new \InvalidArgumentException(
-                    "Invalid parent span type. Expected one of: " . 
-                    implode(', ', $connectionType->getAllowedSpanTypes('parent'))
-                );
             }
 
             // Save the connection
