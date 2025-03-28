@@ -26,7 +26,7 @@ services:
       - key: DB_USERNAME
         fromDatabase:
           name: lifespan-db
-          property: username
+          property: user
       - key: DB_PASSWORD
         fromDatabase:
           name: lifespan-db
