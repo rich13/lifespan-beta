@@ -1,40 +1,48 @@
-services:
-  - type: web
-    name: lifespan-beta
-    env: docker
-    dockerfilePath: ./Dockerfile
-    dockerContext: .
-    envVars:
-      - key: APP_ENV
-        value: production
-      - key: APP_DEBUG
-        value: false
-      - key: DB_CONNECTION
-        value: pgsql
-      - key: DB_HOST
-        fromDatabase:
-          name: lifespan-db
-          property: host
-      - key: DB_PORT
-        fromDatabase:
-          name: lifespan-db
-          property: port
-      - key: DB_DATABASE
-        fromDatabase:
-          name: lifespan-db
-          property: database
-      - key: DB_USERNAME
-        fromDatabase:
-          name: lifespan-db
-          property: username
-      - key: DB_PASSWORD
-        fromDatabase:
-          name: lifespan-db
-          property: password
-      - key: APP_URL
-        value: https://lifespan-beta.onrender.com
-    healthCheckPath: /
-    autoDeploy: true
+blueprint:
+  name: lifespan-beta
+  services:
+    - type: web
+      name: lifespan-beta
+      env: docker
+      dockerfilePath: ./Dockerfile
+      dockerContext: .
+      envVars:
+        - key: APP_ENV
+          value: production
+        - key: APP_DEBUG
+          value: false
+        - key: DB_CONNECTION
+          value: pgsql
+        - key: DB_HOST
+          fromDatabase:
+            name: lifespan-db
+            property: host
+        - key: DB_PORT
+          fromDatabase:
+            name: lifespan-db
+            property: port
+        - key: DB_DATABASE
+          fromDatabase:
+            name: lifespan-db
+            property: database
+        - key: DB_USERNAME
+          fromDatabase:
+            name: lifespan-db
+            property: username
+        - key: DB_PASSWORD
+          fromDatabase:
+            name: lifespan-db
+            property: password
+        - key: APP_URL
+          value: https://lifespan-beta.onrender.com
+      healthCheckPath: /
+      autoDeploy: true
+
+    - type: pgsql
+      name: lifespan-db
+      databaseName: lifespan_beta
+      user: lifespan_user
+      plan: free
 
 databases:
   - name: lifespan-db
