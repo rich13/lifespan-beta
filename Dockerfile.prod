@@ -40,10 +40,13 @@ WORKDIR /var/www
 COPY composer.json composer.lock ./
 
 # Install dependencies (including dev dependencies for build)
-RUN composer install --no-interaction --optimize-autoloader --no-dev
+RUN composer install --no-interaction --optimize-autoloader --no-dev --no-scripts
 
 # Copy the rest of the application
 COPY . .
+
+# Run post-autoload-dump script
+RUN composer dump-autoload --optimize --no-dev
 
 # Install Node.js dependencies and build assets
 RUN npm install && \
