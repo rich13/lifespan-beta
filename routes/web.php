@@ -215,7 +215,7 @@ Route::middleware('web')->group(function () {
         Route::get('auth/password', [EmailFirstAuthController::class, 'showPasswordForm'])
             ->name('auth.password');
         Route::post('auth/password', [EmailFirstAuthController::class, 'login'])
-            ->name('auth.password');
+            ->name('auth.password.submit');
 
         // Registration routes
         Route::get('register', [App\Http\Controllers\Auth\RegisteredUserController::class, 'create'])

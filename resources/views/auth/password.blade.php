@@ -7,7 +7,7 @@
             <div class="card">
                 <div class="card-body">
                     <h2 class="card-title text-center mb-4">Sign In</h2>
-                    <form method="POST" action="{{ route('auth.password') }}">
+                    <form method="POST" action="{{ route('auth.password.submit') }}">
                         @csrf
                         <input type="hidden" name="email" value="{{ $email }}">
                         
