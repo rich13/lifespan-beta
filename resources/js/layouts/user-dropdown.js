@@ -62,7 +62,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if ($userList.data('loaded')) return;
             
             $.ajax({
-                url: 'admin/user-switcher/users',
+                url: window.routes.userSwitcher.users,
                 type: 'GET',
                 dataType: 'json',
                 success: function(response) {
@@ -83,7 +83,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         
                         const $form = $('<form>', {
                             method: 'POST',
-                            action: `admin/user-switcher/switch/${user.id}`,
+                            action: window.routes.userSwitcher.switch.replace(':userId', user.id),
                             class: 'user-switch-form'
                         });
                         
@@ -146,7 +146,7 @@ document.addEventListener('DOMContentLoaded', function() {
             userList.setAttribute('data-loaded', 'true');
             userList.innerHTML = '<div class="text-center py-2"><div class="spinner-border spinner-border-sm text-primary" role="status"></div> Loading users...</div>';
             
-            fetch('admin/user-switcher/users')
+            fetch(window.routes.userSwitcher.users)
                 .then(response => response.json())
                 .then(data => {
                     if (Array.isArray(data) && data.length > 0) {
@@ -159,7 +159,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             
                             const form = document.createElement('form');
                             form.method = 'POST';
-                            form.action = `admin/user-switcher/switch/${user.id}`;
+                            form.action = window.routes.userSwitcher.switch.replace(':userId', user.id);
                             form.className = 'user-switch-form';
                             
                             // Add CSRF token
@@ -219,7 +219,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             const form = document.createElement('form');
             form.method = 'POST';
-            form.action = 'admin/user-switcher/switch-back';
+            form.action = window.routes.userSwitcher.switchBack;
             
             const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
             const csrfInput = document.createElement('input');

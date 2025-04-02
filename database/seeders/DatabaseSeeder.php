@@ -17,6 +17,10 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        $this->call([
+            InvitationCodeSeeder::class,
+        ]);
+
         // Create required span types
         $types = [
             [
@@ -53,74 +57,118 @@ class DatabaseSeeder extends Seeder
             );
         }
 
+        // Create system user
+        $systemUser = User::updateOrCreate(
+            ['email' => 'system@lifespan.app'],
+            [
+                'password' => Hash::make(Str::random(32)),
+                'is_admin' => true,
+                'email_verified_at' => now(),
+            ]
+        );
+
+        // Create system span
+        $systemSpan = Span::updateOrCreate(
+            ['owner_id' => $systemUser->id, 'type_id' => 'person'],
+            [
+                'name' => 'System',
+                'start_year' => 2024,
+                'start_month' => 1,
+                'start_day' => 1,
+                'updater_id' => $systemUser->id,
+                'access_level' => 'private',
+                'state' => 'complete',
+            ]
+        );
+
+        // Link system user to personal span
+        $systemUser->personal_span_id = $systemSpan->id;
+        $systemUser->save();
+
+        // Create user-span relationship for system
+        DB::table('user_spans')->updateOrInsert(
+            ['user_id' => $systemUser->id, 'span_id' => $systemSpan->id],
+            [
+                'id' => Str::uuid(),
+                'access_level' => 'owner',
+                'updated_at' => now(),
+            ]
+        );
+
         // Create admin user
-        $user = User::create([
-            'email' => 'richard@northover.info',
-            'password' => Hash::make('lifespan'),
-            'is_admin' => true,
-            'email_verified_at' => now(), // Pre-verify the admin email
-        ]);
+        $user = User::updateOrCreate(
+            ['email' => 'richard@northover.info'],
+            [
+                'password' => Hash::make('lifespan'),
+                'is_admin' => true,
+                'email_verified_at' => now(),
+            ]
+        );
 
         // Create personal span
-        $span = new Span();
-        $span->name = 'Richard Northover';
-        $span->type_id = 'person';
-        $span->start_year = 1976;
-        $span->start_month = 2;
-        $span->start_day = 13;
-        $span->owner_id = $user->id;
-        $span->updater_id = $user->id;
-        $span->access_level = 'private';
-        $span->state = 'complete';
-        $span->save();
+        $span = Span::updateOrCreate(
+            ['owner_id' => $user->id, 'type_id' => 'person'],
+            [
+                'name' => 'Richard Northover',
+                'start_year' => 1976,
+                'start_month' => 2,
+                'start_day' => 13,
+                'updater_id' => $user->id,
+                'access_level' => 'private',
+                'state' => 'complete',
+            ]
+        );
 
         // Link user to personal span
         $user->personal_span_id = $span->id;
         $user->save();
 
         // Create user-span relationship
-        DB::table('user_spans')->insert([
-            'id' => Str::uuid(),
-            'user_id' => $user->id,
-            'span_id' => $span->id,
-            'access_level' => 'owner',
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        DB::table('user_spans')->updateOrInsert(
+            ['user_id' => $user->id, 'span_id' => $span->id],
+            [
+                'id' => Str::uuid(),
+                'access_level' => 'owner',
+                'updated_at' => now(),
+            ]
+        );
 
         // Create test user
-        $testUser = User::create([
-            'email' => 'test@example.com',
-            'password' => Hash::make('lifespan'),
-            'is_admin' => false,
-            'email_verified_at' => now(),
-        ]);
+        $testUser = User::updateOrCreate(
+            ['email' => 'test@example.com'],
+            [
+                'password' => Hash::make('lifespan'),
+                'is_admin' => false,
+                'email_verified_at' => now(),
+            ]
+        );
 
         // Create personal span for test user
-        $testSpan = new Span();
-        $testSpan->name = 'Test User';
-        $testSpan->type_id = 'person';
-        $testSpan->start_year = 1990;
-        $testSpan->start_month = 1;
-        $testSpan->start_day = 1;
-        $testSpan->owner_id = $testUser->id;
-        $testSpan->updater_id = $testUser->id;
-        $testSpan->access_level = 'private';
-        $testSpan->state = 'complete';
-        $testSpan->save();
+        $testSpan = Span::updateOrCreate(
+            ['owner_id' => $testUser->id, 'type_id' => 'person'],
+            [
+                'name' => 'Test User',
+                'start_year' => 1990,
+                'start_month' => 1,
+                'start_day' => 1,
+                'updater_id' => $testUser->id,
+                'access_level' => 'private',
+                'state' => 'complete',
+            ]
+        );
 
         // Link test user to personal span
         $testUser->personal_span_id = $testSpan->id;
         $testUser->save();
 
         // Create user-span relationship for test user
-        DB::table('user_spans')->insert([
-            'id' => Str::uuid(),
-            'user_id' => $testUser->id,
-            'span_id' => $testSpan->id,
-            'access_level' => 'owner',
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        DB::table('user_spans')->updateOrInsert(
+            ['user_id' => $testUser->id, 'span_id' => $testSpan->id],
+            [
+                'id' => Str::uuid(),
+                'access_level' => 'owner',
+                'updated_at' => now(),
+            ]
+        );
     }
 }

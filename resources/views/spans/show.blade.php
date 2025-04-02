@@ -47,9 +47,9 @@
                 <x-spans.partials.status :span="$span" />
                 @auth
                     <x-spans.display.compare-card :span="$span" />
+                    <x-spans.display.reflect-card :span="$span" />
                 @endauth
                 @if($span->type_id === 'person')
-                    <x-spans.partials.person-info :span="$span" />
                     <x-spans.partials.family-relationships :span="$span" />
                 @endif
                 <x-spans.partials.sources :span="$span" />

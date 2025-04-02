@@ -36,6 +36,11 @@ Route::middleware('web')->group(function () {
         return view('home');
     })->name('home');
 
+    // Date exploration route
+    Route::get('/date/{date}', [SpanController::class, 'exploreDate'])
+        ->where('date', '[0-9]{4}-[0-9]{2}-[0-9]{2}')
+        ->name('date.explore');
+
     // Span routes
     Route::prefix('spans')->group(function () {
         // Protected routes
@@ -143,6 +148,12 @@ Route::middleware('web')->group(function () {
                 ->name('users.edit');
             Route::put('/users/{user}', [UserController::class, 'update'])
                 ->name('users.update');
+            Route::delete('/users/{user}', [UserController::class, 'destroy'])
+                ->name('users.destroy');
+            Route::post('/users/generate-invitation-codes', [UserController::class, 'generateInvitationCodes'])
+                ->name('users.generate-invitation-codes');
+            Route::delete('/users/invitation-codes', [UserController::class, 'deleteAllInvitationCodes'])
+                ->name('users.delete-all-invitation-codes');
 
             // Connection Management
             Route::get('/connections', [ConnectionController::class, 'index'])
@@ -199,12 +210,18 @@ Route::middleware('web')->group(function () {
         Route::get('auth/email', function() {
             return redirect()->route('login');
         });
-        Route::post('auth/email', [EmailFirstAuthController::class, 'handleEmail'])
+        Route::post('auth/email', [EmailFirstAuthController::class, 'processEmail'])
             ->name('auth.email');
-        Route::post('auth/login', [EmailFirstAuthController::class, 'login'])
-            ->name('auth.login');
-        Route::post('auth/register', [EmailFirstAuthController::class, 'register'])
-            ->name('auth.register');
+        Route::get('auth/password', [EmailFirstAuthController::class, 'showPasswordForm'])
+            ->name('auth.password');
+        Route::post('auth/password', [EmailFirstAuthController::class, 'login'])
+            ->name('auth.password');
+
+        // Registration routes
+        Route::get('register', [App\Http\Controllers\Auth\RegisteredUserController::class, 'create'])
+            ->name('register');
+        Route::post('register', [App\Http\Controllers\Auth\RegisteredUserController::class, 'store'])
+            ->name('register.store');
     });
 
     // Email verification routes

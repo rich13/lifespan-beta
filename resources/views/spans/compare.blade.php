@@ -138,7 +138,6 @@
                 if ($personalStartYear && $spanStartYear) {
                     $yearDiff = $spanStartYear - $personalStartYear;
                     
-                    // Check if the older person was still alive when the younger was born
                     if ($yearDiff > 0) {
                         // The span person was born after you
                         // Check if you were still alive when they were born
@@ -221,97 +220,30 @@
                                     (!$connSpan->end_year || $connSpan->end_year >= $overlapStart);
                             });
                             
-                            if (!$personalEndYear && !$spanEndYear) {
-                                $comparisons[] = [
-                                    'icon' => 'bi-arrow-left-right',
-                                    'text' => "Your lives have overlapped for {$overlapYears} years so far",
-                                    'year' => $overlapStart,
-                                    'duration' => $overlapYears,
-                                    'subtext' => "During this time:" .
-                                        ($personalOverlappingConns->isNotEmpty() ? 
-                                            "\nYou were at: " . $personalOverlappingConns->map(function($conn) use ($personalSpan) {
-                                                return $conn->parent_id === $personalSpan->id ? 
-                                                    $conn->child->name :
-                                                    $conn->parent->name;
-                                            })->join(', ') : "") .
-                                        ($spanOverlappingConns->isNotEmpty() ? 
-                                            "\nThey were at: " . $spanOverlappingConns->map(function($conn) use ($span) {
-                                                return $conn->parent_id === $span->id ? 
-                                                    $conn->child->name :
-                                                    $conn->parent->name;
-                                            })->join(', ') : "")
-                                ];
-                            } else {
-                                $comparisons[] = [
-                                    'icon' => 'bi-arrow-left-right',
-                                    'text' => "Your lives overlapped for {$overlapYears} years",
-                                    'year' => $overlapStart,
-                                    'duration' => $overlapYears,
-                                    'subtext' => "During this time:" .
-                                        ($personalOverlappingConns->isNotEmpty() ? 
-                                            "\nYou were at: " . $personalOverlappingConns->map(function($conn) use ($personalSpan) {
-                                                return $conn->parent_id === $personalSpan->id ? 
-                                                    $conn->child->name :
-                                                    $conn->parent->name;
-                                            })->join(', ') : "") .
-                                        ($spanOverlappingConns->isNotEmpty() ? 
-                                            "\nThey were at: " . $spanOverlappingConns->map(function($conn) use ($span) {
-                                                return $conn->parent_id === $span->id ? 
-                                                    $conn->child->name :
-                                                    $conn->parent->name;
-                                            })->join(', ') : "")
-                                ];
+                            $subtext = "During this time:";
+                            if ($personalOverlappingConns->isNotEmpty()) {
+                                $subtext .= "\nYou: " . $personalOverlappingConns->map(function($conn) use ($personalSpan) {
+                                    return $conn->parent_id === $personalSpan->id ? 
+                                        $conn->child->name :
+                                        $conn->parent->name;
+                                })->join(', ');
                             }
-                        }
-                    }
-                }
-                
-                // Age at other's death
-                if ($personalStartYear && $spanEndYear) {
-                    if ($spanEndYear >= $personalStartYear) {
-                        $ageAtDeath = $spanEndYear - $personalStartYear;
-                        if ($ageAtDeath > 0) {
-                            // Find what you were doing when they died
-                            $activeConnections = $personalConnections->filter(function($connection) use ($spanEndYear) {
-                                $connSpan = $connection->connectionSpan;
-                                return $connSpan->start_year <= $spanEndYear && 
-                                    (!$connSpan->end_year || $connSpan->end_year >= $spanEndYear);
-                            });
-                            
+                            if ($spanOverlappingConns->isNotEmpty()) {
+                                $subtext .= "\nThey: " . $spanOverlappingConns->map(function($conn) use ($span) {
+                                    return $conn->parent_id === $span->id ? 
+                                        $conn->child->name :
+                                        $conn->parent->name;
+                                })->join(', ');
+                            }
+
                             $comparisons[] = [
-                                'icon' => 'bi-calendar-x',
-                                'text' => "You were {$ageAtDeath} years old when {$span->name} died",
-                                'year' => $spanEndYear,
-                                'subtext' => $activeConnections->isNotEmpty() ? 
-                                    "At this time, you were: " . $activeConnections->map(function($conn) use ($personalSpan) {
-                                        return $conn->parent_id === $personalSpan->id ? 
-                                            "{$conn->type->forward_predicate} {$conn->child->name}" :
-                                            "{$conn->type->inverse_predicate} {$conn->parent->name}";
-                                    })->join(', ') : null
-                            ];
-                        }
-                    }
-                } elseif ($spanStartYear && $personalEndYear) {
-                    if ($personalEndYear >= $spanStartYear) {
-                        $ageAtDeath = $personalEndYear - $spanStartYear;
-                        if ($ageAtDeath > 0) {
-                            // Find what they were doing when you died
-                            $activeConnections = $spanConnections->filter(function($connection) use ($personalEndYear) {
-                                $connSpan = $connection->connectionSpan;
-                                return $connSpan->start_year <= $personalEndYear && 
-                                    (!$connSpan->end_year || $connSpan->end_year >= $personalEndYear);
-                            });
-                            
-                            $comparisons[] = [
-                                'icon' => 'bi-calendar-x',
-                                'text' => "{$span->name} was {$ageAtDeath} years old when you died",
-                                'year' => $personalEndYear,
-                                'subtext' => $activeConnections->isNotEmpty() ? 
-                                    "At this time, they were: " . $activeConnections->map(function($conn) use ($span) {
-                                        return $conn->parent_id === $span->id ? 
-                                            "{$conn->type->forward_predicate} {$conn->child->name}" :
-                                            "{$conn->type->inverse_predicate} {$conn->parent->name}";
-                                    })->join(', ') : null
+                                'icon' => 'bi-arrow-left-right',
+                                'text' => (!$personalEndYear && !$spanEndYear) ?
+                                    "Your lives have overlapped for {$overlapYears} years so far" :
+                                    "Your lives overlapped for {$overlapYears} years",
+                                'year' => $overlapStart,
+                                'duration' => $overlapYears,
+                                'subtext' => $subtext !== "During this time:" ? $subtext : null
                             ];
                         }
                     }
@@ -338,39 +270,6 @@
                     }
                 }
 
-                // If lives don't overlap, add age-relative comparisons
-                if ($personalStartYear && $spanStartYear && 
-                    ($spanEndYear < $personalStartYear || $personalEndYear < $spanStartYear)) {
-                    $ageRelativeComparisons = [];
-                    $currentAge = date('Y') - $personalStartYear;
-                    
-                    // Find what they were doing at your current age
-                    $theirYear = $spanStartYear + $currentAge;
-                    if (!$spanEndYear || $theirYear <= $spanEndYear) {
-                        $activeConnections = $spanConnections->filter(function($connection) use ($theirYear) {
-                            $connSpan = $connection->connectionSpan;
-                            return $connSpan->start_year <= $theirYear && 
-                                (!$connSpan->end_year || $connSpan->end_year >= $theirYear);
-                        });
-                        
-                        if ($activeConnections->isNotEmpty()) {
-                            $ageRelativeComparisons[] = [
-                                'icon' => 'bi-clock',
-                                'text' => "At your current age ({$currentAge}), {$span->name} was:",
-                                'year' => $theirYear,
-                                'subtext' => $activeConnections->map(function($conn) use ($span) {
-                                    return $conn->parent_id === $span->id ? 
-                                        "{$conn->type->forward_predicate} {$conn->child->name}" :
-                                        "{$conn->type->inverse_predicate} {$conn->parent->name}";
-                                })->join(', ')
-                            ];
-                        }
-                    }
-                    
-                    // Add these to the main comparisons array
-                    $comparisons = array_merge($comparisons, $ageRelativeComparisons);
-                }
-
                 // Sort all comparisons by year
                 usort($comparisons, function($a, $b) {
                     return $a['year'] - $b['year'];
@@ -389,7 +288,7 @@
                     </h2>
 
                     <div class="timeline-container">
-                        <div class="timeline-bar position-relative h-120">
+                        <div class="timeline-bar position-relative h-60">
                             <!-- Personal span bar -->
                             <div class="position-absolute top-0 bg-primary bg-opacity-20 rounded-3 h-20" 
                                  data-left="{{ (($personalSpan->start_year - $minYear) / ($maxYear - $minYear)) * 100 }}"
@@ -403,64 +302,48 @@
                                  data-width="{{ (($span->end_year ?? date('Y')) - $span->start_year) / ($maxYear - $minYear) * 100 }}">
                                 <div class="position-absolute top-n20 small text-muted">{{ $span->name }}</div>
                             </div>
-
-                            <!-- Event markers -->
-                            @foreach($comparisons as $comparison)
-                                @php
-                                    // Handle both array and DTO formats
-                                    $text = is_array($comparison) ? $comparison['text'] : $comparison->text;
-                                    $subtext = is_array($comparison) ? ($comparison['subtext'] ?? null) : $comparison->subtext;
-                                    $year = is_array($comparison) ? $comparison['year'] : $comparison->year;
-                                    $icon = is_array($comparison) ? ($comparison['icon'] ?? 'bi-clock') : $comparison->icon;
-                                @endphp
-                                <div class="position-absolute top-80 d-flex flex-column align-items-center"
-                                     data-left="{{ (($year - $minYear) / ($maxYear - $minYear)) * 100 }}">
-                                    <div class="comparison-marker bg-primary rounded-circle" data-bs-toggle="tooltip" data-bs-html="true"
-                                         title="{{ $text }}{{ $subtext ? '<br><small class=\'text-muted\'>' . $subtext . '</small>' : '' }}">
-                                        <i class="bi {{ $icon }} text-white"></i>
-                                    </div>
-                                </div>
-                            @endforeach
                         </div>
                     </div>
                 </div>
             </div>
 
             @foreach($groupedComparisons as $type => $typeComparisons)
-                <div class="card mb-4">
-                    <div class="card-body">
-                        <h2 class="card-title h5 mb-4">
-                            <i class="bi bi-list-ul text-primary me-2"></i>
-                            {{ ucfirst(str_replace('_', ' ', $type)) }}
-                        </h2>
+                @if(!in_array($type, ['connection_pattern', 'tech_era', 'historical_event']))
+                    <div class="card mb-4">
+                        <div class="card-body">
+                            <h2 class="card-title h5 mb-4">
+                                <i class="bi bi-list-ul text-primary me-2"></i>
+                                {{ ucfirst(str_replace('_', ' ', $type)) }}
+                            </h2>
 
-                        <div class="comparison-list">
-                            @foreach($typeComparisons as $comparison)
-                                @php
-                                    // Handle both array and DTO formats
-                                    $text = is_array($comparison) ? $comparison['text'] : $comparison->text;
-                                    $subtext = is_array($comparison) ? ($comparison['subtext'] ?? null) : $comparison->subtext;
-                                    $year = is_array($comparison) ? $comparison['year'] : $comparison->year;
-                                    $icon = is_array($comparison) ? ($comparison['icon'] ?? 'bi-clock') : $comparison->icon;
-                                @endphp
-                                <div class="comparison-item d-flex align-items-center mb-3">
-                                    <div class="comparison-icon me-3">
-                                        <i class="bi {{ $icon }} text-primary"></i>
+                            <div class="comparison-list">
+                                @foreach($typeComparisons as $comparison)
+                                    @php
+                                        // Handle both array and DTO formats
+                                        $text = is_array($comparison) ? $comparison['text'] : $comparison->text;
+                                        $subtext = is_array($comparison) ? ($comparison['subtext'] ?? null) : $comparison->subtext;
+                                        $year = is_array($comparison) ? $comparison['year'] : $comparison->year;
+                                        $icon = is_array($comparison) ? ($comparison['icon'] ?? 'bi-clock') : $comparison->icon;
+                                    @endphp
+                                    <div class="comparison-item d-flex align-items-center mb-3">
+                                        <div class="comparison-icon me-3">
+                                            <i class="bi {{ $icon }} text-primary"></i>
+                                        </div>
+                                        <div class="comparison-content">
+                                            <div class="comparison-text">{{ $text }}</div>
+                                            @if($subtext)
+                                                <div class="comparison-subtext small text-muted">{{ $subtext }}</div>
+                                            @endif
+                                        </div>
+                                        <div class="comparison-year ms-auto text-muted">
+                                            {{ $year }}
+                                        </div>
                                     </div>
-                                    <div class="comparison-content">
-                                        <div class="comparison-text">{{ $text }}</div>
-                                        @if($subtext)
-                                            <div class="comparison-subtext small text-muted">{{ $subtext }}</div>
-                                        @endif
-                                    </div>
-                                    <div class="comparison-year ms-auto text-muted">
-                                        {{ $year }}
-                                    </div>
-                                </div>
-                            @endforeach
+                                @endforeach
+                            </div>
                         </div>
                     </div>
-                </div>
+                @endif
             @endforeach
         </div>
 

@@ -14,3 +14,13 @@
 .bg-object {
     background-color: var(--bs-object) !important;
 }
+
+/* Dotted underline styles */
+.text-dotted-underline {
+    text-decoration: none;
+    border-bottom: 1px dotted currentColor;
+}
+
+.text-dotted-underline:hover {
+    border-bottom-style: solid;
+}

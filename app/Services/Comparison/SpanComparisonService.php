@@ -58,10 +58,8 @@ class SpanComparisonService implements SpanComparerInterface
                 $this->addLifespanComparisons($comparisons, $personalSpan, $comparedSpan);
                 $this->addAgeRelativeComparisons($comparisons, $personalSpan, $comparedSpan);
 
-                // Add specialized comparisons
-                $comparisons = $comparisons->concat($this->eventComparer->compare($personalSpan, $comparedSpan))
-                    ->concat($this->historicalComparer->compare($personalSpan, $comparedSpan))
-                    ->concat($this->connectionComparer->compare($personalSpan, $comparedSpan));
+                // Add only significant event comparisons
+                $comparisons = $comparisons->concat($this->eventComparer->compare($personalSpan, $comparedSpan));
 
                 // Sort all comparisons by year
                 $comparisons = $comparisons->sortBy(fn(ComparisonDTO $comp) => $comp->year);

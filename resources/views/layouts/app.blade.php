@@ -33,6 +33,17 @@ use Illuminate\Support\Facades\Route;
         @yield('scripts')
         @stack('scripts')
         
+        <script>
+            // Define route URLs for JavaScript
+            window.routes = {
+                userSwitcher: {
+                    users: "{{ route('admin.user-switcher.users') }}",
+                    switch: "{{ route('admin.user-switcher.switch', ':userId') }}",
+                    switchBack: "{{ route('admin.user-switcher.switch-back') }}"
+                }
+            };
+        </script>
+        
         <style>
             /* Custom dropdown styles */
             .hover-bg-light:hover {
@@ -168,7 +179,7 @@ use Illuminate\Support\Facades\Route;
                                             @if(Auth::user()->is_admin)
                                                 <div class="mt-2 mb-1">
                                                     <div class="px-2 py-1 border-top border-bottom bg-light">
-                                                        <small class="text-muted fw-bold">SWITCH TO USER</small>
+                                                        <small class="text-muted fw-bold">Switch User</small>
                                                     </div>
                                                     <div id="userSwitcherList" class="py-1 max-height-200 overflow-auto">
                                                         <div class="px-2 py-1 text-center">
@@ -218,16 +229,16 @@ use Illuminate\Support\Facades\Route;
                                         <i class="bi bi-bar-chart-steps me-1"></i> Spans
                                     </a>
                                 </li>
-                                <li class="nav-item">
+                                <!--<li class="nav-item">
                                     <a class="nav-link" href="#">
-                                        <i class="bi bi-collection-fill me-1"></i> Collections
+                                        <i class="bi bi-collection-fill me-1"></i> TODO: Collections
                                     </a>
                                 </li>
                                 <li class="nav-item">
                                     <a class="nav-link" href="#">
-                                        <i class="bi bi-search me-1"></i> Explorer
+                                        <i class="bi bi-search me-1"></i> TODO: Explorer
                                     </a>
-                                </li>
+                                </li>-->
                             </ul>
 
                             @if(Auth::user()->is_admin)
@@ -237,7 +248,7 @@ use Illuminate\Support\Facades\Route;
                                 <ul class="nav flex-column">
                                     <li class="nav-item">
                                         <a class="nav-link {{ request()->routeIs('admin.dashboard') ? 'active' : '' }}" href="{{ route('admin.dashboard') }}">
-                                            <i class="bi bi-speedometer2 me-1"></i> Dashboard
+                                            {{ __('Dashboard') }}
                                         </a>
                                     </li>
                                     <li class="nav-item">

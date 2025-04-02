@@ -47,7 +47,7 @@ class PublicRoutesTest extends TestCase
             'email' => 'test@example.com'
         ]);
 
-        $response->assertStatus(200);
-        $response->assertViewIs('auth.register');
+        $response->assertRedirect(route('register'));
+        $response->assertSessionHas('email', 'test@example.com');
     }
 } 

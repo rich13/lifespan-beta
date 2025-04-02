@@ -433,4 +433,183 @@ class SpanController extends Controller
         $span->delete();
         return redirect()->route('spans.index');
     }
+
+    /**
+     * Explore spans that start or end on a specific date.
+     */
+    public function exploreDate(string $date): View
+    {
+        // Parse the date string into components
+        $dateParts = explode('-', $date);
+        $year = (int) $dateParts[0];
+        $month = (int) $dateParts[1];
+        $day = (int) $dateParts[2];
+
+        // Build the base query for spans that start or end on this date
+        $query = Span::query()
+            ->where(function ($query) use ($year, $month, $day) {
+                // Spans that start on this date
+                $query->where(function ($q) use ($year, $month, $day) {
+                    $q->where('start_year', $year)
+                      ->where('start_month', $month)
+                      ->where('start_day', $day);
+                })
+                // Spans that end on this date
+                ->orWhere(function ($q) use ($year, $month, $day) {
+                    $q->where('end_year', $year)
+                      ->where('end_month', $month)
+                      ->where('end_day', $day);
+                })
+                // Spans that start in this month
+                ->orWhere(function ($q) use ($year, $month) {
+                    $q->where('start_year', $year)
+                      ->where('start_month', $month);
+                })
+                // Spans that end in this month
+                ->orWhere(function ($q) use ($year, $month) {
+                    $q->where('end_year', $year)
+                      ->where('end_month', $month);
+                })
+                // Spans that start in this year
+                ->orWhere(function ($q) use ($year) {
+                    $q->where('start_year', $year);
+                })
+                // Spans that end in this year
+                ->orWhere(function ($q) use ($year) {
+                    $q->where('end_year', $year);
+                });
+            });
+
+        // For unauthenticated users, only show public spans
+        if (!Auth::check()) {
+            $query->where('access_level', 'public');
+        } else {
+            // For authenticated users
+            $user = Auth::user();
+            if (!$user->is_admin) {
+                // Show:
+                // 1. Public spans
+                // 2. User's own spans
+                // 3. Shared spans where user has permission
+                $query->where(function ($query) use ($user) {
+                    $query->where('access_level', 'public')
+                        ->orWhere('owner_id', $user->id)
+                        ->orWhere(function ($query) use ($user) {
+                            $query->where('access_level', 'shared')
+                                ->whereExists(function ($subquery) use ($user) {
+                                    $subquery->select('id')
+                                        ->from('span_permissions')
+                                        ->whereColumn('span_permissions.span_id', 'spans.id')
+                                        ->where('span_permissions.user_id', $user->id);
+                                });
+                        });
+                });
+            }
+        }
+
+        // Get all spans and separate them into different lists
+        $allSpans = $query->get();
+        
+        // Spans that start on this exact date
+        $spansStartingOnDate = $allSpans->filter(function ($span) use ($year, $month, $day) {
+            return $span->start_year == $year && 
+                   $span->start_month == $month && 
+                   $span->start_day == $day;
+        });
+
+        // Spans that end on this exact date
+        $spansEndingOnDate = $allSpans->filter(function ($span) use ($year, $month, $day) {
+            return $span->end_year == $year && 
+                   $span->end_month == $month && 
+                   $span->end_day == $day;
+        });
+
+        // Spans that start in this month (but not on this day)
+        $spansStartingInMonth = $allSpans->filter(function ($span) use ($year, $month, $day) {
+            return $span->start_year == $year && 
+                   $span->start_month == $month && 
+                   $span->start_day != $day;
+        });
+
+        // Spans that end in this month (but not on this day)
+        $spansEndingInMonth = $allSpans->filter(function ($span) use ($year, $month, $day) {
+            return $span->end_year == $year && 
+                   $span->end_month == $month && 
+                   $span->end_day != $day;
+        });
+
+        // Spans that start in this year (but not in this month)
+        $spansStartingInYear = $allSpans->filter(function ($span) use ($year, $month) {
+            return $span->start_year == $year && 
+                   $span->start_month != $month;
+        });
+
+        // Spans that end in this year (but not in this month)
+        $spansEndingInYear = $allSpans->filter(function ($span) use ($year, $month) {
+            return $span->end_year == $year && 
+                   $span->end_month != $month;
+        });
+
+        // Separate connections from regular spans
+        $connectionSpansStartingOnDate = $spansStartingOnDate->filter(fn($span) => $span->type_id === 'connection');
+        $connectionSpansEndingOnDate = $spansEndingOnDate->filter(fn($span) => $span->type_id === 'connection');
+        $connectionSpansStartingInMonth = $spansStartingInMonth->filter(fn($span) => $span->type_id === 'connection');
+        $connectionSpansEndingInMonth = $spansEndingInMonth->filter(fn($span) => $span->type_id === 'connection');
+        $connectionSpansStartingInYear = $spansStartingInYear->filter(fn($span) => $span->type_id === 'connection');
+        $connectionSpansEndingInYear = $spansEndingInYear->filter(fn($span) => $span->type_id === 'connection');
+
+        // Get the actual Connection models
+        $connectionsStartingOnDate = Connection::whereIn('connection_span_id', $connectionSpansStartingOnDate->pluck('id'))->get();
+        $connectionsEndingOnDate = Connection::whereIn('connection_span_id', $connectionSpansEndingOnDate->pluck('id'))->get();
+        $connectionsStartingInMonth = Connection::whereIn('connection_span_id', $connectionSpansStartingInMonth->pluck('id'))->get();
+        $connectionsEndingInMonth = Connection::whereIn('connection_span_id', $connectionSpansEndingInMonth->pluck('id'))->get();
+        $connectionsStartingInYear = Connection::whereIn('connection_span_id', $connectionSpansStartingInYear->pluck('id'))->get();
+        $connectionsEndingInYear = Connection::whereIn('connection_span_id', $connectionSpansEndingInYear->pluck('id'))->get();
+
+        // Remove connections from regular span collections
+        $spansStartingOnDate = $spansStartingOnDate->filter(fn($span) => $span->type_id !== 'connection');
+        $spansEndingOnDate = $spansEndingOnDate->filter(fn($span) => $span->type_id !== 'connection');
+        $spansStartingInMonth = $spansStartingInMonth->filter(fn($span) => $span->type_id !== 'connection');
+        $spansEndingInMonth = $spansEndingInMonth->filter(fn($span) => $span->type_id !== 'connection');
+        $spansStartingInYear = $spansStartingInYear->filter(fn($span) => $span->type_id !== 'connection');
+        $spansEndingInYear = $spansEndingInYear->filter(fn($span) => $span->type_id !== 'connection');
+
+        // Remove any spans that appear in more specific sections from the year sections
+        $spansStartingInYear = $spansStartingInYear->filter(function ($span) use ($spansStartingOnDate, $spansStartingInMonth) {
+            return !$spansStartingOnDate->contains('id', $span->id) && 
+                   !$spansStartingInMonth->contains('id', $span->id);
+        });
+
+        $spansEndingInYear = $spansEndingInYear->filter(function ($span) use ($spansEndingOnDate, $spansEndingInMonth) {
+            return !$spansEndingOnDate->contains('id', $span->id) && 
+                   !$spansEndingInMonth->contains('id', $span->id);
+        });
+
+        // Do the same for connections
+        $connectionsStartingInYear = $connectionsStartingInYear->filter(function ($connection) use ($connectionsStartingOnDate, $connectionsStartingInMonth) {
+            return !$connectionsStartingOnDate->contains('id', $connection->id) && 
+                   !$connectionsStartingInMonth->contains('id', $connection->id);
+        });
+
+        $connectionsEndingInYear = $connectionsEndingInYear->filter(function ($connection) use ($connectionsEndingOnDate, $connectionsEndingInMonth) {
+            return !$connectionsEndingOnDate->contains('id', $connection->id) && 
+                   !$connectionsEndingInMonth->contains('id', $connection->id);
+        });
+
+        return view('spans.date-explore', compact(
+            'spansStartingOnDate',
+            'spansEndingOnDate',
+            'spansStartingInMonth',
+            'spansEndingInMonth',
+            'spansStartingInYear',
+            'spansEndingInYear',
+            'connectionsStartingOnDate',
+            'connectionsEndingOnDate',
+            'connectionsStartingInMonth',
+            'connectionsEndingInMonth',
+            'connectionsStartingInYear',
+            'connectionsEndingInYear',
+            'date'
+        ));
+    }
 }

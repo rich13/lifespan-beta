@@ -1,4 +1,4 @@
-@props(['span'])
+@props(['span', 'showDateIndicator' => false, 'date' => null])
 
 <div class="card mb-3 span-card">
     <div class="card-body">
@@ -11,7 +11,11 @@
                 </div>
                 
                 <div class="mb-2">
-                    <x-spans.partials.date-range :span="$span" />
+                    <x-spans.partials.date-range 
+                        :span="$span" 
+                        :show-date-indicator="$showDateIndicator"
+                        :date="$date"
+                    />
                 </div>
 
                 @if($span->description)

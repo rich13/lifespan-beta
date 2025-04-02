@@ -25,8 +25,8 @@ class EmailFirstAuthTest extends TestCase
             'email' => $user->email
         ]);
 
-        $response->assertViewIs('auth.password');
-        $response->assertViewHas('email', $user->email);
+        $response->assertRedirect(route('auth.password'));
+        $response->assertSessionHas('email', $user->email);
     }
 
     public function test_new_user_gets_registration_form()
@@ -35,8 +35,8 @@ class EmailFirstAuthTest extends TestCase
             'email' => 'new@example.com'
         ]);
 
-        $response->assertViewIs('auth.register');
-        $response->assertViewHas('email', 'new@example.com');
+        $response->assertRedirect(route('register'));
+        $response->assertSessionHas('email', 'new@example.com');
     }
 
     public function test_session_lifetime_is_one_year(): void
@@ -50,7 +50,7 @@ class EmailFirstAuthTest extends TestCase
         // Test that the session actually persists
         $user = User::factory()->create();
         
-        $response = $this->post('/auth/login', [
+        $response = $this->post('/auth/password', [
             'email' => $user->email,
             'password' => 'password'
         ]);
@@ -62,6 +62,52 @@ class EmailFirstAuthTest extends TestCase
         $expectedExpiry = time() + (525600 * 60);
         $this->assertEqualsWithDelta($expectedExpiry, $cookie->getExpiresTime(), 300, 
             'Session cookie should expire in approximately 1 year');
+    }
+
+    public function test_password_form_can_be_rendered()
+    {
+        $this->withSession(['email' => 'test@example.com']);
+        
+        $response = $this->get(route('auth.password'));
+        $response->assertStatus(200);
+        $response->assertViewIs('auth.password');
+        $response->assertViewHas('email');
+    }
+
+    public function test_password_form_requires_email_in_session()
+    {
+        $response = $this->get(route('auth.password'));
+        $response->assertRedirect(route('login'));
+    }
+
+    public function test_user_can_login_with_valid_credentials()
+    {
+        $user = User::factory()->create([
+            'password' => bcrypt('password')
+        ]);
+
+        $response = $this->post(route('auth.password'), [
+            'email' => $user->email,
+            'password' => 'password'
+        ]);
+
+        $response->assertRedirect('/');
+        $this->assertAuthenticated();
+    }
+
+    public function test_user_cannot_login_with_invalid_credentials()
+    {
+        $user = User::factory()->create([
+            'password' => bcrypt('password')
+        ]);
+
+        $response = $this->post(route('auth.password'), [
+            'email' => $user->email,
+            'password' => 'wrong-password'
+        ]);
+
+        $response->assertSessionHasErrors('password');
+        $this->assertGuest();
     }
 
     // More tests needed...

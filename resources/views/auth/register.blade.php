@@ -7,7 +7,7 @@
             <div class="card">
                 <div class="card-body">
                     <h2 class="card-title text-center mb-4">Create Account</h2>
-                    <form method="POST" action="{{ route('auth.register') }}">
+                    <form method="POST" action="{{ route('register.store') }}">
                         @csrf
                         <input type="hidden" name="email" value="{{ $email }}">
                         
@@ -81,6 +81,15 @@
                             <label for="password_confirmation" class="form-label">Confirm Password</label>
                             <input type="password" class="form-control" 
                                    id="password_confirmation" name="password_confirmation" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="invitation_code" class="form-label">Invitation Code</label>
+                            <input type="text" class="form-control @error('invitation_code') is-invalid @enderror" 
+                                   id="invitation_code" name="invitation_code" value="{{ old('invitation_code') }}" required>
+                            @error('invitation_code')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
                         </div>
 
                         <button type="submit" class="btn btn-primary w-100">Create Account</button>

@@ -19,7 +19,7 @@ class EmailFirstAuthController extends Controller
         return view('auth.email-first');
     }
 
-    public function handleEmail(Request $request)
+    public function processEmail(Request $request)
     {
         $request->validate([
             'email' => ['required', 'email'],
@@ -28,12 +28,25 @@ class EmailFirstAuthController extends Controller
         $user = User::where('email', $request->email)->first();
 
         if ($user) {
-            // User exists - show password login form
-            return view('auth.password', ['email' => $request->email]);
+            // User exists - redirect to password login form
+            return redirect()->route('auth.password')
+                ->with('email', $request->email);
         } else {
-            // New user - show registration form
-            return view('auth.register', ['email' => $request->email]);
+            // New user - redirect to registration form
+            return redirect()->route('register')
+                ->with('email', $request->email);
         }
+    }
+
+    public function showPasswordForm()
+    {
+        if (!session('email')) {
+            return redirect()->route('login');
+        }
+
+        return view('auth.password', [
+            'email' => session('email')
+        ]);
     }
 
     public function login(Request $request)
