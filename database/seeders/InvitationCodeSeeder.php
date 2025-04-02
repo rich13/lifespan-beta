@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use Illuminate\Database\Seeder;
 use App\Models\InvitationCode;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class InvitationCodeSeeder extends Seeder
 {
@@ -22,7 +23,10 @@ class InvitationCodeSeeder extends Seeder
         foreach ($codes as $code) {
             DB::table('invitation_codes')->updateOrInsert(
                 ['code' => $code],
-                ['used' => false]
+                [
+                    'used' => false,
+                    'id' => Str::uuid()
+                ]
             );
         }
     }

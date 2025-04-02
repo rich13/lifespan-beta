@@ -4,6 +4,9 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
+use App\Models\User;
+use App\Models\Span;
+use Illuminate\Support\Str;
 
 class TestDatabaseSeeder extends Seeder
 {
@@ -62,5 +65,40 @@ class TestDatabaseSeeder extends Seeder
                 ]));
             }
         }
+
+        // Create a test user
+        $user = User::factory()->create([
+            'email' => 'test-seeder@example.com',
+            'password' => bcrypt('password'),
+            'is_admin' => true
+        ]);
+
+        // Create a test personal span
+        $span = Span::create([
+            'name' => 'Test User',
+            'type_id' => 'person',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+            'start_year' => 1990,
+            'start_month' => 1,
+            'start_day' => 1,
+            'access_level' => 'private',
+            'state' => 'complete',
+            'is_personal_span' => true
+        ]);
+
+        // Link user to personal span
+        $user->personal_span_id = $span->id;
+        $user->save();
+
+        // Create user-span relationship
+        DB::table('user_spans')->insert([
+            'id' => Str::uuid(),
+            'user_id' => $user->id,
+            'span_id' => $span->id,
+            'access_level' => 'owner',
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
     }
 } 

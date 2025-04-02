@@ -5,6 +5,7 @@ namespace Tests;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\DB;
 
 abstract class TestCase extends BaseTestCase
 {
@@ -13,6 +14,10 @@ abstract class TestCase extends BaseTestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Ensure we're using the test database
+        $this->assertTrue(app()->environment('testing'), 'Tests must run in the testing environment');
+        $this->assertEquals('lifespan_beta_testing', DB::getDatabaseName(), 'Tests must use the test database');
 
         // Run specific migrations that add connection types
         $this->artisan('migrate', [
