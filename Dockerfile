@@ -11,7 +11,8 @@ RUN apt-get update && apt-get install -y \
     unzip \
     libpq-dev \
     libzip-dev \
-    postgresql-client
+    postgresql-client \
+    nginx
 
 # Clear cache
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -46,12 +47,34 @@ RUN if [ ! -f .env ]; then cp .env.example .env; fi && \
 # Optimize Laravel (without view cache)
 RUN php artisan config:cache
 
-# Copy and set up the startup script
-COPY docker/start.sh /usr/local/bin/start.sh
-RUN chmod +x /usr/local/bin/start.sh
+# Configure Nginx
+RUN echo 'server { \
+    listen 80; \
+    index index.php index.html; \
+    server_name localhost; \
+    error_log  /var/log/nginx/error.log; \
+    access_log /var/log/nginx/access.log; \
+    root /var/www/public; \
+    location / { \
+        try_files $uri $uri/ /index.php?$query_string; \
+    } \
+    location ~ \.php$ { \
+        try_files $uri =404; \
+        fastcgi_split_path_info ^(.+\.php)(/.+)$; \
+        fastcgi_pass unix:/var/run/php/php8.2-fpm.sock; \
+        fastcgi_index index.php; \
+        include fastcgi_params; \
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name; \
+        fastcgi_param PATH_INFO $fastcgi_path_info; \
+    } \
+}' > /etc/nginx/conf.d/default.conf
 
-# Expose port 9000
-EXPOSE 9000
+# Create start script
+RUN echo '#!/bin/bash\nphp-fpm -D\nnginx -g "daemon off;"' > /usr/local/bin/start.sh && \
+    chmod +x /usr/local/bin/start.sh
 
-# Start the application using our startup script
+# Expose port 80
+EXPOSE 80
+
+# Start the application
 CMD ["/usr/local/bin/start.sh"] 
