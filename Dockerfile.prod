@@ -93,7 +93,7 @@ RUN echo 'server { \
     error_page 404 /index.php; \
     location ~ \.php$ { \
         fastcgi_pass 127.0.0.1:9000; \
-        fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name; \
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name; \
         include fastcgi_params; \
         fastcgi_read_timeout 300; \
     } \
@@ -106,7 +106,9 @@ rm -f /etc/nginx/sites-enabled/default
 # Create log directories
 RUN mkdir -p /var/log/nginx && \
     touch /var/log/php-fpm.log && \
-    chown -R www-data:www-data /var/log/php-fpm.log
+    chown -R www-data:www-data /var/log/php-fpm.log && \
+    chown -R www-data:www-data /var/www && \
+    chmod -R 755 /var/www/public
 
 # Create start script
 RUN echo '#!/bin/bash\n\
