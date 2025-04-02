@@ -158,7 +158,7 @@ class UserSwitcherTest extends TestCase
         $response = $this->actingAs($admin)->get('/');
 
         // Assert that the user switcher UI is present
-        $response->assertSee('SWITCH TO USER');
+        $response->assertSee('Switch User');
         $response->assertSee('userSwitcherList');
     }
 
@@ -176,7 +176,7 @@ class UserSwitcherTest extends TestCase
         $response = $this->actingAs($user)->get('/');
 
         // Assert that the user switcher UI is not present
-        $response->assertDontSee('SWITCH TO USER');
+        $response->assertDontSee('Switch User');
         $response->assertDontSee('userSwitcherList');
     }
 }

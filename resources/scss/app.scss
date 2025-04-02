@@ -2,6 +2,7 @@
 @use "sass:color";
 @use "bootstrap/scss/bootstrap" as bootstrap;
 @use "bootstrap-icons/font/bootstrap-icons.css" as icons;
+@use "user-dropdown" as dropdown;
 
 // Custom colors
 $subject: #0d6efd;  // Bootstrap primary

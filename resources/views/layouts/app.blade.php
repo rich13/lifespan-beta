@@ -24,97 +24,14 @@ use Illuminate\Support\Facades\Route;
 
         <!-- Scripts and Styles -->
         @viteReactRefresh
-        @vite(['resources/scss/app.scss', 'resources/js/app.js'])
-        
+        @vite(['resources/scss/app.scss', 'resources/js/app.js', 'resources/js/routes.js'])
+
         <!-- Page-specific styles -->
         @stack('styles')
         
         <!-- Page-specific scripts -->
         @yield('scripts')
         @stack('scripts')
-        
-        <script>
-            // Define route URLs for JavaScript
-            window.routes = {
-                userSwitcher: {
-                    users: "{{ route('admin.user-switcher.users') }}",
-                    switch: "{{ route('admin.user-switcher.switch', ':userId') }}",
-                    switchBack: "{{ route('admin.user-switcher.switch-back') }}"
-                }
-            };
-        </script>
-        
-        <style>
-            /* Custom dropdown styles */
-            .hover-bg-light:hover {
-                background-color: #f8f9fa;
-            }
-            
-            #customUserDropdownMenu {
-                box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
-                border: 1px solid rgba(0, 0, 0, 0.1);
-            }
-            
-            #customUserDropdownMenu .fw-bold {
-                font-size: 1rem;
-            }
-            
-            #customUserDropdownMenu .small {
-                font-size: 0.8rem;
-            }
-            
-            .max-height-200 {
-                max-height: 200px;
-                overflow-y: auto;
-            }
-            
-            .user-switch-form {
-                margin-bottom: 2px;
-            }
-            
-            .user-switch-form button {
-                font-size: 0.9rem;
-                text-overflow: ellipsis;
-                overflow: hidden;
-                white-space: nowrap;
-            }
-            
-            /* Button group styling */
-            .btn-group > .btn:not(:first-child):not(:last-child) {
-                border-radius: 0;
-            }
-            
-            .btn-group > .btn:first-child {
-                border-top-right-radius: 0;
-                border-bottom-right-radius: 0;
-            }
-            
-            .btn-group > .btn:last-child {
-                border-top-left-radius: 0;
-                border-bottom-left-radius: 0;
-            }
-            
-            .btn-group > .btn:only-child {
-                border-radius: 0.25rem;
-            }
-
-            #customUserDropdownToggle .spans-micro-card {
-                color: inherit;
-            }
-
-            #customUserDropdownToggle .spans-micro-card:hover {
-                text-decoration: none;
-                color: inherit;
-            }
-
-            #customUserDropdownMenu .spans-micro-card {
-                color: inherit;
-            }
-
-            #customUserDropdownMenu .spans-micro-card:hover {
-                color: var(--bs-primary);
-            }
-        </style>
     </head>
     <body class="bg-light">
         <div class="container-fluid">

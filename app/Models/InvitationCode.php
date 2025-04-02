@@ -4,9 +4,10 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 
 /**
- * @property int $id
+ * @property string $id
  * @property string $code
  * @property bool $used
  * @property Carbon|null $used_at
@@ -24,9 +25,19 @@ class InvitationCode extends Model
     ];
 
     protected $casts = [
+        'id' => 'string',
         'used' => 'boolean',
         'used_at' => 'datetime',
     ];
+
+    public static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($model) {
+            $model->id = (string) Str::uuid();
+        });
+    }
 
     public function markAsUsed(string $email): void
     {

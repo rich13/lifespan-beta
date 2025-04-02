@@ -129,13 +129,13 @@ class SpanFilterSearchTest extends TestCase
         $this->actingAs($this->user);
 
         // Test basic search
-        $response = $this->get('/spans?search=Richard');
+        $response = $this->get('/spans?search=Test');
         $response->assertStatus(200);
         $response->assertSee('Richard Northover');
-        $response->assertSee('Acme Corporation'); // Contains "Richard" in description
+        $response->assertSee('Acme Corporation'); // Contains "Test" in description
 
         // Test case insensitive search
-        $response = $this->get('/spans?search=richard');
+        $response = $this->get('/spans?search=test');
         $response->assertStatus(200);
         $response->assertSee('Richard Northover');
         $response->assertSee('Acme Corporation');
@@ -145,7 +145,7 @@ class SpanFilterSearchTest extends TestCase
         $response->assertStatus(200);
         $response->assertSee('Richard Northover');
         // The current implementation requires ALL words to match, so Acme Corporation won't be in results
-        // because it only contains "Richard" but not "North"
+        // because it only contains "Test" but not "North"
         $response->assertDontSee('Acme Corporation');
         
         // Test search in reverse word order
@@ -168,7 +168,7 @@ class SpanFilterSearchTest extends TestCase
         $this->actingAs($this->user);
 
         // Test search + type filter
-        $response = $this->get('/spans?search=Richard&types=person');
+        $response = $this->get('/spans?search=Test&types=person');
         $response->assertStatus(200);
         $response->assertSee('Richard Northover');
         $response->assertDontSee('Acme Corporation');
@@ -194,7 +194,7 @@ class SpanFilterSearchTest extends TestCase
         $response->assertSee('Found 0 results');
         
         // Test search with special characters
-        $response = $this->get('/spans?search=Richard\'s');
+        $response = $this->get('/spans?search=Test\'s');
         $response->assertStatus(200);
         // This should not cause errors, even if no results
         $response->assertStatus(200);

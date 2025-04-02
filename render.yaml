@@ -2,37 +2,39 @@ services:
   - type: web
     name: lifespan-beta
     env: docker
-    dockerfilePath: ./Dockerfile
-    dockerContext: .
+    dockerfilePath: ./Dockerfile.prod
     envVars:
       - key: APP_ENV
         value: production
       - key: APP_DEBUG
         value: false
+      - key: APP_URL
+        fromService:
+          type: web
+          name: lifespan-beta
+          property: url
       - key: DB_CONNECTION
         value: pgsql
       - key: DB_HOST
         fromDatabase:
-          name: lifespan-db
+          name: lifespan_beta
           property: host
       - key: DB_PORT
         fromDatabase:
-          name: lifespan-db
+          name: lifespan_beta
           property: port
       - key: DB_DATABASE
         fromDatabase:
-          name: lifespan-db
+          name: lifespan_beta
           property: database
       - key: DB_USERNAME
         fromDatabase:
-          name: lifespan-db
-          property: user
+          name: lifespan_beta
+          property: username
       - key: DB_PASSWORD
         fromDatabase:
-          name: lifespan-db
+          name: lifespan_beta
           property: password
-      - key: APP_URL
-        value: https://lifespan-beta.onrender.com
     healthCheckPath: /
     autoDeploy: true
 

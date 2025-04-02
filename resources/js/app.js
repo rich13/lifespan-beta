@@ -2,6 +2,7 @@ import './bootstrap';
 import 'bootstrap';
 import './dropdown-debug';
 import './debug';
+import './routes';
 
 // Import page-specific scripts
 import './spans/show';

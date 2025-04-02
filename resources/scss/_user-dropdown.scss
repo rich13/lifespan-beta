@@ -1,0 +1,75 @@
+// User dropdown styles
+.hover-bg-light:hover {
+    background-color: #f8f9fa;
+}
+
+#customUserDropdownMenu {
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+
+    .fw-bold {
+        font-size: 1rem;
+    }
+
+    .small {
+        font-size: 0.8rem;
+    }
+
+    .spans-micro-card {
+        color: inherit;
+
+        &:hover {
+            color: var(--bs-primary);
+        }
+    }
+}
+
+.max-height-200 {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.user-switch-form {
+    margin-bottom: 2px;
+
+    button {
+        font-size: 0.9rem;
+        text-overflow: ellipsis;
+        overflow: hidden;
+        white-space: nowrap;
+    }
+}
+
+// Button group styling
+.btn-group {
+    > .btn {
+        &:not(:first-child):not(:last-child) {
+            border-radius: 0;
+        }
+
+        &:first-child {
+            border-top-right-radius: 0;
+            border-bottom-right-radius: 0;
+        }
+
+        &:last-child {
+            border-top-left-radius: 0;
+            border-bottom-left-radius: 0;
+        }
+
+        &:only-child {
+            border-radius: 0.25rem;
+        }
+    }
+}
+
+#customUserDropdownToggle {
+    .spans-micro-card {
+        color: inherit;
+
+        &:hover {
+            text-decoration: none;
+            color: inherit;
+        }
+    }
+} 

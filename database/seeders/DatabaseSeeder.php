@@ -17,6 +17,11 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        // Don't run this seeder in the test environment
+        if (app()->environment('testing')) {
+            return;
+        }
+
         $this->call([
             InvitationCodeSeeder::class,
         ]);
@@ -105,33 +110,36 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
-        // Create personal span
-        $span = Span::updateOrCreate(
-            ['owner_id' => $user->id, 'type_id' => 'person'],
-            [
-                'name' => 'Richard Northover',
-                'start_year' => 1976,
-                'start_month' => 2,
-                'start_day' => 13,
-                'updater_id' => $user->id,
-                'access_level' => 'private',
-                'state' => 'complete',
-            ]
-        );
+        // Only create personal span if not in testing environment
+        if (!app()->environment('testing')) {
+            // Create personal span
+            $span = Span::updateOrCreate(
+                ['owner_id' => $user->id, 'type_id' => 'person'],
+                [
+                    'name' => 'Richard Northover',
+                    'start_year' => 1976,
+                    'start_month' => 2,
+                    'start_day' => 13,
+                    'updater_id' => $user->id,
+                    'access_level' => 'private',
+                    'state' => 'complete',
+                ]
+            );
 
-        // Link user to personal span
-        $user->personal_span_id = $span->id;
-        $user->save();
+            // Link user to personal span
+            $user->personal_span_id = $span->id;
+            $user->save();
 
-        // Create user-span relationship
-        DB::table('user_spans')->updateOrInsert(
-            ['user_id' => $user->id, 'span_id' => $span->id],
-            [
-                'id' => Str::uuid(),
-                'access_level' => 'owner',
-                'updated_at' => now(),
-            ]
-        );
+            // Create user-span relationship
+            DB::table('user_spans')->updateOrInsert(
+                ['user_id' => $user->id, 'span_id' => $span->id],
+                [
+                    'id' => Str::uuid(),
+                    'access_level' => 'owner',
+                    'updated_at' => now(),
+                ]
+            );
+        }
 
         // Create test user
         $testUser = User::updateOrCreate(

@@ -63,7 +63,7 @@ class SpanFactory extends Factory
         return [
             'id' => Str::uuid(),
             'name' => fake()->name(),
-            'type_id' => fake()->randomElement(['person', 'organisation', 'event', 'place', 'connection']),
+            'type_id' => fake()->randomElement(['person', 'organisation', 'event', 'place']),
             'start_year' => $startYear,
             'start_month' => $startMonth,
             'start_day' => $startDay,

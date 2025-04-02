@@ -32,7 +32,7 @@ services:
     environment:
       POSTGRES_DB: ${DB_DATABASE}
       POSTGRES_USER: ${DB_USERNAME}
-      POSTGRES_PASSWORD: lifespan_password
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - dbdata:/var/lib/postgresql/data
     networks:
@@ -53,7 +53,7 @@ services:
       - DB_PORT=5432
       - DB_DATABASE=lifespan_beta_testing
       - DB_USERNAME=lifespan_user
-      - DB_PASSWORD=lifespan_password
+      - DB_PASSWORD=${DB_PASSWORD}
     networks:
       - lifespan-network
     depends_on:
