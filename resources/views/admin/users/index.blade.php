@@ -20,7 +20,18 @@
         </div>
     @endif
 
-    <div class="card">
+    @if (session('new_codes'))
+        <div class="alert alert-info">
+            <h5>New Invitation Codes Generated:</h5>
+            <div class="mt-2">
+                @foreach (session('new_codes') as $code)
+                    <code class="me-2">{{ $code }}</code>
+                @endforeach
+            </div>
+        </div>
+    @endif
+
+    <div class="card mb-4">
         <div class="card-body">
             <!-- Search and Filters -->
             <form action="{{ route('admin.users.index') }}" method="GET" class="row g-3 mb-4">
@@ -123,6 +134,72 @@
                     of {{ $users->total() }} users
                 </div>
                 {{ $users->links() }}
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">Invitation Code Management</h5>
+            <div class="row align-items-center mb-4">
+                <div class="col-md-6">
+                    <p class="mb-0">
+                        <strong>Available Codes:</strong> {{ $unusedCodes }}<br>
+                        <strong>Used Codes:</strong> {{ $usedCodes }}
+                    </p>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <form action="{{ route('admin.users.generate-invitation-codes') }}" method="POST" class="d-inline">
+                        @csrf
+                        <button type="submit" class="btn btn-primary">
+                            Generate 10 New Codes
+                        </button>
+                    </form>
+                    <form action="{{ route('admin.users.delete-all-invitation-codes') }}" method="POST" class="d-inline ms-2" onsubmit="return confirm('Are you sure you want to delete all invitation codes? This action cannot be undone.');">
+                        @csrf
+                        @method('DELETE')
+                        <button type="submit" class="btn btn-danger">
+                            Delete All Codes
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Code</th>
+                            <th>Status</th>
+                            <th>Used By</th>
+                            <th>Used At</th>
+                            <th>Created</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse($invitationCodes as $code)
+                            <tr>
+                                <td><code>{{ $code->code }}</code></td>
+                                <td>
+                                    @if($code->used)
+                                        <span class="badge bg-secondary">Used</span>
+                                    @else
+                                        <span class="badge bg-success">Available</span>
+                                    @endif
+                                </td>
+                                <td>{{ $code->used_by ?? '-' }}</td>
+                                <td>{{ $code->used_at ? $code->used_at->format('Y-m-d H:i') : '-' }}</td>
+                                <td>{{ $code->created_at->format('Y-m-d H:i') }}</td>
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="5" class="text-center text-muted">
+                                    No invitation codes found
+                                </td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>

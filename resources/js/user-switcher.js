@@ -11,6 +11,7 @@ $(document).ready(function() {
     
     console.log('Load button found:', $loadUserSwitcherBtn.length > 0);
     console.log('List element found:', $userSwitcherList.length > 0);
+    console.log('Routes available:', window.routes);
     
     if ($loadUserSwitcherBtn.length && $userSwitcherList.length) {
         // Position the user list correctly
@@ -32,6 +33,12 @@ $(document).ready(function() {
                 const buttonPos = $(this).offset();
                 const buttonHeight = $(this).outerHeight();
                 
+                console.log('Dropdown positions:', {
+                    dropdown: dropdownPos,
+                    button: buttonPos,
+                    buttonHeight: buttonHeight
+                });
+                
                 $userSwitcherList.css({
                     'position': 'absolute',
                     'top': buttonPos.top + buttonHeight + 'px',
@@ -48,18 +55,21 @@ $(document).ready(function() {
         // Prevent dropdown from closing when clicking inside the user list
         $userSwitcherList.on('click', function(e) {
             e.stopPropagation();
+            console.log('User list clicked, preventing dropdown close');
         });
         
         // Close user list when clicking outside
         $(document).on('click', function(e) {
             if (!$(e.target).closest('#userSwitcherList').length && 
                 !$(e.target).closest('#loadUserSwitcherBtn').length) {
+                console.log('Click outside user list, closing');
                 $userSwitcherList.slideUp(200);
             }
         });
         
         // Close user list when dropdown is hidden
         $userDropdown.on('hide.bs.dropdown', function() {
+            console.log('Dropdown hidden, closing user list');
             $userSwitcherList.slideUp(200);
         });
     }
@@ -76,14 +86,15 @@ $(document).ready(function() {
             return;
         }
         
-        console.log('Fetching users from server');
+        console.log('Fetching users from server:', window.routes.userSwitcher.users);
         
         $.ajax({
-            url: '/admin/user-switcher/users',
+            url: window.routes.userSwitcher.users,
             type: 'GET',
             dataType: 'json',
             success: function(users) {
                 console.log('Users loaded successfully:', users.length);
+                console.log('Users data:', users);
                 
                 // Clear loading indicator
                 $userSwitcherList.empty();
@@ -108,19 +119,27 @@ $(document).ready(function() {
                 
                 // Add users
                 $.each(users, function(index, user) {
+                    console.log('Processing user:', user);
+                    
                     // Skip the current user
                     if (user.is_current && !user.is_switch_back) {
+                        console.log('Skipping current user:', user.email);
                         return true; // Skip this iteration (continue)
                     }
                     
+                    const switchUrl = window.routes.userSwitcher.switch.replace(':userId', user.id);
+                    console.log('Creating switch form for user:', user.email, 'with URL:', switchUrl);
+                    
                     const $form = $('<form>', {
                         method: 'POST',
-                        action: '/admin/user-switcher/switch/' + user.id,
+                        action: switchUrl,
                         class: 'user-switch-form'
                     });
                     
                     // Add CSRF token
                     const csrfToken = $('meta[name="csrf-token"]').attr('content');
+                    console.log('CSRF token:', csrfToken ? 'Found' : 'Not found');
+                    
                     $form.append(
                         $('<input>', {
                             type: 'hidden',
@@ -169,13 +188,13 @@ $(document).ready(function() {
                 // Add search functionality
                 $('#userSearchInput').on('keyup', function() {
                     const searchTerm = $(this).val().toLowerCase();
+                    console.log('Searching for:', searchTerm);
+                    
                     $('.user-switch-form button').each(function() {
                         const userEmail = $(this).data('email');
-                        if (userEmail && userEmail.includes(searchTerm)) {
-                            $(this).parent().show();
-                        } else {
-                            $(this).parent().hide();
-                        }
+                        const matches = userEmail && userEmail.includes(searchTerm);
+                        console.log('User email:', userEmail, 'matches:', matches);
+                        $(this).parent().toggle(matches);
                     });
                 });
                 

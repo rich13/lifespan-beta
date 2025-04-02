@@ -116,9 +116,13 @@
                     <button type="submit" class="btn btn-primary">Save Changes</button>
                     
                     @unless($user->is_admin)
-                        <button type="button" class="btn btn-danger" disabled>
-                            Delete User
-                        </button>
+                        <form action="{{ route('admin.users.destroy', $user) }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this user? This action cannot be undone.');">
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit" class="btn btn-danger">
+                                Delete User
+                            </button>
+                        </form>
                     @endunless
                 </div>
             </form>
