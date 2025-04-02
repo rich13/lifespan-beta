@@ -16,7 +16,7 @@ services:
         fromService:
           type: web
           name: lifespan-beta
-          property: url
+          property: host
       - key: LOG_CHANNEL
         value: stack
       - key: DB_CONNECTION
