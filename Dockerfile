@@ -10,10 +10,15 @@ RUN apt-get update && apt-get install -y \
     zip \
     unzip \
     libpq-dev \
-    libzip-dev
+    libzip-dev \
+    postgresql-client
 
 # Clear cache
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Install Node.js
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs
 
 # Install PHP extensions
 RUN docker-php-ext-install pdo_pgsql mbstring exif pcntl bcmath gd zip
@@ -28,7 +33,8 @@ WORKDIR /var/www
 COPY . .
 
 # Install dependencies (including dev dependencies for build)
-RUN composer install --no-interaction --optimize-autoloader
+RUN composer install --no-interaction --optimize-autoloader && \
+    npm install
 
 # Set permissions
 RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache
@@ -38,11 +44,7 @@ RUN if [ ! -f .env ]; then cp .env.example .env; fi && \
     php artisan key:generate
 
 # Optimize Laravel (without view cache)
-RUN php artisan config:cache && \
-    php artisan route:cache
-
-# Remove dev dependencies and optimize for production
-RUN composer install --no-dev --optimize-autoloader
+RUN php artisan config:cache
 
 # Copy and set up the startup script
 COPY docker/start.sh /usr/local/bin/start.sh

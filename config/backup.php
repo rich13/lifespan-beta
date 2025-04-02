@@ -152,6 +152,11 @@ return [
             'disks' => [
                 'local',
             ],
+
+            /*
+             * The path where the backups will be stored.
+             */
+            'path' => 'Lifespan',
         ],
 
         /*

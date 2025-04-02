@@ -15,6 +15,10 @@ php artisan migrate --force
 echo "Running seeders..."
 php artisan db:seed --force
 
+# Start Vite in the background
+echo "Starting Vite..."
+npm run dev &
+
 # Start PHP-FPM
 echo "Starting PHP-FPM..."
 php-fpm 
