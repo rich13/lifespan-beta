@@ -1,0 +1,43 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: lifespan-render-test
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    environment:
+      - APP_ENV=production
+      - APP_DEBUG=false
+      - DB_CONNECTION=pgsql
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_DATABASE=lifespan
+      - DB_USERNAME=lifespan
+      - DB_PASSWORD=lifespan_password
+    networks:
+      - lifespan-network
+    depends_on:
+      - db
+
+  db:
+    image: postgres:15
+    container_name: lifespan-render-test-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: lifespan
+      POSTGRES_USER: lifespan
+      POSTGRES_PASSWORD: lifespan_password
+    volumes:
+      - render-test-dbdata:/var/lib/postgresql/data
+    networks:
+      - lifespan-network
+
+networks:
+  lifespan-network:
+    driver: bridge
+
+volumes:
+  render-test-dbdata:
+    driver: local 

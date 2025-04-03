@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 /*
 |--------------------------------------------------------------------------
@@ -240,6 +241,21 @@ Route::middleware('web')->group(function () {
             return back()->with('message', 'Verification link sent!');
         })->middleware('throttle:6,1')->name('verification.send');
     });
+
+    Route::get('/health', function () {
+        try {
+            DB::connection()->getPdo();
+            return response()->json([
+                'status' => 'ok',
+                'database' => 'connected'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'database' => 'disconnected'
+            ], 500);
+        }
+    })->name('health');
 });
 
 // Remove the test-log route if not needed for production
