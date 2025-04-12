@@ -2,7 +2,7 @@ services:
   - type: web
     name: lifespan-beta
     env: docker
-    dockerfilePath: Dockerfile.prod
+    dockerfilePath: render.Dockerfile
     envVars:
       - key: APP_NAME
         value: Lifespan
