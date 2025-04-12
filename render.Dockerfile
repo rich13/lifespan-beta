@@ -53,34 +53,42 @@ COPY . /var/www
 
 # Create required directories
 RUN mkdir -p /var/www/storage/logs \
-    /var/www/storage/framework/{sessions,views,cache} \
+    /var/www/storage/framework/{sessions,views,cache,testing,cache/data} \
     /var/www/storage/app/public \
-    /var/www/bootstrap/cache
+    /var/www/bootstrap/cache \
+    /var/www/resources/views
 
 # Install dependencies
 RUN composer install --no-interaction --no-dev --optimize-autoloader
 
-# Set permissions
-RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache
+# Set permissions and make directories executable
+RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache /var/www/resources && \
+    chmod -R 775 /var/www/storage /var/www/bootstrap/cache && \
+    chmod -R 775 /var/www/resources/views
 
-# Copy entrypoint script
+# Copy and verify configuration files
 COPY docker/prod/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
-
-# Set entrypoint
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-
-# Start PHP-FPM
-CMD ["php-fpm"]
+RUN chmod +x /usr/local/bin/entrypoint.sh && \
+    test -f /usr/local/bin/entrypoint.sh || exit 1
 
 # Configure PHP
 COPY docker/prod/php.ini /usr/local/etc/php/conf.d/app.ini
 COPY docker/prod/opcache.ini /usr/local/etc/php/conf.d/opcache.ini
 COPY docker/prod/php-fpm.conf /usr/local/etc/php-fpm.d/www.conf
 
-# Copy configuration files
+# Copy and verify other configuration files
 COPY docker/prod/nginx.conf /etc/nginx/nginx.conf
 COPY docker/prod/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+RUN chmod 644 /etc/nginx/nginx.conf /etc/supervisor/conf.d/supervisord.conf && \
+    test -f /etc/nginx/nginx.conf || exit 1 && \
+    test -f /etc/supervisor/conf.d/supervisord.conf || exit 1
 
-# Copy built frontend assets
-COPY --from=node-builder /app/public/build public/build/ 
+# Copy built frontend assets and verify
+COPY --from=node-builder /app/public/build public/build/
+RUN test -d public/build || exit 1
+
+# Set entrypoint
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+
+# Start PHP-FPM
+CMD ["php-fpm"] 
