@@ -40,7 +40,8 @@ php artisan migrate --force || echo "Migration failed, but continuing startup...
 
 echo "Optimizing application..."
 php artisan optimize
-php artisan view:cache
+# Skip view:cache as it's causing issues
+# php artisan view:cache
 php artisan config:cache
 php artisan route:cache
 

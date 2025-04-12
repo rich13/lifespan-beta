@@ -48,7 +48,7 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 # Set working directory
 WORKDIR /var/www
 
-# Copy application files
+# Copy application files first
 COPY . /var/www
 
 # Create required directories
