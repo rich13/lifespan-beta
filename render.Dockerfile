@@ -55,8 +55,7 @@ COPY . /var/www
 RUN mkdir -p /var/www/storage/logs \
     /var/www/storage/framework/{sessions,views,cache,testing,cache/data} \
     /var/www/storage/app/public \
-    /var/www/bootstrap/cache \
-    /var/www/resources/views
+    /var/www/bootstrap/cache
 
 # Install dependencies
 RUN composer install --no-interaction --no-dev --optimize-autoloader
