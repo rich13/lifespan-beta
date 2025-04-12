@@ -28,17 +28,7 @@ export default defineConfig({
             strict: false
         }
     },
-    optimizeDeps: {
-        exclude: ['@inertiajs/inertia-vue3']
-    },
     build: {
-        chunkSizeWarningLimit: 1000,
-        rollupOptions: {
-            output: {
-                manualChunks: {
-                    vendor: ['vue', 'vue-router', '@inertiajs/inertia-vue3']
-                }
-            }
-        }
+        chunkSizeWarningLimit: 1000
     }
 });

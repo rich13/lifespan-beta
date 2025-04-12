@@ -31,24 +31,25 @@ use Illuminate\Support\Facades\DB;
 |
 */
 
-// Health check endpoint - must be outside web middleware group
+// Health check endpoint for Render
 Route::get('/health', function () {
     try {
+        // Check database connection
         DB::connection()->getPdo();
+        
         return response()->json([
-            'status' => 'ok',
-            'database' => 'connected'
+            'status' => 'healthy',
+            'database' => 'connected',
+            'timestamp' => now()->toIso8601String()
         ]);
     } catch (\Exception $e) {
-        // During deployment, it's okay for the database to not be connected yet
-        // We'll return a 200 status with a "deploying" status
         return response()->json([
-            'status' => 'deploying',
-            'database' => 'connecting',
-            'message' => 'Application is deploying, database connection pending'
-        ]);
+            'status' => 'unhealthy',
+            'error' => $e->getMessage(),
+            'timestamp' => now()->toIso8601String()
+        ], 500);
     }
-})->name('health');
+});
 
 Route::middleware('web')->group(function () {
     // Public routes
