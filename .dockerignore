@@ -1,23 +1,48 @@
+# Version control
+.git
+.gitignore
+.gitattributes
+
+# Development environment
+.env
+.env.*
+!.env.example
+docker-compose.yml
+docker-compose.*.yml
+docker/dev
+tests
+phpunit.xml
+README.md
+docs
+
+# Dependencies
+/vendor
 /node_modules
+package-lock.json
+yarn.lock
+
+# Build artifacts
+/public/build
 /public/hot
 /public/storage
 /storage/*.key
-/vendor
-.env
-.env.backup
-.env.production
-.phpunit.result.cache
-docker-compose.override.yml
-Homestead.json
-Homestead.yaml
+/storage/logs/*
+/storage/framework/cache/*
+/storage/framework/sessions/*
+/storage/framework/views/*
+
+# IDE and editor files
+.idea
+.vscode
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Additional files
 npm-debug.log
 yarn-error.log
-/.idea
-/.vscode
-/.git
-/.github
 /.cursor
 /backups
-/docs
 /thinking
 /uncommitted_tmp 

@@ -26,12 +26,10 @@ services:
     environment:
       - NODE_OPTIONS=--max-old-space-size=4096
       - VITE_PORT=5173
-    command: >
-      bash -c "
-        php-fpm -D &&
-        nginx -g 'daemon off;' &
-        npm run dev
-      "
+    command: ["/var/www/docker/start.sh"]
+    depends_on:
+      db:
+        condition: service_healthy
 
   nginx:
     image: nginx:alpine
@@ -46,7 +44,8 @@ services:
       - lifespan-network
 
   db:
-    image: postgis/postgis:15-3.3-alpine
+    image: postgres:15-alpine
+    platform: linux/arm64/v8
     container_name: lifespan-db
     restart: unless-stopped
     environment:
@@ -55,8 +54,14 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - dbdata:/var/lib/postgresql/data
+      - ./docker/postgres/init-postgis.sh:/docker-entrypoint-initdb.d/init-postgis.sh
     networks:
       - lifespan-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_DATABASE}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   test:
     build:
@@ -73,7 +78,9 @@ services:
     networks:
       - lifespan-network
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+    restart: unless-stopped
 
 networks:
   lifespan-network:
