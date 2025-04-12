@@ -18,6 +18,7 @@ class RouteHealthTest extends TestCase
         'auth/email',
         '_ignition/health-check',
         'sanctum/csrf-cookie',
+        'health',
     ];
 
     /**
