@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
 use App\Models\Span;
 use App\Models\User;
+use Illuminate\Support\Str;
 
 class ProfileController extends Controller
 {
@@ -64,7 +65,17 @@ class ProfileController extends Controller
         ]);
 
         $user = $request->user();
-        $systemUser = User::where('email', 'system@example.com')->first();
+        $systemUser = User::where('email', 'system@lifespan.app')->first();
+
+        // Create system user if it doesn't exist
+        if (!$systemUser) {
+            $systemUser = User::create([
+                'email' => 'system@lifespan.app',
+                'password' => Hash::make(Str::random(32)),
+                'is_admin' => true,
+                'email_verified_at' => now(),
+            ]);
+        }
 
         // Get the personal span ID before deleting
         $personalSpanId = $user->personal_span_id;

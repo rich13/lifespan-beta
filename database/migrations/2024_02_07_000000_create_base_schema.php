@@ -708,47 +708,6 @@ return new class extends Migration
                 'updated_at' => now(),
             ]
         ]);
-
-        // Create system user
-        $systemUserId = DB::table('users')->insertGetId([
-            'id' => Str::uuid(),
-            'email' => 'system@example.com',
-            'password' => bcrypt(Str::random(32)),
-            'email_verified_at' => now(),
-            'is_admin' => false,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-
-        // Create system user's personal span
-        $systemSpanId = Str::uuid();
-        DB::table('spans')->insert([
-            'id' => $systemSpanId,
-            'name' => 'System',
-            'slug' => 'system',
-            'type_id' => 'person',
-            'is_personal_span' => true,
-            'start_year' => 2024,
-            'owner_id' => $systemUserId,
-            'updater_id' => $systemUserId,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-
-        // Link system user to personal span
-        DB::table('users')->where('id', $systemUserId)->update([
-            'personal_span_id' => $systemSpanId
-        ]);
-
-        // Create user-span connection for system user
-        DB::table('user_spans')->insert([
-            'id' => Str::uuid(),
-            'user_id' => $systemUserId,
-            'span_id' => $systemSpanId,
-            'access_level' => 'owner',
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
     }
 
     /**

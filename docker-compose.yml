@@ -12,6 +12,26 @@ services:
       - "5173:5173"
     networks:
       - lifespan-network
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5173"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    environment:
+      - NODE_OPTIONS=--max-old-space-size=4096
+      - VITE_PORT=5173
+    command: >
+      bash -c "
+        php-fpm -D &&
+        nginx -g 'daemon off;' &
+        npm run dev
+      "
 
   nginx:
     image: nginx:alpine
@@ -46,14 +66,10 @@ services:
     working_dir: /var/www
     volumes:
       - ./:/var/www
-    environment:
-      - APP_ENV=testing
-      - DB_CONNECTION=pgsql
-      - DB_HOST=db
-      - DB_PORT=5432
-      - DB_DATABASE=lifespan_beta_testing
-      - DB_USERNAME=lifespan_user
-      - DB_PASSWORD=${DB_PASSWORD}
+    env_file:
+      - .env.testing
+    entrypoint: ["/var/www/docker/test-entrypoint.sh"]
+    command: ["tail", "-f", "/dev/null"]
     networks:
       - lifespan-network
     depends_on:

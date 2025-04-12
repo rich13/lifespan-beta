@@ -12,14 +12,17 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     libzip-dev \
     postgresql-client \
-    nginx
+    nginx \
+    procps \
+    lsof
 
 # Clear cache
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install Node.js
+# Install Node.js with specific version for stability
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-    apt-get install -y nodejs
+    apt-get install -y nodejs && \
+    npm install -g npm@latest
 
 # Install PHP extensions
 RUN docker-php-ext-install pdo_pgsql mbstring exif pcntl bcmath gd zip
@@ -70,11 +73,13 @@ RUN echo 'server { \
 }' > /etc/nginx/conf.d/default.conf
 
 # Create start script
-RUN echo '#!/bin/bash\nphp-fpm -D\nnginx -g "daemon off;"' > /usr/local/bin/start.sh && \
+RUN echo '#!/bin/bash\n\
+php-fpm -D\n\
+nginx -g "daemon off;"' > /usr/local/bin/start.sh && \
     chmod +x /usr/local/bin/start.sh
 
-# Expose port 80
-EXPOSE 80
+# Expose ports
+EXPOSE 80 5173
 
 # Start the application
 CMD ["/usr/local/bin/start.sh"] 

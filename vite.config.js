@@ -16,10 +16,29 @@ export default defineConfig({
         host: '0.0.0.0',
         port: 5173,
         hmr: {
-            host: 'localhost'
+            host: 'localhost',
+            protocol: 'ws',
+            port: 5173
         },
         watch: {
             usePolling: true
+        },
+        strictPort: true,
+        fs: {
+            strict: false
         }
     },
+    optimizeDeps: {
+        exclude: ['@inertiajs/inertia-vue3']
+    },
+    build: {
+        chunkSizeWarningLimit: 1000,
+        rollupOptions: {
+            output: {
+                manualChunks: {
+                    vendor: ['vue', 'vue-router', '@inertiajs/inertia-vue3']
+                }
+            }
+        }
+    }
 });
