@@ -48,6 +48,10 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 # Set working directory
 WORKDIR /var/www
 
+# Create required run directories
+RUN mkdir -p /run/php /run/nginx /var/log/supervisor && \
+    chown www-data:www-data /run/php /run/nginx /var/log/supervisor
+
 # Copy application files first
 COPY . /var/www
 
@@ -89,5 +93,5 @@ RUN test -d public/build || exit 1
 # Set entrypoint
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
-# Start PHP-FPM
-CMD ["php-fpm"] 
+# Start supervisor
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"] 

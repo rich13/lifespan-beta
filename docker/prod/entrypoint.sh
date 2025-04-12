@@ -45,5 +45,5 @@ php artisan optimize
 php artisan config:cache
 php artisan route:cache
 
-echo "Starting PHP-FPM..."
-php-fpm 
+echo "Starting supervisor..."
+exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf 
