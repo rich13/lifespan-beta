@@ -49,8 +49,9 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 WORKDIR /var/www
 
 # Create required run directories
-RUN mkdir -p /run/php /run/nginx /var/log/supervisor && \
-    chown www-data:www-data /run/php /run/nginx /var/log/supervisor
+RUN mkdir -p /run/php /run/nginx /var/log/supervisor /var/log/nginx /var/lib/nginx/body /var/log/php-fpm && \
+    chown -R www-data:www-data /run/php /run/nginx /var/log/supervisor /var/log/nginx /var/lib/nginx /var/log/php-fpm && \
+    chmod -R 755 /run/php /run/nginx /var/log/supervisor /var/log/nginx /var/lib/nginx /var/log/php-fpm
 
 # Copy application files first
 COPY . /var/www
