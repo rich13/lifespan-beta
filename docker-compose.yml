@@ -15,16 +15,17 @@ services:
     deploy:
       resources:
         limits:
-          memory: 4G
-        reservations:
           memory: 2G
+        reservations:
+          memory: 1G
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5173"]
-      interval: 10s
-      timeout: 5s
+      test: ["CMD-SHELL", "ps aux | grep php-fpm | grep -v grep"]
+      interval: 30s
+      timeout: 10s
       retries: 3
+      start_period: 40s
     environment:
-      - NODE_OPTIONS=--max-old-space-size=4096
+      - NODE_OPTIONS=--max-old-space-size=2048
       - VITE_PORT=5173
     command: ["/var/www/docker/start.sh"]
     depends_on:
@@ -42,6 +43,9 @@ services:
       - ./docker/nginx/conf.d:/etc/nginx/conf.d
     networks:
       - lifespan-network
+    depends_on:
+      app:
+        condition: service_healthy
 
   db:
     image: postgres:15-alpine
@@ -59,9 +63,10 @@ services:
       - lifespan-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_DATABASE}"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
 
   test:
     build:
