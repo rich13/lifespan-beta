@@ -62,10 +62,10 @@ check_required_vars
 
 # Create a new .env file from template
 log "Creating .env file..."
-if [ -f ".env.render" ]; then
-    cp .env.render .env
+if [ -f ".env.railway" ]; then
+    cp .env.railway .env
 else
-    log "WARNING: .env.render not found, using .env.example"
+    log "WARNING: .env.railway not found, using .env.example"
     cp .env.example .env
 fi
 
@@ -115,10 +115,6 @@ log "Optimizing application..."
 php artisan optimize
 php artisan config:cache
 php artisan route:cache
-
-# Configure nginx port
-log "Configuring nginx port..."
-sed -i "s/\$PORT/${PORT:-10000}/g" /etc/nginx/nginx.conf
 
 # Start supervisor
 log "Starting supervisor..."
