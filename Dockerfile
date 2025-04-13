@@ -92,6 +92,11 @@ error_log = /proc/self/fd/2\n\
 log_level = notice\n\
 \n\
 [www]\n\
+user = www-data\n\
+group = www-data\n\
+listen = /var/run/php/php8.2-fpm.sock\n\
+listen.owner = www-data\n\
+listen.group = www-data\n\
 access.log = /proc/self/fd/2\n\
 clear_env = no\n\
 catch_workers_output = yes\n\
