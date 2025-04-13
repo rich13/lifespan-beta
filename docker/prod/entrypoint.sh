@@ -76,6 +76,11 @@ wait_for_db() {
     done
 
     log "ERROR: Database failed to become ready in time"
+    log "INFO: Checking database configuration..."
+    if [ -f ".env" ]; then
+        log "Current database configuration:"
+        grep -E "DB_(HOST|PORT|DATABASE|USERNAME|PASSWORD)" .env
+    fi
     return 1
 }
 
@@ -89,8 +94,12 @@ check_required_vars
 log "Creating .env file..."
 if [ -f ".env.railway" ]; then
     cp .env.railway .env
+    log "Using .env.railway configuration"
+elif [ -f ".env.render" ]; then
+    cp .env.render .env
+    log "Using .env.render configuration"
 else
-    log "WARNING: .env.railway not found, using .env.example"
+    log "WARNING: No environment template found, using .env.example"
     cp .env.example .env
 fi
 
@@ -130,10 +139,15 @@ chmod -R 775 storage
 
 # Create storage link
 log "Creating storage link..."
-php artisan storage:link
+php artisan storage:link || true
 
 # Wait for database
-wait_for_db
+if ! wait_for_db; then
+    log "ERROR: Could not connect to database. Please check your database configuration."
+    log "INFO: You can set the following environment variables in Railway:"
+    log "      PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD"
+    exit 1
+fi
 
 # Run migrations
 log "Running database migrations..."
