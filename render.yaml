@@ -59,4 +59,4 @@ databases:
     databaseName: lifespan
     user: lifespan
     plan: free
-    postgresMajorVersion: 15 
+    postgresMajorVersion: 16 
