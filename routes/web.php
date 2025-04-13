@@ -34,19 +34,75 @@ use Illuminate\Support\Facades\DB;
 // Health check endpoint for Render
 Route::get('/health', function () {
     try {
+        Log::info('Health check started', [
+            'environment' => app()->environment(),
+            'app_url' => config('app.url'),
+            'app_env' => config('app.env'),
+            'app_debug' => config('app.debug'),
+            'database_default' => config('database.default'),
+            'database_connections' => array_keys(config('database.connections')),
+            'render_env' => [
+                'service_id' => getenv('RENDER_SERVICE_ID'),
+                'service_name' => getenv('RENDER_SERVICE_NAME'),
+                'service_type' => getenv('RENDER_SERVICE_TYPE'),
+                'instance_id' => getenv('RENDER_INSTANCE_ID'),
+                'database_url' => getenv('DATABASE_URL') ? 'set' : 'not set',
+                'db_host' => getenv('DB_HOST'),
+                'db_port' => getenv('DB_PORT'),
+                'db_database' => getenv('DB_DATABASE'),
+                'db_username' => getenv('DB_USERNAME') ? 'set' : 'not set',
+                'db_password' => getenv('DB_PASSWORD') ? 'set' : 'not set'
+            ]
+        ]);
+        
         // Check database connection
-        DB::connection()->getPdo();
+        $pdo = DB::connection()->getPdo();
+        Log::info('Database connection successful', [
+            'database' => config('database.connections.pgsql.database'),
+            'host' => config('database.connections.pgsql.host'),
+            'port' => config('database.connections.pgsql.port'),
+            'driver' => config('database.connections.pgsql.driver'),
+            'connection_name' => DB::connection()->getName(),
+            'pdo_driver' => $pdo->getAttribute(\PDO::ATTR_DRIVER_NAME),
+            'pdo_version' => $pdo->getAttribute(\PDO::ATTR_SERVER_VERSION)
+        ]);
         
         return response()->json([
             'status' => 'healthy',
             'database' => 'connected',
-            'timestamp' => now()->toIso8601String()
+            'timestamp' => now()->toIso8601String(),
+            'environment' => app()->environment()
         ]);
     } catch (\Exception $e) {
+        Log::error('Health check failed', [
+            'error' => $e->getMessage(),
+            'error_class' => get_class($e),
+            'trace' => $e->getTraceAsString(),
+            'database_config' => [
+                'connection' => config('database.default'),
+                'host' => config('database.connections.pgsql.host'),
+                'port' => config('database.connections.pgsql.port'),
+                'database' => config('database.connections.pgsql.database'),
+                'driver' => config('database.connections.pgsql.driver'),
+                'url' => config('database.connections.pgsql.url'),
+                'options' => config('database.connections.pgsql.options', [])
+            ],
+            'env_vars' => [
+                'database_url' => getenv('DATABASE_URL') ? 'set' : 'not set',
+                'db_host' => getenv('DB_HOST'),
+                'db_port' => getenv('DB_PORT'),
+                'db_database' => getenv('DB_DATABASE'),
+                'db_username' => getenv('DB_USERNAME') ? 'set' : 'not set',
+                'db_password' => getenv('DB_PASSWORD') ? 'set' : 'not set'
+            ]
+        ]);
+        
         return response()->json([
             'status' => 'unhealthy',
             'error' => $e->getMessage(),
-            'timestamp' => now()->toIso8601String()
+            'error_type' => get_class($e),
+            'timestamp' => now()->toIso8601String(),
+            'environment' => app()->environment()
         ], 500);
     }
 });
