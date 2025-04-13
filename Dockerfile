@@ -53,7 +53,7 @@ RUN php artisan config:cache
 
 # Configure Nginx
 RUN echo 'server { \
-    listen 80; \
+    listen $PORT; \
     index index.php index.html; \
     server_name localhost; \
     error_log  /var/log/nginx/error.log; \
@@ -117,6 +117,8 @@ RUN mkdir -p /var/log/supervisor
 
 # Create start script
 RUN echo '#!/bin/bash\n\
+# Replace $PORT with actual port from environment\n\
+sed -i "s/\$PORT/$PORT/g" /etc/nginx/conf.d/default.conf\n\
 supervisord -c /etc/supervisor/conf.d/supervisord.conf' > /usr/local/bin/start.sh && \
     chmod +x /usr/local/bin/start.sh
 
