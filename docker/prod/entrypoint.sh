@@ -45,5 +45,8 @@ php artisan optimize
 php artisan config:cache
 php artisan route:cache
 
+echo "Configuring nginx port..."
+sed -i "s/\$PORT/${PORT:-10000}/g" /etc/nginx/nginx.conf
+
 echo "Starting supervisor..."
-exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf 
+exec /usr/bin/supervisord -n -c /etc/supervisor/conf.d/supervisord.conf 
