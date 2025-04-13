@@ -16,10 +16,7 @@ services:
       - key: APP_DEBUG
         value: false
       - key: APP_URL
-        fromService:
-          type: web
-          name: lifespan-beta
-          property: host
+        value: https://lifespan-beta.onrender.com
       - key: LOG_CHANNEL
         value: stack
       - key: DB_CONNECTION
@@ -61,4 +58,5 @@ databases:
   - name: lifespan_db
     databaseName: lifespan
     user: lifespan
-    plan: free 
+    plan: free
+    postgresMajorVersion: 15 
