@@ -92,32 +92,32 @@ check_required_vars
 
 # Create a new .env file from template
 log "Creating .env file..."
-if [ -f ".env.railway" ]; then
-    cp .env.railway .env
+if [ -f "/var/www/.env.railway" ]; then
+    cp /var/www/.env.railway /var/www/.env
     log "Using .env.railway configuration"
-elif [ -f ".env.render" ]; then
-    cp .env.render .env
+elif [ -f "/var/www/.env.render" ]; then
+    cp /var/www/.env.render /var/www/.env
     log "Using .env.render configuration"
 else
     log "WARNING: No environment template found, using .env.example"
-    cp .env.example .env
+    cp /var/www/.env.example /var/www/.env
 fi
 
 # Update environment variables
 log "Updating environment variables..."
-sed -i "s#APP_NAME=.*#APP_NAME=${APP_NAME}#" .env
-sed -i "s#APP_ENV=.*#APP_ENV=${APP_ENV}#" .env
-sed -i "s#APP_DEBUG=.*#APP_DEBUG=${APP_DEBUG:-false}#" .env
-sed -i "s#APP_URL=.*#APP_URL=${APP_URL}#" .env
+sed -i "s#APP_NAME=.*#APP_NAME=${APP_NAME}#" /var/www/.env
+sed -i "s#APP_ENV=.*#APP_ENV=${APP_ENV}#" /var/www/.env
+sed -i "s#APP_DEBUG=.*#APP_DEBUG=${APP_DEBUG:-false}#" /var/www/.env
+sed -i "s#APP_URL=.*#APP_URL=${APP_URL}#" /var/www/.env
 
 # Update database configuration from Railway PostgreSQL variables if they exist
 if [ -n "$PGHOST" ] && [ -n "$PGPORT" ] && [ -n "$PGDATABASE" ] && [ -n "$PGUSER" ] && [ -n "$PGPASSWORD" ]; then
     log "Using Railway PostgreSQL configuration..."
-    sed -i "s#DB_HOST=.*#DB_HOST=${PGHOST}#" .env
-    sed -i "s#DB_PORT=.*#DB_PORT=${PGPORT}#" .env
-    sed -i "s#DB_DATABASE=.*#DB_DATABASE=${PGDATABASE}#" .env
-    sed -i "s#DB_USERNAME=.*#DB_USERNAME=${PGUSER}#" .env
-    sed -i "s#DB_PASSWORD=.*#DB_PASSWORD=${PGPASSWORD}#" .env
+    sed -i "s#DB_HOST=.*#DB_HOST=${PGHOST}#" /var/www/.env
+    sed -i "s#DB_PORT=.*#DB_PORT=${PGPORT}#" /var/www/.env
+    sed -i "s#DB_DATABASE=.*#DB_DATABASE=${PGDATABASE}#" /var/www/.env
+    sed -i "s#DB_USERNAME=.*#DB_USERNAME=${PGUSER}#" /var/www/.env
+    sed -i "s#DB_PASSWORD=.*#DB_PASSWORD=${PGPASSWORD}#" /var/www/.env
 else
     log "Using default database configuration from .env file..."
 fi
@@ -128,14 +128,14 @@ if [ -z "$APP_KEY" ]; then
     php artisan key:generate --force
 else
     log "Using provided application key..."
-    sed -i "s#APP_KEY=.*#APP_KEY=${APP_KEY}#" .env
+    sed -i "s#APP_KEY=.*#APP_KEY=${APP_KEY}#" /var/www/.env
 fi
 
 # Set up storage
 log "Setting up storage..."
-mkdir -p storage/logs storage/sessions storage/views storage/cache storage/app/public
-chown -R www-data:www-data storage
-chmod -R 775 storage
+mkdir -p /var/www/storage/logs /var/www/storage/sessions /var/www/storage/views /var/www/storage/cache /var/www/storage/app/public
+chown -R www-data:www-data /var/www/storage
+chmod -R 775 /var/www/storage
 
 # Create storage link
 log "Creating storage link..."
