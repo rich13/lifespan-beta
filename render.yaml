@@ -6,10 +6,6 @@ services:
     plan: free
     healthCheckPath: /health
     autoDeploy: true
-    disk:
-      name: storage
-      mountPath: /var/www/storage
-      sizeGB: 1
     envVars:
       - key: APP_NAME
         value: Lifespan
