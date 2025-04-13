@@ -14,12 +14,13 @@ check_required_vars() {
         "APP_ENV"
         "APP_KEY"
         "APP_URL"
-        "DB_HOST"
-        "DB_PORT"
-        "DB_DATABASE"
-        "DB_USERNAME"
-        "DB_PASSWORD"
     )
+
+    # Check for Railway PostgreSQL variables
+    if [ -z "$PGHOST" ] || [ -z "$PGPORT" ] || [ -z "$PGDATABASE" ] || [ -z "$PGUSER" ] || [ -z "$PGPASSWORD" ]; then
+        log "ERROR: Missing Railway PostgreSQL environment variables"
+        exit 1
+    fi
 
     for var in "${required_vars[@]}"; do
         if [ -z "${!var}" ]; then
@@ -41,7 +42,7 @@ wait_for_db() {
 
     log "Waiting for database to be ready..."
     while [ $attempt -le $max_attempts ]; do
-        if PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -U $DB_USERNAME -d $DB_DATABASE -c '\q' 2>/dev/null; then
+        if PGPASSWORD=$PGPASSWORD psql -h $PGHOST -U $PGUSER -d $PGDATABASE -c '\q' 2>/dev/null; then
             log "Database is ready!"
             return 0
         fi
@@ -75,11 +76,13 @@ sed -i "s#APP_NAME=.*#APP_NAME=${APP_NAME}#" .env
 sed -i "s#APP_ENV=.*#APP_ENV=${APP_ENV}#" .env
 sed -i "s#APP_DEBUG=.*#APP_DEBUG=${APP_DEBUG:-false}#" .env
 sed -i "s#APP_URL=.*#APP_URL=${APP_URL}#" .env
-sed -i "s#DB_HOST=.*#DB_HOST=${DB_HOST}#" .env
-sed -i "s#DB_PORT=.*#DB_PORT=${DB_PORT}#" .env
-sed -i "s#DB_DATABASE=.*#DB_DATABASE=${DB_DATABASE}#" .env
-sed -i "s#DB_USERNAME=.*#DB_USERNAME=${DB_USERNAME}#" .env
-sed -i "s#DB_PASSWORD=.*#DB_PASSWORD=${DB_PASSWORD}#" .env
+
+# Update database configuration from Railway PostgreSQL variables
+sed -i "s#DB_HOST=.*#DB_HOST=${PGHOST}#" .env
+sed -i "s#DB_PORT=.*#DB_PORT=${PGPORT}#" .env
+sed -i "s#DB_DATABASE=.*#DB_DATABASE=${PGDATABASE}#" .env
+sed -i "s#DB_USERNAME=.*#DB_USERNAME=${PGUSER}#" .env
+sed -i "s#DB_PASSWORD=.*#DB_PASSWORD=${PGPASSWORD}#" .env
 
 # Generate application key if not set
 if [ -z "$APP_KEY" ]; then
