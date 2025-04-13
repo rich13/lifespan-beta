@@ -17,9 +17,25 @@ check_required_vars() {
     )
 
     # Check for Railway PostgreSQL variables
-    if [ -z "$PGHOST" ] || [ -z "$PGPORT" ] || [ -z "$PGDATABASE" ] || [ -z "$PGUSER" ] || [ -z "$PGPASSWORD" ]; then
-        log "ERROR: Missing Railway PostgreSQL environment variables"
-        exit 1
+    local db_vars=(
+        "PGHOST"
+        "PGPORT"
+        "PGDATABASE"
+        "PGUSER"
+        "PGPASSWORD"
+    )
+
+    local missing_db_vars=()
+    for var in "${db_vars[@]}"; do
+        if [ -z "${!var}" ]; then
+            missing_db_vars+=("$var")
+        fi
+    done
+
+    if [ ${#missing_db_vars[@]} -ne 0 ]; then
+        log "WARNING: Missing Railway PostgreSQL environment variables: ${missing_db_vars[*]}"
+        log "INFO: Using default database configuration from .env file"
+        return 0
     fi
 
     for var in "${required_vars[@]}"; do
@@ -42,9 +58,17 @@ wait_for_db() {
 
     log "Waiting for database to be ready..."
     while [ $attempt -le $max_attempts ]; do
-        if PGPASSWORD=$PGPASSWORD psql -h $PGHOST -U $PGUSER -d $PGDATABASE -c '\q' 2>/dev/null; then
-            log "Database is ready!"
-            return 0
+        if [ -n "$PGHOST" ] && [ -n "$PGPASSWORD" ]; then
+            if PGPASSWORD=$PGPASSWORD psql -h $PGHOST -U $PGUSER -d $PGDATABASE -c '\q' 2>/dev/null; then
+                log "Database is ready!"
+                return 0
+            fi
+        else
+            # Try using Laravel's database configuration
+            if php artisan db:monitor --timeout=1 >/dev/null 2>&1; then
+                log "Database is ready!"
+                return 0
+            fi
         fi
         log "Attempt $attempt of $max_attempts: Database is not ready yet. Waiting ${wait_time}s..."
         sleep $wait_time
@@ -77,12 +101,17 @@ sed -i "s#APP_ENV=.*#APP_ENV=${APP_ENV}#" .env
 sed -i "s#APP_DEBUG=.*#APP_DEBUG=${APP_DEBUG:-false}#" .env
 sed -i "s#APP_URL=.*#APP_URL=${APP_URL}#" .env
 
-# Update database configuration from Railway PostgreSQL variables
-sed -i "s#DB_HOST=.*#DB_HOST=${PGHOST}#" .env
-sed -i "s#DB_PORT=.*#DB_PORT=${PGPORT}#" .env
-sed -i "s#DB_DATABASE=.*#DB_DATABASE=${PGDATABASE}#" .env
-sed -i "s#DB_USERNAME=.*#DB_USERNAME=${PGUSER}#" .env
-sed -i "s#DB_PASSWORD=.*#DB_PASSWORD=${PGPASSWORD}#" .env
+# Update database configuration from Railway PostgreSQL variables if they exist
+if [ -n "$PGHOST" ] && [ -n "$PGPORT" ] && [ -n "$PGDATABASE" ] && [ -n "$PGUSER" ] && [ -n "$PGPASSWORD" ]; then
+    log "Using Railway PostgreSQL configuration..."
+    sed -i "s#DB_HOST=.*#DB_HOST=${PGHOST}#" .env
+    sed -i "s#DB_PORT=.*#DB_PORT=${PGPORT}#" .env
+    sed -i "s#DB_DATABASE=.*#DB_DATABASE=${PGDATABASE}#" .env
+    sed -i "s#DB_USERNAME=.*#DB_USERNAME=${PGUSER}#" .env
+    sed -i "s#DB_PASSWORD=.*#DB_PASSWORD=${PGPASSWORD}#" .env
+else
+    log "Using default database configuration from .env file..."
+fi
 
 # Generate application key if not set
 if [ -z "$APP_KEY" ]; then
