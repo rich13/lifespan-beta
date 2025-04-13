@@ -14,7 +14,8 @@ RUN apt-get update && apt-get install -y \
     postgresql-client \
     nginx \
     procps \
-    lsof
+    lsof \
+    supervisor
 
 # Clear cache
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -58,6 +59,11 @@ RUN echo 'server { \
     error_log  /var/log/nginx/error.log; \
     access_log /var/log/nginx/access.log; \
     root /var/www/public; \
+    client_max_body_size 100M; \
+    keepalive_timeout 65; \
+    sendfile on; \
+    tcp_nopush on; \
+    tcp_nodelay on; \
     location / { \
         try_files $uri $uri/ /index.php?$query_string; \
     } \
@@ -69,13 +75,49 @@ RUN echo 'server { \
         include fastcgi_params; \
         fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name; \
         fastcgi_param PATH_INFO $fastcgi_path_info; \
+        fastcgi_read_timeout 300; \
+        fastcgi_send_timeout 300; \
+        fastcgi_connect_timeout 300; \
+    } \
+    location /health { \
+        access_log off; \
+        add_header Content-Type application/json; \
+        return 200 '"'"'{"status":"healthy","timestamp":"$time_iso8601"}'"'"'; \
     } \
 }' > /etc/nginx/conf.d/default.conf
 
+# Configure PHP-FPM
+RUN echo '[global]\n\
+error_log = /proc/self/fd/2\n\
+log_level = notice\n\
+\n\
+[www]\n\
+access.log = /proc/self/fd/2\n\
+clear_env = no\n\
+catch_workers_output = yes\n\
+decorate_workers_output = no\n\
+\n\
+pm = dynamic\n\
+pm.max_children = 5\n\
+pm.start_servers = 2\n\
+pm.min_spare_servers = 1\n\
+pm.max_spare_servers = 3\n\
+\n\
+php_admin_value[error_log] = /proc/self/fd/2\n\
+php_admin_flag[log_errors] = on\n\
+\n\
+request_terminate_timeout = 300\n\
+request_slowlog_timeout = 300\n\
+slowlog = /proc/self/fd/2\n\
+' > /usr/local/etc/php-fpm.d/www.conf
+
+# Configure Supervisor
+COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+RUN mkdir -p /var/log/supervisor
+
 # Create start script
 RUN echo '#!/bin/bash\n\
-php-fpm -D\n\
-nginx -g "daemon off;"' > /usr/local/bin/start.sh && \
+supervisord -c /etc/supervisor/conf.d/supervisord.conf' > /usr/local/bin/start.sh && \
     chmod +x /usr/local/bin/start.sh
 
 # Expose ports
