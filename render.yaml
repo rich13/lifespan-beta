@@ -25,10 +25,18 @@ services:
         value: debug
       - key: DB_CONNECTION
         value: pgsql
+      - key: RAILWAY_PRIVATE_DOMAIN
+        fromDatabase:
+          name: lifespan_db
+          property: privateDomain
       - key: DATABASE_URL
         fromDatabase:
           name: lifespan_db
           property: connectionString
+      - key: DATABASE_PUBLIC_URL
+        fromDatabase:
+          name: lifespan_db
+          property: publicUrl
       - key: BROADCAST_DRIVER
         value: log
       - key: CACHE_DRIVER

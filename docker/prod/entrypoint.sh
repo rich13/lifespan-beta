@@ -110,9 +110,87 @@ sed -i "s#APP_ENV=.*#APP_ENV=${APP_ENV}#" /var/www/.env
 sed -i "s#APP_DEBUG=.*#APP_DEBUG=${APP_DEBUG:-false}#" /var/www/.env
 sed -i "s#APP_URL=.*#APP_URL=${APP_URL}#" /var/www/.env
 
-# Update database configuration from Railway PostgreSQL variables if they exist
-if [ -n "$DATABASE_URL" ]; then
-    log "Using DATABASE_URL configuration..."
+# Log available database variables
+log "Available database variables:"
+if [ -n "$PGHOST" ]; then log "PGHOST: $PGHOST"; fi
+if [ -n "$PGPORT" ]; then log "PGPORT: $PGPORT"; fi
+if [ -n "$PGDATABASE" ]; then log "PGDATABASE: $PGDATABASE"; fi
+if [ -n "$PGUSER" ]; then log "PGUSER: $PGUSER"; fi
+if [ -n "$PGPASSWORD" ]; then log "PGPASSWORD: [REDACTED]"; fi
+if [ -n "$DATABASE_URL" ]; then log "DATABASE_URL: [REDACTED]"; fi
+if [ -n "$DATABASE_PUBLIC_URL" ]; then log "DATABASE_PUBLIC_URL: [REDACTED]"; fi
+if [ -n "$RAILWAY_PRIVATE_DOMAIN" ]; then log "RAILWAY_PRIVATE_DOMAIN: $RAILWAY_PRIVATE_DOMAIN"; fi
+
+# Check for Railway private domain first (to avoid egress fees)
+if [ -n "$RAILWAY_PRIVATE_DOMAIN" ]; then
+    log "Using Railway private domain for database connection..."
+    # Extract database components from private domain
+    DB_HOST=$RAILWAY_PRIVATE_DOMAIN
+    DB_PORT=${PGPORT:-5432}
+    DB_DATABASE=${PGDATABASE:-railway}
+    DB_USERNAME=${PGUSER:-postgres}
+    DB_PASSWORD=${PGPASSWORD}
+    
+    # Update .env file with private domain
+    sed -i "s#DB_CONNECTION=.*#DB_CONNECTION=pgsql#" /var/www/.env
+    sed -i "s#DB_HOST=.*#DB_HOST=$DB_HOST#" /var/www/.env
+    sed -i "s#DB_PORT=.*#DB_PORT=$DB_PORT#" /var/www/.env
+    sed -i "s#DB_DATABASE=.*#DB_DATABASE=$DB_DATABASE#" /var/www/.env
+    sed -i "s#DB_USERNAME=.*#DB_USERNAME=$DB_USERNAME#" /var/www/.env
+    sed -i "s#DB_PASSWORD=.*#DB_PASSWORD=$DB_PASSWORD#" /var/www/.env
+    
+    # Verify database configuration
+    log "Verifying database configuration with private domain..."
+    log "DB_CONNECTION: $(grep DB_CONNECTION /var/www/.env | cut -d'=' -f2)"
+    log "DB_HOST: $(grep DB_HOST /var/www/.env | cut -d'=' -f2)"
+    log "DB_PORT: $(grep DB_PORT /var/www/.env | cut -d'=' -f2)"
+    log "DB_DATABASE: $(grep DB_DATABASE /var/www/.env | cut -d'=' -f2)"
+    log "DB_USERNAME: $(grep DB_USERNAME /var/www/.env | cut -d'=' -f2)"
+    
+    # Clear Laravel's configuration cache
+    log "Clearing Laravel's configuration cache..."
+    php artisan config:clear
+    php artisan cache:clear
+    
+    # Wait for database
+    wait_for_db
+# Check for PostgreSQL variables (private connection)
+elif [ -n "$PGHOST" ] && [ -n "$PGPORT" ] && [ -n "$PGDATABASE" ] && [ -n "$PGUSER" ] && [ -n "$PGPASSWORD" ]; then
+    log "Using Railway PostgreSQL configuration..."
+    # Remove any quotes from the values
+    PGHOST=$(echo $PGHOST | tr -d '"')
+    PGPORT=$(echo $PGPORT | tr -d '"')
+    PGDATABASE=$(echo $PGDATABASE | tr -d '"')
+    PGUSER=$(echo $PGUSER | tr -d '"')
+    PGPASSWORD=$(echo $PGPASSWORD | tr -d '"')
+    
+    # Update .env file with clean values
+    sed -i "s#DB_CONNECTION=.*#DB_CONNECTION=pgsql#" /var/www/.env
+    sed -i "s#DB_HOST=.*#DB_HOST=$PGHOST#" /var/www/.env
+    sed -i "s#DB_PORT=.*#DB_PORT=$PGPORT#" /var/www/.env
+    sed -i "s#DB_DATABASE=.*#DB_DATABASE=$PGDATABASE#" /var/www/.env
+    sed -i "s#DB_USERNAME=.*#DB_USERNAME=$PGUSER#" /var/www/.env
+    sed -i "s#DB_PASSWORD=.*#DB_PASSWORD=$PGPASSWORD#" /var/www/.env
+    
+    # Verify database configuration
+    log "Verifying database configuration..."
+    log "DB_CONNECTION: $(grep DB_CONNECTION /var/www/.env | cut -d'=' -f2)"
+    log "DB_HOST: $(grep DB_HOST /var/www/.env | cut -d'=' -f2)"
+    log "DB_PORT: $(grep DB_PORT /var/www/.env | cut -d'=' -f2)"
+    log "DB_DATABASE: $(grep DB_DATABASE /var/www/.env | cut -d'=' -f2)"
+    log "DB_USERNAME: $(grep DB_USERNAME /var/www/.env | cut -d'=' -f2)"
+    
+    # Clear Laravel's configuration cache
+    log "Clearing Laravel's configuration cache..."
+    php artisan config:clear
+    php artisan cache:clear
+    
+    # Wait for database
+    wait_for_db
+# Check for DATABASE_URL (public endpoint) as fallback
+elif [ -n "$DATABASE_URL" ]; then
+    log "WARNING: Using DATABASE_URL (public endpoint) which may incur egress fees..."
+    log "INFO: Consider using RAILWAY_PRIVATE_DOMAIN or PGHOST, PGPORT, etc. to avoid egress fees"
     sed -i "s#DATABASE_URL=.*#DATABASE_URL=$DATABASE_URL#" /var/www/.env
     sed -i "s#DB_CONNECTION=.*#DB_CONNECTION=pgsql#" /var/www/.env
     
@@ -145,21 +223,62 @@ if [ -n "$DATABASE_URL" ]; then
     php artisan cache:clear
     
     # Wait for database
-    log "Waiting for database to be ready..."
-    for i in {1..30}; do
-        if php artisan db:monitor --timeout=1 >/dev/null 2>&1; then
-            log "Database is ready!"
-            break
-        fi
-        if [ $i -eq 30 ]; then
-            log "ERROR: Database failed to become ready in time"
-            exit 1
-        fi
-        log "Waiting for database... attempt $i of 30"
-        sleep 2
-    done
+    wait_for_db
+# Check for DATABASE_PUBLIC_URL as last resort
+elif [ -n "$DATABASE_PUBLIC_URL" ]; then
+    log "WARNING: Using DATABASE_PUBLIC_URL (public endpoint) which will incur egress fees..."
+    log "INFO: Consider using RAILWAY_PRIVATE_DOMAIN or PGHOST, PGPORT, etc. to avoid egress fees"
+    sed -i "s#DATABASE_URL=.*#DATABASE_URL=$DATABASE_PUBLIC_URL#" /var/www/.env
+    sed -i "s#DB_CONNECTION=.*#DB_CONNECTION=pgsql#" /var/www/.env
+    
+    # Extract database components from DATABASE_PUBLIC_URL
+    DB_HOST=$(echo $DATABASE_PUBLIC_URL | sed -n 's/.*@\([^:]*\).*/\1/p')
+    DB_PORT=$(echo $DATABASE_PUBLIC_URL | sed -n 's/.*:\([0-9]*\)\/.*/\1/p')
+    DB_DATABASE=$(echo $DATABASE_PUBLIC_URL | sed -n 's/.*\/\([^?]*\).*/\1/p')
+    DB_USERNAME=$(echo $DATABASE_PUBLIC_URL | sed -n 's/.*:\/\/\([^:]*\):.*/\1/p')
+    DB_PASSWORD=$(echo $DATABASE_PUBLIC_URL | sed -n 's/.*:\([^@]*\)@.*/\1/p')
+    
+    # Update individual database variables
+    sed -i "s#DB_HOST=.*#DB_HOST=$DB_HOST#" /var/www/.env
+    sed -i "s#DB_PORT=.*#DB_PORT=$DB_PORT#" /var/www/.env
+    sed -i "s#DB_DATABASE=.*#DB_DATABASE=$DB_DATABASE#" /var/www/.env
+    sed -i "s#DB_USERNAME=.*#DB_USERNAME=$DB_USERNAME#" /var/www/.env
+    sed -i "s#DB_PASSWORD=.*#DB_PASSWORD=$DB_PASSWORD#" /var/www/.env
+    
+    # Verify database configuration
+    log "Verifying database configuration..."
+    log "DATABASE_URL: $(grep DATABASE_URL /var/www/.env | cut -d'=' -f2)"
+    log "DB_CONNECTION: $(grep DB_CONNECTION /var/www/.env | cut -d'=' -f2)"
+    log "DB_HOST: $(grep DB_HOST /var/www/.env | cut -d'=' -f2)"
+    log "DB_PORT: $(grep DB_PORT /var/www/.env | cut -d'=' -f2)"
+    log "DB_DATABASE: $(grep DB_DATABASE /var/www/.env | cut -d'=' -f2)"
+    log "DB_USERNAME: $(grep DB_USERNAME /var/www/.env | cut -d'=' -f2)"
+    
+    # Clear Laravel's configuration cache
+    log "Clearing Laravel's configuration cache..."
+    php artisan config:clear
+    php artisan cache:clear
+    
+    # Wait for database
+    wait_for_db
 else
-    log "WARNING: DATABASE_URL not set, using default database configuration"
+    log "WARNING: No database configuration found. Please set RAILWAY_PRIVATE_DOMAIN or PGHOST, PGPORT, etc. or DATABASE_URL or DATABASE_PUBLIC_URL"
+    log "INFO: Using default database configuration from .env file"
+    log "INFO: Current database configuration:"
+    grep -E "DB_(HOST|PORT|DATABASE|USERNAME|PASSWORD)" /var/www/.env
+    
+    # Try to wait for database anyway
+    wait_for_db || {
+        log "ERROR: Could not connect to database. Please check your database configuration."
+        log "INFO: You can set the following environment variables in Railway:"
+        log "      RAILWAY_PRIVATE_DOMAIN (preferred to avoid egress fees)"
+        log "      PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD (preferred to avoid egress fees)"
+        log "      DATABASE_URL (may incur egress fees)"
+        log "      DATABASE_PUBLIC_URL (will incur egress fees)"
+        log "INFO: Current environment variables:"
+        env | grep -E "PG(HOST|PORT|DATABASE|USER|PASSWORD)|DATABASE_URL|DATABASE_PUBLIC_URL|RAILWAY_PRIVATE_DOMAIN"
+        exit 1
+    }
 fi
 
 # Generate application key if not set
