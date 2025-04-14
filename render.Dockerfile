@@ -56,6 +56,10 @@ RUN mkdir -p /run/php /run/nginx /var/log/supervisor /var/log/nginx /var/lib/ngi
 # Copy application files first
 COPY . /var/www
 
+# Copy environment files
+COPY .env.railway /var/www/.env.railway
+COPY .env.example /var/www/.env.example
+
 # Create required directories
 RUN mkdir -p /var/www/storage/logs \
     /var/www/storage/framework/{sessions,views,cache,testing,cache/data} \

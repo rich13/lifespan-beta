@@ -77,9 +77,9 @@ wait_for_db() {
 
     log "ERROR: Database failed to become ready in time"
     log "INFO: Checking database configuration..."
-    if [ -f ".env" ]; then
+    if [ -f "/var/www/.env" ]; then
         log "Current database configuration:"
-        grep -E "DB_(HOST|PORT|DATABASE|USERNAME|PASSWORD)" .env
+        grep -E "DB_(HOST|PORT|DATABASE|USERNAME|PASSWORD)" /var/www/.env
     fi
     return 1
 }
@@ -146,6 +146,8 @@ if ! wait_for_db; then
     log "ERROR: Could not connect to database. Please check your database configuration."
     log "INFO: You can set the following environment variables in Railway:"
     log "      PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD"
+    log "INFO: Current environment variables:"
+    env | grep -E "PG(HOST|PORT|DATABASE|USER|PASSWORD)"
     exit 1
 fi
 
