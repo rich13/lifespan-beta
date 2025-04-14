@@ -118,6 +118,18 @@ if [ -n "$PGHOST" ] && [ -n "$PGPORT" ] && [ -n "$PGDATABASE" ] && [ -n "$PGUSER
     sed -i "s#DB_DATABASE=.*#DB_DATABASE=${PGDATABASE}#" /var/www/.env
     sed -i "s#DB_USERNAME=.*#DB_USERNAME=${PGUSER}#" /var/www/.env
     sed -i "s#DB_PASSWORD=.*#DB_PASSWORD=${PGPASSWORD}#" /var/www/.env
+    
+    # Verify database configuration
+    log "Verifying database configuration..."
+    log "DB_HOST: $(grep DB_HOST /var/www/.env | cut -d'=' -f2)"
+    log "DB_PORT: $(grep DB_PORT /var/www/.env | cut -d'=' -f2)"
+    log "DB_DATABASE: $(grep DB_DATABASE /var/www/.env | cut -d'=' -f2)"
+    log "DB_USERNAME: $(grep DB_USERNAME /var/www/.env | cut -d'=' -f2)"
+    
+    # Clear Laravel's configuration cache
+    log "Clearing Laravel's configuration cache..."
+    php artisan config:clear
+    php artisan cache:clear
 else
     log "Using default database configuration from .env file..."
 fi
