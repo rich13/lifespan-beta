@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# Function to log messages
+# Function to log messages with timestamps
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
