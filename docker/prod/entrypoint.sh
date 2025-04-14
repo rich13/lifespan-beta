@@ -113,11 +113,19 @@ sed -i "s#APP_URL=.*#APP_URL=${APP_URL}#" /var/www/.env
 # Update database configuration from Railway PostgreSQL variables if they exist
 if [ -n "$PGHOST" ] && [ -n "$PGPORT" ] && [ -n "$PGDATABASE" ] && [ -n "$PGUSER" ] && [ -n "$PGPASSWORD" ]; then
     log "Using Railway PostgreSQL configuration..."
-    sed -i "s#DB_HOST=.*#DB_HOST=${PGHOST}#" /var/www/.env
-    sed -i "s#DB_PORT=.*#DB_PORT=${PGPORT}#" /var/www/.env
-    sed -i "s#DB_DATABASE=.*#DB_DATABASE=${PGDATABASE}#" /var/www/.env
-    sed -i "s#DB_USERNAME=.*#DB_USERNAME=${PGUSER}#" /var/www/.env
-    sed -i "s#DB_PASSWORD=.*#DB_PASSWORD=${PGPASSWORD}#" /var/www/.env
+    # Remove any quotes from the values
+    PGHOST=$(echo $PGHOST | tr -d '"')
+    PGPORT=$(echo $PGPORT | tr -d '"')
+    PGDATABASE=$(echo $PGDATABASE | tr -d '"')
+    PGUSER=$(echo $PGUSER | tr -d '"')
+    PGPASSWORD=$(echo $PGPASSWORD | tr -d '"')
+    
+    # Update .env file with clean values
+    sed -i "s#DB_HOST=.*#DB_HOST=$PGHOST#" /var/www/.env
+    sed -i "s#DB_PORT=.*#DB_PORT=$PGPORT#" /var/www/.env
+    sed -i "s#DB_DATABASE=.*#DB_DATABASE=$PGDATABASE#" /var/www/.env
+    sed -i "s#DB_USERNAME=.*#DB_USERNAME=$PGUSER#" /var/www/.env
+    sed -i "s#DB_PASSWORD=.*#DB_PASSWORD=$PGPASSWORD#" /var/www/.env
     
     # Verify database configuration
     log "Verifying database configuration..."
