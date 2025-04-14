@@ -138,39 +138,28 @@ if [ -n "$PGHOST" ] && [ -n "$PGPASSWORD" ]; then
     fi
 fi
 
-# Check for PostgreSQL variables (private connection)
+# Set up database configuration using the PHP script
 if [ -n "$PGHOST" ] && [ -n "$PGPORT" ] && [ -n "$PGDATABASE" ] && [ -n "$PGUSER" ] && [ -n "$PGPASSWORD" ]; then
     log "Using Railway PostgreSQL configuration..."
     
-    # Remove any quotes from the values and ensure they're properly formatted
+    # Remove any quotes from the values
     PGHOST=$(echo $PGHOST | tr -d '"' | tr -d "'")
     PGPORT=$(echo $PGPORT | tr -d '"' | tr -d "'")
     PGDATABASE=$(echo $PGDATABASE | tr -d '"' | tr -d "'")
     PGUSER=$(echo $PGUSER | tr -d '"' | tr -d "'")
     PGPASSWORD=$(echo $PGPASSWORD | tr -d '"' | tr -d "'")
     
-    # Create a temporary .env file with the correct database configuration
-    log "Creating a clean .env file with proper database configuration..."
-    cp /var/www/.env /var/www/.env.temp
+    # Export the variables for the PHP script
+    export PGHOST
+    export PGPORT
+    export PGDATABASE
+    export PGUSER
+    export PGPASSWORD
     
-    # Update the temporary .env file with clean values
-    sed -i "s#DB_CONNECTION=.*#DB_CONNECTION=pgsql#" /var/www/.env.temp
-    sed -i "s#DB_HOST=.*#DB_HOST=$PGHOST#" /var/www/.env.temp
-    sed -i "s#DB_PORT=.*#DB_PORT=$PGPORT#" /var/www/.env.temp
-    sed -i "s#DB_DATABASE=.*#DB_DATABASE=$PGDATABASE#" /var/www/.env.temp
-    sed -i "s#DB_USERNAME=.*#DB_USERNAME=$PGUSER#" /var/www/.env.temp
-    sed -i "s#DB_PASSWORD=.*#DB_PASSWORD=$PGPASSWORD#" /var/www/.env.temp
-    
-    # Replace the original .env file with the clean one
-    mv /var/www/.env.temp /var/www/.env
-    
-    # Verify database configuration
-    log "Verifying database configuration..."
-    log "DB_CONNECTION: $(grep DB_CONNECTION /var/www/.env | cut -d'=' -f2)"
-    log "DB_HOST: $(grep DB_HOST /var/www/.env | cut -d'=' -f2)"
-    log "DB_PORT: $(grep DB_PORT /var/www/.env | cut -d'=' -f2)"
-    log "DB_DATABASE: $(grep DB_DATABASE /var/www/.env | cut -d'=' -f2)"
-    log "DB_USERNAME: $(grep DB_USERNAME /var/www/.env | cut -d'=' -f2)"
+    # Run the PHP script to set the database configuration
+    log "Setting database configuration using PHP script..."
+    cd /var/www
+    php docker/prod/set-db-config.php
     
     # Clear Laravel's configuration cache
     log "Clearing Laravel's configuration cache..."
@@ -189,28 +178,17 @@ elif [ -n "$RAILWAY_PRIVATE_DOMAIN" ]; then
     DB_USERNAME=${PGUSER:-postgres}
     DB_PASSWORD=${PGPASSWORD}
     
-    # Create a temporary .env file with the correct database configuration
-    log "Creating a clean .env file with proper database configuration..."
-    cp /var/www/.env /var/www/.env.temp
+    # Export the variables for the PHP script
+    export PGHOST=$DB_HOST
+    export PGPORT=$DB_PORT
+    export PGDATABASE=$DB_DATABASE
+    export PGUSER=$DB_USERNAME
+    export PGPASSWORD=$DB_PASSWORD
     
-    # Update the temporary .env file with clean values
-    sed -i "s#DB_CONNECTION=.*#DB_CONNECTION=pgsql#" /var/www/.env.temp
-    sed -i "s#DB_HOST=.*#DB_HOST=$DB_HOST#" /var/www/.env.temp
-    sed -i "s#DB_PORT=.*#DB_PORT=$DB_PORT#" /var/www/.env.temp
-    sed -i "s#DB_DATABASE=.*#DB_DATABASE=$DB_DATABASE#" /var/www/.env.temp
-    sed -i "s#DB_USERNAME=.*#DB_USERNAME=$DB_USERNAME#" /var/www/.env.temp
-    sed -i "s#DB_PASSWORD=.*#DB_PASSWORD=$DB_PASSWORD#" /var/www/.env.temp
-    
-    # Replace the original .env file with the clean one
-    mv /var/www/.env.temp /var/www/.env
-    
-    # Verify database configuration
-    log "Verifying database configuration with private domain..."
-    log "DB_CONNECTION: $(grep DB_CONNECTION /var/www/.env | cut -d'=' -f2)"
-    log "DB_HOST: $(grep DB_HOST /var/www/.env | cut -d'=' -f2)"
-    log "DB_PORT: $(grep DB_PORT /var/www/.env | cut -d'=' -f2)"
-    log "DB_DATABASE: $(grep DB_DATABASE /var/www/.env | cut -d'=' -f2)"
-    log "DB_USERNAME: $(grep DB_USERNAME /var/www/.env | cut -d'=' -f2)"
+    # Run the PHP script to set the database configuration
+    log "Setting database configuration using PHP script..."
+    cd /var/www
+    php docker/prod/set-db-config.php
     
     # Clear Laravel's configuration cache
     log "Clearing Laravel's configuration cache..."
@@ -231,28 +209,17 @@ elif [ -n "$DATABASE_URL" ]; then
     DB_USERNAME=$(echo $DATABASE_URL | sed -n 's/.*:\/\/\([^:]*\):.*/\1/p')
     DB_PASSWORD=$(echo $DATABASE_URL | sed -n 's/.*:\([^@]*\)@.*/\1/p')
     
-    # Create a temporary .env file with the correct database configuration
-    log "Creating a clean .env file with proper database configuration..."
-    cp /var/www/.env /var/www/.env.temp
+    # Export the variables for the PHP script
+    export PGHOST=$DB_HOST
+    export PGPORT=$DB_PORT
+    export PGDATABASE=$DB_DATABASE
+    export PGUSER=$DB_USERNAME
+    export PGPASSWORD=$DB_PASSWORD
     
-    # Update the temporary .env file with clean values
-    sed -i "s#DB_CONNECTION=.*#DB_CONNECTION=pgsql#" /var/www/.env.temp
-    sed -i "s#DB_HOST=.*#DB_HOST=$DB_HOST#" /var/www/.env.temp
-    sed -i "s#DB_PORT=.*#DB_PORT=$DB_PORT#" /var/www/.env.temp
-    sed -i "s#DB_DATABASE=.*#DB_DATABASE=$DB_DATABASE#" /var/www/.env.temp
-    sed -i "s#DB_USERNAME=.*#DB_USERNAME=$DB_USERNAME#" /var/www/.env.temp
-    sed -i "s#DB_PASSWORD=.*#DB_PASSWORD=$DB_PASSWORD#" /var/www/.env.temp
-    
-    # Replace the original .env file with the clean one
-    mv /var/www/.env.temp /var/www/.env
-    
-    # Verify database configuration
-    log "Verifying database configuration..."
-    log "DB_CONNECTION: $(grep DB_CONNECTION /var/www/.env | cut -d'=' -f2)"
-    log "DB_HOST: $(grep DB_HOST /var/www/.env | cut -d'=' -f2)"
-    log "DB_PORT: $(grep DB_PORT /var/www/.env | cut -d'=' -f2)"
-    log "DB_DATABASE: $(grep DB_DATABASE /var/www/.env | cut -d'=' -f2)"
-    log "DB_USERNAME: $(grep DB_USERNAME /var/www/.env | cut -d'=' -f2)"
+    # Run the PHP script to set the database configuration
+    log "Setting database configuration using PHP script..."
+    cd /var/www
+    php docker/prod/set-db-config.php
     
     # Clear Laravel's configuration cache
     log "Clearing Laravel's configuration cache..."
@@ -273,28 +240,17 @@ elif [ -n "$DATABASE_PUBLIC_URL" ]; then
     DB_USERNAME=$(echo $DATABASE_PUBLIC_URL | sed -n 's/.*:\/\/\([^:]*\):.*/\1/p')
     DB_PASSWORD=$(echo $DATABASE_PUBLIC_URL | sed -n 's/.*:\([^@]*\)@.*/\1/p')
     
-    # Create a temporary .env file with the correct database configuration
-    log "Creating a clean .env file with proper database configuration..."
-    cp /var/www/.env /var/www/.env.temp
+    # Export the variables for the PHP script
+    export PGHOST=$DB_HOST
+    export PGPORT=$DB_PORT
+    export PGDATABASE=$DB_DATABASE
+    export PGUSER=$DB_USERNAME
+    export PGPASSWORD=$DB_PASSWORD
     
-    # Update the temporary .env file with clean values
-    sed -i "s#DB_CONNECTION=.*#DB_CONNECTION=pgsql#" /var/www/.env.temp
-    sed -i "s#DB_HOST=.*#DB_HOST=$DB_HOST#" /var/www/.env.temp
-    sed -i "s#DB_PORT=.*#DB_PORT=$DB_PORT#" /var/www/.env.temp
-    sed -i "s#DB_DATABASE=.*#DB_DATABASE=$DB_DATABASE#" /var/www/.env.temp
-    sed -i "s#DB_USERNAME=.*#DB_USERNAME=$DB_USERNAME#" /var/www/.env.temp
-    sed -i "s#DB_PASSWORD=.*#DB_PASSWORD=$DB_PASSWORD#" /var/www/.env.temp
-    
-    # Replace the original .env file with the clean one
-    mv /var/www/.env.temp /var/www/.env
-    
-    # Verify database configuration
-    log "Verifying database configuration..."
-    log "DB_CONNECTION: $(grep DB_CONNECTION /var/www/.env | cut -d'=' -f2)"
-    log "DB_HOST: $(grep DB_HOST /var/www/.env | cut -d'=' -f2)"
-    log "DB_PORT: $(grep DB_PORT /var/www/.env | cut -d'=' -f2)"
-    log "DB_DATABASE: $(grep DB_DATABASE /var/www/.env | cut -d'=' -f2)"
-    log "DB_USERNAME: $(grep DB_USERNAME /var/www/.env | cut -d'=' -f2)"
+    # Run the PHP script to set the database configuration
+    log "Setting database configuration using PHP script..."
+    cd /var/www
+    php docker/prod/set-db-config.php
     
     # Clear Laravel's configuration cache
     log "Clearing Laravel's configuration cache..."
