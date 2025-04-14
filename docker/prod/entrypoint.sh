@@ -158,17 +158,22 @@ log "Setting up storage directories..."
 mkdir -p /var/www/storage/logs \
     /var/www/storage/framework/{sessions,views,cache,testing,cache/data} \
     /var/www/storage/app/public \
-    /var/www/bootstrap/cache
+    /var/www/bootstrap/cache \
+    /var/www/public/storage
 
 # Set proper permissions
 log "Setting proper permissions..."
-chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache
-chmod -R 775 /var/www/storage /var/www/bootstrap/cache
+chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache /var/www/public
+chmod -R 775 /var/www/storage /var/www/bootstrap/cache /var/www/public
 chmod -R 775 /var/www/resources/views
 
 # Create storage link
 log "Creating storage link..."
-su www-data -s /bin/bash -c "php artisan storage:link"
+if [ -L "/var/www/public/storage" ]; then
+    rm -f /var/www/public/storage
+fi
+ln -sf /var/www/storage/app/public /var/www/public/storage
+chown -h www-data:www-data /var/www/public/storage
 
 # Wait for database
 if ! wait_for_db; then
