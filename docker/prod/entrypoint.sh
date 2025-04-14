@@ -111,25 +111,28 @@ sed -i "s#APP_DEBUG=.*#APP_DEBUG=${APP_DEBUG:-false}#" /var/www/.env
 sed -i "s#APP_URL=.*#APP_URL=${APP_URL}#" /var/www/.env
 
 # Update database configuration from Railway PostgreSQL variables if they exist
-if [ -n "$PGHOST" ] && [ -n "$PGPORT" ] && [ -n "$PGDATABASE" ] && [ -n "$PGUSER" ] && [ -n "$PGPASSWORD" ]; then
-    log "Using Railway PostgreSQL configuration..."
-    # Remove any quotes from the values
-    PGHOST=$(echo $PGHOST | tr -d '"')
-    PGPORT=$(echo $PGPORT | tr -d '"')
-    PGDATABASE=$(echo $PGDATABASE | tr -d '"')
-    PGUSER=$(echo $PGUSER | tr -d '"')
-    PGPASSWORD=$(echo $PGPASSWORD | tr -d '"')
-    
-    # Update .env file with clean values
+if [ -n "$DATABASE_URL" ]; then
+    log "Using DATABASE_URL configuration..."
+    sed -i "s#DATABASE_URL=.*#DATABASE_URL=$DATABASE_URL#" /var/www/.env
     sed -i "s#DB_CONNECTION=.*#DB_CONNECTION=pgsql#" /var/www/.env
-    sed -i "s#DB_HOST=.*#DB_HOST=$PGHOST#" /var/www/.env
-    sed -i "s#DB_PORT=.*#DB_PORT=$PGPORT#" /var/www/.env
-    sed -i "s#DB_DATABASE=.*#DB_DATABASE=$PGDATABASE#" /var/www/.env
-    sed -i "s#DB_USERNAME=.*#DB_USERNAME=$PGUSER#" /var/www/.env
-    sed -i "s#DB_PASSWORD=.*#DB_PASSWORD=$PGPASSWORD#" /var/www/.env
+    
+    # Extract database components from DATABASE_URL
+    DB_HOST=$(echo $DATABASE_URL | sed -n 's/.*@\([^:]*\).*/\1/p')
+    DB_PORT=$(echo $DATABASE_URL | sed -n 's/.*:\([0-9]*\)\/.*/\1/p')
+    DB_DATABASE=$(echo $DATABASE_URL | sed -n 's/.*\/\([^?]*\).*/\1/p')
+    DB_USERNAME=$(echo $DATABASE_URL | sed -n 's/.*:\/\/\([^:]*\):.*/\1/p')
+    DB_PASSWORD=$(echo $DATABASE_URL | sed -n 's/.*:\([^@]*\)@.*/\1/p')
+    
+    # Update individual database variables
+    sed -i "s#DB_HOST=.*#DB_HOST=$DB_HOST#" /var/www/.env
+    sed -i "s#DB_PORT=.*#DB_PORT=$DB_PORT#" /var/www/.env
+    sed -i "s#DB_DATABASE=.*#DB_DATABASE=$DB_DATABASE#" /var/www/.env
+    sed -i "s#DB_USERNAME=.*#DB_USERNAME=$DB_USERNAME#" /var/www/.env
+    sed -i "s#DB_PASSWORD=.*#DB_PASSWORD=$DB_PASSWORD#" /var/www/.env
     
     # Verify database configuration
     log "Verifying database configuration..."
+    log "DATABASE_URL: $(grep DATABASE_URL /var/www/.env | cut -d'=' -f2)"
     log "DB_CONNECTION: $(grep DB_CONNECTION /var/www/.env | cut -d'=' -f2)"
     log "DB_HOST: $(grep DB_HOST /var/www/.env | cut -d'=' -f2)"
     log "DB_PORT: $(grep DB_PORT /var/www/.env | cut -d'=' -f2)"
@@ -141,15 +144,22 @@ if [ -n "$PGHOST" ] && [ -n "$PGPORT" ] && [ -n "$PGDATABASE" ] && [ -n "$PGUSER
     php artisan config:clear
     php artisan cache:clear
     
-    # Use the check-db.sh script to test the connection
-    if /usr/local/bin/check-db.sh; then
-        log "Database is ready!"
-    else
-        log "ERROR: Database connection failed"
-        exit 1
-    fi
+    # Wait for database
+    log "Waiting for database to be ready..."
+    for i in {1..30}; do
+        if php artisan db:monitor --timeout=1 >/dev/null 2>&1; then
+            log "Database is ready!"
+            break
+        fi
+        if [ $i -eq 30 ]; then
+            log "ERROR: Database failed to become ready in time"
+            exit 1
+        fi
+        log "Waiting for database... attempt $i of 30"
+        sleep 2
+    done
 else
-    log "Using default database configuration from .env file..."
+    log "WARNING: DATABASE_URL not set, using default database configuration"
 fi
 
 # Generate application key if not set
@@ -182,32 +192,6 @@ if [ -L "/var/www/public/storage" ]; then
 fi
 ln -sf /var/www/storage/app/public /var/www/public/storage
 chown -h www-data:www-data /var/www/public/storage
-
-# Wait for database
-log "Waiting for database to be ready..."
-if [ -n "$PGHOST" ] && [ -n "$PGPORT" ] && [ -n "$PGDATABASE" ] && [ -n "$PGUSER" ] && [ -n "$PGPASSWORD" ]; then
-    # Use the check-db.sh script to test the connection
-    if /usr/local/bin/check-db.sh; then
-        log "Database is ready!"
-    else
-        log "ERROR: Database connection failed"
-        exit 1
-    fi
-else
-    # Try using Laravel's database configuration
-    for i in {1..30}; do
-        if php artisan db:monitor --timeout=1 >/dev/null 2>&1; then
-            log "Database is ready!"
-            break
-        fi
-        if [ $i -eq 30 ]; then
-            log "ERROR: Database failed to become ready in time"
-            exit 1
-        fi
-        log "Waiting for database... attempt $i of 30"
-        sleep 2
-    done
-fi
 
 # Run database migrations
 log "Running database migrations..."
