@@ -9,17 +9,24 @@ ini_set('display_errors', 1);
 
 // Log the current directory and paths for debugging
 echo "Current directory: " . __DIR__ . "\n";
-echo "Looking for autoload.php at: " . __DIR__ . '/../../vendor/autoload.php' . "\n";
-echo "Looking for app.php at: " . __DIR__ . '/../../bootstrap/app.php' . "\n";
+
+// Based on the error message, the correct path is /var/www/docker/prod/../vendor/autoload.php
+$autoloadPath = __DIR__ . '/../vendor/autoload.php';
+$appPath = __DIR__ . '/../bootstrap/app.php';
+$configPath = __DIR__ . '/../bootstrap/cache/config.php';
+
+echo "Looking for autoload.php at: $autoloadPath\n";
+echo "Looking for app.php at: $appPath\n";
+echo "Looking for config.php at: $configPath\n";
 
 // Check if the files exist
-if (!file_exists(__DIR__ . '/../../vendor/autoload.php')) {
-    echo "ERROR: autoload.php not found at " . __DIR__ . '/../../vendor/autoload.php' . "\n";
-    echo "Trying alternative path...\n";
+if (!file_exists($autoloadPath)) {
+    echo "ERROR: autoload.php not found at $autoloadPath\n";
+    echo "Trying alternative paths...\n";
     
     // Try alternative paths
     $possiblePaths = [
-        __DIR__ . '/../vendor/autoload.php',
+        __DIR__ . '/../../vendor/autoload.php',
         __DIR__ . '/../../../vendor/autoload.php',
         '/var/www/vendor/autoload.php'
     ];
@@ -41,13 +48,13 @@ if (!file_exists(__DIR__ . '/../../vendor/autoload.php')) {
     }
 } else {
     // Load the Laravel application
-    require __DIR__ . '/../../vendor/autoload.php';
+    require $autoloadPath;
 }
 
 // Try to load the Laravel app if possible
 $app = null;
-if (file_exists(__DIR__ . '/../../bootstrap/app.php')) {
-    $app = require_once __DIR__ . '/../../bootstrap/app.php';
+if (file_exists($appPath)) {
+    $app = require_once $appPath;
     echo "Laravel app loaded successfully.\n";
 } else {
     echo "WARNING: bootstrap/app.php not found. Continuing without Laravel app.\n";
@@ -89,29 +96,29 @@ $config = [
 
 // Try to write the configuration to a file
 $configPaths = [
+    $configPath,
     __DIR__ . '/../../bootstrap/cache/config.php',
-    __DIR__ . '/../bootstrap/cache/config.php',
     __DIR__ . '/../../../bootstrap/cache/config.php',
     '/var/www/bootstrap/cache/config.php'
 ];
 
 $configWritten = false;
-foreach ($configPaths as $configPath) {
-    echo "Trying to write config to: $configPath\n";
+foreach ($configPaths as $path) {
+    echo "Trying to write config to: $path\n";
     
     // Make sure the directory exists
-    $configDir = dirname($configPath);
+    $configDir = dirname($path);
     if (!file_exists($configDir)) {
         echo "Creating directory: $configDir\n";
         mkdir($configDir, 0755, true);
     }
     
-    if (file_put_contents($configPath, '<?php return ' . var_export($config, true) . ';')) {
-        echo "Database configuration written successfully to: $configPath\n";
+    if (file_put_contents($path, '<?php return ' . var_export($config, true) . ';')) {
+        echo "Database configuration written successfully to: $path\n";
         $configWritten = true;
         break;
     } else {
-        echo "Failed to write to: $configPath\n";
+        echo "Failed to write to: $path\n";
     }
 }
 
