@@ -1,7 +1,7 @@
 <?php
 
-// This script sets the database configuration directly in Laravel's configuration cache
-// It bypasses the .env file and sets the configuration directly
+// This script sets the database configuration directly in the database config file
+// It bypasses the .env file and config cache
 
 // Enable error reporting for debugging
 error_reporting(E_ALL);
@@ -9,56 +9,6 @@ ini_set('display_errors', 1);
 
 // Log the current directory and paths for debugging
 echo "Current directory: " . __DIR__ . "\n";
-
-// Based on the error message, the correct path is /var/www/docker/prod/../vendor/autoload.php
-$autoloadPath = __DIR__ . '/../vendor/autoload.php';
-$appPath = __DIR__ . '/../bootstrap/app.php';
-$configPath = __DIR__ . '/../bootstrap/cache/config.php';
-
-echo "Looking for autoload.php at: $autoloadPath\n";
-echo "Looking for app.php at: $appPath\n";
-echo "Looking for config.php at: $configPath\n";
-
-// Check if the files exist
-if (!file_exists($autoloadPath)) {
-    echo "ERROR: autoload.php not found at $autoloadPath\n";
-    echo "Trying alternative paths...\n";
-    
-    // Try alternative paths
-    $possiblePaths = [
-        __DIR__ . '/../../vendor/autoload.php',
-        __DIR__ . '/../../../vendor/autoload.php',
-        '/var/www/vendor/autoload.php'
-    ];
-    
-    $autoloadFound = false;
-    foreach ($possiblePaths as $path) {
-        echo "Checking: $path\n";
-        if (file_exists($path)) {
-            echo "Found autoload.php at: $path\n";
-            require $path;
-            $autoloadFound = true;
-            break;
-        }
-    }
-    
-    if (!$autoloadFound) {
-        echo "ERROR: Could not find autoload.php. Using direct configuration.\n";
-        // Continue without Laravel
-    }
-} else {
-    // Load the Laravel application
-    require $autoloadPath;
-}
-
-// Try to load the Laravel app if possible
-$app = null;
-if (file_exists($appPath)) {
-    $app = require_once $appPath;
-    echo "Laravel app loaded successfully.\n";
-} else {
-    echo "WARNING: bootstrap/app.php not found. Continuing without Laravel app.\n";
-}
 
 // Get the environment variables
 $dbHost = getenv('PGHOST');
@@ -74,17 +24,21 @@ echo "DB_PORT: $dbPort\n";
 echo "DB_DATABASE: $dbDatabase\n";
 echo "DB_USERNAME: $dbUsername\n";
 
-// Set the database configuration directly
-$config = [
+// Create the database configuration array
+$config = <<<PHP
+<?php
+
+return [
     'default' => 'pgsql',
     'connections' => [
         'pgsql' => [
             'driver' => 'pgsql',
-            'host' => $dbHost,
+            'url' => null,
+            'host' => '$dbHost',
             'port' => $dbPort,
-            'database' => $dbDatabase,
-            'username' => $dbUsername,
-            'password' => $dbPassword,
+            'database' => '$dbDatabase',
+            'username' => '$dbUsername',
+            'password' => '$dbPassword',
             'charset' => 'utf8',
             'prefix' => '',
             'prefix_indexes' => true,
@@ -93,13 +47,13 @@ $config = [
         ],
     ],
 ];
+PHP;
 
-// Try to write the configuration to a file
+// Try to write the configuration to the database config file
 $configPaths = [
-    $configPath,
-    __DIR__ . '/../../bootstrap/cache/config.php',
-    __DIR__ . '/../../../bootstrap/cache/config.php',
-    '/var/www/bootstrap/cache/config.php'
+    '/var/www/config/database.php',
+    __DIR__ . '/../../config/database.php',
+    __DIR__ . '/../config/database.php'
 ];
 
 $configWritten = false;
@@ -113,7 +67,7 @@ foreach ($configPaths as $path) {
         mkdir($configDir, 0755, true);
     }
     
-    if (file_put_contents($path, '<?php return ' . var_export($config, true) . ';')) {
+    if (file_put_contents($path, $config)) {
         echo "Database configuration written successfully to: $path\n";
         $configWritten = true;
         break;
