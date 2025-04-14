@@ -141,20 +141,28 @@ fi
 # Check for PostgreSQL variables (private connection)
 if [ -n "$PGHOST" ] && [ -n "$PGPORT" ] && [ -n "$PGDATABASE" ] && [ -n "$PGUSER" ] && [ -n "$PGPASSWORD" ]; then
     log "Using Railway PostgreSQL configuration..."
-    # Remove any quotes from the values
-    PGHOST=$(echo $PGHOST | tr -d '"')
-    PGPORT=$(echo $PGPORT | tr -d '"')
-    PGDATABASE=$(echo $PGDATABASE | tr -d '"')
-    PGUSER=$(echo $PGUSER | tr -d '"')
-    PGPASSWORD=$(echo $PGPASSWORD | tr -d '"')
     
-    # Update .env file with clean values
-    sed -i "s#DB_CONNECTION=.*#DB_CONNECTION=pgsql#" /var/www/.env
-    sed -i "s#DB_HOST=.*#DB_HOST=$PGHOST#" /var/www/.env
-    sed -i "s#DB_PORT=.*#DB_PORT=$PGPORT#" /var/www/.env
-    sed -i "s#DB_DATABASE=.*#DB_DATABASE=$PGDATABASE#" /var/www/.env
-    sed -i "s#DB_USERNAME=.*#DB_USERNAME=$PGUSER#" /var/www/.env
-    sed -i "s#DB_PASSWORD=.*#DB_PASSWORD=$PGPASSWORD#" /var/www/.env
+    # Remove any quotes from the values and ensure they're properly formatted
+    PGHOST=$(echo $PGHOST | tr -d '"' | tr -d "'")
+    PGPORT=$(echo $PGPORT | tr -d '"' | tr -d "'")
+    PGDATABASE=$(echo $PGDATABASE | tr -d '"' | tr -d "'")
+    PGUSER=$(echo $PGUSER | tr -d '"' | tr -d "'")
+    PGPASSWORD=$(echo $PGPASSWORD | tr -d '"' | tr -d "'")
+    
+    # Create a temporary .env file with the correct database configuration
+    log "Creating a clean .env file with proper database configuration..."
+    cp /var/www/.env /var/www/.env.temp
+    
+    # Update the temporary .env file with clean values
+    sed -i "s#DB_CONNECTION=.*#DB_CONNECTION=pgsql#" /var/www/.env.temp
+    sed -i "s#DB_HOST=.*#DB_HOST=$PGHOST#" /var/www/.env.temp
+    sed -i "s#DB_PORT=.*#DB_PORT=$PGPORT#" /var/www/.env.temp
+    sed -i "s#DB_DATABASE=.*#DB_DATABASE=$PGDATABASE#" /var/www/.env.temp
+    sed -i "s#DB_USERNAME=.*#DB_USERNAME=$PGUSER#" /var/www/.env.temp
+    sed -i "s#DB_PASSWORD=.*#DB_PASSWORD=$PGPASSWORD#" /var/www/.env.temp
+    
+    # Replace the original .env file with the clean one
+    mv /var/www/.env.temp /var/www/.env
     
     # Verify database configuration
     log "Verifying database configuration..."
@@ -175,19 +183,26 @@ if [ -n "$PGHOST" ] && [ -n "$PGPORT" ] && [ -n "$PGDATABASE" ] && [ -n "$PGUSER
 elif [ -n "$RAILWAY_PRIVATE_DOMAIN" ]; then
     log "Using Railway private domain for database connection..."
     # Extract database components from private domain
-    DB_HOST=$RAILWAY_PRIVATE_DOMAIN
+    DB_HOST=$(echo $RAILWAY_PRIVATE_DOMAIN | tr -d '"' | tr -d "'")
     DB_PORT=${PGPORT:-5432}
     DB_DATABASE=${PGDATABASE:-railway}
     DB_USERNAME=${PGUSER:-postgres}
     DB_PASSWORD=${PGPASSWORD}
     
-    # Update .env file with private domain
-    sed -i "s#DB_CONNECTION=.*#DB_CONNECTION=pgsql#" /var/www/.env
-    sed -i "s#DB_HOST=.*#DB_HOST=$DB_HOST#" /var/www/.env
-    sed -i "s#DB_PORT=.*#DB_PORT=$DB_PORT#" /var/www/.env
-    sed -i "s#DB_DATABASE=.*#DB_DATABASE=$DB_DATABASE#" /var/www/.env
-    sed -i "s#DB_USERNAME=.*#DB_USERNAME=$DB_USERNAME#" /var/www/.env
-    sed -i "s#DB_PASSWORD=.*#DB_PASSWORD=$DB_PASSWORD#" /var/www/.env
+    # Create a temporary .env file with the correct database configuration
+    log "Creating a clean .env file with proper database configuration..."
+    cp /var/www/.env /var/www/.env.temp
+    
+    # Update the temporary .env file with clean values
+    sed -i "s#DB_CONNECTION=.*#DB_CONNECTION=pgsql#" /var/www/.env.temp
+    sed -i "s#DB_HOST=.*#DB_HOST=$DB_HOST#" /var/www/.env.temp
+    sed -i "s#DB_PORT=.*#DB_PORT=$DB_PORT#" /var/www/.env.temp
+    sed -i "s#DB_DATABASE=.*#DB_DATABASE=$DB_DATABASE#" /var/www/.env.temp
+    sed -i "s#DB_USERNAME=.*#DB_USERNAME=$DB_USERNAME#" /var/www/.env.temp
+    sed -i "s#DB_PASSWORD=.*#DB_PASSWORD=$DB_PASSWORD#" /var/www/.env.temp
+    
+    # Replace the original .env file with the clean one
+    mv /var/www/.env.temp /var/www/.env
     
     # Verify database configuration
     log "Verifying database configuration with private domain..."
@@ -216,13 +231,20 @@ elif [ -n "$DATABASE_URL" ]; then
     DB_USERNAME=$(echo $DATABASE_URL | sed -n 's/.*:\/\/\([^:]*\):.*/\1/p')
     DB_PASSWORD=$(echo $DATABASE_URL | sed -n 's/.*:\([^@]*\)@.*/\1/p')
     
-    # Update individual database variables
-    sed -i "s#DB_CONNECTION=.*#DB_CONNECTION=pgsql#" /var/www/.env
-    sed -i "s#DB_HOST=.*#DB_HOST=$DB_HOST#" /var/www/.env
-    sed -i "s#DB_PORT=.*#DB_PORT=$DB_PORT#" /var/www/.env
-    sed -i "s#DB_DATABASE=.*#DB_DATABASE=$DB_DATABASE#" /var/www/.env
-    sed -i "s#DB_USERNAME=.*#DB_USERNAME=$DB_USERNAME#" /var/www/.env
-    sed -i "s#DB_PASSWORD=.*#DB_PASSWORD=$DB_PASSWORD#" /var/www/.env
+    # Create a temporary .env file with the correct database configuration
+    log "Creating a clean .env file with proper database configuration..."
+    cp /var/www/.env /var/www/.env.temp
+    
+    # Update the temporary .env file with clean values
+    sed -i "s#DB_CONNECTION=.*#DB_CONNECTION=pgsql#" /var/www/.env.temp
+    sed -i "s#DB_HOST=.*#DB_HOST=$DB_HOST#" /var/www/.env.temp
+    sed -i "s#DB_PORT=.*#DB_PORT=$DB_PORT#" /var/www/.env.temp
+    sed -i "s#DB_DATABASE=.*#DB_DATABASE=$DB_DATABASE#" /var/www/.env.temp
+    sed -i "s#DB_USERNAME=.*#DB_USERNAME=$DB_USERNAME#" /var/www/.env.temp
+    sed -i "s#DB_PASSWORD=.*#DB_PASSWORD=$DB_PASSWORD#" /var/www/.env.temp
+    
+    # Replace the original .env file with the clean one
+    mv /var/www/.env.temp /var/www/.env
     
     # Verify database configuration
     log "Verifying database configuration..."
@@ -251,13 +273,20 @@ elif [ -n "$DATABASE_PUBLIC_URL" ]; then
     DB_USERNAME=$(echo $DATABASE_PUBLIC_URL | sed -n 's/.*:\/\/\([^:]*\):.*/\1/p')
     DB_PASSWORD=$(echo $DATABASE_PUBLIC_URL | sed -n 's/.*:\([^@]*\)@.*/\1/p')
     
-    # Update individual database variables
-    sed -i "s#DB_CONNECTION=.*#DB_CONNECTION=pgsql#" /var/www/.env
-    sed -i "s#DB_HOST=.*#DB_HOST=$DB_HOST#" /var/www/.env
-    sed -i "s#DB_PORT=.*#DB_PORT=$DB_PORT#" /var/www/.env
-    sed -i "s#DB_DATABASE=.*#DB_DATABASE=$DB_DATABASE#" /var/www/.env
-    sed -i "s#DB_USERNAME=.*#DB_USERNAME=$DB_USERNAME#" /var/www/.env
-    sed -i "s#DB_PASSWORD=.*#DB_PASSWORD=$DB_PASSWORD#" /var/www/.env
+    # Create a temporary .env file with the correct database configuration
+    log "Creating a clean .env file with proper database configuration..."
+    cp /var/www/.env /var/www/.env.temp
+    
+    # Update the temporary .env file with clean values
+    sed -i "s#DB_CONNECTION=.*#DB_CONNECTION=pgsql#" /var/www/.env.temp
+    sed -i "s#DB_HOST=.*#DB_HOST=$DB_HOST#" /var/www/.env.temp
+    sed -i "s#DB_PORT=.*#DB_PORT=$DB_PORT#" /var/www/.env.temp
+    sed -i "s#DB_DATABASE=.*#DB_DATABASE=$DB_DATABASE#" /var/www/.env.temp
+    sed -i "s#DB_USERNAME=.*#DB_USERNAME=$DB_USERNAME#" /var/www/.env.temp
+    sed -i "s#DB_PASSWORD=.*#DB_PASSWORD=$DB_PASSWORD#" /var/www/.env.temp
+    
+    # Replace the original .env file with the clean one
+    mv /var/www/.env.temp /var/www/.env
     
     # Verify database configuration
     log "Verifying database configuration..."
