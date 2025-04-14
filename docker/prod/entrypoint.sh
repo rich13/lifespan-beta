@@ -121,6 +121,7 @@ if [ -n "$PGHOST" ] && [ -n "$PGPORT" ] && [ -n "$PGDATABASE" ] && [ -n "$PGUSER
     PGPASSWORD=$(echo $PGPASSWORD | tr -d '"')
     
     # Update .env file with clean values
+    sed -i "s#DB_CONNECTION=.*#DB_CONNECTION=pgsql#" /var/www/.env
     sed -i "s#DB_HOST=.*#DB_HOST=$PGHOST#" /var/www/.env
     sed -i "s#DB_PORT=.*#DB_PORT=$PGPORT#" /var/www/.env
     sed -i "s#DB_DATABASE=.*#DB_DATABASE=$PGDATABASE#" /var/www/.env
@@ -129,6 +130,7 @@ if [ -n "$PGHOST" ] && [ -n "$PGPORT" ] && [ -n "$PGDATABASE" ] && [ -n "$PGUSER
     
     # Verify database configuration
     log "Verifying database configuration..."
+    log "DB_CONNECTION: $(grep DB_CONNECTION /var/www/.env | cut -d'=' -f2)"
     log "DB_HOST: $(grep DB_HOST /var/www/.env | cut -d'=' -f2)"
     log "DB_PORT: $(grep DB_PORT /var/www/.env | cut -d'=' -f2)"
     log "DB_DATABASE: $(grep DB_DATABASE /var/www/.env | cut -d'=' -f2)"
@@ -151,15 +153,22 @@ else
     sed -i "s#APP_KEY=.*#APP_KEY=${APP_KEY}#" /var/www/.env
 fi
 
-# Set up storage
-log "Setting up storage..."
-mkdir -p /var/www/storage/logs /var/www/storage/sessions /var/www/storage/views /var/www/storage/cache /var/www/storage/app/public
-chown -R www-data:www-data /var/www/storage
-chmod -R 775 /var/www/storage
+# Set up storage directories and permissions
+log "Setting up storage directories..."
+mkdir -p /var/www/storage/logs \
+    /var/www/storage/framework/{sessions,views,cache,testing,cache/data} \
+    /var/www/storage/app/public \
+    /var/www/bootstrap/cache
+
+# Set proper permissions
+log "Setting proper permissions..."
+chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache
+chmod -R 775 /var/www/storage /var/www/bootstrap/cache
+chmod -R 775 /var/www/resources/views
 
 # Create storage link
 log "Creating storage link..."
-php artisan storage:link || true
+su www-data -s /bin/bash -c "php artisan storage:link"
 
 # Wait for database
 if ! wait_for_db; then
@@ -171,19 +180,21 @@ if ! wait_for_db; then
     exit 1
 fi
 
-# Run migrations
+# Run database migrations
 log "Running database migrations..."
-php artisan migrate --force || {
-    log "ERROR: Migration failed"
-    exit 1
-}
+su www-data -s /bin/bash -c "php artisan migrate --force"
 
-# Optimize application
+# Optimize the application
 log "Optimizing application..."
-php artisan optimize
-php artisan config:cache
-php artisan route:cache
+su www-data -s /bin/bash -c "php artisan optimize"
+su www-data -s /bin/bash -c "php artisan config:cache"
+su www-data -s /bin/bash -c "php artisan route:cache"
+su www-data -s /bin/bash -c "php artisan view:cache"
+
+# Configure nginx port
+log "Configuring nginx port..."
+sed -i "s#listen 80;#listen $PORT;#" /etc/nginx/nginx.conf
 
 # Start supervisor
 log "Starting supervisor..."
-exec /usr/bin/supervisord -n -c /etc/supervisor/conf.d/supervisord.conf 
+exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf 
