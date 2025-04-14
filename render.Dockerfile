@@ -77,9 +77,11 @@ RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache /var/ww
 # Copy and verify configuration files
 COPY docker/prod/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY docker/prod/health-check.sh /usr/local/bin/health-check.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/health-check.sh && \
+COPY docker/prod/check-db.sh /usr/local/bin/check-db.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/health-check.sh /usr/local/bin/check-db.sh && \
     test -f /usr/local/bin/entrypoint.sh || exit 1 && \
-    test -f /usr/local/bin/health-check.sh || exit 1
+    test -f /usr/local/bin/health-check.sh || exit 1 && \
+    test -f /usr/local/bin/check-db.sh || exit 1
 
 # Configure PHP
 COPY docker/prod/php.ini /usr/local/etc/php/conf.d/app.ini

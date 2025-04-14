@@ -140,6 +140,14 @@ if [ -n "$PGHOST" ] && [ -n "$PGPORT" ] && [ -n "$PGDATABASE" ] && [ -n "$PGUSER
     log "Clearing Laravel's configuration cache..."
     php artisan config:clear
     php artisan cache:clear
+    
+    # Use the check-db.sh script to test the connection
+    if /usr/local/bin/check-db.sh; then
+        log "Database is ready!"
+    else
+        log "ERROR: Database connection failed"
+        exit 1
+    fi
 else
     log "Using default database configuration from .env file..."
 fi
@@ -176,13 +184,29 @@ ln -sf /var/www/storage/app/public /var/www/public/storage
 chown -h www-data:www-data /var/www/public/storage
 
 # Wait for database
-if ! wait_for_db; then
-    log "ERROR: Could not connect to database. Please check your database configuration."
-    log "INFO: You can set the following environment variables in Railway:"
-    log "      PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD"
-    log "INFO: Current environment variables:"
-    env | grep -E "PG(HOST|PORT|DATABASE|USER|PASSWORD)"
-    exit 1
+log "Waiting for database to be ready..."
+if [ -n "$PGHOST" ] && [ -n "$PGPORT" ] && [ -n "$PGDATABASE" ] && [ -n "$PGUSER" ] && [ -n "$PGPASSWORD" ]; then
+    # Use the check-db.sh script to test the connection
+    if /usr/local/bin/check-db.sh; then
+        log "Database is ready!"
+    else
+        log "ERROR: Database connection failed"
+        exit 1
+    fi
+else
+    # Try using Laravel's database configuration
+    for i in {1..30}; do
+        if php artisan db:monitor --timeout=1 >/dev/null 2>&1; then
+            log "Database is ready!"
+            break
+        fi
+        if [ $i -eq 30 ]; then
+            log "ERROR: Database failed to become ready in time"
+            exit 1
+        fi
+        log "Waiting for database... attempt $i of 30"
+        sleep 2
+    done
 fi
 
 # Run database migrations
