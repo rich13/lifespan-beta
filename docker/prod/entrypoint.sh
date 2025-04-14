@@ -121,41 +121,8 @@ if [ -n "$DATABASE_URL" ]; then log "DATABASE_URL: [REDACTED]"; fi
 if [ -n "$DATABASE_PUBLIC_URL" ]; then log "DATABASE_PUBLIC_URL: [REDACTED]"; fi
 if [ -n "$RAILWAY_PRIVATE_DOMAIN" ]; then log "RAILWAY_PRIVATE_DOMAIN: $RAILWAY_PRIVATE_DOMAIN"; fi
 
-# Check for Railway private domain first (to avoid egress fees)
-if [ -n "$RAILWAY_PRIVATE_DOMAIN" ]; then
-    log "Using Railway private domain for database connection..."
-    # Extract database components from private domain
-    DB_HOST=$RAILWAY_PRIVATE_DOMAIN
-    DB_PORT=${PGPORT:-5432}
-    DB_DATABASE=${PGDATABASE:-railway}
-    DB_USERNAME=${PGUSER:-postgres}
-    DB_PASSWORD=${PGPASSWORD}
-    
-    # Update .env file with private domain
-    sed -i "s#DB_CONNECTION=.*#DB_CONNECTION=pgsql#" /var/www/.env
-    sed -i "s#DB_HOST=.*#DB_HOST=$DB_HOST#" /var/www/.env
-    sed -i "s#DB_PORT=.*#DB_PORT=$DB_PORT#" /var/www/.env
-    sed -i "s#DB_DATABASE=.*#DB_DATABASE=$DB_DATABASE#" /var/www/.env
-    sed -i "s#DB_USERNAME=.*#DB_USERNAME=$DB_USERNAME#" /var/www/.env
-    sed -i "s#DB_PASSWORD=.*#DB_PASSWORD=$DB_PASSWORD#" /var/www/.env
-    
-    # Verify database configuration
-    log "Verifying database configuration with private domain..."
-    log "DB_CONNECTION: $(grep DB_CONNECTION /var/www/.env | cut -d'=' -f2)"
-    log "DB_HOST: $(grep DB_HOST /var/www/.env | cut -d'=' -f2)"
-    log "DB_PORT: $(grep DB_PORT /var/www/.env | cut -d'=' -f2)"
-    log "DB_DATABASE: $(grep DB_DATABASE /var/www/.env | cut -d'=' -f2)"
-    log "DB_USERNAME: $(grep DB_USERNAME /var/www/.env | cut -d'=' -f2)"
-    
-    # Clear Laravel's configuration cache
-    log "Clearing Laravel's configuration cache..."
-    php artisan config:clear
-    php artisan cache:clear
-    
-    # Wait for database
-    wait_for_db
 # Check for PostgreSQL variables (private connection)
-elif [ -n "$PGHOST" ] && [ -n "$PGPORT" ] && [ -n "$PGDATABASE" ] && [ -n "$PGUSER" ] && [ -n "$PGPASSWORD" ]; then
+if [ -n "$PGHOST" ] && [ -n "$PGPORT" ] && [ -n "$PGDATABASE" ] && [ -n "$PGUSER" ] && [ -n "$PGPASSWORD" ]; then
     log "Using Railway PostgreSQL configuration..."
     # Remove any quotes from the values
     PGHOST=$(echo $PGHOST | tr -d '"')
@@ -187,10 +154,43 @@ elif [ -n "$PGHOST" ] && [ -n "$PGPORT" ] && [ -n "$PGDATABASE" ] && [ -n "$PGUS
     
     # Wait for database
     wait_for_db
+# Check for Railway private domain as fallback
+elif [ -n "$RAILWAY_PRIVATE_DOMAIN" ]; then
+    log "Using Railway private domain for database connection..."
+    # Extract database components from private domain
+    DB_HOST=$RAILWAY_PRIVATE_DOMAIN
+    DB_PORT=${PGPORT:-5432}
+    DB_DATABASE=${PGDATABASE:-railway}
+    DB_USERNAME=${PGUSER:-postgres}
+    DB_PASSWORD=${PGPASSWORD}
+    
+    # Update .env file with private domain
+    sed -i "s#DB_CONNECTION=.*#DB_CONNECTION=pgsql#" /var/www/.env
+    sed -i "s#DB_HOST=.*#DB_HOST=$DB_HOST#" /var/www/.env
+    sed -i "s#DB_PORT=.*#DB_PORT=$DB_PORT#" /var/www/.env
+    sed -i "s#DB_DATABASE=.*#DB_DATABASE=$DB_DATABASE#" /var/www/.env
+    sed -i "s#DB_USERNAME=.*#DB_USERNAME=$DB_USERNAME#" /var/www/.env
+    sed -i "s#DB_PASSWORD=.*#DB_PASSWORD=$DB_PASSWORD#" /var/www/.env
+    
+    # Verify database configuration
+    log "Verifying database configuration with private domain..."
+    log "DB_CONNECTION: $(grep DB_CONNECTION /var/www/.env | cut -d'=' -f2)"
+    log "DB_HOST: $(grep DB_HOST /var/www/.env | cut -d'=' -f2)"
+    log "DB_PORT: $(grep DB_PORT /var/www/.env | cut -d'=' -f2)"
+    log "DB_DATABASE: $(grep DB_DATABASE /var/www/.env | cut -d'=' -f2)"
+    log "DB_USERNAME: $(grep DB_USERNAME /var/www/.env | cut -d'=' -f2)"
+    
+    # Clear Laravel's configuration cache
+    log "Clearing Laravel's configuration cache..."
+    php artisan config:clear
+    php artisan cache:clear
+    
+    # Wait for database
+    wait_for_db
 # Check for DATABASE_URL (public endpoint) as fallback
 elif [ -n "$DATABASE_URL" ]; then
     log "WARNING: Using DATABASE_URL (public endpoint) which may incur egress fees..."
-    log "INFO: Consider using RAILWAY_PRIVATE_DOMAIN or PGHOST, PGPORT, etc. to avoid egress fees"
+    log "INFO: Consider using PGHOST, PGPORT, etc. to avoid egress fees"
     sed -i "s#DATABASE_URL=.*#DATABASE_URL=$DATABASE_URL#" /var/www/.env
     sed -i "s#DB_CONNECTION=.*#DB_CONNECTION=pgsql#" /var/www/.env
     
@@ -227,7 +227,7 @@ elif [ -n "$DATABASE_URL" ]; then
 # Check for DATABASE_PUBLIC_URL as last resort
 elif [ -n "$DATABASE_PUBLIC_URL" ]; then
     log "WARNING: Using DATABASE_PUBLIC_URL (public endpoint) which will incur egress fees..."
-    log "INFO: Consider using RAILWAY_PRIVATE_DOMAIN or PGHOST, PGPORT, etc. to avoid egress fees"
+    log "INFO: Consider using PGHOST, PGPORT, etc. to avoid egress fees"
     sed -i "s#DATABASE_URL=.*#DATABASE_URL=$DATABASE_PUBLIC_URL#" /var/www/.env
     sed -i "s#DB_CONNECTION=.*#DB_CONNECTION=pgsql#" /var/www/.env
     
@@ -262,7 +262,7 @@ elif [ -n "$DATABASE_PUBLIC_URL" ]; then
     # Wait for database
     wait_for_db
 else
-    log "WARNING: No database configuration found. Please set RAILWAY_PRIVATE_DOMAIN or PGHOST, PGPORT, etc. or DATABASE_URL or DATABASE_PUBLIC_URL"
+    log "WARNING: No database configuration found. Please set PGHOST, PGPORT, etc. or RAILWAY_PRIVATE_DOMAIN or DATABASE_URL or DATABASE_PUBLIC_URL"
     log "INFO: Using default database configuration from .env file"
     log "INFO: Current database configuration:"
     grep -E "DB_(HOST|PORT|DATABASE|USERNAME|PASSWORD)" /var/www/.env
@@ -271,8 +271,8 @@ else
     wait_for_db || {
         log "ERROR: Could not connect to database. Please check your database configuration."
         log "INFO: You can set the following environment variables in Railway:"
-        log "      RAILWAY_PRIVATE_DOMAIN (preferred to avoid egress fees)"
         log "      PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD (preferred to avoid egress fees)"
+        log "      RAILWAY_PRIVATE_DOMAIN (alternative to avoid egress fees)"
         log "      DATABASE_URL (may incur egress fees)"
         log "      DATABASE_PUBLIC_URL (will incur egress fees)"
         log "INFO: Current environment variables:"
