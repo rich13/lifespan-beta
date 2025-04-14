@@ -121,6 +121,23 @@ if [ -n "$DATABASE_URL" ]; then log "DATABASE_URL: [REDACTED]"; fi
 if [ -n "$DATABASE_PUBLIC_URL" ]; then log "DATABASE_PUBLIC_URL: [REDACTED]"; fi
 if [ -n "$RAILWAY_PRIVATE_DOMAIN" ]; then log "RAILWAY_PRIVATE_DOMAIN: $RAILWAY_PRIVATE_DOMAIN"; fi
 
+# Direct database connection test
+log "Testing direct database connection..."
+if [ -n "$PGHOST" ] && [ -n "$PGPASSWORD" ]; then
+    log "Attempting to connect to PostgreSQL directly..."
+    if PGPASSWORD=$PGPASSWORD psql -h $PGHOST -U $PGUSER -d $PGDATABASE -c "SELECT 1;" 2>/dev/null; then
+        log "Direct PostgreSQL connection successful!"
+    else
+        log "WARNING: Direct PostgreSQL connection failed. This may indicate network issues."
+        log "INFO: Checking if the database host is reachable..."
+        if ping -c 1 $PGHOST &>/dev/null; then
+            log "Database host is reachable via ping."
+        else
+            log "WARNING: Database host is not reachable via ping. This may indicate DNS or network issues."
+        fi
+    fi
+fi
+
 # Check for PostgreSQL variables (private connection)
 if [ -n "$PGHOST" ] && [ -n "$PGPORT" ] && [ -n "$PGDATABASE" ] && [ -n "$PGUSER" ] && [ -n "$PGPASSWORD" ]; then
     log "Using Railway PostgreSQL configuration..."
@@ -191,8 +208,6 @@ elif [ -n "$RAILWAY_PRIVATE_DOMAIN" ]; then
 elif [ -n "$DATABASE_URL" ]; then
     log "WARNING: Using DATABASE_URL (public endpoint) which may incur egress fees..."
     log "INFO: Consider using PGHOST, PGPORT, etc. to avoid egress fees"
-    sed -i "s#DATABASE_URL=.*#DATABASE_URL=$DATABASE_URL#" /var/www/.env
-    sed -i "s#DB_CONNECTION=.*#DB_CONNECTION=pgsql#" /var/www/.env
     
     # Extract database components from DATABASE_URL
     DB_HOST=$(echo $DATABASE_URL | sed -n 's/.*@\([^:]*\).*/\1/p')
@@ -202,6 +217,7 @@ elif [ -n "$DATABASE_URL" ]; then
     DB_PASSWORD=$(echo $DATABASE_URL | sed -n 's/.*:\([^@]*\)@.*/\1/p')
     
     # Update individual database variables
+    sed -i "s#DB_CONNECTION=.*#DB_CONNECTION=pgsql#" /var/www/.env
     sed -i "s#DB_HOST=.*#DB_HOST=$DB_HOST#" /var/www/.env
     sed -i "s#DB_PORT=.*#DB_PORT=$DB_PORT#" /var/www/.env
     sed -i "s#DB_DATABASE=.*#DB_DATABASE=$DB_DATABASE#" /var/www/.env
@@ -210,7 +226,6 @@ elif [ -n "$DATABASE_URL" ]; then
     
     # Verify database configuration
     log "Verifying database configuration..."
-    log "DATABASE_URL: $(grep DATABASE_URL /var/www/.env | cut -d'=' -f2)"
     log "DB_CONNECTION: $(grep DB_CONNECTION /var/www/.env | cut -d'=' -f2)"
     log "DB_HOST: $(grep DB_HOST /var/www/.env | cut -d'=' -f2)"
     log "DB_PORT: $(grep DB_PORT /var/www/.env | cut -d'=' -f2)"
@@ -228,8 +243,6 @@ elif [ -n "$DATABASE_URL" ]; then
 elif [ -n "$DATABASE_PUBLIC_URL" ]; then
     log "WARNING: Using DATABASE_PUBLIC_URL (public endpoint) which will incur egress fees..."
     log "INFO: Consider using PGHOST, PGPORT, etc. to avoid egress fees"
-    sed -i "s#DATABASE_URL=.*#DATABASE_URL=$DATABASE_PUBLIC_URL#" /var/www/.env
-    sed -i "s#DB_CONNECTION=.*#DB_CONNECTION=pgsql#" /var/www/.env
     
     # Extract database components from DATABASE_PUBLIC_URL
     DB_HOST=$(echo $DATABASE_PUBLIC_URL | sed -n 's/.*@\([^:]*\).*/\1/p')
@@ -239,6 +252,7 @@ elif [ -n "$DATABASE_PUBLIC_URL" ]; then
     DB_PASSWORD=$(echo $DATABASE_PUBLIC_URL | sed -n 's/.*:\([^@]*\)@.*/\1/p')
     
     # Update individual database variables
+    sed -i "s#DB_CONNECTION=.*#DB_CONNECTION=pgsql#" /var/www/.env
     sed -i "s#DB_HOST=.*#DB_HOST=$DB_HOST#" /var/www/.env
     sed -i "s#DB_PORT=.*#DB_PORT=$DB_PORT#" /var/www/.env
     sed -i "s#DB_DATABASE=.*#DB_DATABASE=$DB_DATABASE#" /var/www/.env
@@ -247,7 +261,6 @@ elif [ -n "$DATABASE_PUBLIC_URL" ]; then
     
     # Verify database configuration
     log "Verifying database configuration..."
-    log "DATABASE_URL: $(grep DATABASE_URL /var/www/.env | cut -d'=' -f2)"
     log "DB_CONNECTION: $(grep DB_CONNECTION /var/www/.env | cut -d'=' -f2)"
     log "DB_HOST: $(grep DB_HOST /var/www/.env | cut -d'=' -f2)"
     log "DB_PORT: $(grep DB_PORT /var/www/.env | cut -d'=' -f2)"
