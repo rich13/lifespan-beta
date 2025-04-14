@@ -10,12 +10,33 @@ ini_set('display_errors', 1);
 // Log the current directory and paths for debugging
 echo "Current directory: " . __DIR__ . "\n";
 
-// Get the environment variables
+// Get and validate the environment variables
 $dbHost = getenv('PGHOST');
 $dbPort = getenv('PGPORT');
 $dbDatabase = getenv('PGDATABASE');
 $dbUsername = getenv('PGUSER');
 $dbPassword = getenv('PGPASSWORD');
+
+// Validate required variables
+if (!$dbHost || !$dbPort || !$dbDatabase || !$dbUsername || !$dbPassword) {
+    echo "ERROR: Missing required database environment variables\n";
+    exit(1);
+}
+
+// Clean and escape the values
+$dbHost = addslashes($dbHost);
+$dbPort = (int)$dbPort ?: 5432;
+$dbDatabase = addslashes($dbDatabase);
+$dbUsername = addslashes($dbUsername);
+$dbPassword = addslashes($dbPassword);
+
+// Set Laravel's DB_ environment variables
+putenv("DB_CONNECTION=pgsql");
+putenv("DB_HOST=$dbHost");
+putenv("DB_PORT=$dbPort");
+putenv("DB_DATABASE=$dbDatabase");
+putenv("DB_USERNAME=$dbUsername");
+putenv("DB_PASSWORD=$dbPassword");
 
 // Log the database configuration
 echo "Setting database configuration:\n";
@@ -44,8 +65,14 @@ return [
             'prefix_indexes' => true,
             'search_path' => 'public',
             'sslmode' => 'prefer',
+            'options' => [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_EMULATE_PREPARES => false,
+            ],
         ],
     ],
+    'migrations' => 'migrations',
 ];
 PHP;
 
@@ -89,15 +116,42 @@ if (file_exists($envFile)) {
     $envContent = file_get_contents($envFile);
     
     // Replace database configuration in .env
-    $envContent = preg_replace('/DB_CONNECTION=.*/', 'DB_CONNECTION=pgsql', $envContent);
-    $envContent = preg_replace('/DB_HOST=.*/', 'DB_HOST=' . $dbHost, $envContent);
-    $envContent = preg_replace('/DB_PORT=.*/', 'DB_PORT=' . $dbPort, $envContent);
-    $envContent = preg_replace('/DB_DATABASE=.*/', 'DB_DATABASE=' . $dbDatabase, $envContent);
-    $envContent = preg_replace('/DB_USERNAME=.*/', 'DB_USERNAME=' . $dbUsername, $envContent);
-    $envContent = preg_replace('/DB_PASSWORD=.*/', 'DB_PASSWORD=' . $dbPassword, $envContent);
+    $replacements = [
+        'DB_CONNECTION' => 'pgsql',
+        'DB_HOST' => $dbHost,
+        'DB_PORT' => $dbPort,
+        'DB_DATABASE' => $dbDatabase,
+        'DB_USERNAME' => $dbUsername,
+        'DB_PASSWORD' => $dbPassword
+    ];
     
-    file_put_contents($envFile, $envContent);
-    echo "Updated .env file with database configuration.\n";
+    foreach ($replacements as $key => $value) {
+        $pattern = "/$key=.*/";
+        $replacement = "$key=$value";
+        $envContent = preg_replace($pattern, $replacement, $envContent);
+        
+        // If the variable doesn't exist, add it
+        if (strpos($envContent, "$key=") === false) {
+            $envContent .= "\n$key=$value";
+        }
+    }
+    
+    if (file_put_contents($envFile, $envContent)) {
+        echo "Updated .env file with database configuration.\n";
+    } else {
+        echo "WARNING: Failed to update .env file.\n";
+    }
 }
 
-echo "Database configuration set successfully.\n"; 
+// Test the database connection
+try {
+    $dsn = "pgsql:host=$dbHost;port=$dbPort;dbname=$dbDatabase;user=$dbUsername;password=$dbPassword";
+    $pdo = new PDO($dsn);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    echo "Successfully connected to the database.\n";
+} catch (PDOException $e) {
+    echo "ERROR: Failed to connect to the database: " . $e->getMessage() . "\n";
+    exit(1);
+}
+
+echo "Database configuration completed successfully.\n"; 
