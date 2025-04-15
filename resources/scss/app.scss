@@ -1,8 +1,19 @@
 // Use modern SASS syntax
 @use "sass:color";
 @use "bootstrap/scss/bootstrap" as bootstrap;
-@use "bootstrap-icons/font/bootstrap-icons.css" as icons;
+// @use "bootstrap-icons/font/bootstrap-icons.css" as icons;
 @use "user-dropdown" as dropdown;
+
+// Import Bootstrap Icons with custom font path
+@import "bootstrap-icons/font/bootstrap-icons.css";
+
+// Fix Bootstrap Icons font path for production
+@font-face {
+  font-display: block;
+  font-family: "bootstrap-icons";
+  src: url("/fonts/bootstrap-icons.woff2") format("woff2"),
+       url("/fonts/bootstrap-icons.woff") format("woff");
+}
 
 // Custom colors
 $subject: #0d6efd;  // Bootstrap primary

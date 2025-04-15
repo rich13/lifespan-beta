@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import laravel from 'laravel-vite-plugin';
+import { resolve } from 'path';
 
 export default defineConfig({
     plugins: [
@@ -31,6 +32,19 @@ export default defineConfig({
         }
     },
     build: {
-        chunkSizeWarningLimit: 1000
-    }
+        chunkSizeWarningLimit: 1000,
+        rollupOptions: {
+            output: {
+                manualChunks: undefined,
+            },
+        },
+        // Properly handle asset URLs
+        assetsInlineLimit: 0,
+    },
+    resolve: {
+        alias: {
+            '~bootstrap': resolve(__dirname, 'node_modules/bootstrap'),
+            '~bootstrap-icons': resolve(__dirname, 'node_modules/bootstrap-icons'),
+        }
+    },
 });

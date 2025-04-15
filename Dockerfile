@@ -10,6 +10,12 @@ COPY tailwind.config.js ./
 COPY postcss.config.js ./
 RUN npm run build
 
+# Copy Bootstrap Icons fonts to public directory
+RUN mkdir -p public/fonts
+RUN if [ -d "node_modules/bootstrap-icons/font/fonts/" ]; then \
+        cp -r node_modules/bootstrap-icons/font/fonts/* public/fonts/; \
+    fi
+
 # PHP stage
 FROM php:8.2-fpm
 
@@ -45,6 +51,8 @@ COPY . .
 
 # Copy built frontend assets
 COPY --from=node-builder /app/public/build public/build/
+# Copy font files
+COPY --from=node-builder /app/public/fonts public/fonts/
 
 # Install dependencies
 RUN composer install --no-dev --optimize-autoloader
