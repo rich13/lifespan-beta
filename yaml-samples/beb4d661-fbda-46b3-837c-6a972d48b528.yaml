@@ -1,0 +1,73 @@
+name: 'Richard Dawkins'
+type: person
+gender: male
+start: '1941-03-26'
+end: null
+family:
+  mother: 'Jean Mary Vyvyan Ladner'
+  father: 'Clinton John Dawkins'
+  children:
+    - 'Juliet Emma Dawkins'
+education:
+  -
+    institution: 'Oundle School'
+    start: '1954'
+    end: '1959'
+    id: 96533151-f686-4b65-94d0-374ad3dad6dc
+  -
+    institution: 'Balliol College, Oxford'
+    start: '1959'
+    end: '1962'
+    id: 3be28ee6-d50e-4495-9ded-fe4797d13a4c
+  -
+    institution: 'University of Oxford'
+    start: '1962'
+    end: '1966'
+    degree: 'Doctor of Philosophy in Zoology'
+    id: 0fad3a44-189b-4950-9d80-0aba7d4ceef9
+work:
+  -
+    position: 'Assistant Professor of Zoology at the University of California, Berkeley'
+    start: '1967'
+    end: '1969'
+    id: 490814df-467f-4561-b979-29facf56cffd
+  -
+    position: 'Lecturer and later Reader in Zoology at the University of Oxford'
+    start: '1970'
+    end: '1990'
+    id: 8a1fddc1-e7c7-402f-8c1a-bc66c1bcdce0
+  -
+    position: 'Charles Simonyi Professor for the Public Understanding of Science at the University of Oxford'
+    start: '1995'
+    end: '2008'
+    id: e970902b-8d0c-4611-95cf-1a9396021017
+places:
+  -
+    location: 'Nairobi, British Kenya'
+    start: '1941-03-26'
+    end: '1949'
+    id: 8caafd60-475b-48ff-b634-7ca2b56ef141
+  -
+    location: 'Oxford, England'
+    start: '1959'
+    end: null
+    id: 7a6f7a02-2955-42f9-b588-883db16942fc
+relationships:
+  -
+    relation: wife
+    person: 'Marian Stamp Dawkins'
+    start: '1967'
+    end: '1984'
+    id: 5e4bc48b-b5d1-43f8-8dde-859e9c539bd3
+  -
+    relation: wife
+    person: 'Eve Barham'
+    start: '1984'
+    end: '1992'
+    id: deae6166-b852-4383-a6ca-3407b11c4832
+  -
+    relation: wife
+    person: 'Lalla Ward'
+    start: '1992'
+    end: '2016'
+    id: bed9a134-7572-432a-b874-1d91cd6ff8dd

@@ -1,0 +1,9 @@
+name: 'River Northover'
+type: person
+gender: female
+start: '2019-10-28'
+end: null
+family:
+  father: 'Jack Northover'
+  mother: 'Sophie Northover'
+id: 024b65ae-1297-4cb0-bed5-accfe73ac158

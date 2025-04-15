@@ -114,6 +114,7 @@ log "PGPASSWORD: ${PGPASSWORD:+is set}"
 log "Setting up required directories"
 mkdir -p storage/framework/{sessions,views,cache}
 mkdir -p storage/logs
+mkdir -p storage/app/imports
 touch storage/logs/laravel.log
 chmod -R 775 storage bootstrap/cache
 chown -R www-data:www-data storage bootstrap/cache
@@ -123,6 +124,20 @@ log "Setting up log files"
 touch storage/logs/laravel.log
 chmod 664 storage/logs/laravel.log
 chown www-data:www-data storage/logs/laravel.log
+
+# Ensure imports directory exists and has correct permissions
+log "Setting up imports directory"
+mkdir -p storage/app/imports
+chmod 775 storage/app/imports
+chown www-data:www-data storage/app/imports
+log "Found $(find storage/app/imports -name "*.yaml" | wc -l) YAML files in imports directory"
+
+# If imports directory is empty, create sample YAML files
+if [ $(find storage/app/imports -name "*.yaml" | wc -l) -eq 0 ]; then
+    log "No YAML files found in imports directory, creating samples..."
+    php artisan yaml:create-samples 10
+    log "Created sample YAML files. Now found $(find storage/app/imports -name "*.yaml" | wc -l) YAML files."
+fi
 
 # Create storage link if it doesn't exist
 if [ ! -L "public/storage" ]; then

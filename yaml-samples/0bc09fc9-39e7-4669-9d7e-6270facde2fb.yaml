@@ -1,0 +1,8 @@
+name: 'Robbie Denison'
+type: person
+start: '1994-01-11'
+end: null
+gender: male
+family:
+  children:
+    - 'Amelia Denison'

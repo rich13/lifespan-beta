@@ -27,6 +27,8 @@ class Kernel extends ConsoleKernel
         $this->commands = [
             Commands\CleanupDuplicateSpans::class,
             Commands\CleanThingSpanNames::class,
+            Commands\CreateSampleYaml::class,
+            Commands\ImportYaml::class,
         ];
     }
 }

@@ -1,0 +1,97 @@
+name: 'Paul McCartney'
+type: person
+gender: male
+start: '1942-06-17'
+end: null
+education:
+  -
+    type: education
+    level: primary
+    institution: 'Stockton Wood Road Primary School'
+    start: '1947'
+    end: '1949'
+    id: 22460590-f9ab-416c-aad8-e7b7adff050c
+  -
+    type: education
+    level: primary
+    institution: 'Joseph Williams Junior School'
+    start: '1949'
+    end: '1953'
+    id: 8ae1f920-258e-4478-96bf-c2db5f3fc9da
+  -
+    type: education
+    level: secondary
+    institution: 'Liverpool Institute High School for Boys'
+    start: '1953'
+    end: '1960'
+    id: c42299be-0779-422b-af44-b750974c32b3
+places:
+  -
+    type: residence
+    location: 'Liverpool, England'
+    start: '1942-06-18'
+    end: '1963'
+    id: 0ea3d2a8-8ee0-4a2f-aaa0-46c4084a0f9a
+  -
+    type: residence
+    location: 'London, England'
+    start: '1963'
+    end: '1970'
+    id: 5e19a030-8f04-4967-b849-143a6a529e3e
+  -
+    type: residence
+    location: 'East Sussex, England'
+    start: '1970'
+    end: null
+    id: 95032873-945b-4555-9c00-77299227310c
+  -
+    type: residence
+    location: 'New York City, New York, USA'
+    start: '2002'
+    end: null
+    id: 5878c0dd-c8ac-495f-bcdb-ed8bd5f21eb4
+work:
+  -
+    type: work
+    role: 'Co-Lead Vocalist and Bassist'
+    employer: 'The Beatles'
+    start: '1960'
+    end: '1970'
+    id: c4589446-c576-41e8-870c-7e7b1b4e62ea
+  -
+    type: work
+    role: 'Lead Vocalist and Multi-Instrumentalist'
+    employer: Wings
+    start: '1971'
+    end: '1981'
+    id: 74f08765-ef6d-4ef9-be60-5e038a63759b
+  -
+    type: work
+    role: 'Solo Artist'
+    employer: Self-employed
+    start: '1970'
+    end: null
+    id: 7f6de9b5-7ecd-4d03-8a93-b3e25ad8f7e6
+relationships:
+  -
+    type: relationship
+    person: 'Linda Eastman'
+    relationshipType: marriage
+    start: '1969-03-12'
+    end: '1998-04-17'
+    id: 7adbf41b-ac57-4fad-bcea-ce98518947e2
+  -
+    type: relationship
+    person: 'Heather Mills'
+    relationshipType: marriage
+    start: '2002-06-11'
+    end: '2008-03-17'
+    id: 4b57ef5c-a42a-4fc8-b62b-688872708007
+  -
+    type: relationship
+    person: 'Nancy Shevell'
+    relationshipType: marriage
+    start: '2011-10-09'
+    end: null
+    id: bfa3e168-d464-4222-ab61-4a0ab9211af8
+filename: 47a54277-db28-406e-a591-f57fc4e80223.yaml

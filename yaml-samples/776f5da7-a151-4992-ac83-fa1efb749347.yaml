@@ -1,0 +1,92 @@
+name: 'Winston Churchill'
+type: person
+subtypes:
+  - politician
+gender: male
+start: '1874-11-30'
+end: '1965-01-24'
+id: 776f5da7-a151-4992-ac83-fa1efb749347
+family:
+  father: 'Lord Randolph Churchill'
+  mother: 'Jennie Jerome'
+  children:
+    - 'Diana Churchill'
+    - 'Randolph Churchill'
+    - 'Sarah Churchill'
+    - 'Marigold Churchill'
+    - 'Mary Soames, Baroness Soames'
+education:
+  -
+    level: primary
+    institution: "St. George's School, Ascot"
+    start: '1882'
+    end: '1884'
+    id: 6a2e425c-8806-41cd-885c-e462cc304eec
+  -
+    level: secondary
+    institution: 'Harrow School'
+    start: '1888'
+    end: '1893'
+    id: 0d77616d-2a2b-4416-93f6-ca70e5084bec
+  -
+    level: tertiary
+    institution: 'Royal Military Academy, Sandhurst'
+    course: 'Military Training'
+    start: '1893'
+    end: '1894'
+    id: ca723c09-e951-4b6e-a2a4-6cc56b304ce1
+work:
+  -
+    role: 'Army Officer'
+    employer: 'British Army'
+    start: '1895'
+    end: '1899'
+    id: 36cac91f-7d20-4841-8863-8a6068bd7e99
+  -
+    role: 'Journalist and War Correspondent'
+    employer: 'Various Publications'
+    start: '1899'
+    end: '1900'
+    id: 6a0468c5-5fad-4b3d-bb60-03ac8f9cc7d8
+  -
+    role: 'Member of Parliament (MP)'
+    employer: 'British Government'
+    start: '1900'
+    end: '1964'
+    id: 9087988a-26e7-4c26-8d4d-884b745c9fab
+  -
+    role: 'First Lord of the Admiralty'
+    employer: 'British Government'
+    start: '1911'
+    end: '1915'
+    id: 3d7891c0-1538-4501-bab3-17bb34b7347f
+  -
+    role: 'Prime Minister'
+    employer: 'United Kingdom'
+    start: '1940'
+    end: '1945'
+    id: bdadade5-8cab-4d14-94c5-dd3d5c250289
+  -
+    role: 'Prime Minister'
+    employer: 'United Kingdom'
+    start: '1951'
+    end: '1955'
+    id: 768e3abf-1197-478d-9ec3-6f2511dbfef2
+places:
+  -
+    location: 'Blenheim Palace, Oxfordshire, England'
+    start: '1874'
+    end: '1882'
+    id: 3ee9dbb3-cc05-4afe-abdc-a71afbf4ecfa
+  -
+    location: 'London, England'
+    start: '1882'
+    end: '1965-01-24'
+    id: 5c21ad24-3be5-426a-86e5-556bb36a9478
+relationships:
+  -
+    person: 'Clementine Hozier'
+    relationshipType: marriage
+    start: '1908'
+    end: '1965'
+    id: b726905e-2b05-4e4e-b16d-eb032038a67c

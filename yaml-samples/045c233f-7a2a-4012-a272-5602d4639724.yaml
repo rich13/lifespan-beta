@@ -1,0 +1,10 @@
+name: 'Ali Northover'
+type: person
+start: '1973-07-12'
+end: null
+gender: female
+family:
+  children:
+    - 'Scott Northover'
+    - 'Garvey Northover'
+id: 045c233f-7a2a-4012-a272-5602d4639724

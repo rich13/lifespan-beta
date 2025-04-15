@@ -1,0 +1,37 @@
+name: 'Bob Dylan'
+type: person
+gender: male
+start: '1941-05-24'
+end: null
+family:
+  mother: 'Beatty Zimmerman'
+  father: 'Abram Zimmerman'
+education:
+  -
+    institution: 'University of Minnesota'
+    start: '1959'
+    end: '1960'
+    notes: 'Dropped out'
+    id: 305bd599-9eac-4b73-ae14-0dc55d515401
+work:
+  -
+    role: Singer-songwriter
+    start: '1961'
+    end: null
+    id: 3e31000c-ebb3-4464-b5ca-fc1e5052615d
+places:
+  -
+    location: 'Duluth, Minnesota, USA'
+    start: '1941-05-24'
+    end: '1959'
+    id: dad23631-adc0-40a2-b60d-15e42848235f
+  -
+    location: 'Minneapolis, Minnesota, USA'
+    start: '1959'
+    end: '1960'
+    id: 4bc10655-11da-49b7-bf65-dbe406b673ec
+  -
+    location: 'New York City, New York, USA'
+    start: '1961'
+    end: null
+    id: ce26bb82-30ca-4217-aedf-998fda4a6fd0

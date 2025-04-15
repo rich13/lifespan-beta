@@ -1,0 +1,26 @@
+name: Radiohead
+type: band
+start: '1985-01-01'
+end: null
+members:
+  - name: Thom Yorke
+    role: Lead vocals, guitar, piano
+    start: '1985-01-01'
+    end: null
+  - name: Jonny Greenwood
+    role: Lead guitar, keyboards
+    start: '1985-01-01'
+    end: null
+  - name: Colin Greenwood
+    role: Bass guitar
+    start: '1985-01-01'
+    end: null
+  - name: Ed O'Brien
+    role: Guitar, backing vocals
+    start: '1985-01-01'
+    end: null
+  - name: Philip Selway
+    role: Drums
+    start: '1985-01-01'
+    end: null
+filename: 4f274777-aebc-4d41-bdb0-a6776374179d.yaml

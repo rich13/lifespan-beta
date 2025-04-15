@@ -1,0 +1,8 @@
+name: 'Danny Northover'
+type: person
+gender: male
+start: '2011-06-07'
+end: null
+family:
+  father: 'Richard Northover'
+  mother: 'Jenny McInnes'

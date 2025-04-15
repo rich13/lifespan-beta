@@ -1,0 +1,74 @@
+name: 'Joni Mitchell'
+type: person
+gender: female
+start: '1943-11-07'
+end: null
+family:
+  mother: 'Myrtle Marguerite McKee'
+  father: 'William Andrew Anderson'
+  children:
+    - 'Kelly Dale Anderson'
+education:
+  -
+    level: secondary
+    institution: 'Aden Bowman Collegiate'
+    start: '1957'
+    end: '1960'
+    id: f4d432ec-85e9-4416-a9a6-bc0baba8190c
+  -
+    level: art
+    institution: 'Alberta College of Art and Design'
+    start: '1963'
+    end: '1964'
+    id: 652f8cde-a361-4a17-af1a-3afd27bdef72
+work:
+  -
+    role: Musician
+    employer: Self-employed
+    start: '1964'
+    end: null
+    id: 92752572-0782-4eae-8013-6296ef79dc9d
+  -
+    role: Painter
+    employer: Self-employed
+    start: '1967'
+    end: null
+    id: 9d2e111b-f61b-42c4-9158-3391d02add50
+places:
+  -
+    location: 'Saskatoon, Saskatchewan, Canada'
+    start: '1943-11-07'
+    end: '1965'
+    id: 3b36b422-f50b-4a4d-8fe8-3913df245413
+  -
+    location: 'Toronto, Ontario, Canada'
+    start: '1965'
+    end: '1968'
+    id: 7d7aeb25-b0a2-4b1a-8450-cc76a409bd98
+  -
+    location: 'Los Angeles, California, United States'
+    start: '1968'
+    end: null
+    id: c167944d-2472-487f-bc00-83276eb2dbf4
+relationships:
+  -
+    person: 'Chuck Mitchell'
+    relationshipType: marriage
+    start: '1965'
+    end: '1967'
+    id: 30452e73-8138-4c8b-80ab-829b5f9bc8c8
+  -
+    person: 'Graham Nash'
+    relationshipType: partner
+    start: '1968'
+    end: '1970'
+    id: e4224fb9-6df3-4736-ac1c-f57201affbba
+subspans:
+  -
+    description: 'Release of first album "Song to a Seagull"'
+    date: '1968-03-01'
+    uuid: 81255c71-a95e-4dbe-a901-76516966b7da
+  -
+    description: 'Induction into the Rock and Roll Hall of Fame'
+    date: '1997-01-12'
+    uuid: 563f3003-bbd9-4115-bdf4-d4843824e48d

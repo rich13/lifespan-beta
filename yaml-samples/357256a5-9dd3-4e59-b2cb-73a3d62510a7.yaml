@@ -1,0 +1,12 @@
+name: 'Guest User'
+type: person
+gender: female
+start: '2008-01-03'
+end: null
+work:
+  -
+    role: Tester
+    employer: Lifespan
+    start: '2025-01-07'
+    end: null
+    id: d6eb80fd-ccb6-47f4-9575-e29aed698020

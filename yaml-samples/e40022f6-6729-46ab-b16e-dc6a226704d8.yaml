@@ -1,0 +1,47 @@
+name: 'Thom Yorke'
+type: person
+start: '1968-10-07'
+end: null
+gender: male
+family:
+  father: 'Nigel Yorke'
+  mother: 'Carol Yorke'
+  children:
+    - 'Noah Yorke'
+    - 'Agnes Yorke'
+education:
+  -
+    level: secondary
+    institution: 'Abingdon School'
+    start: '1982'
+    end: '1987'
+    course: 'Fine Arts'
+    id: 9eab84eb-4786-4a4b-a1d7-ceb6f6dda5f9
+work:
+  -
+    role: 'Lead Vocalist'
+    employer: Radiohead
+    start: '1985'
+    end: null
+    location: 'Oxfordshire, England'
+    id: 3c9f796c-f14d-48e9-a4e1-503cd049052a
+places:
+  -
+    location: 'Wellingborough, England'
+    start: '1968'
+    end: '1978'
+    reason: 'Birth and early childhood'
+    id: 00d8a067-35fe-4d32-b179-5376579957aa
+  -
+    location: 'Abingdon, Oxfordshire, England'
+    start: '1978'
+    end: null
+    reason: 'Moved at age 10, formed Radiohead here'
+    id: 321657b5-3036-4223-9a27-568908c52d9d
+relationships:
+  -
+    person: 'Rachel Owen'
+    relationshipType: partner
+    start: '1995'
+    end: '2016'
+    id: 5354c176-0841-43cd-bcbf-c6e7e258ac51

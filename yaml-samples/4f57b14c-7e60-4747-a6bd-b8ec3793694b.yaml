@@ -1,0 +1,10 @@
+name: 'Joseph Northover'
+type: person
+start: '1919-05-04'
+end: '1993-05-19'
+gender: male
+family:
+  children:
+    - 'John Northover'
+    - 'Chris Northover'
+id: 4f57b14c-7e60-4747-a6bd-b8ec3793694b

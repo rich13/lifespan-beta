@@ -49,3 +49,7 @@ Thumbs.db
 
 # New backups directory
 /backups
+
+# Ensure yaml-samples is not ignored
+!/yaml-samples/
+!/yaml-samples/*.yaml

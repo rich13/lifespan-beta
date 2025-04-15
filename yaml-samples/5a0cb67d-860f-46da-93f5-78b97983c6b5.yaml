@@ -1,0 +1,34 @@
+---
+
+# --- Basic Information ---
+name: 'The Magnetic Fields'
+type: band
+start: '1989-01-01'
+end: null  # Still active
+
+# --- Members ---
+members:
+  - name: "Stephin Merritt"
+    role: "lead vocals, various instruments"
+    start: '1989'
+    end: null  # Current member
+  - name: "Claudia Gonson"
+    role: "vocals, various instruments"
+    start: '1989'
+    end: null  # Current member
+  - name: "Sam Davol"
+    role: "cello, flute"
+    start: '1991'
+    end: null  # Current member
+  - name: "John Woo"
+    role: "banjo, guitar"
+    start: '1994'
+    end: '2004'
+  - name: "Shirley Simms"
+    role: "vocals, ukulele"
+    start: '1999'
+    end: null  # Current member
+  - name: "Johny Blood"
+    role: "tuba, horn"
+    start: '1991'
+    end: '1992'

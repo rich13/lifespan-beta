@@ -1,0 +1,45 @@
+name: 'Taylor Swift'
+type: person
+gender: female
+start: '1989-12-13'
+end: null
+family:
+  mother: 'Andrea Swift'
+  father: 'Scott Kingsley Swift'
+  children: {  }
+work:
+  -
+    role: Singer-songwriter
+    employer: 'Big Machine Records'
+    start: '2006'
+    end: '2018'
+    id: 5710c88c-b56e-4a8f-bc46-ca413a10ee79
+  -
+    role: Singer-songwriter
+    employer: 'Republic Records'
+    start: '2019'
+    end: null
+    id: a637dabc-6405-4e7c-b681-c4b18dcac71d
+places:
+  -
+    location: 'Reading, Pennsylvania, USA'
+    start: '1989'
+    end: '2004'
+    id: cfbb35e2-78c9-4c13-8851-19b3562d4266
+  -
+    location: 'Hendersonville, Tennessee, USA'
+    start: '2004'
+    end: '2010'
+    id: 502fe925-9acd-46fe-b9b1-f96e47fbb131
+  -
+    location: 'Nashville, Tennessee, USA'
+    start: '2010'
+    end: null
+    id: c15f8e5c-35d1-460c-b4e8-c4160391e787
+relationships:
+  -
+    person: 'Joe Alwyn'
+    relationshipType: partner
+    start: '2016'
+    end: null
+    id: 997719cc-8211-4e57-92dc-076848e0035b

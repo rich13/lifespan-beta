@@ -1,0 +1,11 @@
+name: 'Simon Northover'
+type: person
+start: '1978-08-15'
+end: null
+gender: male
+family:
+  father: 'John Northover'
+  mother: 'Sheila Northover'
+  children:
+    - 'Scott Northover'
+    - 'Garvey Northover'

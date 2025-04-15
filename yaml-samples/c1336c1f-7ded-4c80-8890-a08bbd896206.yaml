@@ -1,0 +1,50 @@
+name: 'Nick Drake'
+type: person
+gender: male
+start: '1948-06-19'
+end: '1974-11-25'
+education:
+  -
+    type: education
+    level: primary
+    institution: 'Eagle House School'
+    start: '1957'
+    end: '1961'
+    id: 74b7acdc-9c6f-4a66-b0b6-0d19ed3696ca
+  -
+    type: education
+    level: secondary
+    institution: 'Marlborough College'
+    start: '1961'
+    end: '1966'
+    id: b0cf26ba-c530-4443-8b19-f6bb9ec7cbb9
+  -
+    type: education
+    level: tertiary
+    institution: 'Fitzwilliam College, Cambridge'
+    course: 'English Literature'
+    start: '1967'
+    end: '1969'
+    id: 072f5d19-c6b6-4815-8463-2dd6ea23b8a8
+work:
+  -
+    type: work
+    role: Singer-Songwriter
+    employer: Self-employed
+    start: '1968'
+    end: '1974-11-25'
+    id: 950d33d4-1668-4dcc-96e2-ec4b6280d638
+places:
+  -
+    type: residence
+    location: 'Rangoon, Burma (Myanmar)'
+    start: '1948'
+    end: '1950'
+    id: 91aeb840-b809-4440-b3b3-ec64efb942aa
+  -
+    type: residence
+    location: 'Tanworth-in-Arden, Warwickshire, England'
+    start: '1950'
+    end: '1974-11-25'
+    id: 9f7abae6-205d-4e9f-bf7b-e2a670d2c109
+filename: c1336c1f-7ded-4c80-8890-a08bbd896206.yaml

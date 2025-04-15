@@ -1,0 +1,10 @@
+name: 'Tom Northover'
+type: person
+gender: male
+start: '1989-01-23'
+end: null
+family:
+  father: 'John Northover'
+  mother: 'Lindsay Northover'
+  children:
+    - 'Aiden Northover'

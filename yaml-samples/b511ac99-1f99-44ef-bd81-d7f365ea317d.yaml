@@ -1,0 +1,31 @@
+name: 'Max Richter'
+type: person
+gender: male
+start: '1966-03-22'
+end: null
+id: b511ac99-1f99-44ef-bd81-d7f365ea317d
+subtypes:
+  - musician
+  - composer
+education:
+  -
+    level: undergraduate
+    institution: 'The University of Edinburgh'
+    start: '1984'
+    end: '1988'
+    course: 'Composition and Piano'
+    id: cced503d-f0a2-41cc-a3e2-f1e810ab4959
+  -
+    level: postgraduate
+    institution: 'Royal Academy of Music'
+    start: '1988'
+    end: '1991'
+    course: Composition
+    id: 833bb826-9fdc-435d-b17e-790c853b5ada
+work:
+  -
+    role: Composer
+    employer: Freelance
+    start: '1991'
+    end: null
+    id: 1c4675b2-e9b9-478f-8173-d69e9b973b6b

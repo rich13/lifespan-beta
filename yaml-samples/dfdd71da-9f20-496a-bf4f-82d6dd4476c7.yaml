@@ -1,0 +1,87 @@
+name: 'Alan Turing'
+type: person
+start: '1912-06-23'
+end: '1954-06-07'
+filename: dfdd71da-9f20-496a-bf4f-82d6dd4476c7.yaml
+education:
+  -
+    level: primary
+    institution: "St Michael's, a preparatory school in the seaside town of St Leonards-on-Sea, Hastings, England"
+    start: '1922'
+    end: '1926'
+    id: 6a5f2eba-5a05-461e-8b6d-c6462125139f
+  -
+    level: secondary
+    institution: 'Sherborne School'
+    start: 1926-09
+    end: 1931-07
+    id: 4deec46c-c667-492d-ad45-052c34eadf1b
+  -
+    level: undergraduate
+    institution: "King's College, University of Cambridge"
+    start: '1931'
+    end: '1934'
+    id: f62ac9ff-a9e1-4655-9da1-d5f975653f4b
+  -
+    level: postgraduate
+    institution: "King's College, University of Cambridge"
+    start: '1934'
+    end: '1936'
+    id: 705b0f0b-464a-4af5-afa6-67fa45a3d03d
+  -
+    level: postgraduate
+    institution: 'Princeton University'
+    start: '1936'
+    end: '1938'
+    id: 22a1b62f-d2cc-4232-a768-0e841d4494ab
+work:
+  -
+    role: Cryptanalyst
+    employer: 'Government Code and Cypher School at Bletchley Park'
+    start: '1939'
+    end: '1945'
+    id: 640dc6d0-4f7c-4d97-9e60-df1cdf636319
+  -
+    role: 'Deputy Director'
+    employer: 'Computing Laboratory at the University of Manchester'
+    start: '1948'
+    end: '1954'
+    id: b0b6c6ee-625f-4a6b-a5d3-20631856dab1
+places:
+  -
+    location: 'Maida Vale, London, England'
+    start: '1912-06-23'
+    end: '1926'
+    id: 8fc412e0-70e0-4da1-a9ef-faaeee83c4d1
+  -
+    location: 'Sherborne, Dorset, England'
+    start: '1926'
+    end: '1931'
+    id: ce3f4f85-defb-4ef4-95fb-0bb59b99fffb
+  -
+    location: 'Cambridge, England'
+    start: '1931'
+    end: '1936'
+    id: 973b2f6b-fd67-488d-9693-a8a116fb6e1d
+  -
+    location: 'Princeton, New Jersey, United States'
+    start: '1936'
+    end: '1938'
+    id: 84dbdfae-9267-468d-9ca9-cce321b01fa7
+  -
+    location: 'Bletchley Park, England'
+    start: '1939'
+    end: '1945'
+    id: 3095cbce-25cf-4a96-a1ef-6be46f06bdec
+  -
+    location: 'Manchester, England'
+    start: '1948'
+    end: '1954'
+    id: c5a614bc-3a91-46a8-ab12-39b4c893485c
+relationships:
+  -
+    person: 'Joan Clarke'
+    relationshipType: fiancée
+    start: '1941'
+    end: '1941'
+    id: c8fa33f8-b652-4184-b283-095c146c889b

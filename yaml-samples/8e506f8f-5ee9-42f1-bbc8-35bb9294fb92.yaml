@@ -1,0 +1,72 @@
+name: 'Barack Obama'
+type: person
+gender: male
+start: '1961-08-04'
+end: null
+subtypes:
+  - politician
+id: 8e506f8f-5ee9-42f1-bbc8-35bb9294fb92
+family:
+  mother: 'Stanley Ann Dunham'
+  father: 'Barack Obama Sr.'
+  children:
+    - 'Malia Ann Obama'
+    - 'Natasha Marian Obama'
+education:
+  -
+    level: secondary
+    institution: 'Punahou School'
+    start: '1971'
+    end: '1979'
+    id: ea134eab-0c3c-49e8-a8f1-fec32e7d8887
+  -
+    level: undergraduate
+    institution: 'Occidental College'
+    start: '1979'
+    end: '1981'
+    id: 91991b36-ad6c-43c2-8c25-0b5c4b3996f9
+  -
+    level: undergraduate
+    institution: 'Columbia University'
+    start: '1981'
+    end: '1983'
+    id: ee48c7f3-4a01-40ab-af94-f8e29018ef51
+  -
+    level: graduate
+    institution: 'Harvard Law School'
+    start: '1988'
+    end: '1991'
+    id: c56adcb6-af8a-45c8-aa0c-6dc58700bbbd
+work:
+  -
+    role: 'President of the United States'
+    employer: 'United States Government'
+    start: '2009-01-20'
+    end: '2017-01-20'
+    id: d23c6502-b225-4b33-ae6a-c1a20ac4d37c
+  -
+    role: 'U.S. Senator from Illinois'
+    employer: 'United States Government'
+    start: '2005-01-03'
+    end: '2008-11-16'
+    id: e8a024d5-912c-4423-b65c-4c8cdab7e77f
+places:
+  -
+    location: 'Honolulu, Hawaii, USA'
+    start: '1961-08-04'
+    end: '1979'
+    reason: 'birthplace and childhood home'
+    id: 8ed1f2f8-cb86-489f-8242-ff5ee2ed44ee
+  -
+    location: 'Chicago, Illinois, USA'
+    start: '1985'
+    end: '2009-01-20'
+    reason: 'work and family'
+    id: 0308d1b8-571d-4644-82df-8d5399c2a436
+relationships:
+  -
+    person: 'Michelle Obama'
+    relationshipType: marriage
+    start: '1992-10-03'
+    end: null
+    id: 8229437e-2d4e-4f9d-aafb-497365c1c0fb

@@ -1,0 +1,9 @@
+name: 'Amelia Denison'
+type: person
+gender: female
+start: '2024-01-01'
+end: null
+family:
+  mother: 'Louisa Denison'
+  father: 'Robbie Denison'
+id: c1da4c53-7890-4fbb-9d11-42692cb33f30

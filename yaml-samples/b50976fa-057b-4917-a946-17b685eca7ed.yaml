@@ -1,0 +1,23 @@
+---
+
+# --- Basic Information ---
+name: Portishead
+type: band
+start: '1991'  # Corrected the start date
+end: null
+
+# --- Members ---
+members:
+  - name: "Beth Gibbons"
+    role: "vocals"
+    start: '1991'
+    end: null
+  - name: "Geoff Barrow"
+    role: "instrumentalist"
+    start: '1991'
+    end: null
+  - name: "Adrian Utley"
+    role: "instrumentalist"
+    start: '1991'
+    end: null
+# Source: https://en.wikipedia.org/wiki/Portishead_(band)

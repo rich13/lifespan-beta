@@ -1,0 +1,28 @@
+---
+
+# --- Basic Information ---
+name: 'The Beatles'
+type: band
+start: '1960-08-17'
+end: '1970-04-10'
+
+# --- Members ---
+members:
+  - name: 'John Lennon'
+    start: '1960-08-17'
+    end: '1970-04-10'
+    role: 'Lead vocals, rhythm guitar'
+  - name: 'Paul McCartney'
+    start: '1960-08-17'
+    end: '1970-04-10'
+    role: 'Lead vocals, bass guitar'
+  - name: 'George Harrison'
+    start: '1960-08-17'
+    end: '1970-04-10'
+    role: 'Lead guitar, vocals'
+  - name: 'Ringo Starr'
+    start: '1962-08-18'
+    end: '1970-04-10'
+    role: 'Drums, vocals'
+# This file is named with the UUID of the span
+# filename: 12dfd465-e084-42d1-a6ac-b9810b292e91.yaml

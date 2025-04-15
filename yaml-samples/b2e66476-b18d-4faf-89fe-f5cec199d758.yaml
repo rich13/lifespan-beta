@@ -1,0 +1,63 @@
+name: 'George Orwell'
+type: person
+gender: male
+start: '1903-06-25'
+end: '1950-01-21'
+subtypes:
+  - author
+  - journalist
+id: a6b5b7f2-86cf-4a7c-9d61-2b7d3e3e0f8d
+family:
+  mother: 'Ida Blair'
+  father: 'Richard Walmesley Blair'
+  children: {  }
+education:
+  -
+    level: primary
+    institution: "St Cyprian's School"
+    start: '1911'
+    end: '1916'
+    id: 20eea3f9-7e30-4d36-a2a8-5bff0e0736b0
+  -
+    level: secondary
+    institution: 'Eton College'
+    start: '1917'
+    end: '1921'
+    id: 7c219b3e-a7f8-42c5-9a2a-a7d9e7f78f9c
+work:
+  -
+    role: 'Imperial Policeman'
+    employer: 'Indian Imperial Police'
+    start: '1922'
+    end: '1927'
+    id: e811e412-3189-44dd-ad74-ce55ca20fed7
+  -
+    role: Writer
+    employer: Freelance
+    start: '1927'
+    end: '1950'
+    id: d4fcd91f-3fd7-4282-9b88-0cb908c55e96
+places:
+  -
+    location: 'Motihari, Bihar, India'
+    start: '1903'
+    end: '1904'
+    id: 3644d56d-68d8-43f6-ba1b-d1cda5d1eebe
+  -
+    location: England
+    start: '1904'
+    end: '1950'
+    id: 3cc3227b-9ff0-4b67-b8ec-44f5e41592dc
+relationships:
+  -
+    person: "Eileen O'Shaughnessy"
+    relationshipType: marriage
+    start: '1936'
+    end: '1945'
+    id: 57f65108-a58b-45d5-a084-c4496ba68134
+  -
+    person: 'Sonia Brownell'
+    relationshipType: marriage
+    start: '1949'
+    end: '1950'
+    id: 3210e723-8290-4148-a6dd-0d0354cf8025

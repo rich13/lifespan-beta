@@ -1,0 +1,50 @@
+name: 'Ringo Starr'
+type: person
+gender: male
+start: '1940-07-07'
+end: null
+family:
+  mother: 'Elsie Starkey'
+  father: 'Richard Starkey'
+  children:
+    - 'Zak Starkey'
+    - 'Jason Starkey'
+    - 'Lee Starkey'
+    - 'Francesca Gregorini'
+work:
+  -
+    role: 'Drummer for Beatles'
+    employer: 'The Beatles'
+    start: '1962'
+    end: '1970'
+    id: dd1bf0b1-53c2-440e-9902-59a3ee842eaf
+  -
+    role: 'Solo Artist'
+    employer: 'Ringo Starr'
+    start: '1970'
+    end: null
+    id: 4942c8e9-d899-43c5-870c-526c0ee85732
+places:
+  -
+    location: 'Liverpool, England'
+    start: '1940'
+    end: '1962'
+    id: bcb456a0-918b-47d8-94db-48cf964ac6a8
+  -
+    location: 'Los Angeles, USA'
+    start: '1970'
+    end: null
+    id: 9b172123-5673-4ca7-939f-6f3e97657fd5
+relationships:
+  -
+    person: 'Maureen Starkey Tigrett'
+    relationshipType: marriage
+    start: '1965'
+    end: '1975'
+    id: 1562ac7c-948f-428f-ad05-ad9b782753f4
+  -
+    person: 'Barbara Bach'
+    relationshipType: marriage
+    start: '1981'
+    end: null
+    id: a66ded4d-f5b9-4980-b6e2-ef3c6f7a61ea

@@ -1,0 +1,14 @@
+name: 'John Northover'
+type: person
+start: '1947-06-16'
+end: null
+gender: male
+family:
+  mother: 'Peggy Northover'
+  father: 'Joseph Northover'
+  children:
+    - 'Richard Northover'
+    - 'Simon Northover'
+    - 'Tom Northover'
+    - 'Joe Northover'
+    - 'Louisa Denison'

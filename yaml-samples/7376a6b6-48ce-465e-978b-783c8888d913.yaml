@@ -1,0 +1,97 @@
+name: 'Albert Einstein'
+type: person
+subtypes:
+  - scientist
+start: '1879-03-14'
+end: '1955-04-18'
+education:
+  -
+    level: secondary
+    institution: 'Aarau Cantonal School'
+    start: '1895'
+    end: '1896'
+    id: 50459537-dcff-4093-987b-3e147148c907
+  -
+    level: tertiary
+    institution: 'ETH Zurich (Swiss Federal Polytechnic)'
+    course: 'Diploma in Teaching Physics and Mathematics'
+    start: '1896'
+    end: '1900'
+    id: 6700103b-03ee-4483-91a0-d95c11509e72
+work:
+  -
+    role: 'Patent Examiner'
+    employer: 'Swiss Patent Office'
+    start: '1902'
+    end: '1909'
+    id: 8fa6c760-027a-4d0b-92d7-c14dde6dcda6
+  -
+    role: 'Professor of Theoretical Physics'
+    employer: 'University of Zurich'
+    start: '1909'
+    end: '1911'
+    id: f0d2f4d7-fb89-4b0d-b081-0c4230e644b8
+  -
+    role: 'Professor of Theoretical Physics'
+    employer: 'Charles University in Prague'
+    start: '1911'
+    end: '1912'
+    id: baf214cc-5668-496a-900f-f1ff9b79101e
+  -
+    role: 'Professor of Theoretical Physics'
+    employer: 'ETH Zurich'
+    start: '1912'
+    end: '1914'
+    id: 5553acc9-e375-4ff2-a12f-76d4170b3359
+  -
+    role: 'Professor and Director of Physics'
+    employer: 'Kaiser Wilhelm Institute for Physics'
+    start: '1914'
+    end: '1933'
+    id: f49502fd-bad3-471b-b3f5-3f8dc1aa5359
+  -
+    role: 'Professor of Theoretical Physics'
+    employer: 'Institute for Advanced Study, Princeton'
+    start: '1933'
+    end: '1955-04-18'
+    id: 4ffa89c0-d040-4698-9ecd-4d8dfd02b41f
+places:
+  -
+    location: 'Ulm, Kingdom of Württemberg, German Empire'
+    start: '1879-03-14'
+    end: '1880'
+    id: 74619e76-9d2c-4fb6-b4d8-6d1599e23c4c
+  -
+    location: 'Munich, Germany'
+    start: '1880'
+    end: '1895'
+    id: 7e3c79d6-8ec4-483b-8a12-a3c1258fde59
+  -
+    location: 'Zurich, Switzerland'
+    start: '1896'
+    end: '1902'
+    id: e6a81091-fa57-42a8-bc84-fa6c4d9df470
+  -
+    location: 'Bern, Switzerland'
+    start: '1902'
+    end: '1909'
+    id: 9647e305-c286-427a-9e02-9e733a72a5a6
+  -
+    location: 'Princeton, New Jersey, USA'
+    start: '1933'
+    end: '1955-04-18'
+    id: 7e6d5527-86e2-4dc6-a4ac-017cd3483cd9
+relationships:
+  -
+    person: 'Mileva Marić'
+    relationshipType: marriage
+    start: '1903'
+    end: '1919'
+    id: ad089c9d-ef0c-47ac-a50e-bafd3dfa9d8e
+  -
+    person: 'Elsa Einstein'
+    relationshipType: marriage
+    start: '1919'
+    end: '1936-12-20'
+    id: 88b6abab-cd36-453e-bdab-457166b1a0f9
+filename: 7376a6b6-48ce-465e-978b-783c8888d913.yaml

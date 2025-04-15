@@ -1,0 +1,12 @@
+name: 'Matthew Shorter'
+type: person
+start: '1976-02-13'
+end: null
+
+work:
+  -
+    role: Director
+    employer: Unthinkable
+    start: '2010-01-01'
+    end: null
+    id: d6eb80fd-ccb6-47f4-9575-e29aed698020

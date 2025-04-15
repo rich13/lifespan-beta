@@ -1,0 +1,8 @@
+# Required fields:
+name: United Kingdom
+alias: UK Government
+type: place
+subtypes:
+  - 'country'
+start: '1801-01-01'
+end: null

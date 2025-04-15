@@ -1,0 +1,11 @@
+name: 'Jenny McInnes'
+type: person
+gender: female
+start: '1980-06-06'
+end: null
+family:
+  mother: 'Sheila McInnes'
+  father: 'Ian McInnes'
+  children:
+    - 'Danny Northover'
+    - 'Agnes Northover'

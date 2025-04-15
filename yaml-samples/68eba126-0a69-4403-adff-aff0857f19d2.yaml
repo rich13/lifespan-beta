@@ -1,0 +1,54 @@
+name: 'George Harrison'
+gender: male
+type: person
+start: '1943-02-25'
+end: '2001-11-29'
+family:
+  mother: 'Louise French Harrison'
+  father: 'Harold Hargreaves Harrison'
+  children:
+    - 'Dhani Harrison'
+education:
+  -
+    level: secondary
+    institution: 'Liverpool Institute High School for Boys'
+    start: '1954'
+    end: '1959'
+    id: 9097ac4f-0c1f-4b00-8c06-032027bd0040
+work:
+  -
+    role: 'Lead Guitarist'
+    employer: 'The Beatles'
+    start: '1960'
+    end: '1970'
+    id: 6fbb339a-3c95-4a78-a631-5f1d3d64dbd5
+  -
+    role: 'Solo Artist'
+    employer: Self-Employed
+    start: '1970'
+    end: '2001'
+    id: 0a237151-7756-4c52-8736-735f39c7b970
+places:
+  -
+    location: 'Liverpool, England'
+    start: '1943'
+    end: '1960'
+    id: 4f3bbaa5-818d-422c-bf84-7bfceca0857e
+  -
+    location: 'Los Angeles, USA'
+    start: '1970'
+    end: '2001'
+    id: e4fcc38b-d48c-42c4-a7f6-6adaa3404e91
+relationships:
+  -
+    person: 'Pattie Boyd'
+    relationshipType: marriage
+    start: '1966'
+    end: '1977'
+    id: 586913fb-a788-4e6b-8cbe-59832181ead7
+  -
+    person: 'Olivia Trinidad Arias'
+    relationshipType: marriage
+    start: '1978'
+    end: '2001'
+    id: 06a54542-1324-4145-bf5e-0562dac204dc

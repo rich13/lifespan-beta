@@ -1,0 +1,12 @@
+name: 'Beth Gibbons'
+type: person
+gender: female
+start: '1965-01-04'
+end: null
+work:
+  -
+    role: Vocalist
+    employer: Portishead
+    start: '1991'
+    end: null
+    id: 9d67f86e-eebe-4e5b-9921-dad343ac500d

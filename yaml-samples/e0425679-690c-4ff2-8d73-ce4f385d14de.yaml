@@ -1,0 +1,56 @@
+name: 'Vladimir Putin'
+type: person
+gender: male
+start: '1952-10-07'
+end: null
+id: e0425679-690c-4ff2-8d73-ce4f385d14de
+family:
+  mother: 'Maria Ivanovna Putina'
+  father: 'Vladimir Spiridonovich Putin'
+  children:
+    - 'Maria Vorontsova'
+    - 'Katerina Tikhonova'
+education:
+  -
+    level: undergraduate
+    institution: 'Leningrad State University'
+    start: '1970'
+    end: '1975'
+    course: Law
+    id: 419d316d-e789-41ae-9111-ce130f5104d9
+work:
+  -
+    role: 'President of Russia'
+    employer: 'Government of Russia'
+    start: '2000'
+    end: null
+    id: d4341bec-50af-423b-83d8-6d42761a0a43
+  -
+    role: 'Prime Minister of Russia'
+    employer: 'Government of Russia'
+    start: '1999'
+    end: '2000'
+    id: 1c261a83-6e0f-445d-9d2d-a4465b094fcb
+  -
+    role: 'Director of the Federal Security Service'
+    employer: 'Government of Russia'
+    start: '1998'
+    end: '1999'
+    id: 3612937d-fd3c-4c57-932c-9e4d336c5064
+  -
+    role: 'Deputy Chief of Presidential Staff'
+    employer: 'Government of Russia'
+    start: '1997'
+    end: '1998'
+    id: 5fdfb64b-c591-4e12-8d3d-d2ff12ddc97f
+places:
+  -
+    location: 'Leningrad, Soviet Union'
+    start: '1952'
+    end: '1975'
+    id: 0016c8d6-99e6-495c-b721-745875aecb70
+  -
+    location: 'Moscow, Russia'
+    start: '2000'
+    end: null
+    id: 201582cc-aad5-47f6-b12f-fd2229da6a85

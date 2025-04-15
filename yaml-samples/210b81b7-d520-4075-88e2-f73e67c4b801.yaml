@@ -1,0 +1,69 @@
+name: 'John Lennon'
+type: person
+subtypes:
+  - musician
+gender: male
+start: '1940-10-09'
+end: '1980-12-08'
+family:
+  mother: 'Julia Lennon'
+  father: 'Alfred Lennon'
+  children:
+    - 'Julian Lennon'
+    - 'Sean Lennon'
+education:
+  -
+    level: primary
+    institution: 'Dovedale Primary School'
+    start: '1946'
+    end: '1952'
+    id: c7a2c975-8eba-4236-a296-702bf0a54089
+  -
+    level: secondary
+    institution: 'Quarry Bank High School'
+    start: '1952'
+    end: '1957'
+    id: 0d422502-8b8b-4e0b-969b-5bcc4b56b0e9
+  -
+    level: 'higher education'
+    institution: 'Liverpool College of Art'
+    start: '1957'
+    end: '1960'
+    id: 408c76cb-e1c6-4f66-b81e-5a6414c7ad03
+work:
+  -
+    role: 'Musician, Singer, Songwriter'
+    employer: 'The Beatles'
+    start: '1960'
+    end: '1970'
+    id: 5e81ed87-ecb9-41b1-9c84-167e7f437c5c
+  -
+    role: 'Solo Artist'
+    employer: Self-Employed
+    start: '1970'
+    end: '1980'
+    id: d31b5ca3-5713-4538-9e9b-bb476a499a1a
+places:
+  -
+    location: 'Liverpool, England, United Kingdom'
+    start: '1940-10-09'
+    end: '1963'
+    id: 7eacb8cf-efdc-4f09-9718-51e68abe773f
+  -
+    location: 'New York City, New York, USA'
+    start: '1971'
+    end: '1980-12-08'
+    id: ae21e2fc-944c-4794-b294-cd8e3d76e84f
+relationships:
+  -
+    person: 'Cynthia Powell'
+    relationshipType: marriage
+    start: '1962-08-23'
+    end: '1968-11-08'
+    id: 3ce411a1-15aa-4753-8bd9-fd360a4876ac
+  -
+    person: 'Yoko Ono'
+    relationshipType: marriage
+    start: '1969-03-20'
+    end: '1980-12-08'
+    id: 5168e5e5-9a61-4c1a-8410-fac6eb694eb0

@@ -1,0 +1,105 @@
+name: 'Richard Northover'
+type: person
+gender: male
+start: '1976-02-13'
+end: null
+family:
+  mother: 'Sheila Northover'
+  father: 'John Northover'
+  children:
+    - 'Danny Northover'
+    - 'Agnes Northover'
+education:
+  -
+    level: primary
+    institution: 'St Saviours'
+    start: 1980-09
+    end: 1987-06
+    id: 948f9f5e-40fb-4304-bf99-2b5cc8cb7c14
+  -
+    level: secondary
+    institution: "Alleyn's"
+    start: 1987-09
+    end: 1994-06
+    id: dba5dc46-0642-4772-8728-78af01498ae9
+  -
+    level: undergraduate
+    institution: 'The University of Edinburgh'
+    course: 'Biological Sciences, Zoology'
+    start: 1994-10
+    end: 1997-06
+    id: 74a606af-56fc-4e46-89fc-03d921671576
+work:
+  -
+    role: Freelance
+    employer: 'Richard Northover'
+    start: 1998-01
+    end: 2005-12
+    id: b84a5de1-924c-4f36-816d-c48e9e4fa10a
+  -
+    role: 'Web Content Developer'
+    employer: 'The University of Edinburgh'
+    start: 2005-01
+    end: 2006-02
+    location: Edinburgh
+    id: cc9902d8-999d-41e2-abc7-84001b98ebce
+  -
+    role: 'Service Owner, BBC iD'
+    employer: BBC
+    start: 2006-02
+    end: 2015-07
+    location: London
+    id: 5dbd9b9e-8b1d-4efb-a7e6-392abb7e56ee
+  -
+    role: 'Product Director, Identity'
+    employer: Elsevier
+    start: 2015-09
+    end: 2022-05
+    location: London
+    id: 4e7a15b8-e64c-49fb-99b2-6dbb82407ea5
+  -
+    role: Freelance
+    employer: 'Richard Northover'
+    start: 2022-05
+    end: null
+    location: London
+    id: 73e2db49-a6e6-4300-90b3-91b6e428df98
+places:
+  -
+    location: London
+    start: 1976-02
+    end: 1994-09
+    reason: childhood
+    id: b789a2a4-9dcf-4ac5-b2a7-06056ee0b691
+  -
+    location: Edinburgh
+    start: 1994-09
+    end: 2006-02
+    reason: 'university and early career'
+    id: e1d1b8d9-a19f-4b6c-ae99-c9acb99926eb
+  -
+    location: London
+    start: 2006-02
+    end: null
+    reason: career
+    id: 5b313a90-c51e-4748-a445-ad221fad523b
+relationships:
+  -
+    person: 'Nonny Denny'
+    relationshipType: girlfriend
+    start: '1995'
+    end: '1997'
+    id: b93156e2-ef20-4c22-831a-9dd18fc6fd36
+  -
+    person: 'Kat Cooper'
+    relationshipType: girlfriend
+    start: '1999'
+    end: '2002'
+    id: 31aad254-2e1d-443e-ad88-0fa4a6a5730b
+  -
+    person: 'Jenny McInnes'
+    relationshipType: partner
+    start: '2002-11-13'
+    end: '2023-02-13'
+    id: b8612612-2286-4606-8dff-c35444770188
+id: ecb0bfb2-d397-401b-9ac9-8d3a16c3dec6

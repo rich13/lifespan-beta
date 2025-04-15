@@ -1,0 +1,23 @@
+---
+
+# --- Basic Information ---
+name: The Jimi Hendrix Experience
+type: band
+start: '1966'
+end: '1970'
+# Source: https://en.wikipedia.org/wiki/The_Jimi_Hendrix_Experience
+# --- Members ---
+members:
+  - name: Jimi Hendrix
+    role: Lead vocals, guitar
+    start: '1966'
+    end: '1970'
+  - name: Noel Redding
+    role: Bass, backing vocals
+    start: '1966'
+    end: '1969'
+  - name: Mitch Mitchell
+    role: Drums
+    start: '1966'
+    end: '1970'
+# Source: https://en.wikipedia.org/wiki/The_Jimi_Hendrix_Experience#Band_members

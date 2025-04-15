@@ -1,0 +1,107 @@
+name: 'Joe Biden'
+type: person
+gender: male
+start: '1942-11-20'
+end: null
+education:
+  -
+    type: education
+    level: primary
+    institution: "St. Paul's Elementary School"
+    start: '1946'
+    end: '1950'
+    id: b1741c03-f4a5-41cf-bc5e-fd5d430bb541
+  -
+    type: education
+    level: secondary
+    institution: 'Archmere Academy'
+    start: '1950'
+    end: '1959'
+    id: 6874df9d-c1f8-4991-bb34-af06e50858e8
+  -
+    type: education
+    level: undergraduate
+    institution: 'University of Delaware'
+    course: 'Bachelor of Arts, History and Political Science'
+    start: '1961'
+    end: '1965'
+    id: 846733fd-274f-417e-9888-a1512342ae59
+  -
+    type: education
+    level: postgraduate
+    institution: 'Syracuse University College of Law'
+    course: 'Juris Doctor (JD)'
+    start: '1965'
+    end: '1968'
+    id: d8cbf832-1105-443e-ae4a-1d26ee17061c
+work:
+  -
+    type: work
+    role: Attorney
+    employer: 'Private Practice'
+    start: '1969'
+    end: '1972'
+    id: dd703143-da6e-4a3d-a904-bee85946cf7b
+  -
+    type: work
+    role: 'New Castle County Council Member'
+    employer: 'New Castle County, Delaware'
+    start: '1970'
+    end: '1972'
+    id: d3fbda80-b76c-4499-8b2e-0447cb6e60ef
+  -
+    type: work
+    role: 'U.S. Senator'
+    employer: Delaware
+    start: '1973'
+    end: '2009'
+    id: af752055-6a4d-422c-800c-a86d67f2b444
+  -
+    type: work
+    role: 'Vice President'
+    employer: 'United States of America'
+    start: '2009'
+    end: '2017'
+    id: 35dd54d5-89b4-4a7f-ae55-869655b260c6
+  -
+    type: work
+    role: President
+    employer: 'United States of America'
+    start: '2021'
+    end: null
+    id: e0b351cc-0c21-47bf-bd93-c9acf3c4eec7
+places:
+  -
+    type: residence
+    location: 'Scranton, Pennsylvania, USA'
+    start: '1942'
+    end: '1953'
+    id: 2d54cc46-b642-47ef-b48a-7db8adae4e8f
+  -
+    type: residence
+    location: 'Claymont, Delaware, USA'
+    start: '1953'
+    end: '1955'
+    id: 57b62c1c-541c-4fd9-a24d-06c5692e145a
+  -
+    type: residence
+    location: 'Greenville, Delaware, USA'
+    start: '1955'
+    end: null
+    id: 235195c2-92e4-45c6-9204-419bdee67a90
+relationships:
+  -
+    type: relationship
+    person: 'Neilia Hunter'
+    relationshipType: marriage
+    start: '1966'
+    end: '1972-12-18'
+    id: d655a81c-1c05-4515-8ff5-eb9e18df1725
+  -
+    type: relationship
+    person: 'Jill Biden'
+    relationshipType: marriage
+    start: '1977'
+    end: null
+    id: fca90eaf-3ade-4bfa-815c-cc989d987bc9
+filename: ebda118a-c526-4a37-9a65-db529e0df48f.yaml

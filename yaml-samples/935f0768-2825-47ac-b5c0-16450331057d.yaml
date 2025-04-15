@@ -1,0 +1,11 @@
+name: 'Jack Northover'
+type: person
+gender: male
+start: '1982-11-07'
+end: null
+family:
+  father: 'Chris Northover'
+  mother: 'Katy Northover'
+  children:
+    - 'River Northover'
+    - 'Indiana Northover'

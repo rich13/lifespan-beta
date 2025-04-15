@@ -1,0 +1,28 @@
+---
+
+# --- Basic Information ---
+name: 'Benn Northover'
+type: person
+subtypes:
+  - actor
+gender: male
+start: '1978-01-03'
+end: null
+
+# --- Family ---
+family:
+  father: 'Chris Northover'
+  mother: 'Katy Northover'
+  children:
+    - 'Pema Northover'
+
+# --- Education ---
+# education: # No verified education records
+# --- Work ---
+# work: # No verified work records
+# --- Places ---
+# places: # No verified places records
+# --- Relationships ---
+# relationships: # No verified relationships records
+# --- Sources ---
+# Comment: Information gathered from available online sources. More specific details were not available.

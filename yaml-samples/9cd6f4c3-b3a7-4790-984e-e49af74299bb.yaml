@@ -1,0 +1,7 @@
+name: 'Joe Northover'
+type: person
+start: '1990-11-09'
+end: null
+family:
+  father: 'John Northover'
+  mother: 'Lindsay Northover'

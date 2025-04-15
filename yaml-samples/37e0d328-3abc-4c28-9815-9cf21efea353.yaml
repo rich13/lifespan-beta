@@ -1,0 +1,12 @@
+name: 'Chris Northover'
+type: person
+gender: male
+start: '1951-02-02'
+end: null
+family:
+  father: 'Joseph Northover'
+  mother: 'Peggy Northover'
+  children:
+    - 'Benn Northover'
+    - 'Jack Northover'
+id: 37e0d328-3abc-4c28-9815-9cf21efea353

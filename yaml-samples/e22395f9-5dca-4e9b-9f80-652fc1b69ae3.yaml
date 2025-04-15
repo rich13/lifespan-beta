@@ -1,0 +1,8 @@
+name: 'Arielle Northover'
+type: person
+start: '1992-03-23'
+end: null
+gender: female
+family:
+  children:
+    - 'Aiden Northover'

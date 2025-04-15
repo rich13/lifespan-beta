@@ -1,0 +1,27 @@
+name: 'Laurie Anderson'
+type: person
+gender: female
+start: '1947-06-05'
+end: null
+education:
+  -
+    level: graduate
+    institution: 'Columbia University'
+    start: '1969'
+    end: '1972'
+    course: Sculpture
+    id: ed54d860-8701-4ce4-a5dd-7768f3c1c588
+work:
+  -
+    role: 'Performance artist'
+    employer: Self-employed
+    start: '1970'
+    end: null
+    id: 7365d3bf-2547-4da2-9c12-e6d2633e3f69
+relationships:
+  -
+    person: 'Lou Reed'
+    relationshipType: marriage
+    start: '2008'
+    end: '2013'
+    id: bd10119c-2de4-4189-9be4-9faaad09a179

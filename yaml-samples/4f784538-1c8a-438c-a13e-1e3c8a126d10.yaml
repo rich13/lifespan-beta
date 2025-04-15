@@ -1,0 +1,9 @@
+name: 'Katy Northover'
+type: person
+start: '1948-10-09'
+end: null
+gender: female
+family:
+  children:
+    - 'Benn Northover'
+    - 'Jack Northover'

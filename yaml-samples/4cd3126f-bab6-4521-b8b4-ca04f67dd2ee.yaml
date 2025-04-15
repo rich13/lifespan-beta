@@ -1,0 +1,83 @@
+name: 'Keir Starmer'
+type: person
+gender: male
+start: '1962-09-02'
+end: null
+id: 4cd3126f-bab6-4521-b8b4-ca04f67dd2ee
+subtypes:
+  - politician
+family:
+  mother: 'Josephine Starmer'
+  father: 'Rodney Starmer'
+education:
+  -
+    level: undergraduate
+    institution: 'University of Leeds'
+    start: '1981'
+    end: '1985'
+    course: Law
+    id: 729d8280-6c83-449c-8be6-90831821427b
+  -
+    level: postgraduate
+    institution: 'University of Oxford'
+    start: '1985'
+    end: '1986'
+    course: BCL
+    id: 99b8f666-11bf-4817-bf75-4fbc015bd038
+work:
+  -
+    role: Barrister
+    employer: 'Doughty Street Chambers'
+    start: '1987'
+    end: '2008'
+    id: db00ca0e-6421-4e7c-9c23-86fc37ac4ae6
+  -
+    role: 'Director of Public Prosecutions and Head of the Crown Prosecution Service'
+    employer: 'Crown Prosecution Service'
+    start: '2008'
+    end: '2013'
+    id: 0b1922e5-fb47-417a-8b40-65e4e05994b7
+  -
+    role: 'Member of Parliament for Holborn and St Pancras'
+    employer: 'UK Government'
+    start: '2015'
+    end: null
+    id: 95f1c497-17f7-4b0b-9436-399ca06b71df
+  -
+    role: 'Leader of the Labour Party'
+    employer: 'Labour Party'
+    start: '2020'
+    end: null
+    id: 28555e5c-ed20-4164-a5f2-2e145c409a00
+places:
+  -
+    location: 'Oxted, UK'
+    start: '1962-09-02'
+    end: '1981'
+    reason: 'birthplace and childhood home'
+    id: 19ed8c84-b855-4813-973e-a1403fff11fd
+  -
+    location: 'Leeds, UK'
+    start: '1981'
+    end: '1985'
+    reason: 'undergraduate studies'
+    id: 1445cafb-447c-45e8-8b6e-ce4f0eff5527
+  -
+    location: 'Oxford, UK'
+    start: '1985'
+    end: '1986'
+    reason: 'postgraduate studies'
+    id: 0b9cd382-b6f4-4f84-a5d9-c52af400dbbc
+  -
+    location: 'London, UK'
+    start: '1986'
+    end: null
+    reason: 'work and current residence'
+    id: 0d12fec2-5350-42b4-81c7-f9c9bb7ecdfc
+relationships:
+  -
+    person: 'Victoria Starmer'
+    relationshipType: marriage
+    start: '2007'
+    end: null
+    id: 01eeeb7e-edd0-40a8-8646-e5c74abdead9

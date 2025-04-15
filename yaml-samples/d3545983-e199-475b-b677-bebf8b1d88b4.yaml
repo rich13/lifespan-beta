@@ -1,0 +1,58 @@
+name: 'Joan Scott'
+type: person
+gender: female
+start: '1921-04-13'
+end: '2007-04-11'
+family:
+  mother: 'Winifred Garvie'
+  father: 'John George Garvie'
+  children:
+    - 'Sheila Northover'
+    - 'John Scott'
+education:
+  -
+    level: primary
+    institution: 'Local Primary School'
+    location: 'Sunderland'
+    start: '1929-09'
+    end: '1930-06'
+  -
+    level: primary
+    institution: 'St Winifreds'
+    location: 'Southampton'
+    start: '1930-09-01'
+    end: '1931-06-01'
+  -
+    level: secondary
+    institution: 'High School'
+    location: 'Sunderland'
+    start: '1931-09-01'
+    end: '1932-06-01'
+  -
+    level: secondary
+    institution: 'English School in Cairo'
+    location: 'Cairo'
+    start: '1932-09-01'
+    end: '1938-06-01'
+places:
+  -
+    location: 'Sunderland'
+    start: '1921-04-13'
+    end: '1926-02-01'
+    reason: childhood
+  -
+    location: 'Hurgharda'
+    start: '1926-02-01'
+    end: '1932-09-01'
+    reason: "father's work on the oil field"
+  -
+    location: 'Cairo'
+    start: '1932-09-01'
+    end: '1938-06-01'
+    reason: 'schooling'
+relationships:
+  -
+    person: 'Gerald Scott'
+    relationshipType: marriage
+    start: '1945-01-01'
+    end: '2007-04-11'

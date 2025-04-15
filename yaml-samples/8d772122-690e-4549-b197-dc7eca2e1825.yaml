@@ -1,0 +1,9 @@
+name: 'Aiden Northover'
+type: person
+gender: male
+start: '2023-12-01'
+end: null
+family:
+  father: 'Tom Northover'
+  mother: 'Arielle Northover'
+id: 8d772122-690e-4549-b197-dc7eca2e1825

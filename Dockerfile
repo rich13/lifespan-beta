@@ -67,6 +67,7 @@ RUN composer install --no-dev --optimize-autoloader
 RUN mkdir -p /var/www/storage/logs \
     /var/www/storage/framework/{sessions,views,cache} \
     /var/www/storage/app/public \
+    /var/www/storage/app/imports \
     /var/www/bootstrap/cache \
     /var/log/supervisor \
     /var/log/nginx \
@@ -77,6 +78,17 @@ RUN mkdir -p /var/www/storage/logs \
 RUN touch /var/www/storage/logs/laravel.log && \
     chmod 664 /var/www/storage/logs/laravel.log && \
     chown www-data:www-data /var/www/storage/logs/laravel.log
+
+# Copy YAML files to imports directory - try multiple sources
+# First try from storage/app/imports (local dev environment)
+RUN if [ -d "storage/app/imports" ] && [ "$(ls -A storage/app/imports)" ]; then \
+    cp -r storage/app/imports/*.yaml /var/www/storage/app/imports/ || true; \
+fi
+
+# Then try from yaml-samples directory (Git repository samples)
+RUN if [ -d "yaml-samples" ] && [ "$(ls -A yaml-samples)" ]; then \
+    cp -r yaml-samples/*.yaml /var/www/storage/app/imports/ || true; \
+fi
 
 # Copy configuration files
 COPY docker/prod/nginx.conf /etc/nginx/nginx.conf

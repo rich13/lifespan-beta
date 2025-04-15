@@ -1,0 +1,24 @@
+name: 'Stephin Merritt'
+type: person
+gender: male
+start: '1965'
+end: null
+work:
+  -
+    role: 'Lead Singer, Songwriter'
+    employer: 'The Magnetic Fields'
+    start: '1989'
+    end: null
+    id: 22581ed0-d37f-4f2a-a4dd-b1e647f3870f
+  -
+    role: Author
+    employer: Self-Employed
+    start: '2011'
+    end: null
+    id: 8ad3b3da-0cd1-495c-a423-75ef8ab1e212
+places:
+  -
+    location: 'New York, USA'
+    start: '1990'
+    end: null
+    id: 5d9a4239-3650-4648-9f0f-4845d3d7810a

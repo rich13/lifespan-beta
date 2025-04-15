@@ -1,0 +1,65 @@
+name: 'David Attenborough'
+type: person
+subtypes:
+  - broadcaster
+gender: male
+start: '1926-05-08'
+end: null
+family:
+  mother: 'Mary Attenborough'
+  father: 'Frederick Attenborough'
+  children:
+    - 'Robert Attenborough'
+    - 'Susan Attenborough'
+    - 'Helga Attenborough'
+education:
+  -
+    level: undergraduate
+    institution: 'University College, London'
+    start: '1945'
+    end: '1947'
+    id: 27130122-34ac-454a-bf2f-f63565620366
+  -
+    level: postgraduate
+    institution: 'University of Cambridge'
+    start: '1947'
+    end: '1950'
+    id: 2ccbaf8c-cf77-4733-984c-f43b12556d85
+work:
+  -
+    role: Producer
+    employer: BBC
+    start: '1955'
+    end: '1965'
+    id: 6b306a00-deec-4201-b516-26173d1dc88a
+  -
+    role: 'Controller, BBC Two'
+    employer: BBC
+    start: '1965'
+    end: '1969'
+    id: f78498a5-41ca-40ce-a8cd-015ffabb32ff
+  -
+    role: 'Director of Programmes, Television'
+    employer: BBC
+    start: '1969'
+    end: '1972'
+    id: e487b74d-96ad-45db-9eb7-34d796925b6c
+  -
+    role: 'Freelance Broadcaster and Naturalist'
+    employer: 'David Attenborough'
+    start: '1972'
+    end: null
+    id: ccfa4f09-78b3-42bd-94ec-68fb5361ef24
+places:
+  -
+    location: 'London, United Kingdom'
+    start: '1926-05-08'
+    end: null
+    id: 5430b442-54b6-4ae6-9c88-f50d06539d4c
+relationships:
+  -
+    person: 'Jane Elizabeth Ebsworth Oriel'
+    relationshipType: marriage
+    start: '1950'
+    end: '1997'
+    id: 410c9e9d-bdc1-42ea-ad08-34cbc75932c8

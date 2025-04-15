@@ -1,0 +1,100 @@
+name: 'Steve Jobs'
+type: person
+subtypes:
+    - Q131524
+    - Q205375
+    - Q5322166
+    - Q82594
+    - Q1053574
+    - Q3282637
+    - Q1979607
+    - Q133253419
+start: '1955-02-24'
+end: '2011-10-05'
+education:
+    -
+        level: tertiary
+        institution: Q1140775
+        start: '1972-00-00'
+        end: '1974-00-00'
+        id: 043d6a37-0986-4755-8824-23f8e67e5c9d
+    -
+        level: tertiary
+        institution: Q5890521
+        start: null
+        end: '1972-00-00'
+        id: f24e78fa-e011-4f26-87b4-443d335a997f
+    -
+        level: tertiary
+        institution: Q928272
+        start: null
+        end: null
+        id: 91a3c9bf-db28-4f2d-9886-75f7425a2504
+work:
+    -
+        role: Q131524
+        employer: Unknown
+        start: null
+        end: null
+        id: 669a8f34-69a5-4bcc-8fe3-bdc9fe750afb
+    -
+        role: Q205375
+        employer: Unknown
+        start: null
+        end: null
+        id: 85267f67-809b-40fd-9ecb-63010a199ecf
+    -
+        role: Q5322166
+        employer: Unknown
+        start: null
+        end: null
+        id: 78d8a144-5e0b-4c60-8274-393e65dc8c41
+    -
+        role: Q82594
+        employer: Unknown
+        start: null
+        end: null
+        id: d3ab1931-3e9c-4019-88a5-26647efd528d
+    -
+        role: Q1053574
+        employer: Unknown
+        start: null
+        end: null
+        id: 77b5428b-4e7c-4ea9-8dcb-a6279961d5bb
+    -
+        role: Q3282637
+        employer: Unknown
+        start: null
+        end: null
+        id: c4a7a7d2-33d7-465d-8f84-f002236f47d2
+    -
+        role: Q1979607
+        employer: Unknown
+        start: null
+        end: null
+        id: efb0ba31-80e9-4c10-abf3-8dc3264e25bc
+    -
+        role: Q133253419
+        employer: Unknown
+        start: null
+        end: null
+        id: bed9f608-8013-4b15-803e-5ca5445223ce
+places:
+    -
+        location: 'San Francisco'
+        start: '1955-02-24'
+        end: null
+        id: 30a3c16b-8537-4900-a188-0f185bee34b3
+    -
+        location: 'Palo Alto'
+        start: null
+        end: '2011-10-05'
+        id: 32f29b2f-7717-4827-992a-564ad77d0ea1
+relationships:
+    -
+        person: Q3133593
+        relationshipType: marriage
+        start: '1991-03-18'
+        end: '2011-10-05'
+        id: 24591c16-6fa0-480b-850f-fe81ba7db887
+filename: 396a4031-2e35-4d3a-8ae4-8ae6da876bd5.yaml

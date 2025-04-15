@@ -1,0 +1,72 @@
+name: 'Donald Trump'
+type: person
+gender: male
+start: '1946-06-14'
+end: null
+id: 44d4087b-e962-4f90-b985-495e953c9cb6
+family:
+  mother: 'Mary Anne MacLeod'
+  father: 'Fred Trump'
+  children:
+    - 'Donald Trump Jr.'
+    - 'Ivanka Trump'
+    - 'Eric Trump'
+    - 'Tiffany Trump'
+    - 'Barron Trump'
+education:
+  -
+    level: 'higher education'
+    institution: 'Fordham University'
+    start: '1964'
+    end: '1966'
+    id: bb805475-71fb-4bd9-b213-ab6d21a77ead
+  -
+    level: 'higher education'
+    institution: 'Wharton School of the University of Pennsylvania'
+    start: '1966'
+    end: '1968'
+    course: Economics
+    id: f343eb25-95e8-476a-a6a6-f94b3f8c901a
+work:
+  -
+    role: 'President of the United States'
+    employer: 'United States Government'
+    start: '2017'
+    end: '2021'
+    id: 50d69503-8740-42a1-a9a4-4e2ce72fc8d4
+  -
+    role: 'Businessman and television personality'
+    employer: 'The Trump Organization'
+    start: '1971'
+    end: null
+    id: f8b368a2-552c-482f-83a1-7fab591571cf
+places:
+  -
+    location: 'Queens, New York, USA'
+    start: '1946'
+    end: '1968'
+    id: edc7df3b-ba9c-4987-9ada-4be8eb17a8a9
+  -
+    location: 'Manhattan, New York, USA'
+    start: '1971'
+    end: null
+    id: 0d9764bd-ff62-4242-b2f4-50a29d794d19
+relationships:
+  -
+    person: 'Ivana Trump'
+    relationshipType: marriage
+    start: '1977'
+    end: '1992'
+    id: f7348018-6cec-4a8a-beba-6e8c19dcf410
+  -
+    person: 'Marla Maples'
+    relationshipType: marriage
+    start: '1993'
+    end: '1999'
+    id: 8bfa1212-eb31-4d9a-8519-7401b17ffcc5
+  -
+    person: 'Melania Trump'
+    relationshipType: marriage
+    start: '2005'
+    end: null
+    id: aa95d540-b415-4fe8-95e1-656b66e3420f

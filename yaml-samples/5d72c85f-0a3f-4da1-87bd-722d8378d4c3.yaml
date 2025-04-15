@@ -1,0 +1,11 @@
+name: 'Sheila Northover'
+type: person
+start: '1947-05-13'
+end: null
+gender: female
+family:
+  mother: 'Joan Scott'
+  father: 'Gerald Scott'
+  children:
+    - 'Richard Northover'
+    - 'Simon Northover'

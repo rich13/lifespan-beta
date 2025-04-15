@@ -1,0 +1,39 @@
+name: 'Jimi Hendrix'
+type: person
+gender: male
+start: '1942-11-27'
+end: '1970-09-18'
+family:
+  mother: 'Lucille Jeter'
+  father: 'James Allen Hendrix'
+education:
+  -
+    level: secondary
+    institution: 'Garfield High School'
+    start: '1958'
+    end: '1961'
+    id: 7f6f04d0-08c6-40e4-9c0f-cc2f83a0c41b
+work:
+  -
+    role: 'Guitarist in The Jimi Hendrix Experience'
+    employer: 'The Jimi Hendrix Experience'
+    start: '1966'
+    end: '1969'
+    id: 56de5089-ac82-4228-a93d-e4c26cdc6644
+  -
+    role: 'Guitarist in Band of Gypsys'
+    employer: 'Band of Gypsys'
+    start: '1969'
+    end: '1970'
+    id: 3525934c-71d7-4267-b836-d2ecf9fb2738
+places:
+  -
+    location: 'Seattle, Washington, USA'
+    start: '1942-11-27'
+    end: '1961'
+    id: a14d2ca0-8b43-4fb2-8cdd-93983ab70b48
+  -
+    location: 'London, UK'
+    start: '1966'
+    end: '1969'
+    id: b29c4b5a-d9c1-4a74-b689-3c49fa168245

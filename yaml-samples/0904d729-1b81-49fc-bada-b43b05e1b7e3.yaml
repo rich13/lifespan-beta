@@ -1,0 +1,9 @@
+name: 'Sophie Northover'
+type: person
+start: '1992-11-07'
+end: null
+gender: female
+family:
+  children:
+    - 'River Northover'
+    - 'Indiana Northover'

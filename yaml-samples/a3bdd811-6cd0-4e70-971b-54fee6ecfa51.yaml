@@ -1,0 +1,9 @@
+name: 'Indiana Northover'
+type: person
+gender: female
+start: '2023-12-27'
+end: null
+family:
+  father: 'Jack Northover'
+  mother: 'Sophie Northover'
+id: a3bdd811-6cd0-4e70-971b-54fee6ecfa51

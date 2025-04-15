@@ -1,0 +1,9 @@
+name: 'Peggy Northover'
+type: person
+gender: female
+start: '1920-01-14'
+end: '2014-07-15'
+family:
+  children:
+    - 'John Northover'
+    - 'Chris Northover'

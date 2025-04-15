@@ -1,0 +1,12 @@
+name: 'Louisa Denison'
+alias:
+  - 'Louisa Northover'
+gender: female
+type: person
+start: '1993-03-28'
+end: null
+family:
+  father: 'John Northover'
+  mother: 'Lindsay Northover'
+  children:
+    - 'Amelia Denison'

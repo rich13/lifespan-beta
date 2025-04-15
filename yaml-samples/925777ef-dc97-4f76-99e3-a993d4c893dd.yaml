@@ -1,0 +1,102 @@
+name: 'Kurt Vonnegut'
+type: person
+gender: male
+start: '1922-11-11'
+end: '2007-04-11'
+education:
+  -
+    type: education
+    level: secondary
+    institution: 'Shortridge High School'
+    start: '1936'
+    end: '1940'
+  -
+    type: education
+    level: tertiary
+    institution: 'Cornell University'
+    course: 'Biology and Chemistry'
+    start: '1940'
+    end: '1943'
+  -
+    type: education
+    level: tertiary
+    institution: 'Carnegie Institute of Technology (now Carnegie Mellon)'
+    course: 'Mechanical Engineering'
+    start: '1943'
+    end: '1943'
+  -
+    type: education
+    level: tertiary
+    institution: 'University of Tennessee'
+    course: 'Mechanical Engineering (U.S. Army Special Training Program)'
+    start: '1943'
+    end: '1944'
+  -
+    type: education
+    level: honorary
+    institution: 'University of Chicago'
+    course: 'Master’s Degree in Anthropology'
+    date_awarded: '1971'
+    details: 'Granted retroactively for his novel *Cat’s Cradle*, which met thesis criteria.'
+places:
+  -
+    type: residence
+    location: 'Indianapolis, Indiana, USA'
+    start: '1922-11-11'
+    end: '1943'
+    id: 68cb8f60-0fba-4d0e-a57b-4d0ea16a1041
+  -
+    type: residence
+    location: 'Dresden, Germany (as a POW)'
+    start: '1944'
+    end: '1945'
+    id: 906370f0-a050-4858-8c18-59e7cd92de0e
+  -
+    type: residence
+    location: 'Chicago, Illinois, USA'
+    start: '1946'
+    end: '1947'
+    id: e5862bdb-3d02-40f9-83bd-d8725c923827
+  -
+    type: residence
+    location: 'Cape Cod, Massachusetts, USA'
+    start: '1950'
+    end: '1971'
+    id: 3049b220-affa-4c01-9496-afc13e0fe4bd
+  -
+    type: residence
+    location: 'New York City, New York, USA'
+    start: '1971'
+    end: '2007-04-11'
+    id: 2ce9efd8-c5c2-48a4-a666-441acc4d761a
+work:
+  -
+    type: work
+    role: 'Public Relations Staff Writer'
+    employer: 'General Electric'
+    start: '1947'
+    end: '1950'
+    id: bf0db6a9-8f09-4464-898d-2cb89552ab9c
+  -
+    type: work
+    role: Author
+    employer: Self-employed
+    start: '1950'
+    end: '2007-04-11'
+    id: 7ca34c6d-a1e4-4e79-a707-49a406fa8e7d
+relationships:
+  -
+    type: relationship
+    person: 'Jane Marie Cox'
+    relationshipType: marriage
+    start: '1945'
+    end: '1971'
+    id: fc16e563-3936-4849-a107-8a9289f1de3e
+  -
+    type: relationship
+    person: 'Jill Krementz'
+    relationshipType: marriage
+    start: '1979'
+    end: '2007-04-11'
+    id: 621cc050-54bb-4a15-8003-81e27120f42f
+filename: 925777ef-dc97-4f76-99e3-a993d4c893dd.yaml

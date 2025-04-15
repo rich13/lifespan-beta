@@ -1,0 +1,12 @@
+name: 'The University of Edinburgh'
+type: organisation
+start: '1583-01-01'
+end: null
+subtypes:
+  - university
+places:
+  -
+    location: 'Edinburgh, Scotland, UK'
+    start: '1583'
+    end: null
+    id: 319b889f-e579-481e-9990-04d730ee003f

@@ -1,0 +1,23 @@
+---
+
+# --- Basic Information ---
+name: Nirvana
+type: band
+start: '1987-01-01'
+end: '1994-04-05'
+id: b5d87f2e-6f89-4226-916e-89aa41fba655
+
+# --- Subspans ---
+members:
+  - name: "Kurt Cobain"
+    role: "Lead Vocals, Guitar"
+    start: '1987-01-01'
+    end: '1994-04-05'
+  - name: "Krist Novoselic"
+    role: "Bass"
+    start: '1987-01-01'
+    end: '1994-04-05'
+  - name: "Dave Grohl"
+    role: "Drums"
+    start: '1990-10-14'
+    end: '1994-04-05'  

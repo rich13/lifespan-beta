@@ -1,0 +1,35 @@
+name: 'Michael Stipe'
+type: person
+start: '1960-01-04'
+end: null
+gender: male
+subtypes:
+  - musician
+education:
+  -
+    level: 'higher education'
+    institution: 'University of Georgia'
+    start: '1980'
+    end: '1982'
+    id: 8856363e-c5ae-4918-b662-63193b8afd2b
+work:
+  -
+    role: 'Lead vocalist'
+    employer: R.E.M.
+    start: '1980'
+    end: '2011'
+    location: 'Athens, Georgia, USA'
+    id: 76685ad5-8094-42bd-9e4a-8bd618bf6311
+places:
+  -
+    location: 'Decatur, Georgia, USA'
+    start: '1960'
+    end: '1980'
+    reason: 'Birth and early life'
+    id: b29cd160-87d2-427d-8df0-2cee928a8b86
+  -
+    location: 'Athens, Georgia, USA'
+    start: '1980'
+    end: null
+    reason: 'Career and current residence'
+    id: cead4bc5-8165-4c93-a5f9-7cd50871d3de

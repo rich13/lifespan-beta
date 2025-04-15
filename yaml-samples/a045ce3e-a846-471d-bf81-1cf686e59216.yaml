@@ -1,0 +1,10 @@
+name: 'Gerald Scott'
+type: person
+start: '1917-12-13'
+end: '1993-05-19'
+gender: male
+family:
+  children:
+    - 'Sheila Northover'
+    - 'John Scott'
+id: a045ce3e-a846-471d-bf81-1cf686e59216

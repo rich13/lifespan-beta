@@ -1,0 +1,8 @@
+name: 'Lhaki Berger'
+type: person
+start: '1979-06-17'
+end: null
+gender: female
+family:
+  children:
+    - 'Pema Northover'

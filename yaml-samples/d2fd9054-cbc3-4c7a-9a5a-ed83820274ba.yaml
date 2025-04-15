@@ -1,0 +1,93 @@
+name: 'Tony Blair'
+type: person
+gender: male
+start: '1953-05-06'
+end: null
+subtypes:
+  - politician
+  - author
+family:
+  mother: 'Hazel Corscadden'
+  father: 'Leo Blair'
+  children:
+    - 'Euan Blair'
+    - 'Nick Blair'
+    - 'Kathryn Blair'
+    - 'Leo Blair'
+education:
+  -
+    level: secondary
+    institution: 'The Chorister School'
+    start: '1961'
+    end: '1966'
+    id: d5214347-dc9c-451e-94c3-417196e9d85b
+  -
+    level: secondary
+    institution: 'Fettes College'
+    start: '1966'
+    end: '1971'
+    id: a485fa44-d3f7-4ddb-b514-71a2781bb1ea
+  -
+    level: undergraduate
+    institution: 'St John’s College, Oxford'
+    start: '1972'
+    end: '1975'
+    course: Jurisprudence
+    id: 640db682-6454-4b8c-93da-7d01f081a8b7
+work:
+  -
+    role: 'Member of Parliament for Sedgefield'
+    employer: 'UK Government'
+    start: '1983'
+    end: '2007'
+    id: 4ddf251d-b0b9-45f9-9962-faed239bc2fa
+  -
+    role: 'Leader of the Labour Party'
+    employer: 'Labour Party'
+    start: '1994'
+    end: '2007'
+    id: a5956a41-2876-4954-973f-cf60864a20c1
+  -
+    role: 'Prime Minister of the United Kingdom'
+    employer: 'UK Government'
+    start: '1997'
+    end: '2007'
+    id: fb53bc3b-0710-497d-a858-745900f185b8
+  -
+    role: 'Middle East envoy for the United Nations, European Union, United States, and Russia'
+    employer: 'Quartet on the Middle East'
+    start: '2007'
+    end: '2015'
+    id: a2e95663-1495-43ae-ac22-bd60103e34bc
+places:
+  -
+    location: 'Edinburgh, Scotland'
+    start: '1953'
+    end: '1966'
+    id: 0cce7216-c2e7-420e-99f2-7e3e307f257d
+  -
+    location: 'Durham, England'
+    start: '1961'
+    end: '1966'
+    id: 11c782fc-da5b-4f02-b3bd-edf0b4545dcf
+  -
+    location: 'Oxford, England'
+    start: '1972'
+    end: '1975'
+    id: 7336d499-201b-4674-bf54-be15d2dc461b
+  -
+    location: 'Sedgefield, England'
+    start: '1983'
+    end: '2007'
+    id: 00dc0905-9108-4fe1-ba8c-2e4b82102064
+  -
+    location: 'London, England'
+    start: '1997'
+    end: '2007'
+    id: 762b9846-da44-4a5d-bfc1-4b44ad36cb5e
+relationships:
+  -
+    person: 'Cherie Blair'
+    relationshipType: marriage
+    start: '1980'
+    id: 8eff3e05-037c-4237-93b9-f51e213ccf73

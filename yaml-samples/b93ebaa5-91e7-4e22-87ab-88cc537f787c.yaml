@@ -1,0 +1,104 @@
+name: 'Lindsay Northover'
+type: person
+start: '1954-08-20'
+end: null
+gender: female
+family:
+  children:
+    - 'Tom Northover'
+    - 'Joe Northover'
+    - 'Louisa Denison'
+education:
+  -
+    type: education
+    level: secondary
+    institution: 'Brighton and Hove High School'
+    start: '1965'
+    end: '1972'
+    id: bd39a880-6eb4-4610-af5f-3c075d6de1aa
+  -
+    type: education
+    level: tertiary
+    institution: "St Anne's College, Oxford"
+    course: 'Modern History'
+    start: '1972'
+    end: '1976'
+    id: 1f8bed32-038f-43b3-8b67-5d1868c90a48
+  -
+    type: education
+    level: postgraduate
+    institution: 'Bryn Mawr College and University of Pennsylvania'
+    course: 'History and Philosophy of Science'
+    start: '1976'
+    end: '1981'
+    id: 57863aa6-1a6e-4c4b-a543-14a0f9852dc7
+places:
+  -
+    type: residence
+    location: 'Brighton, England'
+    start: '1954-08-21'
+    end: '1972'
+    id: 8764486e-b6cb-4be5-a645-3432678466d4
+  -
+    type: residence
+    location: 'Oxford, England'
+    start: '1972'
+    end: '1976'
+    id: cf110652-45af-4a89-bd0a-f0535290d6cf
+  -
+    type: residence
+    location: 'Philadelphia, Pennsylvania, USA'
+    start: '1976'
+    end: '1981'
+    id: a21d081c-cc37-4498-8410-d3b80615e67f
+  -
+    type: residence
+    location: 'London, England'
+    start: '1981'
+    end: null
+    id: 8dce8ecf-13fd-48fa-b0f6-bc4a52ffd415
+work:
+  -
+    type: work
+    role: 'Research Fellow'
+    employer: "University College London and St Mark's Hospital"
+    start: '1980'
+    end: '1983'
+    id: 975dfa22-9049-44aa-8be2-8e81b4e612c9
+  -
+    type: work
+    role: 'Research Fellow'
+    employer: "St Thomas's Hospital Medical School"
+    start: '1983'
+    end: '1984'
+    id: 76fb4bc6-e6ac-433f-be1d-97a29a7815e1
+  -
+    type: work
+    role: Lecturer
+    employer: 'University College London and Wellcome Institute'
+    start: '1984'
+    end: '1991'
+    id: 8d00c430-de20-4a6b-8d01-67e2e7896a3a
+  -
+    type: work
+    role: Member
+    employer: 'House of Lords'
+    start: '2000-05-10'
+    end: null
+    id: 4f62e47b-a5a4-4a2b-8be9-3645465580f6
+  -
+    type: work
+    role: 'Parliamentary Under-Secretary of State'
+    employer: 'Department for International Development'
+    start: '2014-11-04'
+    end: '2015-05-07'
+    id: 7742f7ab-d067-497a-9869-0cd3868326be
+relationships:
+  -
+    type: relationship
+    person: 'John Northover'
+    relationshipType: marriage
+    start: '1984'
+    end: '2015'
+    id: 11db435b-8bd2-456f-b227-2672bdccb65b
+id: b93ebaa5-91e7-4e22-87ab-88cc537f787c
