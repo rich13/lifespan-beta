@@ -6,9 +6,26 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
 
+# Function to log errors
+error_log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1" >&2
+}
+
 # Function to check if a command exists
 command_exists() {
     command -v "$1" >/dev/null 2>&1
+}
+
+# Function to test database connection
+test_db_connection() {
+    log "Testing direct PostgreSQL connection..."
+    if PGPASSWORD="${PGPASSWORD}" psql -h "${PGHOST}" -p "${PGPORT}" -U "${PGUSER}" -d "${PGDATABASE}" -c '\l' &>/dev/null; then
+        log "Direct PostgreSQL connection successful!"
+        return 0
+    else
+        error_log "Direct PostgreSQL connection failed!"
+        return 1
+    fi
 }
 
 # Wait for database to be ready
@@ -19,20 +36,49 @@ wait_for_db() {
         apt-get update && apt-get install -y postgresql-client
     fi
 
-    while ! pg_isready -h "${PGHOST}" -p "${PGPORT}" -U "${PGUSER}"; do
-        log "Database is not ready - waiting"
-        sleep 2
+    local retries=30
+    local counter=0
+    
+    while [ $counter -lt $retries ]; do
+        if pg_isready -h "${PGHOST}" -p "${PGPORT}" -U "${PGUSER}"; then
+            log "Database is ready!"
+            
+            # Double check with a connection test
+            if test_db_connection; then
+                return 0
+            else
+                error_log "Database is ready but connection test failed."
+                counter=$((counter + 1))
+                sleep 2
+                continue
+            fi
+        fi
+        
+        error_log "Database is not ready - waiting (attempt $counter/$retries)"
+        sleep 3
+        counter=$((counter + 1))
     done
-    log "Database is ready!"
+    
+    error_log "Database connection timed out after $retries attempts"
+    return 1
 }
 
 # Set up environment
+log "Setting up environment..."
 if [ -f .env ]; then
     log "Using existing .env file"
 else
     log "Creating .env file from .env.example"
     cp .env.example .env
 fi
+
+# Debug environment variables
+log "Environment variables:"
+log "PGHOST: ${PGHOST:-not set}"
+log "PGPORT: ${PGPORT:-not set}"
+log "PGDATABASE: ${PGDATABASE:-not set}"
+log "PGUSER: ${PGUSER:-not set}"
+log "PGPASSWORD: ${PGPASSWORD:+is set}"
 
 # Update .env with Railway PostgreSQL configuration
 if [ -n "${PGHOST}" ]; then
@@ -43,6 +89,12 @@ if [ -n "${PGHOST}" ]; then
     sed -i "s/DB_DATABASE=.*/DB_DATABASE=${PGDATABASE}/" .env
     sed -i "s/DB_USERNAME=.*/DB_USERNAME=${PGUSER}/" .env
     sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=${PGPASSWORD}/" .env
+    
+    # Debug .env file
+    log "Database configuration in .env:"
+    grep -E "^DB_" .env
+else
+    error_log "No PostgreSQL configuration found in environment variables"
 fi
 
 # Update .env with logging and debug configuration
@@ -70,13 +122,23 @@ if [ ! -L "public/storage" ]; then
 fi
 
 # Wait for database
-wait_for_db
+if ! wait_for_db; then
+    error_log "Failed to connect to the database. Starting services anyway."
+fi
+
+# Generate application key if not set
+if grep -q "APP_KEY=base64" .env; then
+    log "Generating application key"
+    php artisan key:generate --force
+fi
 
 # Run migrations with error handling
 log "Running migrations"
 if ! php artisan migrate --force; then
-    log "Migration failed, attempting to refresh"
-    php artisan migrate:refresh --force
+    error_log "Migration failed, attempting to refresh"
+    if ! php artisan migrate:refresh --force; then
+        error_log "Migration refresh also failed"
+    fi
 fi
 
 # Clear cache

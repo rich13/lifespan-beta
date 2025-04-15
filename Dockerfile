@@ -25,7 +25,8 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     nginx \
     supervisor \
-    libzip-dev
+    libzip-dev \
+    postgresql-client
 
 # Clear cache
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -61,10 +62,12 @@ RUN mkdir -p /var/www/storage/logs \
 # Copy configuration files
 COPY docker/prod/nginx.conf /etc/nginx/nginx.conf
 COPY docker/prod/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY docker/prod/php-fpm/www.conf /usr/local/etc/php-fpm.d/www.conf
 COPY docker/prod/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY docker/prod/health-check.sh /usr/local/bin/health-check.sh
 
 # Make scripts executable
-RUN chmod +x /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/health-check.sh
 
 # Set permissions
 RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache \
