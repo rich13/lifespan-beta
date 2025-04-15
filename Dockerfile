@@ -61,10 +61,10 @@ RUN mkdir -p /var/www/storage/logs \
 # Copy configuration files
 COPY docker/prod/nginx.conf /etc/nginx/nginx.conf
 COPY docker/prod/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-COPY docker/prod/entrypoint.sh /entrypoint.sh
+COPY docker/prod/entrypoint.sh /usr/local/bin/entrypoint.sh
 
 # Make scripts executable
-RUN chmod +x /entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # Set permissions
 RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache \
@@ -73,5 +73,5 @@ RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache \
 # Expose port
 EXPOSE 8080
 
-# Start supervisor
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"] 
+# Set entrypoint
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"] 

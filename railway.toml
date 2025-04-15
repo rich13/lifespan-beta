@@ -3,7 +3,7 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "/usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf"
+startCommand = "/usr/local/bin/entrypoint.sh"
 healthcheckPath = "/health"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
