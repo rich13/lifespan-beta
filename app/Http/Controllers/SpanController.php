@@ -49,11 +49,17 @@ class SpanController extends Controller
                 ->orderByRaw('COALESCE(start_month, 12)')   // Then by month
                 ->orderByRaw('COALESCE(start_day, 31)');    // Then by day
 
-            // Basic debug info
-            \Illuminate\Support\Facades\Log::info('Span Index Query', [
-                'is_authenticated' => Auth::check(),
-                'request_data' => $request->all()
-            ]);
+            // Basic debug info - only if we're in development
+            if (app()->environment('local', 'development')) {
+                try {
+                    \Illuminate\Support\Facades\Log::info('Span Index Query', [
+                        'is_authenticated' => Auth::check(),
+                        'request_data' => $request->all()
+                    ]);
+                } catch (\Exception $loggingError) {
+                    // Silently ignore logging errors in development
+                }
+            }
 
             // Handle type filtering
             if ($request->has('types')) {

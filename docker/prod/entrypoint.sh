@@ -106,9 +106,15 @@ log "PGPASSWORD: ${PGPASSWORD:+is set}"
 log "Setting up required directories"
 mkdir -p storage/framework/{sessions,views,cache}
 mkdir -p storage/logs
-mkdir -p bootstrap/cache
+touch storage/logs/laravel.log
 chmod -R 775 storage bootstrap/cache
 chown -R www-data:www-data storage bootstrap/cache
+
+# Ensure log file exists and has correct permissions
+log "Setting up log files"
+touch storage/logs/laravel.log
+chmod 664 storage/logs/laravel.log
+chown www-data:www-data storage/logs/laravel.log
 
 # Create storage link if it doesn't exist
 if [ ! -L "public/storage" ]; then

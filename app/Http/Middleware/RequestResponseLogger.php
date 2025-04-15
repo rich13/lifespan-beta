@@ -21,9 +21,18 @@ class RequestResponseLogger
         // Process the request
         $response = $next($request);
         
-        // Only log if we're in production (Railway) and response code is 4xx or 5xx
-        if (app()->environment('production') && $response->getStatusCode() >= 400) {
-            $this->logRequest($request, $response);
+        try {
+            // Only log if we're in production (Railway) and response code is 4xx or 5xx
+            if (app()->environment('production') && $response->getStatusCode() >= 400) {
+                $this->logRequest($request, $response);
+            }
+        } catch (\Exception $e) {
+            // Don't let logging failures break the app
+            try {
+                Log::error('Error in request logging: ' . $e->getMessage());
+            } catch (\Exception $loggingError) {
+                // If even the basic logging fails, just continue silently
+            }
         }
         
         return $response;

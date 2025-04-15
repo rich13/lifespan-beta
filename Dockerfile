@@ -73,6 +73,11 @@ RUN mkdir -p /var/www/storage/logs \
     /var/run/nginx \
     /var/run/php
 
+# Create log files with correct permissions
+RUN touch /var/www/storage/logs/laravel.log && \
+    chmod 664 /var/www/storage/logs/laravel.log && \
+    chown www-data:www-data /var/www/storage/logs/laravel.log
+
 # Copy configuration files
 COPY docker/prod/nginx.conf /etc/nginx/nginx.conf
 COPY docker/prod/supervisord.conf /etc/supervisor/conf.d/supervisord.conf

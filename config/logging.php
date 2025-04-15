@@ -54,7 +54,7 @@ return [
     'channels' => [
         'stack' => [
             'driver' => 'stack',
-            'channels' => env('APP_ENV') === 'production' ? ['railway', 'daily'] : ['single', 'daily'],
+            'channels' => env('APP_ENV') === 'production' ? ['railway', 'daily', 'stderr'] : ['single', 'daily'],
             'ignore_exceptions' => false,
         ],
 
@@ -94,11 +94,15 @@ return [
 
         'stderr' => [
             'driver' => 'monolog',
+            'level' => env('LOG_LEVEL', 'debug'),
             'handler' => StreamHandler::class,
+            'formatter' => env('LOG_STDERR_FORMATTER', Monolog\Formatter\LineFormatter::class),
+            'formatter_with' => [
+                'format' => "[%datetime%] %channel%.%level_name%: %message% %context% %extra%\n",
+            ],
             'with' => [
                 'stream' => 'php://stderr',
             ],
-            'processors' => [PsrLogMessageProcessor::class],
         ],
 
         'syslog' => [
