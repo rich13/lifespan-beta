@@ -83,11 +83,19 @@ wait_for_db() {
 
 # Set up environment
 log "Setting up environment..."
+# Set Docker container environment variable for logging
+export DOCKER_CONTAINER=true
+export APP_ENV=production
+
 if [ -f .env ]; then
     log "Using existing .env file"
+    # Update env file with docker container variable
+    grep -q "DOCKER_CONTAINER=" .env && sed -i "s/DOCKER_CONTAINER=.*/DOCKER_CONTAINER=true/" .env || echo "DOCKER_CONTAINER=true" >> .env
 else
     log "Creating .env file from .env.example"
     cp .env.example .env
+    echo "DOCKER_CONTAINER=true" >> .env
+    echo "APP_ENV=production" >> .env
 fi
 
 # Parse DATABASE_URL if present

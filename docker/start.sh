@@ -18,6 +18,26 @@ for cmd in php npm; do
     fi
 done
 
+# Set Docker container environment variable for logging
+log "Setting Docker container environment variable"
+export DOCKER_CONTAINER=true
+
+# Update .env with DOCKER_CONTAINER variable
+if [ -f /var/www/.env ]; then
+    grep -q "DOCKER_CONTAINER=" /var/www/.env && sed -i "s/DOCKER_CONTAINER=.*/DOCKER_CONTAINER=true/" /var/www/.env || echo "DOCKER_CONTAINER=true" >> /var/www/.env
+else 
+    echo "DOCKER_CONTAINER=true" >> /var/www/.env
+fi
+
+# Create storage directories and set permissions
+log "Setting up storage directories..."
+mkdir -p /var/www/storage/logs
+mkdir -p /var/www/storage/framework/{sessions,views,cache}
+chmod -R 777 /var/www/storage
+touch /var/www/storage/logs/laravel.log
+chmod 666 /var/www/storage/logs/laravel.log
+log "Storage directories configured"
+
 # Wait for the database to be ready
 log "Waiting for database to be ready..."
 max_attempts=30

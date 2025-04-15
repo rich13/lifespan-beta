@@ -54,7 +54,11 @@ return [
     'channels' => [
         'stack' => [
             'driver' => 'stack',
-            'channels' => env('APP_ENV') === 'production' ? ['railway', 'daily', 'stderr'] : ['single', 'daily'],
+            'channels' => env('APP_ENV') === 'production' 
+                ? ['railway', 'stderr'] 
+                : (env('APP_ENV') === 'local' && env('DOCKER_CONTAINER', false) 
+                    ? ['stderr', 'errorlog'] 
+                    : ['single', 'stderr']),
             'ignore_exceptions' => false,
         ],
 
@@ -62,6 +66,7 @@ return [
             'driver' => 'single',
             'path' => storage_path('logs/laravel.log'),
             'level' => env('LOG_LEVEL', 'debug'),
+            'replace_placeholders' => true,
         ],
 
         'daily' => [
@@ -69,6 +74,7 @@ return [
             'path' => storage_path('logs/laravel.log'),
             'level' => env('LOG_LEVEL', 'debug'),
             'days' => 14,
+            'replace_placeholders' => true,
         ],
 
         'slack' => [
@@ -129,6 +135,12 @@ return [
 
         // Custom channels for Lifespan
         'spans' => [
+            'driver' => 'stack',
+            'channels' => ['stderr', 'spansFile'],
+            'ignore_exceptions' => false,
+        ],
+        
+        'spansFile' => [
             'driver' => 'daily',
             'path' => storage_path('logs/spans.log'),
             'level' => env('LOG_LEVEL', 'debug'),
@@ -137,6 +149,12 @@ return [
         ],
 
         'relationships' => [
+            'driver' => 'stack',
+            'channels' => ['stderr', 'relationshipsFile'],
+            'ignore_exceptions' => false,
+        ],
+        
+        'relationshipsFile' => [
             'driver' => 'daily',
             'path' => storage_path('logs/relationships.log'),
             'level' => env('LOG_LEVEL', 'debug'),
@@ -145,6 +163,12 @@ return [
         ],
 
         'security' => [
+            'driver' => 'stack',
+            'channels' => ['stderr', 'securityFile'],
+            'ignore_exceptions' => false,
+        ],
+        
+        'securityFile' => [
             'driver' => 'daily',
             'path' => storage_path('logs/security.log'),
             'level' => env('LOG_LEVEL', 'debug'),
@@ -153,6 +177,12 @@ return [
         ],
 
         'performance' => [
+            'driver' => 'stack',
+            'channels' => ['stderr', 'performanceFile'],
+            'ignore_exceptions' => false,
+        ],
+        
+        'performanceFile' => [
             'driver' => 'daily',
             'path' => storage_path('logs/performance.log'),
             'level' => env('LOG_LEVEL', 'debug'),
@@ -161,18 +191,30 @@ return [
         ],
 
         'testing' => [
+            'driver' => 'stack',
+            'channels' => ['stderr', 'testingFile'],
+            'ignore_exceptions' => false,
+        ],
+        
+        'testingFile' => [
             'driver' => 'single',
             'path' => storage_path('logs/testing.log'),
             'level' => env('LOG_LEVEL', 'debug'),
         ],
 
         'connections' => [
+            'driver' => 'stack',
+            'channels' => ['stderr', 'connectionsFile'],
+            'ignore_exceptions' => false,
+        ],
+        
+        'connectionsFile' => [
             'driver' => 'single',
             'path' => storage_path('logs/connections.log'),
             'level' => env('LOG_LEVEL', 'debug'),
         ],
 
-        // New Railway logging channel that writes to stderr
+        // Railway logging channel that writes to stderr
         'railway' => [
             'driver' => 'monolog',
             'handler' => Monolog\Handler\StreamHandler::class,
