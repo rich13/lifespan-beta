@@ -16,6 +16,12 @@ RUN if [ -d "node_modules/bootstrap-icons/font/fonts/" ]; then \
         cp -r node_modules/bootstrap-icons/font/fonts/* public/fonts/; \
     fi
 
+# Also create a special build directory for static files
+RUN mkdir -p public/build/fonts
+RUN if [ -d "node_modules/bootstrap-icons/font/fonts/" ]; then \
+        cp -r node_modules/bootstrap-icons/font/fonts/* public/build/fonts/; \
+    fi
+
 # PHP stage
 FROM php:8.2-fpm
 

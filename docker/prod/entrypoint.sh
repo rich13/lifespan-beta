@@ -116,6 +116,14 @@ if [ ! -L "public/storage" ]; then
     php artisan storage:link
 fi
 
+# Create font symlinks to ensure bootstrap-icons can find them
+log "Setting up font symlinks for Bootstrap Icons"
+if [ ! -d "public/assets" ]; then
+    mkdir -p public/assets
+fi
+ln -sf /var/www/public/build/fonts/* /var/www/public/assets/ || true
+ln -sf /var/www/public/build/fonts/* /var/www/public/ || true
+
 # Wait for database
 if ! wait_for_db; then
     error_log "Failed to connect to the database. Starting services anyway."
