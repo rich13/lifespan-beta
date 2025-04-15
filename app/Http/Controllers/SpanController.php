@@ -42,84 +42,106 @@ class SpanController extends Controller
      */
     public function index(Request $request): View|Response
     {
-        $query = Span::query()
-            ->whereNot('type_id', 'connection')
-            ->orderByRaw('COALESCE(start_year, 9999)')  // Order by start_year, putting nulls last
-            ->orderByRaw('COALESCE(start_month, 12)')   // Then by month
-            ->orderByRaw('COALESCE(start_day, 31)');    // Then by day
+        try {
+            $query = Span::query()
+                ->whereNot('type_id', 'connection')
+                ->orderByRaw('COALESCE(start_year, 9999)')  // Order by start_year, putting nulls last
+                ->orderByRaw('COALESCE(start_month, 12)')   // Then by month
+                ->orderByRaw('COALESCE(start_day, 31)');    // Then by day
 
-        // Handle type filtering
-        if ($request->has('types')) {
-            $types = is_array($request->types) ? $request->types : explode(',', $request->types);
-            $query->whereIn('type_id', $types);
+            // Basic debug info
+            \Illuminate\Support\Facades\Log::info('Span Index Query', [
+                'is_authenticated' => Auth::check(),
+                'request_data' => $request->all()
+            ]);
 
-            // Handle subtype filtering
-            foreach ($types as $typeId) {
-                $subtypeParam = $request->input($typeId . '_subtype');
-                if ($subtypeParam) {
-                    $subtypes = explode(',', $subtypeParam);
-                    $query->where(function($q) use ($typeId, $subtypes) {
-                        foreach ($subtypes as $subtype) {
-                            $q->orWhereJsonContains('metadata->subtype', $subtype);
-                        }
-                    });
+            // Handle type filtering
+            if ($request->has('types')) {
+                $types = is_array($request->types) ? $request->types : explode(',', $request->types);
+                $query->whereIn('type_id', $types);
+
+                // Handle subtype filtering
+                foreach ($types as $typeId) {
+                    $subtypeParam = $request->input($typeId . '_subtype');
+                    if ($subtypeParam) {
+                        $subtypes = explode(',', $subtypeParam);
+                        $query->where(function($q) use ($typeId, $subtypes) {
+                            foreach ($subtypes as $subtype) {
+                                $q->orWhereJsonContains('metadata->subtype', $subtype);
+                            }
+                        });
+                    }
                 }
             }
-        }
 
-        // Handle search
-        if ($request->has('search')) {
-            $searchTerms = preg_split('/\s+/', trim($request->search));
-            $query->where(function($q) use ($searchTerms) {
-                foreach ($searchTerms as $term) {
-                    $q->where(function($subq) use ($term) {
-                        $subq->where('name', 'ilike', "%{$term}%")
-                             ->orWhere('description', 'ilike', "%{$term}%");
-                    });
-                }
-            });
-        }
-
-        // For unauthenticated users, only show public spans
-        if (!Auth::check()) {
-            $query->where('access_level', 'public');
-        } else {
-            // For authenticated users
-            $user = Auth::user();
-            if (!$user->is_admin) {
-                // Show:
-                // 1. Public spans
-                // 2. User's own spans
-                // 3. Shared spans where user has permission
-                $query->where(function ($query) use ($user) {
-                    $query->where('access_level', 'public')
-                        ->orWhere('owner_id', $user->id)
-                        ->orWhere(function ($query) use ($user) {
-                            $query->where('access_level', 'shared')
-                                ->whereExists(function ($subquery) use ($user) {
-                                    $subquery->select('id')
-                                        ->from('span_permissions')
-                                        ->whereColumn('span_permissions.span_id', 'spans.id')
-                                        ->where('span_permissions.user_id', $user->id);
-                                });
+            // Handle search
+            if ($request->has('search')) {
+                $searchTerms = preg_split('/\s+/', trim($request->search));
+                $query->where(function($q) use ($searchTerms) {
+                    foreach ($searchTerms as $term) {
+                        $q->where(function($subq) use ($term) {
+                            $subq->where('name', 'ilike', "%{$term}%")
+                                 ->orWhere('description', 'ilike', "%{$term}%");
                         });
+                    }
                 });
             }
+
+            // For unauthenticated users, only show public spans
+            if (!Auth::check()) {
+                $query->where('access_level', 'public');
+            } else {
+                // For authenticated users
+                $user = Auth::user();
+                if (!$user->is_admin) {
+                    // Show:
+                    // 1. Public spans
+                    // 2. User's own spans
+                    // 3. Shared spans where user has permission
+                    $query->where(function ($query) use ($user) {
+                        $query->where('access_level', 'public')
+                            ->orWhere('owner_id', $user->id)
+                            ->orWhere(function ($query) use ($user) {
+                                $query->where('access_level', 'shared')
+                                    ->whereExists(function ($subquery) use ($user) {
+                                        $subquery->select('id')
+                                            ->from('span_permissions')
+                                            ->whereColumn('span_permissions.span_id', 'spans.id')
+                                            ->where('span_permissions.user_id', $user->id);
+                                    });
+                            });
+                    });
+                }
+            }
+
+            $spans = $query->paginate(20);
+
+            // Log the query for debugging
+            \Illuminate\Support\Facades\Log::info('Span Index Results', [
+                'is_authenticated' => Auth::check(),
+                'query_sql' => $query->toSql(),
+                'query_bindings' => $query->getBindings(),
+                'spans_count' => $spans->count()
+            ]);
+
+            return view('spans.index', compact('spans'));
+        } catch (\Exception $e) {
+            // Log the error
+            \Illuminate\Support\Facades\Log::error('Error in spans index', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            // Return error page
+            if (app()->environment('production')) {
+                return response()->view('errors.500', [], 500);
+            } else {
+                return response()->view('errors.500', [
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString()
+                ], 500);
+            }
         }
-
-        $spans = $query->paginate(20);
-
-        // For debugging
-        ray('=== Span Index Debug ===');
-        ray([
-            'is_authenticated' => Auth::check(),
-            'query_sql' => $query->toSql(),
-            'query_bindings' => $query->getBindings(),
-            'spans_count' => $spans->count(),
-            'spans' => $spans->items()
-        ]);
-
-        return view('spans.index', compact('spans'));
     }
 
     /**
@@ -180,39 +202,54 @@ class SpanController extends Controller
      */
     public function show(Request $request, Span $span): View|\Illuminate\Http\RedirectResponse
     {
-        // Basic debug info
-        ray('=== Span Debug Info ===');
-        
-        // Log the span model
-        ray($span->toArray());
-        
-        // If we're accessing via UUID and a slug exists, redirect to the slug URL
-        $routeParam = $request->segment(2); // Get the actual URL segment
-        
-        // Route info
-        ray([
-            'route_param' => $routeParam,
-            'is_uuid' => Str::isUuid($routeParam),
-            'slug' => $span->slug,
-            'span_id' => $span->id
-        ]);
-        
-        if (Str::isUuid($routeParam) && $span->slug) {
-            ray('Redirecting to slug URL', [
-                'from' => $routeParam,
-                'to' => $span->slug
+        try {
+            // Basic debug info
+            \Illuminate\Support\Facades\Log::info('Span Show Request', [
+                'route_param' => $request->segment(2),
+                'span_id' => $span->id,
+                'span_type' => $span->type_id,
+                'is_uuid' => Str::isUuid($request->segment(2)),
+                'slug' => $span->slug
             ]);
-            return redirect()
-                ->route('spans.show', ['span' => $span->slug], 301)
-                ->with('status', session('status')); // Preserve flash message
-        }
+            
+            // If we're accessing via UUID and a slug exists, redirect to the slug URL
+            $routeParam = $request->segment(2); // Get the actual URL segment
+            
+            if (Str::isUuid($routeParam) && $span->slug) {
+                \Illuminate\Support\Facades\Log::info('Redirecting to slug URL', [
+                    'from' => $routeParam,
+                    'to' => $span->slug
+                ]);
+                
+                return redirect()
+                    ->route('spans.show', ['span' => $span->slug], 301)
+                    ->with('status', session('status')); // Preserve flash message
+            }
 
-        // Check if the span is private and the user is not authenticated
-        if ($span->access_level !== 'public' && !Auth::check()) {
-            return redirect()->route('login');
-        }
+            // Check if the span is private and the user is not authenticated
+            if ($span->access_level !== 'public' && !Auth::check()) {
+                return redirect()->route('login');
+            }
 
-        return view('spans.show', compact('span'));
+            return view('spans.show', compact('span'));
+        } catch (\Exception $e) {
+            // Log the error
+            \Illuminate\Support\Facades\Log::error('Error in spans show', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'route_param' => $request->segment(2)
+            ]);
+            
+            // Return error page
+            if (app()->environment('production')) {
+                return response()->view('errors.500', [], 500);
+            } else {
+                return response()->view('errors.500', [
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString()
+                ], 500);
+            }
+        }
     }
 
     /**

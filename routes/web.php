@@ -75,6 +75,39 @@ Route::get('/health', function () {
     }
 });
 
+// Debug route for troubleshooting
+Route::get('/debug', function() {
+    try {
+        // Test basic database connection
+        $dbStatus = DB::connection()->getPdo() ? 'connected' : 'failed';
+        
+        // Check if spans table exists and get count
+        $spansCount = DB::table('spans')->count();
+        
+        // List installed tables
+        $tables = DB::select('SELECT table_name FROM information_schema.tables WHERE table_schema = ?', ['public']);
+        $tableNames = array_map(function($table) {
+            return $table->table_name;
+        }, $tables);
+        
+        return response()->json([
+            'status' => 'debug info',
+            'database' => $dbStatus,
+            'spans_count' => $spansCount,
+            'tables' => $tableNames,
+            'environment' => app()->environment(),
+            'php_version' => PHP_VERSION,
+            'laravel_version' => app()->version(),
+            'debug_enabled' => config('app.debug')
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ], 500);
+    }
+});
+
 Route::middleware('web')->group(function () {
     // Public routes
     Route::get('/', function () {
