@@ -10,61 +10,63 @@ COPY tailwind.config.js ./
 COPY postcss.config.js ./
 RUN npm run build
 
-# Use PHP 8.2 FPM Alpine as base image
-FROM php:8.2-fpm-alpine
+# PHP stage
+FROM php:8.2-fpm
 
 # Install system dependencies
-RUN apk add --no-cache \
-    nginx \
-    supervisor \
-    postgresql-client \
-    postgresql-dev \
-    libpng-dev \
-    libjpeg-turbo-dev \
-    freetype-dev \
-    libzip-dev \
-    zip \
-    unzip \
+RUN apt-get update && apt-get install -y \
     git \
     curl \
-    && rm -rf /var/cache/apk/*
+    libpng-dev \
+    libonig-dev \
+    libxml2-dev \
+    zip \
+    unzip \
+    libpq-dev \
+    nginx \
+    supervisor
+
+# Clear cache
+RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions
-RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install -j$(nproc) \
-    pdo_pgsql \
-    pgsql \
-    gd \
-    zip
+RUN docker-php-ext-install pdo_pgsql pgsql mbstring exif pcntl bcmath gd
 
-# Install Composer
+# Get latest Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 # Set working directory
 WORKDIR /var/www
 
-# Copy configuration files first
-COPY docker/prod/nginx.conf /etc/nginx/http.d/default.conf
-COPY docker/prod/supervisord.conf /etc/supervisord.conf
-COPY docker/prod/entrypoint.sh /usr/local/bin/entrypoint.sh
-COPY docker/prod/health-check.sh /usr/local/bin/health-check.sh
-
-# Make scripts executable
-RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/health-check.sh
-
 # Copy application files
 COPY . .
+
+# Copy built frontend assets
+COPY --from=node-builder /app/public/build public/build/
 
 # Install dependencies
 RUN composer install --no-dev --optimize-autoloader
 
-# Create storage directory and set permissions
+# Copy configuration files
+COPY docker/prod/nginx.conf /etc/nginx/sites-available/default
+COPY docker/prod/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY docker/prod/entrypoint.sh /entrypoint.sh
+
+# Make scripts executable
+RUN chmod +x /entrypoint.sh
+
+# Create required directories
 RUN mkdir -p /var/www/storage/logs \
-    && chown -R www-data:www-data /var/www/storage \
-    && chmod -R 775 /var/www/storage
+    /var/www/storage/framework/{sessions,views,cache} \
+    /var/www/storage/app/public \
+    /var/www/bootstrap/cache \
+    /var/log/supervisor
+
+# Set permissions
+RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache
 
 # Expose port
 EXPOSE 8080
 
-# Set entrypoint
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"] 
+# Start supervisor
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"] 
