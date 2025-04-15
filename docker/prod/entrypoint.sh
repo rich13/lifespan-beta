@@ -117,12 +117,6 @@ if ! php artisan migrate --force; then
     exit 1
 fi
 
-# Set up php-fpm socket directory
-log "Setting up php-fpm socket directory..."
-mkdir -p /var/run/php
-chown -R www-data:www-data /var/run/php
-chmod -R 775 /var/run/php
-
 # Configure nginx port
 log "Configuring nginx port..."
 if [ -z "$PORT" ]; then
