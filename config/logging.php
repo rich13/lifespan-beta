@@ -54,7 +54,7 @@ return [
     'channels' => [
         'stack' => [
             'driver' => 'stack',
-            'channels' => ['daily'],
+            'channels' => env('APP_ENV') === 'production' ? ['railway', 'daily'] : ['single', 'daily'],
             'ignore_exceptions' => false,
         ],
 
@@ -62,7 +62,6 @@ return [
             'driver' => 'single',
             'path' => storage_path('logs/laravel.log'),
             'level' => env('LOG_LEVEL', 'debug'),
-            'replace_placeholders' => true,
         ],
 
         'daily' => [
@@ -70,7 +69,6 @@ return [
             'path' => storage_path('logs/laravel.log'),
             'level' => env('LOG_LEVEL', 'debug'),
             'days' => 14,
-            'replace_placeholders' => true,
         ],
 
         'slack' => [
@@ -168,6 +166,23 @@ return [
             'driver' => 'single',
             'path' => storage_path('logs/connections.log'),
             'level' => env('LOG_LEVEL', 'debug'),
+        ],
+
+        // New Railway logging channel that writes to stderr
+        'railway' => [
+            'driver' => 'monolog',
+            'handler' => Monolog\Handler\StreamHandler::class,
+            'with' => [
+                'stream' => 'php://stderr',
+            ],
+            'level' => env('LOG_LEVEL', 'debug'),
+            'formatter' => Monolog\Formatter\LineFormatter::class,
+            'formatter_with' => [
+                'format' => "[%datetime%] %channel%.%level_name%: %message% %context% %extra%\n",
+                'dateFormat' => 'Y-m-d H:i:s',
+                'allowInlineLineBreaks' => true,
+                'ignoreEmptyContextAndExtra' => false,
+            ],
         ],
     ],
 

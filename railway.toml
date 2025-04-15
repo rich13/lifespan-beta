@@ -23,6 +23,7 @@ APP_LOCALE = "en_GB"
 
 # Logging and Debug Configuration
 LOG_CHANNEL = "stack"
+LOG_LEVEL = "debug"
 BROADCAST_DRIVER = "log"
 CACHE_DRIVER = "file"
 FILESYSTEM_DISK = "local"

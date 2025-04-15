@@ -24,7 +24,38 @@ class Handler extends ExceptionHandler
     public function register(): void
     {
         $this->reportable(function (Throwable $e) {
-            //
+            // Enhance logging with request details for production environment
+            if (app()->environment('production')) {
+                $request = request();
+                
+                $context = [
+                    'url' => $request->fullUrl(),
+                    'method' => $request->method(),
+                    'ip' => $request->ip(),
+                    'user_agent' => $request->header('User-Agent'),
+                    'referrer' => $request->header('referer'),
+                    'request_id' => $request->header('X-Request-ID'),
+                    'path' => $request->path(),
+                    'route' => $request->route() ? $request->route()->getName() : 'unknown',
+                ];
+                
+                // Add authenticated user if available
+                if ($request->user()) {
+                    $context['user_id'] = $request->user()->id;
+                    $context['user_email'] = $request->user()->email;
+                }
+                
+                // Log the exception with extra context
+                \Illuminate\Support\Facades\Log::error(
+                    $e->getMessage(), 
+                    array_merge($context, [
+                        'exception' => get_class($e),
+                        'file' => $e->getFile(),
+                        'line' => $e->getLine(),
+                        'trace' => $e->getTraceAsString(),
+                    ])
+                );
+            }
         });
     }
 }
