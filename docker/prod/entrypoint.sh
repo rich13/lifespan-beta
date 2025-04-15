@@ -16,9 +16,27 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Function to parse DATABASE_URL if present
+parse_database_url() {
+    if [ -n "${DATABASE_URL}" ]; then
+        log "Parsing DATABASE_URL: ${DATABASE_URL}"
+        # Extract parts from the URL
+        PGUSER=$(echo "${DATABASE_URL}" | sed -r 's/^postgres:\/\/([^:]+):.*/\1/')
+        PGPASSWORD=$(echo "${DATABASE_URL}" | sed -r 's/^postgres:\/\/[^:]+:([^@]+).*/\1/')
+        PGHOST=$(echo "${DATABASE_URL}" | sed -r 's/^postgres:\/\/[^@]+@([^:]+).*/\1/')
+        PGPORT=$(echo "${DATABASE_URL}" | sed -r 's/^postgres:\/\/[^:]+:[^@]+@[^:]+:([0-9]+).*/\1/')
+        PGDATABASE=$(echo "${DATABASE_URL}" | sed -r 's/^postgres:\/\/[^:]+:[^@]+@[^:]+:[0-9]+\/([^?]+).*/\1/')
+        
+        log "Parsed DATABASE_URL to: PGUSER=${PGUSER}, PGHOST=${PGHOST}, PGPORT=${PGPORT}, PGDATABASE=${PGDATABASE}"
+        export PGUSER PGPASSWORD PGHOST PGPORT PGDATABASE
+    fi
+}
+
 # Function to test database connection
 test_db_connection() {
     log "Testing direct PostgreSQL connection..."
+    log "Connection params: PGHOST=${PGHOST}, PGPORT=${PGPORT}, PGDATABASE=${PGDATABASE}, PGUSER=${PGUSER}"
+    
     if PGPASSWORD="${PGPASSWORD}" psql -h "${PGHOST}" -p "${PGPORT}" -U "${PGUSER}" -d "${PGDATABASE}" -c '\l' &>/dev/null; then
         log "Direct PostgreSQL connection successful!"
         return 0
@@ -72,15 +90,19 @@ else
     cp .env.example .env
 fi
 
+# Parse DATABASE_URL if present
+parse_database_url
+
 # Debug environment variables
 log "Environment variables:"
+log "DATABASE_URL: ${DATABASE_URL:-not set}"
 log "PGHOST: ${PGHOST:-not set}"
 log "PGPORT: ${PGPORT:-not set}"
 log "PGDATABASE: ${PGDATABASE:-not set}"
 log "PGUSER: ${PGUSER:-not set}"
 log "PGPASSWORD: ${PGPASSWORD:+is set}"
 
-# Update .env with Railway PostgreSQL configuration
+# Update .env with PostgreSQL configuration
 if [ -n "${PGHOST}" ]; then
     log "Setting up PostgreSQL configuration"
     sed -i "s/DB_CONNECTION=.*/DB_CONNECTION=pgsql/" .env
