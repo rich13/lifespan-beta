@@ -6,77 +6,71 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
 
-# Start application setup
-log "Starting application setup..."
+# Wait for database to be ready
+wait_for_db() {
+    log "Waiting for database..."
+    while ! pg_isready -h "${PGHOST}" -p "${PGPORT}" -U "${PGUSER}"; do
+        sleep 1
+    done
+    log "Database is ready!"
+}
 
-# Create .env file
-log "Creating .env file..."
-if [ -f .env.railway ]; then
-    cp .env.railway .env
-    log "Using .env.railway template"
-elif [ -f .env.example ]; then
+# Set up environment
+if [ -f .env ]; then
+    log "Using existing .env file"
+else
+    log "Creating .env file from .env.example"
     cp .env.example .env
-    log "WARNING: No .env.railway found, using .env.example"
-else
-    log "ERROR: No environment template found"
-    exit 1
 fi
 
-# Update environment variables
-log "Updating environment variables..."
-log "Available database variables:"
-log "PGHOST: $PGHOST"
-log "PGPORT: $PGPORT"
-log "PGDATABASE: $PGDATABASE"
-log "PGUSER: $PGUSER"
-log "PGPASSWORD: [REDACTED]"
-
-# Test direct database connection
-log "Testing direct database connection..."
-if PGPASSWORD=$PGPASSWORD psql -h $PGHOST -p $PGPORT -U $PGUSER -d $PGDATABASE -c "SELECT 1"; then
-    log "Direct PostgreSQL connection successful!"
-else
-    log "ERROR: Failed to connect to PostgreSQL directly"
-    exit 1
+# Update .env with Railway PostgreSQL configuration
+if [ -n "${PGHOST}" ]; then
+    log "Setting up PostgreSQL configuration"
+    sed -i "s/DB_HOST=.*/DB_HOST=${PGHOST}/" .env
+    sed -i "s/DB_PORT=.*/DB_PORT=${PGPORT}/" .env
+    sed -i "s/DB_DATABASE=.*/DB_DATABASE=${PGDATABASE}/" .env
+    sed -i "s/DB_USERNAME=.*/DB_USERNAME=${PGUSER}/" .env
+    sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=${PGPASSWORD}/" .env
 fi
 
-# Set database configuration
-log "Setting database configuration..."
-php docker/prod/set-db-config.php
+# Update .env with logging and debug configuration
+log "Setting up logging and debug configuration"
+sed -i "s/LOG_CHANNEL=.*/LOG_CHANNEL=stack/" .env
+sed -i "s/BROADCAST_DRIVER=.*/BROADCAST_DRIVER=log/" .env
+sed -i "s/CACHE_DRIVER=.*/CACHE_DRIVER=file/" .env
+sed -i "s/FILESYSTEM_DISK=.*/FILESYSTEM_DISK=local/" .env
+sed -i "s/QUEUE_CONNECTION=.*/QUEUE_CONNECTION=sync/" .env
+sed -i "s/SESSION_DRIVER=.*/SESSION_DRIVER=file/" .env
+sed -i "s/SESSION_LIFETIME=.*/SESSION_LIFETIME=525600/" .env
 
-# Clear Laravel's configuration cache
-log "Clearing Laravel's configuration cache..."
+# Create required directories with proper permissions
+log "Setting up required directories"
+mkdir -p storage/framework/{sessions,views,cache}
+mkdir -p storage/logs
+mkdir -p bootstrap/cache
+chmod -R 775 storage bootstrap/cache
+chown -R www-data:www-data storage bootstrap/cache
+
+# Create storage link if it doesn't exist
+if [ ! -L "public/storage" ]; then
+    log "Creating storage link"
+    php artisan storage:link
+fi
+
+# Wait for database
+wait_for_db
+
+# Run migrations
+log "Running migrations"
+php artisan migrate --force
+
+# Clear cache
+log "Clearing cache"
 php artisan config:clear
 php artisan cache:clear
-
-# Verify database configuration
-log "Verifying database configuration..."
-if ! php artisan tinker --execute="try { DB::connection()->getPdo(); echo 'Database connection successful!\n'; } catch (\Exception \$e) { echo 'Database connection failed: ' . \$e->getMessage() . '\n'; exit(1); }"; then
-    log "ERROR: Database configuration verification failed"
-    exit 1
-fi
-
-# Set up storage directories
-log "Setting up storage directories..."
-mkdir -p storage/framework/{sessions,views,cache}
-chmod -R 775 storage
-chmod -R 775 bootstrap/cache
-
-# Create storage link
-log "Creating storage link..."
-php artisan storage:link
-
-# Run database migrations
-log "Running database migrations..."
-if ! php artisan migrate --force; then
-    log "ERROR: Database migrations failed"
-    log "Checking database schema..."
-    PGPASSWORD=$PGPASSWORD psql -h $PGHOST -p $PGPORT -U $PGUSER -d $PGDATABASE -c "\dt"
-    log "Checking migrations table..."
-    PGPASSWORD=$PGPASSWORD psql -h $PGHOST -p $PGPORT -U $PGUSER -d $PGDATABASE -c "SELECT * FROM migrations;"
-    exit 1
-fi
+php artisan view:clear
+php artisan route:clear
 
 # Start supervisor
-log "Starting supervisor..."
-exec /usr/bin/supervisord -n -c /etc/supervisor/conf.d/supervisord.conf 
+log "Starting supervisor"
+exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf 
