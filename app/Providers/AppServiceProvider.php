@@ -11,6 +11,7 @@ use App\Services\Comparison\Comparers\HistoricalContextComparer;
 use App\Services\Comparison\Comparers\SignificantEventComparer;
 use App\Services\Comparison\Contracts\SpanComparerInterface;
 use App\Services\Comparison\SpanComparisonService;
+use Illuminate\Support\Facades\Config;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -48,6 +49,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        // Load testing-specific logging configuration in testing environment
+        if ($this->app->environment('testing')) {
+            // Override logging configuration for testing
+            if (file_exists(config_path('logging.testing.php'))) {
+                $testConfig = require config_path('logging.testing.php');
+                Config::set('logging', $testConfig);
+            }
+        }
     }
 }
