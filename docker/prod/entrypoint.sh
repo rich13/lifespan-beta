@@ -144,6 +144,15 @@ if ! php artisan migrate --force; then
     fi
 fi
 
+# Run database seeders if migrations were successful and database is empty
+log "Checking if database needs seeding"
+if php artisan db:seed --force --class=CheckIfSeedingNeeded; then
+    log "Running database seeders"
+    php artisan db:seed --force
+else
+    log "Database already seeded or seeding check failed"
+fi
+
 # Clear cache
 log "Clearing cache"
 php artisan config:clear
