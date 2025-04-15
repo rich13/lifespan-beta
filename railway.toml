@@ -19,4 +19,7 @@ CACHE_DRIVER = "file"
 FILESYSTEM_DISK = "local"
 QUEUE_CONNECTION = "sync"
 SESSION_DRIVER = "file"
-SESSION_LIFETIME = "525600" 
+SESSION_LIFETIME = "525600"
+
+# Database configuration will be automatically injected by Railway
+# when you add a PostgreSQL service and link it to this service 
