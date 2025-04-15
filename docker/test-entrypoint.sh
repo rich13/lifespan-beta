@@ -44,8 +44,14 @@ wait_for_postgres() {
     return 1
 }
 
-# Set up storage directories
+# Create or fix storage directories with proper permissions
 log "Setting up storage directories..."
+
+# Get current user and group id to set permissions that match host system
+HOST_UID=$(stat -c '%u' /var/www)
+HOST_GID=$(stat -c '%g' /var/www)
+log "Host UID:GID = $HOST_UID:$HOST_GID"
+
 # Create storage directories if they don't exist
 mkdir -p /var/www/storage/logs
 mkdir -p /var/www/storage/framework/{sessions,views,cache}
@@ -53,10 +59,20 @@ mkdir -p /var/www/storage/app/public
 mkdir -p /var/www/storage/app/imports
 mkdir -p /var/www/bootstrap/cache
 
-# Create log file and set permissions
-touch /var/www/storage/logs/laravel.log
+# Set permissions for all storage dirs (even if they already exist)
 chmod -R 777 /var/www/storage
 chmod -R 777 /var/www/bootstrap/cache
+chown -R $HOST_UID:$HOST_GID /var/www/storage
+chown -R $HOST_UID:$HOST_GID /var/www/bootstrap/cache
+
+# Create or touch log file to ensure it exists and has proper permissions
+if [ ! -f "/var/www/storage/logs/laravel.log" ]; then
+    touch /var/www/storage/logs/laravel.log
+fi
+chmod 666 /var/www/storage/logs/laravel.log
+chown $HOST_UID:$HOST_GID /var/www/storage/logs/laravel.log
+
+log "Storage directories configured"
 
 # Set Docker container environment variable for logging
 export DOCKER_CONTAINER=true
@@ -69,6 +85,9 @@ if [ "$(find /var/www/storage/app/imports -name "*.yaml" | wc -l)" -eq 0 ]; then
     log "Copying YAML samples to imports directory..."
     if [ -d "/var/www/yaml-samples" ] && [ "$(ls -A /var/www/yaml-samples | grep -c "\.yaml$")" -gt 0 ]; then
         cp /var/www/yaml-samples/*.yaml /var/www/storage/app/imports/
+        # Set appropriate permissions for copied files
+        chmod 666 /var/www/storage/app/imports/*.yaml
+        chown $HOST_UID:$HOST_GID /var/www/storage/app/imports/*.yaml
         log "Copied $(find /var/www/storage/app/imports -name "*.yaml" | wc -l) YAML files to imports directory"
     else
         log "No YAML samples found in /var/www/yaml-samples"
@@ -98,6 +117,13 @@ fi
 # Run migrations
 log "Running migrations..."
 php artisan migrate --force
+
+# Update cache
+log "Clearing Laravel caches..."
+php artisan config:clear
+php artisan cache:clear
+php artisan route:clear
+php artisan view:clear
 
 # Run the command passed to docker run
 exec "$@" 
