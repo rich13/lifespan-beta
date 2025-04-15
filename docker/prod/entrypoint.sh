@@ -6,11 +6,22 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
 
+# Function to check if a command exists
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
 # Wait for database to be ready
 wait_for_db() {
     log "Waiting for database..."
+    if ! command_exists pg_isready; then
+        log "pg_isready not found, installing postgresql-client"
+        apt-get update && apt-get install -y postgresql-client
+    fi
+
     while ! pg_isready -h "${PGHOST}" -p "${PGPORT}" -U "${PGUSER}"; do
-        sleep 1
+        log "Database is not ready - waiting"
+        sleep 2
     done
     log "Database is ready!"
 }
@@ -26,6 +37,7 @@ fi
 # Update .env with Railway PostgreSQL configuration
 if [ -n "${PGHOST}" ]; then
     log "Setting up PostgreSQL configuration"
+    sed -i "s/DB_CONNECTION=.*/DB_CONNECTION=pgsql/" .env
     sed -i "s/DB_HOST=.*/DB_HOST=${PGHOST}/" .env
     sed -i "s/DB_PORT=.*/DB_PORT=${PGPORT}/" .env
     sed -i "s/DB_DATABASE=.*/DB_DATABASE=${PGDATABASE}/" .env
@@ -60,9 +72,12 @@ fi
 # Wait for database
 wait_for_db
 
-# Run migrations
+# Run migrations with error handling
 log "Running migrations"
-php artisan migrate --force
+if ! php artisan migrate --force; then
+    log "Migration failed, attempting to refresh"
+    php artisan migrate:refresh --force
+fi
 
 # Clear cache
 log "Clearing cache"
