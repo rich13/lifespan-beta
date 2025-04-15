@@ -81,36 +81,30 @@ docker-compose down
 
 ## Testing
 
-The application uses an isolated test environment to ensure tests don't affect your development database.
+The application uses a dedicated test container to isolate tests from the main application data. 
 
 ### Running Tests
 
-Run all tests:
+To run all tests:
+
 ```bash
-./run-tests.sh
+./scripts/run-tests.sh
 ```
 
-Run specific tests:
-```bash
-./run-tests.sh --filter=TestName
-```
+To run specific tests by filter:
 
-Run tests with specific options:
 ```bash
-./run-tests.sh --parallel --coverage
+./scripts/run-tests.sh ExampleTest
 ```
 
 ### Test Environment
 
-The test environment:
-- Uses a separate database (`lifespan_beta_testing`)
-- Runs in an isolated container
-- Validates the environment before running tests
-- Cleans up after test execution
+Tests are executed in a dedicated container with its own environment configuration:
+- Uses a separate test database (`lifespan_beta_testing`)
+- Has its own `.env.testing` configuration
+- Runs with isolated storage to prevent affecting production data
 
-### Test Database
-
-The test database is automatically created and managed by the test environment. You don't need to manually set up or migrate the test database.
+The test environment is automatically set up when you run `docker-compose up -d`.
 
 ## License
 
