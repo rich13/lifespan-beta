@@ -48,23 +48,27 @@ COPY --from=node-builder /app/public/build public/build/
 # Install dependencies
 RUN composer install --no-dev --optimize-autoloader
 
+# Create required directories
+RUN mkdir -p /var/www/storage/logs \
+    /var/www/storage/framework/{sessions,views,cache} \
+    /var/www/storage/app/public \
+    /var/www/bootstrap/cache \
+    /var/log/supervisor \
+    /var/log/nginx \
+    /var/run/nginx \
+    /var/run/php
+
 # Copy configuration files
-COPY docker/prod/nginx.conf /etc/nginx/sites-available/default
+COPY docker/prod/nginx.conf /etc/nginx/nginx.conf
 COPY docker/prod/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY docker/prod/entrypoint.sh /entrypoint.sh
 
 # Make scripts executable
 RUN chmod +x /entrypoint.sh
 
-# Create required directories
-RUN mkdir -p /var/www/storage/logs \
-    /var/www/storage/framework/{sessions,views,cache} \
-    /var/www/storage/app/public \
-    /var/www/bootstrap/cache \
-    /var/log/supervisor
-
 # Set permissions
-RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache
+RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache \
+    /var/log/nginx /var/run/nginx /var/run/php
 
 # Expose port
 EXPOSE 8080
