@@ -13,7 +13,7 @@
     <form action="{{ $route }}" method="GET" class="d-flex align-items-center gap-2" id="type-filter-form">
         @if($showTypeFilters)
             <!-- Type Filters -->
-            <div class="btn-group" role="group" aria-label="Filter by type">
+            <div class="btn-group rounded-3" role="group" aria-label="Filter by type">
                 @php
                     $spanTypes = App\Models\SpanType::whereIn('type_id', ['person', 'organisation', 'place', 'event', 'band', 'thing'])->get();
                 @endphp
@@ -26,7 +26,7 @@
                            value="{{ $spanType->type_id }}" 
                            {{ in_array($spanType->type_id, $selectedTypes) ? 'checked' : '' }} 
                            autocomplete="off">
-                    <label class="btn btn-sm {{ in_array($spanType->type_id, $selectedTypes) ? 'btn-primary' : 'btn-outline-secondary' }}" 
+                    <label class="btn btn-sm {{ in_array($spanType->type_id, $selectedTypes) ? 'btn-primary' : 'btn-outline-secondary' }} {{ $loop->first ? 'rounded-start' : '' }} {{ $loop->last ? 'rounded-end' : '' }}" 
                            for="filter_{{ $spanType->type_id }}" 
                            title="{{ ucfirst($spanType->type_id) }}">
                         <i class="bi bi-{{ 
@@ -49,10 +49,9 @@
                                    id="filter_{{ $spanType->type_id }}_{{ $option }}" 
                                    name="{{ $spanType->type_id }}_subtype" 
                                    value="{{ $option }}" 
-                                   data-type="{{ $spanType->type_id }}"
                                    {{ in_array($option, request($spanType->type_id . '_subtype') ? explode(',', request($spanType->type_id . '_subtype')) : []) ? 'checked' : '' }} 
                                    autocomplete="off">
-                            <label class="btn btn-sm {{ in_array($option, request($spanType->type_id . '_subtype') ? explode(',', request($spanType->type_id . '_subtype')) : []) ? 'btn-secondary' : 'bg-light text-dark' }}" 
+                            <label class="btn btn-sm {{ in_array($option, request($spanType->type_id . '_subtype') ? explode(',', request($spanType->type_id . '_subtype')) : []) ? 'btn-secondary' : 'bg-light text-dark' }} {{ $loop->first ? 'rounded-start' : '' }} {{ $loop->last ? 'rounded-end' : '' }}" 
                                    for="filter_{{ $spanType->type_id }}_{{ $option }}" 
                                    title="{{ ucfirst($option) }}">
                                 <i class="bi bi-{{ 
@@ -95,12 +94,12 @@
 
         @if($showPermissionMode || $showVisibility || $showState)
             <!-- Admin Filters -->
-            <div class="btn-group" role="group" aria-label="Admin filters">
+            <div class="btn-group rounded-3" role="group" aria-label="Admin filters">
                 @if($showPermissionMode)
                     <!-- Permission Mode Filter -->
                     <input type="radio" class="btn-check filter-radio" name="permission_mode" id="permission_mode_all" value="" 
                            {{ !request('permission_mode') ? 'checked' : '' }} autocomplete="off">
-                    <label class="btn btn-sm {{ !request('permission_mode') ? 'btn-primary' : 'btn-outline-secondary' }}" 
+                    <label class="btn btn-sm {{ !request('permission_mode') ? 'btn-primary' : 'btn-outline-secondary' }} rounded-start" 
                            for="permission_mode_all" title="All Permission Modes">
                         <i class="bi bi-shield"></i>
                     </label>
@@ -114,7 +113,7 @@
 
                     <input type="radio" class="btn-check filter-radio" name="permission_mode" id="permission_mode_inherit" value="inherit" 
                            {{ request('permission_mode') === 'inherit' ? 'checked' : '' }} autocomplete="off">
-                    <label class="btn btn-sm {{ request('permission_mode') === 'inherit' ? 'btn-primary' : 'btn-outline-secondary' }}" 
+                    <label class="btn btn-sm {{ request('permission_mode') === 'inherit' ? 'btn-primary' : 'btn-outline-secondary' }} rounded-end" 
                            for="permission_mode_inherit" title="Inherited Permissions">
                         <i class="bi bi-shield-fill-check"></i>
                     </label>
@@ -124,7 +123,7 @@
                     <!-- Visibility Filter -->
                     <input type="radio" class="btn-check filter-radio" name="visibility" id="visibility_all" value="" 
                            {{ !request('visibility') ? 'checked' : '' }} autocomplete="off">
-                    <label class="btn btn-sm {{ !request('visibility') ? 'btn-primary' : 'btn-outline-secondary' }}" 
+                    <label class="btn btn-sm {{ !request('visibility') ? 'btn-primary' : 'btn-outline-secondary' }} rounded-start" 
                            for="visibility_all" title="All Visibility">
                         <i class="bi bi-eye"></i>
                     </label>
@@ -145,7 +144,7 @@
 
                     <input type="radio" class="btn-check filter-radio" name="visibility" id="visibility_group" value="group" 
                            {{ request('visibility') === 'group' ? 'checked' : '' }} autocomplete="off">
-                    <label class="btn btn-sm {{ request('visibility') === 'group' ? 'btn-primary' : 'btn-outline-secondary' }}" 
+                    <label class="btn btn-sm {{ request('visibility') === 'group' ? 'btn-primary' : 'btn-outline-secondary' }} rounded-end" 
                            for="visibility_group" title="Group Access">
                         <i class="bi bi-people"></i>
                     </label>
@@ -155,7 +154,7 @@
                     <!-- State Filter -->
                     <input type="radio" class="btn-check filter-radio" name="state" id="state_all" value="" 
                            {{ !request('state') ? 'checked' : '' }} autocomplete="off">
-                    <label class="btn btn-sm {{ !request('state') ? 'btn-primary' : 'btn-outline-secondary' }}" 
+                    <label class="btn btn-sm {{ !request('state') ? 'btn-primary' : 'btn-outline-secondary' }} rounded-start" 
                            for="state_all" title="All States">
                         <i class="bi bi-check-circle"></i>
                     </label>
@@ -176,7 +175,7 @@
 
                     <input type="radio" class="btn-check filter-radio" name="state" id="state_complete" value="complete" 
                            {{ request('state') === 'complete' ? 'checked' : '' }} autocomplete="off">
-                    <label class="btn btn-sm {{ request('state') === 'complete' ? 'btn-primary' : 'btn-outline-secondary' }}" 
+                    <label class="btn btn-sm {{ request('state') === 'complete' ? 'btn-primary' : 'btn-outline-secondary' }} rounded-end" 
                            for="state_complete" title="Complete">
                         <i class="bi bi-check-circle-fill"></i>
                     </label>
