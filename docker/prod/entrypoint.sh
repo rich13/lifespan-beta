@@ -11,9 +11,9 @@ log "Starting application setup..."
 
 # Create .env file
 log "Creating .env file..."
-if [ -f .env.render ]; then
-    cp .env.render .env
-    log "Using .env.render template"
+if [ -f .env.railway ]; then
+    cp .env.railway .env
+    log "Using .env.railway template"
 else
     cp .env.example .env
     log "WARNING: No environment template found, using .env.example"
@@ -72,13 +72,6 @@ if ! php artisan migrate --force; then
     log "Checking migrations table..."
     PGPASSWORD=$PGPASSWORD psql -h $PGHOST -p $PGPORT -U $PGUSER -d $PGDATABASE -c "SELECT * FROM migrations;"
     exit 1
-fi
-
-# Configure nginx port
-log "Configuring nginx port..."
-if [ -z "$PORT" ]; then
-    log "WARNING: PORT environment variable not set, using default port 8080"
-    export PORT=8080
 fi
 
 # Start supervisor

@@ -1,3 +1,16 @@
+# Build stage for Node.js assets
+FROM node:20-alpine AS node-builder
+
+WORKDIR /app
+COPY package*.json ./
+RUN npm install && npm ci
+COPY resources/ resources/
+COPY vite.config.js ./
+COPY tailwind.config.js ./
+COPY postcss.config.js ./
+RUN npm run build
+
+# PHP stage
 FROM php:8.2-fpm
 
 # Install system dependencies
@@ -26,7 +39,8 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     npm install -g npm@latest
 
 # Install PHP extensions
-RUN docker-php-ext-install pdo_pgsql mbstring exif pcntl bcmath gd zip
+RUN docker-php-ext-configure zip && \
+    docker-php-ext-install pdo_pgsql pgsql mbstring exif pcntl bcmath gd zip
 
 # Get latest Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
@@ -34,101 +48,61 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 # Set working directory
 WORKDIR /var/www
 
-# Copy the entire application
-COPY . .
+# Create required run directories
+RUN mkdir -p /run/php /run/nginx /var/log/supervisor /var/log/nginx /var/lib/nginx/body /var/log/php-fpm && \
+    chown -R www-data:www-data /run/php /run/nginx /var/log/supervisor /var/log/nginx /var/lib/nginx /var/log/php-fpm && \
+    chmod -R 755 /run/php /run/nginx /var/log/supervisor /var/log/nginx /var/lib/nginx /var/log/php-fpm
 
-# Install dependencies (including dev dependencies for build)
-RUN composer install --no-interaction --optimize-autoloader && \
-    npm install
+# Copy application files first
+COPY . /var/www
 
-# Set permissions
-RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache
+# Copy environment files
+COPY .env.railway /var/www/.env.railway
+COPY .env.example /var/www/.env.example
 
-# Generate application key if not exists
-RUN if [ ! -f .env ]; then cp .env.example .env; fi && \
-    php artisan key:generate
+# Create required directories
+RUN mkdir -p /var/www/storage/logs \
+    /var/www/storage/framework/{sessions,views,cache,testing,cache/data} \
+    /var/www/storage/app/public \
+    /var/www/bootstrap/cache
 
-# Optimize Laravel (without view cache)
-RUN php artisan config:cache
+# Install dependencies
+RUN composer install --no-interaction --no-dev --optimize-autoloader
 
-# Configure Nginx
-RUN echo 'server { \
-    listen $PORT; \
-    index index.php index.html; \
-    server_name localhost; \
-    error_log  /var/log/nginx/error.log; \
-    access_log /var/log/nginx/access.log; \
-    root /var/www/public; \
-    client_max_body_size 100M; \
-    keepalive_timeout 65; \
-    sendfile on; \
-    tcp_nopush on; \
-    tcp_nodelay on; \
-    location / { \
-        try_files $uri $uri/ /index.php?$query_string; \
-    } \
-    location ~ \.php$ { \
-        try_files $uri =404; \
-        fastcgi_split_path_info ^(.+\.php)(/.+)$; \
-        fastcgi_pass unix:/var/run/php/php8.2-fpm.sock; \
-        fastcgi_index index.php; \
-        include fastcgi_params; \
-        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name; \
-        fastcgi_param PATH_INFO $fastcgi_path_info; \
-        fastcgi_read_timeout 300; \
-        fastcgi_send_timeout 300; \
-        fastcgi_connect_timeout 300; \
-    } \
-    location /health { \
-        access_log off; \
-        add_header Content-Type application/json; \
-        return 200 '"'"'{"status":"healthy","timestamp":"$time_iso8601"}'"'"'; \
-    } \
-}' > /etc/nginx/conf.d/default.conf
+# Set permissions and make directories executable
+RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache /var/www/resources && \
+    chmod -R 775 /var/www/storage /var/www/bootstrap/cache && \
+    chmod -R 775 /var/www/resources/views
 
-# Configure PHP-FPM
-RUN echo '[global]\n\
-error_log = /proc/self/fd/2\n\
-log_level = notice\n\
-\n\
-[www]\n\
-user = www-data\n\
-group = www-data\n\
-listen = /var/run/php/php8.2-fpm.sock\n\
-listen.owner = www-data\n\
-listen.group = www-data\n\
-access.log = /proc/self/fd/2\n\
-clear_env = no\n\
-catch_workers_output = yes\n\
-decorate_workers_output = no\n\
-\n\
-pm = dynamic\n\
-pm.max_children = 5\n\
-pm.start_servers = 2\n\
-pm.min_spare_servers = 1\n\
-pm.max_spare_servers = 3\n\
-\n\
-php_admin_value[error_log] = /proc/self/fd/2\n\
-php_admin_flag[log_errors] = on\n\
-\n\
-request_terminate_timeout = 300\n\
-request_slowlog_timeout = 300\n\
-slowlog = /proc/self/fd/2\n\
-' > /usr/local/etc/php-fpm.d/www.conf
+# Copy and verify configuration files
+COPY docker/prod/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY docker/prod/health-check.sh /usr/local/bin/health-check.sh
+COPY docker/prod/check-db.sh /usr/local/bin/check-db.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/health-check.sh /usr/local/bin/check-db.sh && \
+    test -f /usr/local/bin/entrypoint.sh || exit 1 && \
+    test -f /usr/local/bin/health-check.sh || exit 1 && \
+    test -f /usr/local/bin/check-db.sh || exit 1
 
-# Configure Supervisor
-COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-RUN mkdir -p /var/log/supervisor
+# Configure PHP
+COPY docker/prod/php.ini /usr/local/etc/php/conf.d/app.ini
+COPY docker/prod/opcache.ini /usr/local/etc/php/conf.d/opcache.ini
+COPY docker/prod/php-fpm.conf /usr/local/etc/php-fpm.d/www.conf
 
-# Create start script
-RUN echo '#!/bin/bash\n\
-# Replace $PORT with actual port from environment\n\
-sed -i "s/\$PORT/$PORT/g" /etc/nginx/conf.d/default.conf\n\
-supervisord -c /etc/supervisor/conf.d/supervisord.conf' > /usr/local/bin/start.sh && \
-    chmod +x /usr/local/bin/start.sh
+# Copy and verify other configuration files
+COPY docker/prod/nginx.conf /etc/nginx/nginx.conf
+COPY docker/prod/default.conf /etc/nginx/conf.d/default.conf
+COPY docker/prod/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+RUN chmod 644 /etc/nginx/nginx.conf /etc/nginx/conf.d/default.conf /etc/supervisor/conf.d/supervisord.conf && \
+    test -f /etc/nginx/nginx.conf || exit 1 && \
+    test -f /etc/nginx/conf.d/default.conf || exit 1 && \
+    test -f /etc/supervisor/conf.d/supervisord.conf || exit 1
 
-# Expose ports
-EXPOSE 80 5173
+# Copy built frontend assets and verify
+COPY --from=node-builder /app/public/build public/build/
+RUN test -d public/build || exit 1
 
-# Start the application
-CMD ["/usr/local/bin/start.sh"] 
+# Set entrypoint
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+
+# Start supervisor
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"] 
