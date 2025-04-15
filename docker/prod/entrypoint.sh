@@ -175,9 +175,19 @@ fi
 # Run migrations with error handling
 log "Running migrations"
 if ! php artisan migrate --force; then
-    error_log "Migration failed, attempting to refresh"
-    if ! php artisan migrate:refresh --force; then
-        error_log "Migration refresh also failed"
+    error_log "Migration failed, checking migration status"
+    php artisan migrate:status
+    
+    log "Attempting to repair migrations table"
+    if ! php artisan migrate:repair; then
+        error_log "Migration repair failed"
+    else
+        log "Migration table repaired, retrying migration"
+        if ! php artisan migrate --force; then
+            error_log "Migration still failing after repair"
+        else
+            log "Migration successful after repair"
+        fi
     fi
 fi
 
