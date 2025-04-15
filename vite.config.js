@@ -12,6 +12,8 @@ export default defineConfig({
             refresh: true,
         }),
     ],
+    // Force HTTPS in production and set proper base path
+    base: process.env.APP_ENV === 'production' ? 'https://lifespan-beta-production.up.railway.app/' : '/',
     server: {
         host: '0.0.0.0',
         port: 5173,

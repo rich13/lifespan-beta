@@ -144,13 +144,25 @@ if ! php artisan migrate --force; then
     fi
 fi
 
-# Run database seeders if migrations were successful and database is empty
+# Run database seeders if migrations were successful
+# Check if users table is empty directly with database query
 log "Checking if database needs seeding"
-if php artisan db:seed --force --class=CheckIfSeedingNeeded; then
-    log "Running database seeders"
+SEED_NEEDED=$(PGPASSWORD="${PGPASSWORD}" psql -h "${PGHOST}" -p "${PGPORT}" -U "${PGUSER}" -d "${PGDATABASE}" -t -c "SELECT COUNT(*) FROM pg_tables WHERE tablename = 'users'")
+SEED_NEEDED=$(echo $SEED_NEEDED | tr -d ' ')
+
+if [ "$SEED_NEEDED" = "0" ] || [ -z "$SEED_NEEDED" ]; then
+    log "Database schema not found, running seeders"
     php artisan db:seed --force
 else
-    log "Database already seeded or seeding check failed"
+    USER_COUNT=$(PGPASSWORD="${PGPASSWORD}" psql -h "${PGHOST}" -p "${PGPORT}" -U "${PGUSER}" -d "${PGDATABASE}" -t -c "SELECT COUNT(*) FROM users")
+    USER_COUNT=$(echo $USER_COUNT | tr -d ' ')
+    
+    if [ "$USER_COUNT" = "0" ] || [ -z "$USER_COUNT" ]; then
+        log "Users table is empty, running seeders"
+        php artisan db:seed --force
+    else
+        log "Database already has users, skipping seeding"
+    fi
 fi
 
 # Clear cache
