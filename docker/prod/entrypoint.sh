@@ -130,4 +130,50 @@ log "Nginx configured to listen on port $PORT"
 
 # Start supervisor
 log "Starting supervisor..."
-exec /usr/bin/supervisord -n -c /etc/supervisor/conf.d/supervisord.conf 
+supervisord -n -c /etc/supervisor/conf.d/supervisord.conf &
+
+# Wait for services to start
+log "Waiting for services to start..."
+sleep 5
+
+# Check if services are running
+log "Checking if services are running..."
+if pgrep nginx > /dev/null; then
+    log "Nginx is running (PID: $(pgrep nginx))"
+else
+    log "ERROR: Nginx is not running"
+    log "Nginx error log:"
+    cat /var/log/nginx/error.log
+    exit 1
+fi
+
+if pgrep php-fpm > /dev/null; then
+    log "PHP-FPM is running (PID: $(pgrep php-fpm))"
+else
+    log "ERROR: PHP-FPM is not running"
+    log "PHP-FPM error log:"
+    cat /var/log/php-fpm/error.log
+    exit 1
+fi
+
+if pgrep supervisord > /dev/null; then
+    log "Supervisor is running (PID: $(pgrep supervisord))"
+else
+    log "ERROR: Supervisor is not running"
+    exit 1
+fi
+
+# Check if nginx can connect to php-fpm
+log "Testing nginx connection to php-fpm..."
+if curl -s http://127.0.0.1:9000/health > /dev/null; then
+    log "Nginx can connect to PHP-FPM"
+else
+    log "ERROR: Nginx cannot connect to PHP-FPM"
+    log "Nginx error log:"
+    cat /var/log/nginx/error.log
+    exit 1
+fi
+
+# Keep the container running
+log "All services are running, keeping container alive..."
+tail -f /var/log/nginx/error.log /var/log/php-fpm/error.log 
