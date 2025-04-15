@@ -44,6 +44,37 @@ wait_for_postgres() {
     return 1
 }
 
+# Set up storage directories
+log "Setting up storage directories..."
+# Create storage directories if they don't exist
+mkdir -p /var/www/storage/logs
+mkdir -p /var/www/storage/framework/{sessions,views,cache}
+mkdir -p /var/www/storage/app/public
+mkdir -p /var/www/storage/app/imports
+mkdir -p /var/www/bootstrap/cache
+
+# Create log file and set permissions
+touch /var/www/storage/logs/laravel.log
+chmod -R 777 /var/www/storage
+chmod -R 777 /var/www/bootstrap/cache
+
+# Set Docker container environment variable for logging
+export DOCKER_CONTAINER=true
+if ! grep -q "DOCKER_CONTAINER" /var/www/.env.testing; then
+    echo "DOCKER_CONTAINER=true" >> /var/www/.env.testing
+fi
+
+# Ensure imports directory has YAML files
+if [ "$(find /var/www/storage/app/imports -name "*.yaml" | wc -l)" -eq 0 ]; then
+    log "Copying YAML samples to imports directory..."
+    if [ -d "/var/www/yaml-samples" ] && [ "$(ls -A /var/www/yaml-samples | grep -c "\.yaml$")" -gt 0 ]; then
+        cp /var/www/yaml-samples/*.yaml /var/www/storage/app/imports/
+        log "Copied $(find /var/www/storage/app/imports -name "*.yaml" | wc -l) YAML files to imports directory"
+    else
+        log "No YAML samples found in /var/www/yaml-samples"
+    fi
+fi
+
 # Check environment
 check_env "APP_ENV" "testing" "Tests must run in the testing environment"
 check_env "DB_DATABASE" "lifespan_beta_testing" "Tests must use the test database"
