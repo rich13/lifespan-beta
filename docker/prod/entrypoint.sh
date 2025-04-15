@@ -74,6 +74,13 @@ if ! php artisan migrate --force; then
     exit 1
 fi
 
+# Configure nginx port
+log "Configuring nginx port..."
+if [ -z "$PORT" ]; then
+    log "WARNING: PORT environment variable not set, using default port 8080"
+    export PORT=8080
+fi
+
 # Start supervisor
 log "Starting supervisor..."
 exec /usr/bin/supervisord -n -c /etc/supervisor/conf.d/supervisord.conf 
