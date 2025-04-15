@@ -43,13 +43,7 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 # Set working directory
 WORKDIR /var/www
 
-# Copy application files
-COPY . .
-
-# Install dependencies
-RUN composer install --no-dev --optimize-autoloader
-
-# Copy configuration files
+# Copy configuration files first
 COPY docker/prod/nginx.conf /etc/nginx/http.d/default.conf
 COPY docker/prod/supervisord.conf /etc/supervisord.conf
 COPY docker/prod/entrypoint.sh /usr/local/bin/entrypoint.sh
@@ -57,6 +51,12 @@ COPY docker/prod/health-check.sh /usr/local/bin/health-check.sh
 
 # Make scripts executable
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/health-check.sh
+
+# Copy application files
+COPY . .
+
+# Install dependencies
+RUN composer install --no-dev --optimize-autoloader
 
 # Create storage directory and set permissions
 RUN mkdir -p /var/www/storage/logs \
