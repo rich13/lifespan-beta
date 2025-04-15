@@ -14,9 +14,12 @@ log "Creating .env file..."
 if [ -f .env.railway ]; then
     cp .env.railway .env
     log "Using .env.railway template"
-else
+elif [ -f .env.example ]; then
     cp .env.example .env
-    log "WARNING: No environment template found, using .env.example"
+    log "WARNING: No .env.railway found, using .env.example"
+else
+    log "ERROR: No environment template found"
+    exit 1
 fi
 
 # Update environment variables

@@ -19,7 +19,7 @@ if ! pgrep -x "php-fpm" > /dev/null; then
 fi
 
 # Check if the health endpoint is responding
-HEALTH_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${PORT:-10000}/health)
+HEALTH_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${PORT:-8080}/health)
 if [ "$HEALTH_RESPONSE" != "200" ]; then
     log "ERROR: Health check endpoint returned $HEALTH_RESPONSE"
     exit 1

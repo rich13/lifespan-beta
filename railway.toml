@@ -3,7 +3,7 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "docker/prod/entrypoint.sh"
+startCommand = "/usr/local/bin/entrypoint.sh"
 healthcheckPath = "/health"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
@@ -13,13 +13,10 @@ restartPolicyMaxRetries = 10
 APP_NAME = "Lifespan"
 APP_ENV = "production"
 APP_DEBUG = "false"
-LOG_CHANNEL = "stack"
-BROADCAST_DRIVER = "log"
-CACHE_DRIVER = "file"
-FILESYSTEM_DISK = "local"
-QUEUE_CONNECTION = "sync"
-SESSION_DRIVER = "file"
-SESSION_LIFETIME = "525600"
+APP_URL = "https://lifespan-beta.up.railway.app"
+APP_KEY = "base64:b9s0KnR3GhoY1oz5r0OAPoYb5qfDziovEqzyxHWHA1E="
+APP_TIMEZONE = "Europe/London"
+APP_LOCALE = "en_GB"
 
 # Database configuration will be automatically injected by Railway
-# when you add a PostgreSQL service and link it to this service 
+# when a PostgreSQL service is linked 
