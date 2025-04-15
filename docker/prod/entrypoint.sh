@@ -102,33 +102,6 @@ log "PGDATABASE: ${PGDATABASE:-not set}"
 log "PGUSER: ${PGUSER:-not set}"
 log "PGPASSWORD: ${PGPASSWORD:+is set}"
 
-# Update .env with PostgreSQL configuration
-if [ -n "${PGHOST}" ]; then
-    log "Setting up PostgreSQL configuration"
-    sed -i "s/DB_CONNECTION=.*/DB_CONNECTION=pgsql/" .env
-    sed -i "s/DB_HOST=.*/DB_HOST=${PGHOST}/" .env
-    sed -i "s/DB_PORT=.*/DB_PORT=${PGPORT}/" .env
-    sed -i "s/DB_DATABASE=.*/DB_DATABASE=${PGDATABASE}/" .env
-    sed -i "s/DB_USERNAME=.*/DB_USERNAME=${PGUSER}/" .env
-    sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=${PGPASSWORD}/" .env
-    
-    # Debug .env file
-    log "Database configuration in .env:"
-    grep -E "^DB_" .env
-else
-    error_log "No PostgreSQL configuration found in environment variables"
-fi
-
-# Update .env with logging and debug configuration
-log "Setting up logging and debug configuration"
-sed -i "s/LOG_CHANNEL=.*/LOG_CHANNEL=stack/" .env
-sed -i "s/BROADCAST_DRIVER=.*/BROADCAST_DRIVER=log/" .env
-sed -i "s/CACHE_DRIVER=.*/CACHE_DRIVER=file/" .env
-sed -i "s/FILESYSTEM_DISK=.*/FILESYSTEM_DISK=local/" .env
-sed -i "s/QUEUE_CONNECTION=.*/QUEUE_CONNECTION=sync/" .env
-sed -i "s/SESSION_DRIVER=.*/SESSION_DRIVER=file/" .env
-sed -i "s/SESSION_LIFETIME=.*/SESSION_LIFETIME=525600/" .env
-
 # Create required directories with proper permissions
 log "Setting up required directories"
 mkdir -p storage/framework/{sessions,views,cache}
@@ -146,6 +119,14 @@ fi
 # Wait for database
 if ! wait_for_db; then
     error_log "Failed to connect to the database. Starting services anyway."
+fi
+
+# Use the PHP script to set the database configuration
+log "Setting database configuration with PHP script"
+php /usr/local/bin/set-db-config.php
+if [ $? -ne 0 ]; then
+    error_log "Failed to set database configuration with PHP script"
+    # Don't exit, try to continue
 fi
 
 # Generate application key if not set

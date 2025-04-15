@@ -65,6 +65,7 @@ COPY docker/prod/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY docker/prod/php-fpm/www.conf /usr/local/etc/php-fpm.d/www.conf
 COPY docker/prod/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY docker/prod/health-check.sh /usr/local/bin/health-check.sh
+COPY docker/prod/set-db-config.php /usr/local/bin/set-db-config.php
 
 # Make scripts executable
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/health-check.sh
