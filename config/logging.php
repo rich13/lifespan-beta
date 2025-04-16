@@ -57,7 +57,7 @@ return [
             'channels' => env('APP_ENV') === 'production' 
                 ? ['railway', 'stderr'] 
                 : (env('APP_ENV') === 'local' && env('DOCKER_CONTAINER', false) 
-                    ? ['stderr', 'errorlog'] 
+                    ? ['single', 'stderr', 'errorlog'] 
                     : ['single', 'stderr']),
             'ignore_exceptions' => false,
         ],

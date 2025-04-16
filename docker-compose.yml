@@ -27,6 +27,13 @@ services:
     environment:
       - NODE_OPTIONS=--max-old-space-size=2048
       - VITE_PORT=5173
+      - APP_ENV=production
+      - DB_CONNECTION=pgsql
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_DATABASE=lifespan_beta
+      - DB_USERNAME=lifespan_user
+      - DB_PASSWORD=lifespan_password
       - SESSION_DRIVER=file
       - SESSION_LIFETIME=525600
     command: ["/var/www/docker/start.sh"]
@@ -55,16 +62,16 @@ services:
     container_name: lifespan-db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${DB_DATABASE}
-      POSTGRES_USER: ${DB_USERNAME}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: lifespan_beta
+      POSTGRES_USER: lifespan_user
+      POSTGRES_PASSWORD: lifespan_password
     volumes:
       - dbdata:/var/lib/postgresql/data
       - ./docker/postgres/init-postgis.sh:/docker-entrypoint-initdb.d/init-postgis.sh
     networks:
       - lifespan-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_DATABASE}"]
+      test: ["CMD-SHELL", "pg_isready -U lifespan_user -d lifespan_beta"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -78,8 +85,6 @@ services:
     working_dir: /var/www
     volumes:
       - ./:/var/www
-    env_file:
-      - .env.testing
     environment:
       - APP_ENV=testing
       - DB_CONNECTION=pgsql

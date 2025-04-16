@@ -18,6 +18,10 @@ abstract class TestCase extends BaseTestCase
      */
     protected function setUp(): void
     {
+        // First call parent::setUp() to bootstrap the application
+        parent::setUp();
+
+        // Now it's safe to use facades
         // Ensure tests only run in testing environment to prevent data corruption
         if (!App::environment('testing')) {
             $this->markTestSkipped(
@@ -25,8 +29,6 @@ abstract class TestCase extends BaseTestCase
                 'Use --env=testing with phpunit or ensure APP_ENV=testing in your .env.testing file.'
             );
         }
-
-        parent::setUp();
 
         // Enhanced environment validation
         $this->validateTestEnvironment();
