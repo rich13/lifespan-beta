@@ -45,48 +45,74 @@ done
 # Ensure we're running in the testing environment with proper setup
 log "Setting up testing environment..."
 
-# Always generate a new application key for testing
+# Generate a new application key for testing but don't modify any shared files
 log "Generating application key for testing environment..."
 KEY=$(docker exec $CONTAINER php -r "echo base64_encode(random_bytes(32));")
-if [ -n "$KEY" ]; then
-    # Update the key in the local .env.testing file (not the shared one)
-    docker exec $CONTAINER bash -c "sed -i \"s/^APP_KEY=.*/APP_KEY=base64:$KEY/\" /var/www/.env.testing"
-    log "Application key set: base64:$KEY"
-else
+if [ -z "$KEY" ]; then
     log "ERROR: Failed to generate application key"
     exit 1
 fi
+log "Application key generated: base64:$KEY"
 
-# Create a temporary .env file within the container that doesn't affect the shared volume
-log "Setting up test environment in container..."
-docker exec $CONTAINER bash -c "cd /var/www && cp .env.testing /tmp/.env.test && export APP_ENV=testing && export DB_DATABASE=lifespan_beta_testing"
+# Set up environment variables entirely within the container without modifying shared files
+log "Setting up isolated test environment in container..."
+# Create a temporary env file that doesn't affect the shared volume
+docker exec $CONTAINER bash -c "cat > /tmp/.env.test << EOF
+APP_ENV=testing
+APP_KEY=base64:$KEY
+DB_CONNECTION=pgsql
+DB_HOST=db
+DB_PORT=5432
+DB_DATABASE=lifespan_beta_testing
+DB_USERNAME=lifespan_user
+DB_PASSWORD=lifespan_password
+CACHE_DRIVER=array
+SESSION_DRIVER=file
+SESSION_LIFETIME=525600
+EOF"
 
-# Use environment variables from .env.testing
+# Source our local .env.testing file for local reference only (doesn't affect container)
 source .env.testing
 
 # Create the test database if it doesn't exist using PostgreSQL directly
 log "Preparing test database..."
 docker exec $CONTAINER bash -c "
     export PGPASSWORD=$DB_PASSWORD;
-    if ! psql -h $DB_HOST -U $DB_USERNAME -lqt | cut -d \| -f 1 | grep -qw $DB_DATABASE; then
-        echo 'Creating test database $DB_DATABASE...';
-        psql -h $DB_HOST -U $DB_USERNAME -c 'CREATE DATABASE $DB_DATABASE WITH TEMPLATE template0 LC_COLLATE=\"en_GB.UTF-8\" LC_CTYPE=\"en_GB.UTF-8\";';
+    if ! psql -h $DB_HOST -U $DB_USERNAME -lqt | cut -d \| -f 1 | grep -qw lifespan_beta_testing; then
+        echo 'Creating test database lifespan_beta_testing...';
+        psql -h $DB_HOST -U $DB_USERNAME -c 'CREATE DATABASE lifespan_beta_testing WITH TEMPLATE template0 LC_COLLATE=\"en_GB.UTF-8\" LC_CTYPE=\"en_GB.UTF-8\";';
     else
         echo 'Test database already exists';
     fi
 "
 
 # Run the migrations in the container to ensure database schema is up to date
+# Use environment variables to specify test environment without modifying .env
 log "Running migrations in test environment..."
-docker exec $CONTAINER bash -c "cd /var/www && PHP_INI_SCAN_DIR=/tmp APP_ENV=testing DB_DATABASE=lifespan_beta_testing php artisan migrate:fresh --seed --env=testing --force"
+docker exec $CONTAINER bash -c "cd /var/www && \
+    APP_ENV=testing \
+    APP_KEY=base64:$KEY \
+    DB_DATABASE=lifespan_beta_testing \
+    php artisan migrate:fresh --seed --env=testing --force"
 
 # Clear caches
 log "Clearing caches..."
-docker exec $CONTAINER bash -c "cd /var/www && PHP_INI_SCAN_DIR=/tmp APP_ENV=testing DB_DATABASE=lifespan_beta_testing php artisan config:clear && php artisan cache:clear && php artisan route:clear && php artisan view:clear"
+docker exec $CONTAINER bash -c "cd /var/www && \
+    APP_ENV=testing \
+    APP_KEY=base64:$KEY \
+    DB_DATABASE=lifespan_beta_testing \
+    php artisan config:clear && \
+    php artisan cache:clear && \
+    php artisan route:clear && \
+    php artisan view:clear"
 
 # Run the tests directly with PHPUnit instead of using artisan to avoid bootstrap issues
 log "Running tests with enforced testing environment using PHPUnit..."
-docker exec $CONTAINER bash -c "cd /var/www && PHP_INI_SCAN_DIR=/tmp APP_ENV=testing DB_DATABASE=lifespan_beta_testing ./vendor/bin/phpunit $PARALLEL_FLAG $TEST_FILTER"
+docker exec $CONTAINER bash -c "cd /var/www && \
+    APP_ENV=testing \
+    APP_KEY=base64:$KEY \
+    DB_DATABASE=lifespan_beta_testing \
+    ./vendor/bin/phpunit $PARALLEL_FLAG $TEST_FILTER"
 
 TEST_EXIT_CODE=$?
 
