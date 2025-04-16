@@ -16,12 +16,11 @@ export default defineConfig({
     // Force HTTPS in production and set proper base path
     base: process.env.APP_ENV === 'production' ? 'https://lifespan-beta-production.up.railway.app/' : '/',
     server: {
+        https: false, // Use HTTP for development server
         host: '0.0.0.0',
         port: 5173,
         hmr: {
             host: 'localhost',
-            protocol: 'ws',
-            port: 5173
         },
         watch: {
             usePolling: true

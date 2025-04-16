@@ -27,7 +27,8 @@ services:
     environment:
       - NODE_OPTIONS=--max-old-space-size=2048
       - VITE_PORT=5173
-      - APP_ENV=production
+      - APP_ENV=local
+      - APP_DEBUG=true
       - DB_CONNECTION=pgsql
       - DB_HOST=db
       - DB_PORT=5432
@@ -36,6 +37,7 @@ services:
       - DB_PASSWORD=lifespan_password
       - SESSION_DRIVER=file
       - SESSION_LIFETIME=525600
+      - DOCKER_CONTAINER=true
     command: ["/var/www/docker/start.sh"]
     depends_on:
       db:
@@ -87,6 +89,7 @@ services:
       - ./:/var/www
     environment:
       - APP_ENV=testing
+      - APP_DEBUG=true
       - DB_CONNECTION=pgsql
       - DB_HOST=db
       - DB_PORT=5432
