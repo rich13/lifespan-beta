@@ -27,25 +27,67 @@ if ! docker ps | grep -q $CONTAINER; then
     sleep 3
 fi
 
-# Set up specific test parameters if provided
+# Initialize test parameters
 TEST_FILTER=""
-PARALLEL_FLAG="--parallel"
+PARALLEL_FLAG=""
 
-if [ ! -z "$1" ]; then
-    TEST_FILTER="--filter=$1"
-    log "Using test filter: $TEST_FILTER"
-    # When filtering tests, parallel mode can sometimes cause issues
-    # so we disable it when a filter is specified
-    PARALLEL_FLAG=""
+# Process all arguments
+for arg in "$@"; do
+    if [[ "$arg" == "--parallel"* ]]; then
+        PARALLEL_FLAG="$arg"
+        log "Running in parallel mode with: $PARALLEL_FLAG"
+    else
+        TEST_FILTER="--filter=$arg"
+        log "Using test filter: $TEST_FILTER"
+    fi
+done
+
+# Ensure we're running in the testing environment with proper setup
+log "Setting up testing environment..."
+
+# Always generate a new application key for testing
+log "Generating application key for testing environment..."
+KEY=$(docker exec $CONTAINER php -r "echo base64_encode(random_bytes(32));")
+if [ -n "$KEY" ]; then
+    # Update the key in the .env.testing file
+    sed -i.bak "s/^APP_KEY=.*/APP_KEY=base64:$KEY/" .env.testing
+    rm -f .env.testing.bak
+    log "Application key set: base64:$KEY"
+else
+    log "ERROR: Failed to generate application key"
+    exit 1
 fi
 
-# Ensure we're running in the testing environment
+# Copy updated .env.testing to container
 log "Enforcing testing environment..."
-docker exec -it $CONTAINER bash -c "cd /var/www && echo 'APP_ENV=testing' > .env.testing"
+docker exec $CONTAINER bash -c "cd /var/www && cp .env.testing .env"
 
-# Run the tests in the container with explicit testing environment
-log "Running tests in parallel mode with enforced testing environment..."
-docker exec -it $CONTAINER bash -c "cd /var/www && APP_ENV=testing php artisan test $PARALLEL_FLAG $TEST_FILTER"
+# Use environment variables from .env.testing
+source .env.testing
+
+# Create the test database if it doesn't exist using PostgreSQL directly
+log "Preparing test database..."
+docker exec $CONTAINER bash -c "
+    export PGPASSWORD=$DB_PASSWORD;
+    if ! psql -h $DB_HOST -U $DB_USERNAME -lqt | cut -d \| -f 1 | grep -qw $DB_DATABASE; then
+        echo 'Creating test database $DB_DATABASE...';
+        psql -h $DB_HOST -U $DB_USERNAME -c 'CREATE DATABASE $DB_DATABASE WITH TEMPLATE template0 LC_COLLATE=\"en_GB.UTF-8\" LC_CTYPE=\"en_GB.UTF-8\";';
+    else
+        echo 'Test database already exists';
+    fi
+"
+
+# Run the migrations in the container to ensure database schema is up to date
+log "Running migrations in test environment..."
+docker exec $CONTAINER bash -c "cd /var/www && php artisan migrate:fresh --seed --env=testing --force"
+
+# Clear caches
+log "Clearing caches..."
+docker exec $CONTAINER bash -c "cd /var/www && php artisan config:clear && php artisan cache:clear && php artisan route:clear && php artisan view:clear"
+
+# Run the tests directly with PHPUnit instead of using artisan to avoid bootstrap issues
+log "Running tests with enforced testing environment using PHPUnit..."
+docker exec $CONTAINER bash -c "cd /var/www && APP_ENV=testing ./vendor/bin/phpunit $PARALLEL_FLAG $TEST_FILTER"
 
 TEST_EXIT_CODE=$?
 

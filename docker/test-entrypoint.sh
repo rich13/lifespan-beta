@@ -16,6 +16,7 @@ check_env() {
     local expected_value=$2
     local error_message=$3
 
+    log "Checking $var_name (current value: '${!var_name}')"
     if [ "${!var_name}" != "$expected_value" ]; then
         log "ERROR: $error_message"
         log "Expected $var_name to be '$expected_value', got '${!var_name}'"
@@ -44,6 +45,30 @@ wait_for_postgres() {
     return 1
 }
 
+# DEBUG: Print information about the environment
+log "DEBUG: Current working directory: $(pwd)"
+log "DEBUG: Directory listing of /var/www:"
+ls -la /var/www
+log "DEBUG: Directory listing of /var/www/storage (if exists):"
+ls -la /var/www/storage || echo "Storage directory doesn't exist"
+
+# Log environment variables for debugging
+log "DEBUG: Environment variables:"
+log "APP_ENV=$APP_ENV"
+log "DB_CONNECTION=$DB_CONNECTION"
+log "DB_HOST=$DB_HOST"
+log "DB_PORT=$DB_PORT"
+log "DB_DATABASE=$DB_DATABASE"
+log "DB_USERNAME=$DB_USERNAME"
+log "DB_PASSWORD=$DB_PASSWORD"
+
+# Create storage directory if it doesn't exist
+if [ ! -d "/var/www/storage" ]; then
+    log "DEBUG: Creating missing storage directory"
+    mkdir -p /var/www/storage
+    chmod 777 /var/www/storage
+fi
+
 # Create or fix storage directories with proper permissions
 log "Setting up storage directories..."
 
@@ -52,25 +77,52 @@ HOST_UID=$(stat -c '%u' /var/www)
 HOST_GID=$(stat -c '%g' /var/www)
 log "Host UID:GID = $HOST_UID:$HOST_GID"
 
-# Create storage directories if they don't exist
+# Create storage directories one by one with error checking
+log "DEBUG: Creating storage/logs directory"
 mkdir -p /var/www/storage/logs
-mkdir -p /var/www/storage/framework/{sessions,views,cache}
+if [ $? -ne 0 ]; then
+    log "ERROR: Failed to create storage/logs directory"
+    exit 1
+fi
+
+log "DEBUG: Creating storage/framework directories"
+mkdir -p /var/www/storage/framework/sessions
+mkdir -p /var/www/storage/framework/views
+mkdir -p /var/www/storage/framework/cache
+
+log "DEBUG: Creating storage/app directories"
 mkdir -p /var/www/storage/app/public
 mkdir -p /var/www/storage/app/imports
+
+log "DEBUG: Creating bootstrap/cache directory"
 mkdir -p /var/www/bootstrap/cache
 
 # Set permissions for all storage dirs (even if they already exist)
-chmod -R 777 /var/www/storage
-chmod -R 777 /var/www/bootstrap/cache
-chown -R $HOST_UID:$HOST_GID /var/www/storage
-chown -R $HOST_UID:$HOST_GID /var/www/bootstrap/cache
+log "DEBUG: Setting permissions on storage directories"
+chmod -R 777 /var/www/storage || log "ERROR: Failed to chmod storage directory"
+chmod -R 777 /var/www/bootstrap/cache || log "ERROR: Failed to chmod bootstrap/cache directory"
+
+log "DEBUG: Setting ownership on storage directories"
+chown -R $HOST_UID:$HOST_GID /var/www/storage || log "ERROR: Failed to chown storage directory"
+chown -R $HOST_UID:$HOST_GID /var/www/bootstrap/cache || log "ERROR: Failed to chown bootstrap/cache directory"
 
 # Create or touch log file to ensure it exists and has proper permissions
+log "DEBUG: Checking for laravel.log file"
 if [ ! -f "/var/www/storage/logs/laravel.log" ]; then
+    log "DEBUG: Creating laravel.log file"
     touch /var/www/storage/logs/laravel.log
+    if [ $? -ne 0 ]; then 
+        log "ERROR: Failed to create laravel.log file"
+        log "DEBUG: Check directory permissions:"
+        ls -la /var/www/storage/logs/
+    fi
+else
+    log "DEBUG: laravel.log file already exists"
 fi
-chmod 666 /var/www/storage/logs/laravel.log
-chown $HOST_UID:$HOST_GID /var/www/storage/logs/laravel.log
+
+log "DEBUG: Setting permissions on laravel.log"
+chmod 666 /var/www/storage/logs/laravel.log || log "ERROR: Failed to chmod laravel.log"
+chown $HOST_UID:$HOST_GID /var/www/storage/logs/laravel.log || log "ERROR: Failed to chown laravel.log"
 
 log "Storage directories configured"
 
@@ -94,8 +146,10 @@ if [ "$(find /var/www/storage/app/imports -name "*.yaml" | wc -l)" -eq 0 ]; then
     fi
 fi
 
-# Check environment
+# Check that we're in testing environment
 check_env "APP_ENV" "testing" "Tests must run in the testing environment"
+
+# Check that we're using the test database
 check_env "DB_DATABASE" "lifespan_beta_testing" "Tests must use the test database"
 
 # Wait for PostgreSQL to be ready

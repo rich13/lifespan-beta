@@ -27,6 +27,7 @@ services:
     environment:
       - NODE_OPTIONS=--max-old-space-size=2048
       - VITE_PORT=5173
+      - SESSION_DRIVER=file
     command: ["/var/www/docker/start.sh"]
     depends_on:
       db:
@@ -78,6 +79,19 @@ services:
       - ./:/var/www
     env_file:
       - .env.testing
+    environment:
+      - APP_ENV=testing
+      - DB_CONNECTION=pgsql
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_DATABASE=lifespan_beta_testing
+      - DB_USERNAME=lifespan_user
+      - DB_PASSWORD=lifespan_password
+      - LOG_CHANNEL=testing
+      - CACHE_DRIVER=array
+      - SESSION_DRIVER=file
+      - QUEUE_CONNECTION=sync
+      - DOCKER_CONTAINER=true
     entrypoint: ["/var/www/docker/test-entrypoint.sh"]
     command: ["tail", "-f", "/dev/null"]
     networks:
