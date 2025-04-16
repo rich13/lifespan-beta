@@ -14,6 +14,7 @@ use App\Services\Comparison\SpanComparisonService;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -65,8 +66,68 @@ class AppServiceProvider extends ServiceProvider
             // Force HTTPS in production
             URL::forceScheme('https');
             
+            // Configure database for Railway
+            $this->configureRailwayDatabase();
+            
             // Configure session for Railway
             $this->configureRailwaySession();
+        }
+    }
+    
+    /**
+     * Configure database connection for Railway environment
+     */
+    protected function configureRailwayDatabase(): void
+    {
+        try {
+            $databaseUrl = env('DATABASE_URL');
+            
+            if (!empty($databaseUrl)) {
+                Log::info("Parsing DATABASE_URL for Railway environment");
+                
+                $parsedUrl = parse_url($databaseUrl);
+                
+                if ($parsedUrl !== false) {
+                    $host = $parsedUrl['host'] ?? null;
+                    $port = $parsedUrl['port'] ?? '5432';
+                    $username = $parsedUrl['user'] ?? null;
+                    $password = $parsedUrl['pass'] ?? null;
+                    $path = $parsedUrl['path'] ?? null;
+                    $database = $path ? ltrim($path, '/') : null;
+                    
+                    if ($host && $username && $database) {
+                        // Set the database configuration directly
+                        Config::set('database.connections.pgsql.host', $host);
+                        Config::set('database.connections.pgsql.port', $port);
+                        Config::set('database.connections.pgsql.database', $database);
+                        Config::set('database.connections.pgsql.username', $username);
+                        Config::set('database.connections.pgsql.password', $password);
+                        
+                        // Reconnect to apply changes
+                        DB::purge('pgsql');
+                        DB::reconnect('pgsql');
+                        
+                        Log::info("Railway database configuration applied", [
+                            'host' => $host,
+                            'port' => $port,
+                            'database' => $database,
+                            'username' => $username
+                        ]);
+                    } else {
+                        Log::error("Failed to parse DATABASE_URL: missing components", [
+                            'has_host' => !empty($host),
+                            'has_username' => !empty($username),
+                            'has_database' => !empty($database)
+                        ]);
+                    }
+                } else {
+                    Log::error("Failed to parse DATABASE_URL: invalid URL format");
+                }
+            } else {
+                Log::error("DATABASE_URL environment variable is not set");
+            }
+        } catch (\Exception $e) {
+            Log::error('Failed to configure Railway database: ' . $e->getMessage());
         }
     }
     
