@@ -136,8 +136,20 @@ else
     echo "APP_ENV=production" >> .env
 fi
 
-# Parse DATABASE_URL if present
-parse_database_url
+# Run improved database URL parsing script
+log "Running improved DATABASE_URL parsing script"
+if [ -f /usr/local/bin/fix-db-connection.php ]; then
+    php /usr/local/bin/fix-db-connection.php
+    if [ $? -ne 0 ]; then
+        error_log "Failed to run improved DATABASE_URL parsing script"
+    else
+        log "Successfully parsed DATABASE_URL with the improved script"
+    fi
+else
+    # Fallback to original method
+    log "Improved DATABASE_URL parsing script not found, using legacy method"
+    parse_database_url
+fi
 
 # Debug environment variables
 log "Environment variables:"
