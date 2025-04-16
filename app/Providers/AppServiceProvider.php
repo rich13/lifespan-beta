@@ -12,6 +12,8 @@ use App\Services\Comparison\Comparers\SignificantEventComparer;
 use App\Services\Comparison\Contracts\SpanComparerInterface;
 use App\Services\Comparison\SpanComparisonService;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Facades\Log;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -56,6 +58,46 @@ class AppServiceProvider extends ServiceProvider
                 $testConfig = require config_path('logging.testing.php');
                 Config::set('logging', $testConfig);
             }
+        }
+        
+        // Special configuration for Railway production environment
+        if ($this->app->environment('production') && env('DOCKER_CONTAINER') === 'true') {
+            // Force HTTPS in production
+            URL::forceScheme('https');
+            
+            // Configure session for Railway
+            $this->configureRailwaySession();
+        }
+    }
+    
+    /**
+     * Set up proper session configuration for Railway environment
+     */
+    protected function configureRailwaySession(): void
+    {
+        try {
+            $appUrl = env('APP_URL');
+            
+            if (!empty($appUrl)) {
+                $parsedUrl = parse_url($appUrl);
+                $domain = $parsedUrl['host'] ?? null;
+                
+                if ($domain) {
+                    // Set session domain for cookies
+                    Config::set('session.domain', $domain);
+                    
+                    // Ensure secure cookies for HTTPS
+                    Config::set('session.secure', true);
+                    
+                    // Set cookie SameSite attribute
+                    Config::set('session.same_site', 'lax');
+                    
+                    // Log the configuration
+                    Log::info("Railway session configuration set domain: {$domain}");
+                }
+            }
+        } catch (\Exception $e) {
+            Log::error('Failed to configure Railway session: ' . $e->getMessage());
         }
     }
 }
