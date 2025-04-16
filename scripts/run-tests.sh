@@ -29,14 +29,23 @@ fi
 
 # Set up specific test parameters if provided
 TEST_FILTER=""
+PARALLEL_FLAG="--parallel"
+
 if [ ! -z "$1" ]; then
     TEST_FILTER="--filter=$1"
     log "Using test filter: $TEST_FILTER"
+    # When filtering tests, parallel mode can sometimes cause issues
+    # so we disable it when a filter is specified
+    PARALLEL_FLAG=""
 fi
 
-# Run the tests in the container
-log "Running tests..."
-docker exec -it $CONTAINER bash -c "cd /var/www && php artisan test $TEST_FILTER"
+# Ensure we're running in the testing environment
+log "Enforcing testing environment..."
+docker exec -it $CONTAINER bash -c "cd /var/www && echo 'APP_ENV=testing' > .env.testing"
+
+# Run the tests in the container with explicit testing environment
+log "Running tests in parallel mode with enforced testing environment..."
+docker exec -it $CONTAINER bash -c "cd /var/www && APP_ENV=testing php artisan test $PARALLEL_FLAG $TEST_FILTER"
 
 TEST_EXIT_CODE=$?
 

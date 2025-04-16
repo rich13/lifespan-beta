@@ -7,13 +7,25 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\App;
 
 abstract class TestCase extends BaseTestCase
 {
     use CreatesApplication, RefreshDatabase;
 
+    /**
+     * Setup the test environment.
+     */
     protected function setUp(): void
     {
+        // Ensure tests only run in testing environment to prevent data corruption
+        if (!App::environment('testing')) {
+            $this->markTestSkipped(
+                'ERROR: Tests must be run in the testing environment. ' .
+                'Use --env=testing with phpunit or ensure APP_ENV=testing in your .env.testing file.'
+            );
+        }
+
         parent::setUp();
 
         // Enhanced environment validation
