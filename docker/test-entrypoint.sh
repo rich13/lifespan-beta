@@ -24,6 +24,39 @@ check_env() {
     fi
 }
 
+# Function to validate APP_KEY
+validate_app_key() {
+    local key="$1"
+    
+    # Check if key is in base64: format
+    if [[ ! "$key" =~ ^base64: ]]; then
+        return 1
+    fi
+    
+    # Extract the base64 part
+    local base64_part=${key#base64:}
+    
+    # Check length of decoded key (should be 32 bytes for AES-256)
+    local decoded_length=$(echo "$base64_part" | base64 -d 2>/dev/null | wc -c)
+    if [ "$decoded_length" -ne 32 ]; then
+        return 1
+    fi
+    
+    return 0
+}
+
+# Function to properly generate APP_KEY
+generate_app_key() {
+    log "Generating a new application key..."
+    local new_key=$(APP_ENV=testing php artisan key:generate --show --force)
+    log "Generated new key: $new_key"
+    
+    # Export for current process
+    export APP_KEY="$new_key"
+    
+    return 0
+}
+
 # Function to wait for PostgreSQL to be ready
 wait_for_postgres() {
     local max_attempts=30
@@ -61,6 +94,50 @@ log "DB_PORT=$DB_PORT"
 log "DB_DATABASE=$DB_DATABASE"
 log "DB_USERNAME=$DB_USERNAME"
 log "DB_PASSWORD=$DB_PASSWORD"
+
+# Create a separate .env file for testing to avoid contaminating the shared .env
+log "Creating isolated .env.test file for testing"
+cat > /tmp/.env.test << EOF
+APP_NAME="Lifespan Beta Testing"
+APP_ENV=testing
+APP_DEBUG=true
+APP_URL=http://localhost:8000
+
+LOG_CHANNEL=testing
+LOG_LEVEL=debug
+
+DB_CONNECTION=${DB_CONNECTION}
+DB_HOST=${DB_HOST}
+DB_PORT=${DB_PORT}
+DB_DATABASE=${DB_DATABASE}
+DB_USERNAME=${DB_USERNAME}
+DB_PASSWORD=${DB_PASSWORD}
+
+BROADCAST_DRIVER=log
+CACHE_DRIVER=array
+FILESYSTEM_DISK=local
+QUEUE_CONNECTION=sync
+SESSION_DRIVER=${SESSION_DRIVER}
+SESSION_LIFETIME=${SESSION_LIFETIME}
+
+# Testing environment flag
+DOCKER_CONTAINER=true
+TESTING=true
+EOF
+
+# Generate a valid key for the testing environment
+generate_app_key
+log "Using APP_KEY: $APP_KEY"
+echo "APP_KEY=$APP_KEY" >> /tmp/.env.test
+
+# Copy the test env file to the application directory
+cp /tmp/.env.test /var/www/.env.testing
+chmod 644 /var/www/.env.testing
+
+# Export variables to make them available to child processes
+export APP_ENV=testing
+export DB_DATABASE=lifespan_beta_testing
+export TESTING=true
 
 # Create storage directory if it doesn't exist
 if [ ! -d "/var/www/storage" ]; then
@@ -128,9 +205,6 @@ log "Storage directories configured"
 
 # Set Docker container environment variable for logging
 export DOCKER_CONTAINER=true
-if ! grep -q "DOCKER_CONTAINER" /var/www/.env.testing; then
-    echo "DOCKER_CONTAINER=true" >> /var/www/.env.testing
-fi
 
 # Ensure imports directory has YAML files
 if [ "$(find /var/www/storage/app/imports -name "*.yaml" | wc -l)" -eq 0 ]; then
@@ -168,16 +242,16 @@ else
     log "Database $DB_DATABASE already exists"
 fi
 
-# Run migrations
+# Run migrations using the environment variables, not the .env file
 log "Running migrations..."
-php artisan migrate --force
+APP_ENV=testing php artisan migrate --force
 
 # Update cache
 log "Clearing Laravel caches..."
-php artisan config:clear
-php artisan cache:clear
-php artisan route:clear
-php artisan view:clear
+APP_ENV=testing php artisan config:clear
+APP_ENV=testing php artisan cache:clear
+APP_ENV=testing php artisan route:clear
+APP_ENV=testing php artisan view:clear
 
 # Run the command passed to docker run
 exec "$@" 

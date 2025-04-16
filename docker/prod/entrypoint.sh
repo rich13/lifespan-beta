@@ -81,6 +81,44 @@ wait_for_db() {
     return 1
 }
 
+# Function to validate APP_KEY
+validate_app_key() {
+    local key="$1"
+    
+    # Check if key is in base64: format
+    if [[ ! "$key" =~ ^base64: ]]; then
+        return 1
+    fi
+    
+    # Extract the base64 part
+    local base64_part=${key#base64:}
+    
+    # Check length of decoded key (should be 32 bytes for AES-256)
+    local decoded_length=$(echo "$base64_part" | base64 -d 2>/dev/null | wc -c)
+    if [ "$decoded_length" -ne 32 ]; then
+        return 1
+    fi
+    
+    return 0
+}
+
+# Function to properly generate APP_KEY
+generate_app_key() {
+    log "Generating a new application key..."
+    local new_key=$(php artisan key:generate --show --force)
+    log "Generated new key: $new_key"
+    
+    # Update .env file
+    if [ -f .env ]; then
+        sed -i "s|APP_KEY=.*|APP_KEY=$new_key|" .env
+    fi
+    
+    # Export for current process
+    export APP_KEY="$new_key"
+    
+    return 0
+}
+
 # Set up environment
 log "Setting up environment..."
 # Set Docker container environment variable for logging
@@ -166,10 +204,15 @@ if [ $? -ne 0 ]; then
     # Don't exit, try to continue
 fi
 
-# Generate application key if not set
-if grep -q "APP_KEY=base64" .env; then
-    log "Generating application key"
-    php artisan key:generate --force
+# Validate or regenerate application key
+current_key=$(grep "^APP_KEY=" .env | cut -d= -f2)
+log "Current APP_KEY: ${current_key}"
+
+if [ -z "$current_key" ] || ! validate_app_key "$current_key"; then
+    log "APP_KEY is missing or invalid. Generating a new one."
+    generate_app_key
+else
+    log "APP_KEY is valid."
 fi
 
 # Run migrations with error handling

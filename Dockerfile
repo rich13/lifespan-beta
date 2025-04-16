@@ -63,7 +63,7 @@ COPY --from=node-builder /app/public/fonts public/fonts/
 # Install dependencies
 RUN composer install --no-dev --optimize-autoloader
 
-# Create required directories
+# Create required directories with proper permissions
 RUN mkdir -p /var/www/storage/logs \
     /var/www/storage/framework/{sessions,views,cache} \
     /var/www/storage/app/public \
@@ -72,7 +72,8 @@ RUN mkdir -p /var/www/storage/logs \
     /var/log/supervisor \
     /var/log/nginx \
     /var/run/nginx \
-    /var/run/php
+    /var/run/php \
+    /etc/supervisor/conf.d
 
 # Create log files with correct permissions
 RUN touch /var/www/storage/logs/laravel.log && \
@@ -101,7 +102,14 @@ COPY docker/prod/set-db-config.php /usr/local/bin/set-db-config.php
 # Make scripts executable
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/health-check.sh
 
-# Set permissions
+# Set appropriate permissions for supervisor directories
+RUN mkdir -p /var/log/supervisor && \
+    chmod -R 755 /var/log/supervisor && \
+    chmod -R 755 /etc/supervisor/conf.d && \
+    touch /var/log/supervisor/supervisord.log && \
+    chmod 664 /var/log/supervisor/supervisord.log
+
+# Set permissions for the application
 RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache \
     /var/log/nginx /var/run/nginx /var/run/php
 
