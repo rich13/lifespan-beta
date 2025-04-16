@@ -31,6 +31,19 @@ QUESTIONS.md
 ray.php
 notepad.md
 
+# Deployment files no longer in use
+.env.render
+render-build.sh
+test-render-build.sh
+docker-compose.render-test.yml
+test-environments.sh
+build-local.sh
+start-app.sh
+setup-test-db.sh
+render.yaml
+render.Dockerfile
+Dockerfile.prod
+
 # Database
 *.sqlite
 *.sqlite-journal
@@ -46,6 +59,7 @@ Thumbs.db
 
 # Local development directories
 /thinking/
+/uncommitted_tmp
 
 # New backups directory
 /backups
