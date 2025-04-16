@@ -10,6 +10,7 @@ restartPolicyMaxRetries = 10
 startCommand = ""
 healthcheckPath = "/health"
 healthcheckTimeout = 300
+port = 8080
 
 [deploy.env]
 APP_NAME = "Lifespan"
