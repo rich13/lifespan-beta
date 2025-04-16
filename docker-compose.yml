@@ -28,6 +28,7 @@ services:
       - NODE_OPTIONS=--max-old-space-size=2048
       - VITE_PORT=5173
       - SESSION_DRIVER=file
+      - SESSION_LIFETIME=525600
     command: ["/var/www/docker/start.sh"]
     depends_on:
       db:
@@ -90,7 +91,7 @@ services:
       - LOG_CHANNEL=testing
       - CACHE_DRIVER=array
       - SESSION_DRIVER=file
-      - QUEUE_CONNECTION=sync
+      - SESSION_LIFETIME=525600
       - DOCKER_CONTAINER=true
     entrypoint: ["/var/www/docker/test-entrypoint.sh"]
     command: ["tail", "-f", "/dev/null"]

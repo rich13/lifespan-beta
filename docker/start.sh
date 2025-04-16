@@ -22,11 +22,17 @@ done
 log "Setting Docker container environment variable"
 export DOCKER_CONTAINER=true
 
-# Update .env with DOCKER_CONTAINER variable
+# Update .env with DOCKER_CONTAINER variable and ensure we use the main database
 if [ -f /var/www/.env ]; then
+    # Update or add the Docker container flag
     grep -q "DOCKER_CONTAINER=" /var/www/.env && sed -i "s/DOCKER_CONTAINER=.*/DOCKER_CONTAINER=true/" /var/www/.env || echo "DOCKER_CONTAINER=true" >> /var/www/.env
+    
+    # Ensure we're using the main database, not the testing one
+    grep -q "DB_DATABASE=" /var/www/.env && sed -i "s/DB_DATABASE=.*/DB_DATABASE=lifespan_beta/" /var/www/.env || echo "DB_DATABASE=lifespan_beta" >> /var/www/.env
 else 
+    # Create a basic .env file with the correct database
     echo "DOCKER_CONTAINER=true" >> /var/www/.env
+    echo "DB_DATABASE=lifespan_beta" >> /var/www/.env
 fi
 
 # Create storage directories and set permissions

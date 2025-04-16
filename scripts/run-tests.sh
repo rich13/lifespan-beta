@@ -49,18 +49,17 @@ log "Setting up testing environment..."
 log "Generating application key for testing environment..."
 KEY=$(docker exec $CONTAINER php -r "echo base64_encode(random_bytes(32));")
 if [ -n "$KEY" ]; then
-    # Update the key in the .env.testing file
-    sed -i.bak "s/^APP_KEY=.*/APP_KEY=base64:$KEY/" .env.testing
-    rm -f .env.testing.bak
+    # Update the key in the local .env.testing file (not the shared one)
+    docker exec $CONTAINER bash -c "sed -i \"s/^APP_KEY=.*/APP_KEY=base64:$KEY/\" /var/www/.env.testing"
     log "Application key set: base64:$KEY"
 else
     log "ERROR: Failed to generate application key"
     exit 1
 fi
 
-# Copy updated .env.testing to container
-log "Enforcing testing environment..."
-docker exec $CONTAINER bash -c "cd /var/www && cp .env.testing .env"
+# Create a temporary .env file within the container that doesn't affect the shared volume
+log "Setting up test environment in container..."
+docker exec $CONTAINER bash -c "cd /var/www && cp .env.testing /tmp/.env.test && export APP_ENV=testing && export DB_DATABASE=lifespan_beta_testing"
 
 # Use environment variables from .env.testing
 source .env.testing
@@ -79,15 +78,15 @@ docker exec $CONTAINER bash -c "
 
 # Run the migrations in the container to ensure database schema is up to date
 log "Running migrations in test environment..."
-docker exec $CONTAINER bash -c "cd /var/www && php artisan migrate:fresh --seed --env=testing --force"
+docker exec $CONTAINER bash -c "cd /var/www && PHP_INI_SCAN_DIR=/tmp APP_ENV=testing DB_DATABASE=lifespan_beta_testing php artisan migrate:fresh --seed --env=testing --force"
 
 # Clear caches
 log "Clearing caches..."
-docker exec $CONTAINER bash -c "cd /var/www && php artisan config:clear && php artisan cache:clear && php artisan route:clear && php artisan view:clear"
+docker exec $CONTAINER bash -c "cd /var/www && PHP_INI_SCAN_DIR=/tmp APP_ENV=testing DB_DATABASE=lifespan_beta_testing php artisan config:clear && php artisan cache:clear && php artisan route:clear && php artisan view:clear"
 
 # Run the tests directly with PHPUnit instead of using artisan to avoid bootstrap issues
 log "Running tests with enforced testing environment using PHPUnit..."
-docker exec $CONTAINER bash -c "cd /var/www && APP_ENV=testing ./vendor/bin/phpunit $PARALLEL_FLAG $TEST_FILTER"
+docker exec $CONTAINER bash -c "cd /var/www && PHP_INI_SCAN_DIR=/tmp APP_ENV=testing DB_DATABASE=lifespan_beta_testing ./vendor/bin/phpunit $PARALLEL_FLAG $TEST_FILTER"
 
 TEST_EXIT_CODE=$?
 
