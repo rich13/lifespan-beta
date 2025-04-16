@@ -18,21 +18,50 @@ $database = getenv('PGDATABASE');
 $username = getenv('PGUSER');
 $password = getenv('PGPASSWORD');
 
-// Verify all variables are set
-if (!$host || !$port || !$database || !$username || !$password) {
-    echo "ERROR: Missing required database environment variables\n";
+// Check if the necessary variables are set
+if (empty($host) || empty($database) || empty($username)) {
+    echo "ERROR: Missing required database configuration variables.\n";
+    echo "PGHOST: " . (empty($host) ? "NOT SET" : $host) . "\n";
+    echo "PGPORT: " . (empty($port) ? "NOT SET (will use default 5432)" : $port) . "\n";
+    echo "PGDATABASE: " . (empty($database) ? "NOT SET" : $database) . "\n";
+    echo "PGUSER: " . (empty($username) ? "NOT SET" : $username) . "\n";
+    echo "PGPASSWORD: " . (empty($password) ? "NOT SET" : "[SET]") . "\n";
     exit(1);
 }
 
-// Log database connection information (without password)
-echo "Database configuration: host=$host, port=$port, database=$database, username=$username\n";
+// Use default port if not set
+if (empty($port)) {
+    $port = '5432';
+}
 
-// Create database configuration
-$config = <<<EOT
-<?php
+echo "Database configuration to apply:\n";
+echo "- DB_CONNECTION: pgsql\n";
+echo "- DB_HOST: $host\n";
+echo "- DB_PORT: $port\n";
+echo "- DB_DATABASE: $database\n";
+echo "- DB_USERNAME: $username\n";
+echo "- DB_PASSWORD: " . (empty($password) ? "[EMPTY]" : "[SET]") . "\n";
+
+// Create a database.php file in bootstrap/cache that will override the Laravel config
+$configDir = __DIR__ . '/../../bootstrap/cache';
+$configFile = $configDir . '/database.php';
+
+// Ensure the directory exists
+if (!is_dir($configDir)) {
+    echo "Creating bootstrap/cache directory\n";
+    if (!mkdir($configDir, 0755, true)) {
+        echo "ERROR: Failed to create bootstrap/cache directory\n";
+        exit(1);
+    }
+}
+
+// Format the config PHP code
+$configContent = "<?php
+// Auto-generated database configuration by set-db-config.php script
+// Generated at: " . date('Y-m-d H:i:s') . "
 
 return [
-    'default' => env('DB_CONNECTION', 'pgsql'),
+    'default' => 'pgsql',
     'connections' => [
         'pgsql' => [
             'driver' => 'pgsql',
@@ -40,8 +69,8 @@ return [
             'host' => '$host',
             'port' => '$port',
             'database' => '$database',
-            'username' => '$username', 
-            'password' => '$password',
+            'username' => '$username',
+            'password' => '" . addslashes($password) . "',
             'charset' => 'utf8',
             'prefix' => '',
             'prefix_indexes' => true,
@@ -49,63 +78,44 @@ return [
             'sslmode' => 'prefer',
         ],
     ],
-    'migrations' => 'migrations',
 ];
-EOT;
+";
 
-// Possible config file paths
-$paths = [
-    '/var/www/config/database.php',
-    './config/database.php',
-    __DIR__ . '/../../config/database.php'
-];
-
-$success = false;
-
-// Try to write to each path
-foreach ($paths as $path) {
-    if (is_writable(dirname($path)) || is_writable($path)) {
-        if (file_put_contents($path, $config)) {
-            echo "Successfully wrote database configuration to $path\n";
-            $success = true;
-            break;
-        } else {
-            echo "Failed to write to $path\n";
-        }
-    } else {
-        echo "Path is not writable: $path\n";
-    }
-}
-
-// Also update the .env file as a fallback
-if ($success) {
-    echo "Updating .env file as a fallback\n";
-    
-    $envPaths = [
-        '/var/www/.env',
-        './.env',
-        __DIR__ . '/../../.env'
-    ];
-    
-    foreach ($envPaths as $envPath) {
-        if (file_exists($envPath) && is_writable($envPath)) {
-            $envContent = file_get_contents($envPath);
-            
-            $envContent = preg_replace('/DB_CONNECTION=.*/', 'DB_CONNECTION=pgsql', $envContent);
-            $envContent = preg_replace('/DB_HOST=.*/', "DB_HOST=$host", $envContent);
-            $envContent = preg_replace('/DB_PORT=.*/', "DB_PORT=$port", $envContent);
-            $envContent = preg_replace('/DB_DATABASE=.*/', "DB_DATABASE=$database", $envContent);
-            $envContent = preg_replace('/DB_USERNAME=.*/', "DB_USERNAME=$username", $envContent);
-            $envContent = preg_replace('/DB_PASSWORD=.*/', "DB_PASSWORD=$password", $envContent);
-            
-            file_put_contents($envPath, $envContent);
-            echo "Updated $envPath\n";
-            break;
-        }
-    }
+// Write the config file
+if (file_put_contents($configFile, $configContent)) {
+    echo "Successfully wrote database configuration to $configFile\n";
+    chmod($configFile, 0644); // Make sure it's readable
 } else {
-    echo "ERROR: Could not write database configuration to any path\n";
+    echo "ERROR: Failed to write database configuration file\n";
     exit(1);
 }
 
-echo "Database configuration complete\n"; 
+// Test database connection with configured values
+echo "Testing database connection with configured values...\n";
+
+try {
+    $dsn = "pgsql:host=$host;port=$port;dbname=$database";
+    $options = [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_TIMEOUT => 5
+    ];
+    
+    $pdo = new PDO($dsn, $username, $password, $options);
+    
+    // Execute a simple query to verify connection
+    $stmt = $pdo->query('SELECT 1 AS connection_test');
+    $result = $stmt->fetch();
+    
+    if (isset($result['connection_test']) && $result['connection_test'] === 1) {
+        echo "Database connection test successful!\n";
+    } else {
+        echo "WARNING: Database connection established but test query returned unexpected result.\n";
+    }
+} catch (PDOException $e) {
+    echo "ERROR: Database connection failed: " . $e->getMessage() . "\n";
+    // We'll continue anyway - the script has set the config file
+}
+
+echo "Database configuration completed.\n";
+exit(0); 

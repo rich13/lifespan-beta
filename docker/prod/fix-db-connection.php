@@ -8,105 +8,141 @@
  * and creates the necessary configuration for Laravel to use
  */
 
+// This script provides improved DATABASE_URL parsing for the Laravel environment
+// It parses the DATABASE_URL value directly, handling complex formats and query parameters
+
 // Enable error reporting for debugging
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
-echo "Fixing database connection in Railway environment\n";
+echo "Running improved DATABASE_URL parsing script\n";
 
-// Get DATABASE_URL from environment
+// Get the DATABASE_URL environment variable
 $databaseUrl = getenv('DATABASE_URL');
 
-if (!$databaseUrl) {
-    echo "ERROR: DATABASE_URL environment variable is not set\n";
-    exit(1);
+if (empty($databaseUrl)) {
+    echo "DATABASE_URL is not set or empty. Skipping parsing.\n";
+    exit(0);
 }
 
 echo "Parsing DATABASE_URL: " . preg_replace('/:[^:@]+@/', ':***@', $databaseUrl) . "\n";
 
 // Parse the DATABASE_URL
-$parsedUrl = parse_url($databaseUrl);
+$parsed = parse_url($databaseUrl);
 
-if ($parsedUrl === false) {
-    echo "ERROR: Failed to parse DATABASE_URL\n";
+if ($parsed === false) {
+    echo "Failed to parse DATABASE_URL: Invalid URL format\n";
     exit(1);
 }
 
-// Extract components
-$host = $parsedUrl['host'] ?? null;
-$port = $parsedUrl['port'] ?? '5432';
-$user = $parsedUrl['user'] ?? null;
-$pass = $parsedUrl['pass'] ?? null;
-$path = $parsedUrl['path'] ?? null;
+// Extract components with error checking
+$host = $parsed['host'] ?? null;
+$port = $parsed['port'] ?? '5432';
+$user = $parsed['user'] ?? null;
+$pass = $parsed['pass'] ?? null;
+$path = $parsed['path'] ?? null;
+$database = ltrim($path, '/');
 
-// Remove leading slash from path to get database name
-$database = $path ? ltrim($path, '/') : null;
-
-if (!$host || !$user || !$database) {
-    echo "ERROR: DATABASE_URL is missing required components\n";
-    echo "Parsed components: host=$host, port=$port, user=$user, database=$database\n";
+// Check for missing required components
+if (empty($host)) {
+    echo "ERROR: Host is missing in DATABASE_URL\n";
     exit(1);
 }
 
-echo "Parsed database components: host=$host, port=$port, user=$user, database=$database\n";
+if (empty($user)) {
+    echo "ERROR: Username is missing in DATABASE_URL\n";
+    exit(1);
+}
 
-// Set environment variables for the database connection
+if (empty($database)) {
+    echo "ERROR: Database name is missing in DATABASE_URL\n";
+    exit(1);
+}
+
+// If there are query parameters, extract and process them
+if (isset($parsed['query'])) {
+    parse_str($parsed['query'], $query);
+    
+    // Handle sslmode
+    if (isset($query['sslmode'])) {
+        echo "SSLMode specified: " . $query['sslmode'] . "\n";
+        // You could set this in your database configuration if needed
+    }
+    
+    // Remove query from database name if it got included
+    if (strpos($database, '?') !== false) {
+        $database = substr($database, 0, strpos($database, '?'));
+    }
+}
+
+echo "Extracted database connection parameters:\n";
+echo "- Host: $host\n";
+echo "- Port: $port\n";
+echo "- Database: $database\n";
+echo "- Username: $user\n";
+echo "- Password: " . (!empty($pass) ? "[SET]" : "[EMPTY]") . "\n";
+
+// Export to environment variables for the shell script to use
+putenv("PGHOST=$host");
+putenv("PGPORT=$port");
+putenv("PGDATABASE=$database");
+putenv("PGUSER=$user");
+if (!empty($pass)) {
+    putenv("PGPASSWORD=$pass");
+}
+
+// Also set DB_ variables directly for Laravel
 putenv("DB_CONNECTION=pgsql");
 putenv("DB_HOST=$host");
 putenv("DB_PORT=$port");
 putenv("DB_DATABASE=$database");
 putenv("DB_USERNAME=$user");
-putenv("DB_PASSWORD=$pass");
+if (!empty($pass)) {
+    putenv("DB_PASSWORD=$pass");
+}
 
-// Also set PGHOST and other Postgres-specific variables
-putenv("PGHOST=$host");
-putenv("PGPORT=$port");
-putenv("PGDATABASE=$database");
-putenv("PGUSER=$user");
-putenv("PGPASSWORD=$pass");
-
-// Update the .env file if it exists
+// Update the .env file in Laravel
 $envFile = '/var/www/.env';
+
 if (file_exists($envFile) && is_writable($envFile)) {
-    echo "Updating .env file with database configuration\n";
+    echo "Updating Laravel .env file with database configuration\n";
     
-    $envContent = file_get_contents($envFile);
+    $content = file_get_contents($envFile);
     
-    // Update database connection settings
-    $envContent = preg_replace('/DB_CONNECTION=.*/', "DB_CONNECTION=pgsql", $envContent);
-    $envContent = preg_replace('/DB_HOST=.*/', "DB_HOST=$host", $envContent);
-    $envContent = preg_replace('/DB_PORT=.*/', "DB_PORT=$port", $envContent);
-    $envContent = preg_replace('/DB_DATABASE=.*/', "DB_DATABASE=$database", $envContent);
-    $envContent = preg_replace('/DB_USERNAME=.*/', "DB_USERNAME=$user", $envContent);
-    $envContent = preg_replace('/DB_PASSWORD=.*/', "DB_PASSWORD=$pass", $envContent);
+    // Replace or add the connection settings in the .env file
+    $vars = [
+        'DB_CONNECTION' => 'pgsql',
+        'DB_HOST' => $host,
+        'DB_PORT' => $port,
+        'DB_DATABASE' => $database,
+        'DB_USERNAME' => $user,
+    ];
     
-    file_put_contents($envFile, $envContent);
-    echo "Updated .env file\n";
-} else {
-    echo "WARNING: Could not update .env file (not found or not writable)\n";
-}
-
-// Test the database connection to verify settings
-echo "Testing database connection with new settings...\n";
-
-try {
-    $dsn = "pgsql:host=$host;port=$port;dbname=$database";
-    $pdo = new PDO($dsn, $user, $pass);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    
-    // Simple query to test connection
-    $stmt = $pdo->query("SELECT 1");
-    $result = $stmt->fetchColumn();
-    
-    if ($result == 1) {
-        echo "SUCCESS: Database connection established successfully\n";
-    } else {
-        echo "WARNING: Connected to database but test query returned unexpected result\n";
+    if (!empty($pass)) {
+        $vars['DB_PASSWORD'] = $pass;
     }
-} catch (PDOException $e) {
-    echo "ERROR: Database connection test failed: " . $e->getMessage() . "\n";
-    // Continue execution - we've at least set the environment variables
+    
+    foreach ($vars as $key => $value) {
+        $value = str_replace('"', '\"', $value); // Escape double quotes
+        
+        if (preg_match("/^{$key}=/m", $content)) {
+            // Replace existing variable
+            $content = preg_replace("/^{$key}=.*/m", "{$key}=\"{$value}\"", $content);
+        } else {
+            // Add new variable
+            $content .= PHP_EOL . "{$key}=\"{$value}\"";
+        }
+    }
+    
+    // Write back to .env file
+    if (file_put_contents($envFile, $content)) {
+        echo "Successfully updated .env file with database configuration\n";
+    } else {
+        echo "WARNING: Failed to update .env file\n";
+    }
+} else {
+    echo "WARNING: .env file not found or not writable at $envFile\n";
 }
 
-echo "Database configuration completed\n";
+echo "Improved DATABASE_URL parsing completed successfully\n";
 exit(0); 
