@@ -23,6 +23,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        // Load Railway-specific database configuration if available
+        $this->loadRailwayDatabaseConfig();
+        
         // Register PrecisionValidator as a singleton
         $this->app->singleton(PrecisionValidator::class);
 
@@ -48,6 +51,34 @@ class AppServiceProvider extends ServiceProvider
     }
 
     /**
+     * Load Railway-specific database configuration if available
+     */
+    protected function loadRailwayDatabaseConfig(): void
+    {
+        try {
+            $railwayDbConfig = base_path('bootstrap/cache/railway_db.php');
+            
+            if (file_exists($railwayDbConfig)) {
+                $config = require $railwayDbConfig;
+                
+                if (isset($config['connections']['pgsql'])) {
+                    // Load the configuration
+                    Config::set('database', $config);
+                    
+                    // Log that we've loaded custom config
+                    if ($this->app->hasBeenBootstrapped()) {
+                        Log::info('Loaded Railway-specific database configuration');
+                    }
+                }
+            }
+        } catch (\Exception $e) {
+            if ($this->app->hasBeenBootstrapped()) {
+                Log::error('Failed to load Railway database config: ' . $e->getMessage());
+            }
+        }
+    }
+
+    /**
      * Bootstrap any application services.
      */
     public function boot(): void
@@ -66,11 +97,11 @@ class AppServiceProvider extends ServiceProvider
             // Force HTTPS in production
             URL::forceScheme('https');
             
-            // Configure database for Railway
-            $this->configureRailwayDatabase();
-            
             // Configure session for Railway
             $this->configureRailwaySession();
+            
+            // Configure database for Railway
+            $this->configureRailwayDatabase();
         }
     }
     
@@ -96,7 +127,7 @@ class AppServiceProvider extends ServiceProvider
                     $database = $path ? ltrim($path, '/') : null;
                     
                     if ($host && $username && $database) {
-                        // Set the database configuration directly
+                        // Reconfigure the database on-the-fly
                         Config::set('database.connections.pgsql.host', $host);
                         Config::set('database.connections.pgsql.port', $port);
                         Config::set('database.connections.pgsql.database', $database);

@@ -100,12 +100,20 @@ COPY docker/prod/health-check.sh /usr/local/bin/health-check.sh
 COPY docker/prod/set-db-config.php /usr/local/bin/set-db-config.php
 COPY docker/prod/fix-db-connection.php /usr/local/bin/fix-db-connection.php
 COPY docker/prod/set-session-config.php /usr/local/bin/set-session-config.php
+COPY docker/prod/railway-db-config.php /usr/local/bin/railway-db-config.php
 
 # Make scripts executable
 RUN chmod +x /usr/local/bin/entrypoint.sh \
     /usr/local/bin/health-check.sh \
     /usr/local/bin/fix-db-connection.php \
-    /usr/local/bin/set-session-config.php
+    /usr/local/bin/set-session-config.php \
+    /usr/local/bin/railway-db-config.php
+
+# Pre-configure Railway database if DATABASE_URL is available (will run again at startup)
+RUN if [ -n "${DATABASE_URL}" ]; then \
+    echo "Pre-configuring Railway database from DATABASE_URL" && \
+    php /usr/local/bin/railway-db-config.php; \
+fi
 
 # Set appropriate permissions for supervisor directories
 RUN mkdir -p /var/log/supervisor && \

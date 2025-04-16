@@ -136,7 +136,20 @@ else
     echo "APP_ENV=production" >> .env
 fi
 
-# Run improved database URL parsing script
+# Set up Railway-specific database configuration
+log "Running Railway-specific database configuration"
+if [ -f /usr/local/bin/railway-db-config.php ]; then
+    php /usr/local/bin/railway-db-config.php
+    if [ $? -ne 0 ]; then
+        error_log "Failed to configure Railway database"
+    else
+        log "Successfully configured Railway database"
+    fi
+else
+    log "Railway database configuration script not found"
+fi
+
+# Run improved database URL parsing script (as fallback)
 log "Running improved DATABASE_URL parsing script"
 if [ -f /usr/local/bin/fix-db-connection.php ]; then
     php /usr/local/bin/fix-db-connection.php
