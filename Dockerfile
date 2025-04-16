@@ -97,22 +97,19 @@ COPY docker/prod/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY docker/prod/php-fpm/www.conf /usr/local/etc/php-fpm.d/www.conf
 COPY docker/prod/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY docker/prod/health-check.sh /usr/local/bin/health-check.sh
-COPY docker/prod/set-db-config.php /usr/local/bin/set-db-config.php
-COPY docker/prod/fix-db-connection.php /usr/local/bin/fix-db-connection.php
 COPY docker/prod/set-session-config.php /usr/local/bin/set-session-config.php
-COPY docker/prod/railway-db-config.php /usr/local/bin/railway-db-config.php
+COPY docker/prod/configure-database.php /usr/local/bin/configure-database.php
 
 # Make scripts executable
 RUN chmod +x /usr/local/bin/entrypoint.sh \
     /usr/local/bin/health-check.sh \
-    /usr/local/bin/fix-db-connection.php \
     /usr/local/bin/set-session-config.php \
-    /usr/local/bin/railway-db-config.php
+    /usr/local/bin/configure-database.php
 
-# Pre-configure Railway database if DATABASE_URL is available (will run again at startup)
+# Pre-configure database if DATABASE_URL is available (will run again at startup)
 RUN if [ -n "${DATABASE_URL}" ]; then \
-    echo "Pre-configuring Railway database from DATABASE_URL" && \
-    php /usr/local/bin/railway-db-config.php; \
+    echo "Pre-configuring database from DATABASE_URL" && \
+    php /usr/local/bin/configure-database.php; \
 fi
 
 # Set appropriate permissions for supervisor directories

@@ -16,109 +16,6 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
-# Function to parse DATABASE_URL if present
-parse_database_url() {
-    if [ -n "${DATABASE_URL}" ]; then
-        log "Parsing DATABASE_URL: ${DATABASE_URL}"
-        # Extract parts from the URL
-        PGUSER=$(echo "${DATABASE_URL}" | sed -r 's/^postgres:\/\/([^:]+):.*/\1/')
-        PGPASSWORD=$(echo "${DATABASE_URL}" | sed -r 's/^postgres:\/\/[^:]+:([^@]+).*/\1/')
-        PGHOST=$(echo "${DATABASE_URL}" | sed -r 's/^postgres:\/\/[^@]+@([^:]+).*/\1/')
-        PGPORT=$(echo "${DATABASE_URL}" | sed -r 's/^postgres:\/\/[^:]+:[^@]+@[^:]+:([0-9]+).*/\1/')
-        PGDATABASE=$(echo "${DATABASE_URL}" | sed -r 's/^postgres:\/\/[^:]+:[^@]+@[^:]+:[0-9]+\/([^?]+).*/\1/')
-        
-        log "Parsed DATABASE_URL to: PGUSER=${PGUSER}, PGHOST=${PGHOST}, PGPORT=${PGPORT}, PGDATABASE=${PGDATABASE}"
-        export PGUSER PGPASSWORD PGHOST PGPORT PGDATABASE
-    fi
-}
-
-# Function to test database connection
-test_db_connection() {
-    log "Testing direct PostgreSQL connection..."
-    log "Connection params: PGHOST=${PGHOST}, PGPORT=${PGPORT}, PGDATABASE=${PGDATABASE}, PGUSER=${PGUSER}"
-    
-    if PGPASSWORD="${PGPASSWORD}" psql -h "${PGHOST}" -p "${PGPORT}" -U "${PGUSER}" -d "${PGDATABASE}" -c '\l' &>/dev/null; then
-        log "Direct PostgreSQL connection successful!"
-        return 0
-    else
-        error_log "Direct PostgreSQL connection failed!"
-        return 1
-    fi
-}
-
-# Wait for database to be ready
-wait_for_db() {
-    log "Waiting for database..."
-    if ! command_exists pg_isready; then
-        log "pg_isready not found, installing postgresql-client"
-        apt-get update && apt-get install -y postgresql-client
-    fi
-
-    local retries=30
-    local counter=0
-    
-    while [ $counter -lt $retries ]; do
-        if pg_isready -h "${PGHOST}" -p "${PGPORT}" -U "${PGUSER}"; then
-            log "Database is ready!"
-            
-            # Double check with a connection test
-            if test_db_connection; then
-                return 0
-            else
-                error_log "Database is ready but connection test failed."
-                counter=$((counter + 1))
-                sleep 2
-                continue
-            fi
-        fi
-        
-        error_log "Database is not ready - waiting (attempt $counter/$retries)"
-        sleep 3
-        counter=$((counter + 1))
-    done
-    
-    error_log "Database connection timed out after $retries attempts"
-    return 1
-}
-
-# Function to validate APP_KEY
-validate_app_key() {
-    local key="$1"
-    
-    # Check if key is in base64: format
-    if [[ ! "$key" =~ ^base64: ]]; then
-        return 1
-    fi
-    
-    # Extract the base64 part
-    local base64_part=${key#base64:}
-    
-    # Check length of decoded key (should be 32 bytes for AES-256)
-    local decoded_length=$(echo "$base64_part" | base64 -d 2>/dev/null | wc -c)
-    if [ "$decoded_length" -ne 32 ]; then
-        return 1
-    fi
-    
-    return 0
-}
-
-# Function to properly generate APP_KEY
-generate_app_key() {
-    log "Generating a new application key..."
-    local new_key=$(php artisan key:generate --show --force)
-    log "Generated new key: $new_key"
-    
-    # Update .env file
-    if [ -f .env ]; then
-        sed -i "s|APP_KEY=.*|APP_KEY=$new_key|" .env
-    fi
-    
-    # Export for current process
-    export APP_KEY="$new_key"
-    
-    return 0
-}
-
 # Set up environment
 log "Setting up environment..."
 # Set Docker container environment variable for logging
@@ -136,45 +33,20 @@ else
     echo "APP_ENV=production" >> .env
 fi
 
-# Set up Railway-specific database configuration
-log "Running Railway-specific database configuration"
-if [ -f /usr/local/bin/railway-db-config.php ]; then
-    php /usr/local/bin/railway-db-config.php
-    if [ $? -ne 0 ]; then
-        error_log "Failed to configure Railway database"
+# STEP 1: Configure Database - Most critical step
+log "Configuring database using unified database configuration script"
+if [ -f /usr/local/bin/configure-database.php ]; then
+    php /usr/local/bin/configure-database.php
+    DB_CONFIG_RESULT=$?
+    
+    if [ $DB_CONFIG_RESULT -ne 0 ]; then
+        error_log "Database configuration failed with exit code $DB_CONFIG_RESULT"
+        # We'll continue anyway, as Laravel might still work with default config
     else
-        log "Successfully configured Railway database"
+        log "Database configuration completed successfully"
     fi
 else
-    log "Railway database configuration script not found"
-fi
-
-# Run improved database URL parsing script (as fallback)
-log "Running improved DATABASE_URL parsing script"
-if [ -f /usr/local/bin/fix-db-connection.php ]; then
-    php /usr/local/bin/fix-db-connection.php
-    if [ $? -ne 0 ]; then
-        error_log "Failed to run improved DATABASE_URL parsing script"
-    else
-        log "Successfully parsed DATABASE_URL with the improved script"
-    fi
-else
-    # Fallback to original method
-    log "Improved DATABASE_URL parsing script not found, using legacy method"
-    parse_database_url
-fi
-
-# Set up session configuration for Railway environment
-log "Setting up session configuration for Railway environment"
-if [ -f /usr/local/bin/set-session-config.php ]; then
-    php /usr/local/bin/set-session-config.php
-    if [ $? -ne 0 ]; then
-        error_log "Failed to set up session configuration"
-    else
-        log "Successfully configured session settings for Railway"
-    fi
-else
-    log "Session configuration script not found, using default settings"
+    error_log "Database configuration script not found!"
 fi
 
 # Debug environment variables
@@ -229,18 +101,56 @@ fi
 ln -sf /var/www/public/build/fonts/* /var/www/public/assets/ || true
 ln -sf /var/www/public/build/fonts/* /var/www/public/ || true
 
-# Wait for database
-if ! wait_for_db; then
-    error_log "Failed to connect to the database. Starting services anyway."
+# Set up session configuration for Railway environment
+log "Setting up session configuration for Railway environment"
+if [ -f /usr/local/bin/set-session-config.php ]; then
+    php /usr/local/bin/set-session-config.php
+    if [ $? -ne 0 ]; then
+        error_log "Failed to set up session configuration"
+    else
+        log "Successfully configured session settings for Railway"
+    fi
+else
+    log "Session configuration script not found, using default settings"
 fi
 
-# Use the PHP script to set the database configuration
-log "Setting database configuration with PHP script"
-php /usr/local/bin/set-db-config.php
-if [ $? -ne 0 ]; then
-    error_log "Failed to set database configuration with PHP script"
-    # Don't exit, try to continue
-fi
+# Function to validate APP_KEY
+validate_app_key() {
+    local key="$1"
+    
+    # Check if key is in base64: format
+    if [[ ! "$key" =~ ^base64: ]]; then
+        return 1
+    fi
+    
+    # Extract the base64 part
+    local base64_part=${key#base64:}
+    
+    # Check length of decoded key (should be 32 bytes for AES-256)
+    local decoded_length=$(echo "$base64_part" | base64 -d 2>/dev/null | wc -c)
+    if [ "$decoded_length" -ne 32 ]; then
+        return 1
+    fi
+    
+    return 0
+}
+
+# Function to properly generate APP_KEY
+generate_app_key() {
+    log "Generating a new application key..."
+    local new_key=$(php artisan key:generate --show --force)
+    log "Generated new key: $new_key"
+    
+    # Update .env file
+    if [ -f .env ]; then
+        sed -i "s|APP_KEY=.*|APP_KEY=$new_key|" .env
+    fi
+    
+    # Export for current process
+    export APP_KEY="$new_key"
+    
+    return 0
+}
 
 # Validate or regenerate application key
 current_key=$(grep "^APP_KEY=" .env | cut -d= -f2)

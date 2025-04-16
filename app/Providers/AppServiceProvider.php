@@ -23,7 +23,6 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        // Load Railway-specific database configuration if available
         $this->loadRailwayDatabaseConfig();
         
         // Register PrecisionValidator as a singleton
@@ -51,52 +50,17 @@ class AppServiceProvider extends ServiceProvider
     }
 
     /**
-     * Load Railway-specific database configuration if available
-     */
-    protected function loadRailwayDatabaseConfig(): void
-    {
-        try {
-            $railwayDbConfig = base_path('bootstrap/cache/railway_db.php');
-            
-            if (file_exists($railwayDbConfig)) {
-                $config = require $railwayDbConfig;
-                
-                if (isset($config['connections']['pgsql'])) {
-                    // Load the configuration
-                    Config::set('database', $config);
-                    
-                    // Log that we've loaded custom config
-                    if ($this->app->hasBeenBootstrapped()) {
-                        Log::info('Loaded Railway-specific database configuration');
-                    }
-                }
-            }
-        } catch (\Exception $e) {
-            if ($this->app->hasBeenBootstrapped()) {
-                Log::error('Failed to load Railway database config: ' . $e->getMessage());
-            }
-        }
-    }
-
-    /**
      * Bootstrap any application services.
      */
     public function boot(): void
     {
-        // Load testing-specific logging configuration in testing environment
-        if ($this->app->environment('testing')) {
-            // Override logging configuration for testing
-            if (file_exists(config_path('logging.testing.php'))) {
-                $testConfig = require config_path('logging.testing.php');
-                Config::set('logging', $testConfig);
-            }
+        // Force HTTPS in production
+        if (config('app.env') === 'production') {
+            URL::forceScheme('https');
         }
         
         // Special configuration for Railway production environment
         if ($this->app->environment('production') && env('DOCKER_CONTAINER') === 'true') {
-            // Force HTTPS in production
-            URL::forceScheme('https');
-            
             // Configure session for Railway
             $this->configureRailwaySession();
             
@@ -190,6 +154,28 @@ class AppServiceProvider extends ServiceProvider
             }
         } catch (\Exception $e) {
             Log::error('Failed to configure Railway session: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Load the custom database configuration for Railway if available
+     */
+    private function loadRailwayDatabaseConfig(): void
+    {
+        $configPath = base_path('bootstrap/cache/railway_database.php');
+        
+        if (file_exists($configPath)) {
+            try {
+                $railwayConfig = require $configPath;
+                
+                if (isset($railwayConfig['connections']['pgsql'])) {
+                    // Merge the Railway database configuration with the existing configuration
+                    Config::set('database.connections.pgsql', $railwayConfig['connections']['pgsql']);
+                    Log::info('Loaded Railway database configuration');
+                }
+            } catch (\Throwable $e) {
+                Log::error('Failed to load Railway database configuration: ' . $e->getMessage());
+            }
         }
     }
 }
