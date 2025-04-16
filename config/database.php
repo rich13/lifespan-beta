@@ -2,6 +2,24 @@
 
 use Illuminate\Support\Str;
 
+// Parse DATABASE_URL for Railway environment
+$databaseUrl = env('DATABASE_URL');
+$dbConfig = [];
+
+if (!empty($databaseUrl)) {
+    $parsedUrl = parse_url($databaseUrl);
+    
+    if ($parsedUrl !== false) {
+        $dbConfig = [
+            'host' => $parsedUrl['host'] ?? env('DB_HOST', '127.0.0.1'),
+            'port' => $parsedUrl['port'] ?? env('DB_PORT', '5432'),
+            'database' => isset($parsedUrl['path']) ? ltrim($parsedUrl['path'], '/') : env('DB_DATABASE', 'forge'),
+            'username' => $parsedUrl['user'] ?? env('DB_USERNAME', 'forge'),
+            'password' => $parsedUrl['pass'] ?? env('DB_PASSWORD', ''),
+        ];
+    }
+}
+
 return [
 
     /*
@@ -66,11 +84,11 @@ return [
         'pgsql' => [
             'driver' => 'pgsql',
             'url' => env('DATABASE_URL'),
-            'host' => env('DB_HOST', '127.0.0.1'),
-            'port' => env('DB_PORT', '5432'),
-            'database' => env('DB_DATABASE', 'forge'),
-            'username' => env('DB_USERNAME', 'forge'),
-            'password' => env('DB_PASSWORD', ''),
+            'host' => $dbConfig['host'] ?? env('DB_HOST', '127.0.0.1'),
+            'port' => $dbConfig['port'] ?? env('DB_PORT', '5432'),
+            'database' => $dbConfig['database'] ?? env('DB_DATABASE', 'forge'),
+            'username' => $dbConfig['username'] ?? env('DB_USERNAME', 'forge'),
+            'password' => $dbConfig['password'] ?? env('DB_PASSWORD', ''),
             'charset' => 'utf8',
             'prefix' => '',
             'prefix_indexes' => true,

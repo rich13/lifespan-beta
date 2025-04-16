@@ -23,6 +23,7 @@ class Kernel extends HttpKernel
         \Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull::class,
         \App\Http\Middleware\ForceHttpsInProduction::class,
         \App\Http\Middleware\RequestResponseLogger::class,
+        \App\Http\Middleware\DatabaseConnectionLogger::class,
     ];
 
     /**
