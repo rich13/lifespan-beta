@@ -21,6 +21,9 @@ class DatabaseConnectionLogger
         // Only log in Railway production environment
         if (env('APP_ENV') === 'production' && env('DOCKER_CONTAINER') === 'true') {
             try {
+                // Ensure database configuration is set correctly before testing
+                $this->ensureDatabaseConfigIsCorrect();
+                
                 $dbConfig = Config::get('database.connections.pgsql');
                 
                 // Log database configuration
@@ -46,6 +49,73 @@ class DatabaseConnectionLogger
         }
         
         return $next($request);
+    }
+    
+    /**
+     * Ensure database configuration is correct
+     */
+    private function ensureDatabaseConfigIsCorrect(): void
+    {
+        try {
+            // Get database credentials from environment variables
+            // Try PG* variables first (set by our scripts)
+            $host = env('PGHOST');
+            $port = env('PGPORT', '5432');
+            $database = env('PGDATABASE');
+            $username = env('PGUSER');
+            $password = env('PGPASSWORD');
+
+            // If PG* variables aren't available, try DATABASE_URL
+            if (empty($host) || empty($database) || empty($username)) {
+                $databaseUrl = env('DATABASE_URL');
+                
+                if (!empty($databaseUrl)) {
+                    Log::info("Using DATABASE_URL directly in middleware");
+                    
+                    $parsedUrl = parse_url($databaseUrl);
+                    
+                    if ($parsedUrl !== false) {
+                        $host = $parsedUrl['host'] ?? null;
+                        $port = $parsedUrl['port'] ?? '5432';
+                        $username = $parsedUrl['user'] ?? null;
+                        $password = $parsedUrl['pass'] ?? null;
+                        $path = $parsedUrl['path'] ?? null;
+                        $database = $path ? ltrim($path, '/') : null;
+                    }
+                }
+            }
+
+            // Only proceed if we have all required values
+            if (!empty($host) && !empty($database) && !empty($username)) {
+                Log::info("Setting database configuration directly from middleware", [
+                    'host' => $host,
+                    'port' => $port,
+                    'database' => $database,
+                    'username' => $username
+                ]);
+                
+                // IMPORTANT: Hard-code values directly in the configuration
+                Config::set('database.connections.pgsql', [
+                    'driver' => 'pgsql',
+                    'host' => $host,
+                    'port' => $port,
+                    'database' => $database,
+                    'username' => $username,
+                    'password' => $password ?? '',
+                    'charset' => 'utf8',
+                    'prefix' => '',
+                    'prefix_indexes' => true,
+                    'search_path' => 'public',
+                    'sslmode' => 'prefer',
+                ]);
+                
+                // Reconnect to apply changes
+                DB::purge('pgsql');
+                DB::reconnect('pgsql');
+            }
+        } catch (\Exception $e) {
+            Log::error('Failed to configure database in middleware: ' . $e->getMessage());
+        }
     }
     
     /**

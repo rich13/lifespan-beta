@@ -23,6 +23,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        // Configure database as early as possible
+        $this->configureDatabase();
+        
         // Register PrecisionValidator as a singleton
         $this->app->singleton(PrecisionValidator::class);
 
@@ -52,6 +55,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Configure database again to ensure it takes priority
+        $this->configureDatabase();
+        
         // Load testing-specific logging configuration in testing environment
         if ($this->app->environment('testing')) {
             // Override logging configuration for testing
@@ -68,66 +74,79 @@ class AppServiceProvider extends ServiceProvider
             
             // Configure session for Railway
             $this->configureRailwaySession();
-            
-            // Configure database for Railway
-            $this->configureRailwayDatabase();
         }
     }
     
     /**
-     * Configure database connection for Railway environment
+     * Set database configuration directly with highest priority
      */
-    protected function configureRailwayDatabase(): void
+    protected function configureDatabase(): void
     {
         try {
-            $databaseUrl = env('DATABASE_URL');
-            
-            if (!empty($databaseUrl)) {
-                Log::info("Parsing DATABASE_URL for Railway environment");
+            // Get database credentials from environment variables
+            // Try PG* variables first (set by our scripts)
+            $host = env('PGHOST');
+            $port = env('PGPORT', '5432');
+            $database = env('PGDATABASE');
+            $username = env('PGUSER');
+            $password = env('PGPASSWORD');
+
+            // If PG* variables aren't available, try DATABASE_URL
+            if (empty($host) || empty($database) || empty($username)) {
+                $databaseUrl = env('DATABASE_URL');
                 
-                $parsedUrl = parse_url($databaseUrl);
-                
-                if ($parsedUrl !== false) {
-                    $host = $parsedUrl['host'] ?? null;
-                    $port = $parsedUrl['port'] ?? '5432';
-                    $username = $parsedUrl['user'] ?? null;
-                    $password = $parsedUrl['pass'] ?? null;
-                    $path = $parsedUrl['path'] ?? null;
-                    $database = $path ? ltrim($path, '/') : null;
+                if (!empty($databaseUrl)) {
+                    Log::info("Using DATABASE_URL instead of PG* variables");
                     
-                    if ($host && $username && $database) {
-                        // Reconfigure the database on-the-fly
-                        Config::set('database.connections.pgsql.host', $host);
-                        Config::set('database.connections.pgsql.port', $port);
-                        Config::set('database.connections.pgsql.database', $database);
-                        Config::set('database.connections.pgsql.username', $username);
-                        Config::set('database.connections.pgsql.password', $password);
-                        
-                        // Reconnect to apply changes
-                        DB::purge('pgsql');
-                        DB::reconnect('pgsql');
-                        
-                        Log::info("Railway database configuration applied", [
-                            'host' => $host,
-                            'port' => $port,
-                            'database' => $database,
-                            'username' => $username
-                        ]);
-                    } else {
-                        Log::error("Failed to parse DATABASE_URL: missing components", [
-                            'has_host' => !empty($host),
-                            'has_username' => !empty($username),
-                            'has_database' => !empty($database)
-                        ]);
+                    $parsedUrl = parse_url($databaseUrl);
+                    
+                    if ($parsedUrl !== false) {
+                        $host = $parsedUrl['host'] ?? null;
+                        $port = $parsedUrl['port'] ?? '5432';
+                        $username = $parsedUrl['user'] ?? null;
+                        $password = $parsedUrl['pass'] ?? null;
+                        $path = $parsedUrl['path'] ?? null;
+                        $database = $path ? ltrim($path, '/') : null;
                     }
-                } else {
-                    Log::error("Failed to parse DATABASE_URL: invalid URL format");
                 }
+            }
+
+            // Log what we're using for debugging
+            if (!empty($host) && !empty($database) && !empty($username)) {
+                Log::info("Setting database configuration directly", [
+                    'host' => $host,
+                    'port' => $port,
+                    'database' => $database,
+                    'username' => $username,
+                    'has_password' => !empty($password)
+                ]);
+                
+                // Set the configuration directly - this overrides anything previously set
+                Config::set('database.default', 'pgsql');
+                Config::set('database.connections.pgsql.driver', 'pgsql');
+                Config::set('database.connections.pgsql.host', $host);
+                Config::set('database.connections.pgsql.port', $port);
+                Config::set('database.connections.pgsql.database', $database);
+                Config::set('database.connections.pgsql.username', $username);
+                
+                if (!empty($password)) {
+                    Config::set('database.connections.pgsql.password', $password);
+                }
+                
+                // Force database to reconnect with new config
+                DB::purge('pgsql');
+                DB::reconnect('pgsql');
+                
+                Log::info("Database configuration set and connection purged/reconnected");
             } else {
-                Log::error("DATABASE_URL environment variable is not set");
+                Log::error("Failed to set database configuration - missing required values", [
+                    'has_host' => !empty($host),
+                    'has_database' => !empty($database),
+                    'has_username' => !empty($username)
+                ]);
             }
         } catch (\Exception $e) {
-            Log::error('Failed to configure Railway database: ' . $e->getMessage());
+            Log::error('Failed to configure database: ' . $e->getMessage());
         }
     }
     
