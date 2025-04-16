@@ -99,9 +99,13 @@ COPY docker/prod/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY docker/prod/health-check.sh /usr/local/bin/health-check.sh
 COPY docker/prod/set-db-config.php /usr/local/bin/set-db-config.php
 COPY docker/prod/fix-db-connection.php /usr/local/bin/fix-db-connection.php
+COPY docker/prod/set-session-config.php /usr/local/bin/set-session-config.php
 
 # Make scripts executable
-RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/health-check.sh /usr/local/bin/fix-db-connection.php
+RUN chmod +x /usr/local/bin/entrypoint.sh \
+    /usr/local/bin/health-check.sh \
+    /usr/local/bin/fix-db-connection.php \
+    /usr/local/bin/set-session-config.php
 
 # Set appropriate permissions for supervisor directories
 RUN mkdir -p /var/log/supervisor && \

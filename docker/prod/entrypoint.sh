@@ -151,6 +151,19 @@ else
     parse_database_url
 fi
 
+# Set up session configuration for Railway environment
+log "Setting up session configuration for Railway environment"
+if [ -f /usr/local/bin/set-session-config.php ]; then
+    php /usr/local/bin/set-session-config.php
+    if [ $? -ne 0 ]; then
+        error_log "Failed to set up session configuration"
+    else
+        log "Successfully configured session settings for Railway"
+    fi
+else
+    log "Session configuration script not found, using default settings"
+fi
+
 # Debug environment variables
 log "Environment variables:"
 log "DATABASE_URL: ${DATABASE_URL:-not set}"
