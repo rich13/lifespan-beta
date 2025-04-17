@@ -3,13 +3,13 @@
 namespace Tests\Feature;
 
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\PostgresRefreshDatabase;
 use Illuminate\Foundation\Testing\WithFaker;
 use Tests\TestCase;
 
 class UserSwitcherTest extends TestCase
 {
-    use RefreshDatabase;
+    use PostgresRefreshDatabase;
 
     /**
      * Test that admin users can access the user switcher API.
@@ -21,9 +21,10 @@ class UserSwitcherTest extends TestCase
             'is_admin' => true,
         ]);
 
-        // Create a test user
+        // Create a test user with unique email
+        $uniqueEmail = 'test_' . uniqid() . '@example.com';
         $testUser = User::factory()->create([
-            'email' => 'test@example.com',
+            'email' => $uniqueEmail,
             'is_admin' => false,
         ]);
 
@@ -41,7 +42,7 @@ class UserSwitcherTest extends TestCase
 
         // Assert that the test user is in the response
         $response->assertJsonFragment([
-            'email' => 'test@example.com',
+            'email' => $uniqueEmail,
             'is_admin' => false,
         ]);
     }
