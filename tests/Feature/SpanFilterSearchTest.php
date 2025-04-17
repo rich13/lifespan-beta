@@ -4,13 +4,15 @@ namespace Tests\Feature;
 
 use App\Models\Span;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Foundation\Testing\WithFaker;
+use Tests\PostgresRefreshDatabase;
 use Tests\TestCase;
+use Tests\TestHelpers;
 use Illuminate\Support\Facades\DB;
 
 class SpanFilterSearchTest extends TestCase
 {
-    use RefreshDatabase;
+    use PostgresRefreshDatabase, WithFaker, TestHelpers;
 
     protected $user;
     protected $personSpan;
@@ -46,7 +48,7 @@ class SpanFilterSearchTest extends TestCase
             'owner_id' => $this->user->id,
             'updater_id' => $this->user->id,
             'start_year' => 1980,
-            'slug' => 'richard-northover',
+            'slug' => $this->uniqueSlug('richard-northover'),
             'access_level' => 'public',
             'description' => 'A test person with a unique description',
             'state' => 'complete',
@@ -60,7 +62,7 @@ class SpanFilterSearchTest extends TestCase
             'owner_id' => $this->user->id,
             'updater_id' => $this->user->id,
             'start_year' => 1990,
-            'slug' => 'acme-corporation',
+            'slug' => $this->uniqueSlug('acme-corporation'),
             'access_level' => 'public',
             'description' => 'A test organisation where Richard works',
             'state' => 'complete',
@@ -74,7 +76,7 @@ class SpanFilterSearchTest extends TestCase
             'owner_id' => $this->user->id,
             'updater_id' => $this->user->id,
             'start_year' => 1800,
-            'slug' => 'london-bridge',
+            'slug' => $this->uniqueSlug('london-bridge'),
             'access_level' => 'public',
             'description' => 'A famous bridge in London',
             'state' => 'complete',
@@ -88,7 +90,7 @@ class SpanFilterSearchTest extends TestCase
             'owner_id' => $this->user->id,
             'updater_id' => $this->user->id,
             'start_year' => 2023,
-            'slug' => 'company-picnic',
+            'slug' => $this->uniqueSlug('company-picnic'),
             'access_level' => 'public',
             'description' => 'Annual company event at London park',
             'state' => 'complete',

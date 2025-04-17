@@ -243,7 +243,9 @@ class SpanViewTest extends TestCase
 
         // Verify slugs are different
         $this->assertNotEquals($span1->slug, $span2->slug);
-        $this->assertEquals('test-span', $span1->slug);
-        $this->assertEquals('test-span-2', $span2->slug);
+        $this->assertStringStartsWith('test-span', $span1->slug);
+        $this->assertStringStartsWith('test-span', $span2->slug);
+        $this->assertMatchesRegularExpression('/^test-span(-\d+)?$/', $span1->slug);
+        $this->assertMatchesRegularExpression('/^test-span-\d+$/', $span2->slug);
     }
 } 

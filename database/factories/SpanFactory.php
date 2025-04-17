@@ -88,7 +88,7 @@ class SpanFactory extends Factory
         $user = $user ?? User::factory()->create();
 
         return $this->state(fn (array $attributes) => [
-            'name' => $this->faker->name(),
+            'name' => $user->name ?? $this->faker->name(),
             'type_id' => 'person',
             'owner_id' => $user->id,
             'updater_id' => $user->id,
@@ -101,7 +101,8 @@ class SpanFactory extends Factory
             'start_precision' => 'day',
             'end_precision' => null,
             'slug' => fn (array $attributes) => \Str::slug($attributes['name']),
-            'access_level' => 'private'  // Personal spans are private by default
+            'access_level' => 'private',  // Personal spans are private by default
+            'is_personal_span' => true
         ]);
     }
 

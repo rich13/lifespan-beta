@@ -14,7 +14,10 @@ class ProfileTest extends TestCase
 
     protected function createUserWithPersonalSpan(bool $isAdmin = false): User
     {
-        $user = User::factory()->create(['is_admin' => $isAdmin]);
+        $user = User::factory()->create([
+            'is_admin' => $isAdmin,
+            'name' => 'Richard Northover'
+        ]);
         $span = Span::factory()->personal($user)->create();
         $user->personal_span_id = $span->id;
         $user->save();
