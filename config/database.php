@@ -20,6 +20,31 @@ if (!empty($databaseUrl)) {
     }
 }
 
+// Detect testing environment without using app()->environment()
+$isTestingEnv = env('APP_ENV') === 'testing';
+
+// Ensure test isolation - prevent accidentally using main database in tests
+if ($isTestingEnv && env('DB_DATABASE') !== null && !Str::startsWith(env('DB_DATABASE'), 'lifespan_beta_testing')) {
+    // In testing environment, force the database to be a test database
+    // This prevents accidental data corruption of production data
+    $testDatabase = env('DB_DATABASE_TESTING', 'lifespan_beta_testing');
+    putenv("DB_DATABASE={$testDatabase}");
+    $_ENV['DB_DATABASE'] = $testDatabase;
+    $_SERVER['DB_DATABASE'] = $testDatabase;
+    
+    // Log this protection measure
+    if (class_exists('\Illuminate\Support\Facades\Log')) {
+        \Illuminate\Support\Facades\Log::warning(
+            "Detected attempt to use non-test database in testing environment. " .
+            "Automatically switched to test database for safety.",
+            [
+                'original_database' => env('DB_DATABASE'),
+                'forced_test_database' => $testDatabase
+            ]
+        );
+    }
+}
+
 return [
 
     /*
@@ -108,19 +133,13 @@ return [
             'host' => env('DB_HOST', '127.0.0.1'),
             'port' => env('DB_PORT', '5432'),
             'database' => env('DB_DATABASE', 'lifespan_beta_testing'),
-            'username' => env('DB_USERNAME', 'forge'),
+            'username' => env('DB_USERNAME', 'postgres'),
             'password' => env('DB_PASSWORD', ''),
             'charset' => 'utf8',
             'prefix' => '',
             'prefix_indexes' => true,
             'search_path' => 'public',
             'sslmode' => 'prefer',
-            'strict' => true,
-            'options' => [
-                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                PDO::ATTR_EMULATE_PREPARES => false,
-            ],
         ],
 
         'sqlsrv' => [
