@@ -132,7 +132,7 @@ use Illuminate\Support\Facades\Route;
                     </div>
                     
                     <!-- Sidebar and Main Content -->
-                    <div class="col-md-3 col-lg-2 bg-white border-end min-vh-100 px-0">
+                    <div class="col-md-3 col-lg-2 bg-white border-end min-vh-100 px-0 d-flex flex-column">
                         <!-- Navigation -->
                         <div class="p-3">
                             <ul class="nav flex-column">
@@ -232,6 +232,21 @@ use Illuminate\Support\Facades\Route;
                                     </li>
                                 </ul>
                             @endif
+                        </div>
+                        
+                        <!-- Sidebar Footer -->
+                        <div class="mt-auto border-top bg-light p-3">
+                            <div class="d-flex flex-column">
+                                <a href="#" class="text-decoration-none text-muted small mb-1">
+                                    <i class="bi bi-info-circle me-1"></i> About
+                                </a>
+                                <a href="#" class="text-decoration-none text-muted small mb-1">
+                                    <i class="bi bi-question-circle me-1"></i> Help
+                                </a>
+                                <div class="text-muted small mt-2">
+                                    <i class="bi bi-c-circle me-1"></i> {{ date('Y') }} Lifespan
+                                </div>
+                            </div>
                         </div>
                     </div>
 
