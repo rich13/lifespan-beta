@@ -29,6 +29,7 @@ class Kernel extends ConsoleKernel
             Commands\CleanThingSpanNames::class,
             Commands\CreateSampleYaml::class,
             Commands\ImportYaml::class,
+            Commands\DatabaseCreateCommand::class,
         ];
     }
 }

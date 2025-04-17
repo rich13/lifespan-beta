@@ -23,8 +23,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        // Configure database as early as possible
-        $this->configureDatabase();
+        // Configure database as early as possible, but only in production
+        if ($this->app->environment('production')) {
+            $this->configureDatabase();
+        }
         
         // Register PrecisionValidator as a singleton
         $this->app->singleton(PrecisionValidator::class);
@@ -55,8 +57,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Configure database again to ensure it takes priority
-        $this->configureDatabase();
+        // Configure database again to ensure it takes priority, but only in production
+        if ($this->app->environment('production')) {
+            $this->configureDatabase();
+        }
         
         // Load testing-specific logging configuration in testing environment
         if ($this->app->environment('testing')) {
