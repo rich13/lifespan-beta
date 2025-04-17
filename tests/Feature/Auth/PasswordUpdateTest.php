@@ -2,8 +2,6 @@
 
 namespace Tests\Feature\Auth;
 
-use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
@@ -12,5 +10,13 @@ use Tests\TestCase;
  */
 class PasswordUpdateTest extends TestCase
 {
-    use RefreshDatabase;
+    /**
+     * Test password update
+     */
+    public function test_password_update_feature(): void
+    {
+        $this->markTestSkipped(
+            'Password update feature is not implemented.'
+        );
+    }
 }
