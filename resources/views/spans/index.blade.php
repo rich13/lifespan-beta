@@ -49,7 +49,7 @@
         </div>
 
         <div class="mt-4">
-            {{ $spans->appends(request()->query())->links() }}
+            <x-pagination :paginator="$spans->appends(request()->query())" />
         </div>
     @endif
 </div>

@@ -114,7 +114,7 @@
                     Showing {{ $spans->firstItem() ?? 0 }} to {{ $spans->lastItem() ?? 0 }} 
                     of {{ $spans->total() }} spans
                 </div>
-                {{ $spans->links() }}
+                <x-pagination :paginator="$spans" :showInfo="false" />
             </div>
         </div>
     </div>

@@ -124,7 +124,7 @@
                     Showing {{ $connections->firstItem() ?? 0 }} to {{ $connections->lastItem() ?? 0 }} 
                     of {{ $connections->total() }} connections
                 </div>
-                {{ $connections->links() }}
+                <x-pagination :paginator="$connections" :showInfo="false" itemName="connections" />
             </div>
         </div>
     </div>

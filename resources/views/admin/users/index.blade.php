@@ -133,7 +133,7 @@
                     Showing {{ $users->firstItem() ?? 0 }} to {{ $users->lastItem() ?? 0 }} 
                     of {{ $users->total() }} users
                 </div>
-                {{ $users->links() }}
+                <x-pagination :paginator="$users" :showInfo="false" itemName="users" />
             </div>
         </div>
     </div>

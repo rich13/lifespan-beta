@@ -157,7 +157,7 @@
                         
                         <!-- Pagination -->
                         <div class="d-flex justify-content-center mt-4">
-                            {{ $privateSharedSpans->onEachSide(1)->appends(request()->except('private_page'))->links() }}
+                            <x-pagination :paginator="$privateSharedSpans->onEachSide(1)->appends(request()->except('private_page'))" :showInfo="false" itemName="spans" />
                         </div>
                     @else
                         <div class="alert alert-info">
@@ -211,7 +211,7 @@
                         
                         <!-- Pagination -->
                         <div class="d-flex justify-content-center mt-4">
-                            {{ $publicSpans->onEachSide(1)->appends(request()->except('public_page'))->links() }}
+                            <x-pagination :paginator="$publicSpans->onEachSide(1)->appends(request()->except('public_page'))" :showInfo="false" itemName="spans" />
                         </div>
                     @else
                         <div class="alert alert-info">
