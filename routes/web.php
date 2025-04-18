@@ -36,19 +36,79 @@ Route::get('/health', function () {
     try {
         // Basic app check
         if (!app()->isDownForMaintenance()) {
-            // Database connection check
-            $pdo = DB::connection()->getPdo();
+            // Database connection check with more detailed info
+            $dbInfo = [];
+            
+            try {
+                $pdo = DB::connection()->getPdo();
+                $dbConfig = config('database.connections.' . config('database.default'));
+                
+                // Get sanitized config (don't show password)
+                $dbInfo = [
+                    'connection' => config('database.default'),
+                    'host' => $dbConfig['host'] ?? 'unknown',
+                    'port' => $dbConfig['port'] ?? 'unknown',
+                    'database' => $dbConfig['database'] ?? 'unknown',
+                    'username' => $dbConfig['username'] ?? 'unknown',
+                    'status' => 'connected'
+                ];
+                
+                // Test a simple query
+                $tables = DB::select("SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = 'public'");
+                $dbInfo['tables_count'] = $tables[0]->count ?? 0;
+                
+                // Try to get the user count as a more meaningful test
+                try {
+                    $userCount = DB::table('users')->count();
+                    $dbInfo['users_count'] = $userCount;
+                    $dbInfo['query_test'] = 'passed';
+                } catch (\Exception $e) {
+                    $dbInfo['query_test'] = 'failed';
+                    $dbInfo['query_error'] = $e->getMessage();
+                }
+                
+            } catch (\Exception $e) {
+                $dbInfo = [
+                    'status' => 'error',
+                    'error' => $e->getMessage(),
+                    'error_code' => $e->getCode(),
+                    'driver' => config('database.default')
+                ];
+                
+                // Get the database config we're trying to use
+                try {
+                    $dbConfig = config('database.connections.' . config('database.default'));
+                    $dbInfo['connection_info'] = [
+                        'driver' => config('database.default'),
+                        'host' => $dbConfig['host'] ?? 'unknown',
+                        'port' => $dbConfig['port'] ?? 'unknown',
+                        'database' => $dbConfig['database'] ?? 'unknown',
+                        'username' => $dbConfig['username'] ?? 'unknown',
+                    ];
+                } catch (\Exception $ex) {
+                    $dbInfo['config_error'] = $ex->getMessage();
+                }
+                
+                // Return 500 for database errors
+                return response()->json([
+                    'status' => 'unhealthy',
+                    'reason' => 'database_connection_failed',
+                    'database' => $dbInfo,
+                    'timestamp' => now()->toIso8601String(),
+                    'environment' => app()->environment()
+                ], 500);
+            }
             
             // Log successful health check
             Log::info('Health check successful', [
                 'environment' => app()->environment(),
-                'database' => 'connected',
+                'database' => $dbInfo,
                 'timestamp' => now()->toIso8601String()
             ]);
             
             return response()->json([
                 'status' => 'healthy',
-                'database' => 'connected',
+                'database' => $dbInfo,
                 'timestamp' => now()->toIso8601String(),
                 'environment' => app()->environment()
             ]);

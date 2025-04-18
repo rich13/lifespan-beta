@@ -11,6 +11,9 @@ use Illuminate\Support\Facades\Route;
 
         <title>{{ config('app.name', 'Laravel') }}</title>
 
+        <!-- Favicon -->
+        <link rel="icon" href="{{ asset('favicon.ico') }}" type="image/x-icon">
+
         <!-- jQuery -->
         <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 
@@ -29,6 +32,21 @@ use Illuminate\Support\Facades\Route;
         <!-- Page-specific styles -->
         @stack('styles')
         
+        <!-- Custom styles -->
+        <style>
+            /* Only add minimal custom styling, prefer Bootstrap classes */
+            body {
+                padding-top: 56px; /* Height of the fixed navbar */
+            }
+            .nav-link {
+                color: rgba(255, 255, 255, 0.8) !important;
+            }
+            .nav-link:hover, .nav-link.active {
+                color: #fff !important;
+                background-color: rgba(255, 255, 255, 0.1);
+            }
+        </style>
+        
         <!-- Page-specific scripts -->
         @yield('scripts')
         @stack('scripts')
@@ -38,13 +56,13 @@ use Illuminate\Support\Facades\Route;
             <div class="row">
                 @auth
                     <!-- Top Navigation Bar -->
-                    <div class="col-12 px-0">
-                        <div class="d-flex align-items-center bg-light border-bottom navbar-height">
+                    <div class="col-12 px-0 fixed-top">
+                        <div class="d-flex align-items-center bg-light border-bottom shadow-sm" style="height: 56px;">
                             <!-- Brand -->
                             <div class="h-100 d-flex align-items-center border-end bg-secondary col-md-3 col-lg-2">
                                 <a class="text-decoration-none px-3" href="{{ route('home') }}">
                                     <h5 class="mb-0 text-white">
-                                        <i class="bi bi-bar-chart-steps me-1"></i> Lifespan &beta;
+                                        <i class="bi bi-bar-chart-steps me-1"></i> Lifespan
                                     </h5>
                                 </a>
                             </div>
@@ -132,144 +150,135 @@ use Illuminate\Support\Facades\Route;
                     </div>
                     
                     <!-- Sidebar and Main Content -->
-                    <div class="col-md-3 col-lg-2 bg-white border-end min-vh-100 px-0 d-flex flex-column">
-                        <!-- Navigation -->
-                        <div class="p-3">
-                            <ul class="nav flex-column">
-                                <li class="nav-item">
-                                    <a class="nav-link {{ request()->routeIs('home') ? 'active' : '' }}" href="{{ route('home') }}">
-                                        <i class="bi bi-house-fill me-1"></i> Home
-                                    </a>
-                                </li>
-                                <li class="nav-item">
-                                    <a class="nav-link {{ request()->routeIs('spans.*') ? 'active' : '' }}" href="{{ route('spans.index') }}">
-                                        <i class="bi bi-bar-chart-steps me-1"></i> Spans
-                                    </a>
-                                </li>
-                                <!--<li class="nav-item">
-                                    <a class="nav-link" href="#">
-                                        <i class="bi bi-collection-fill me-1"></i> TODO: Collections
-                                    </a>
-                                </li>
-                                <li class="nav-item">
-                                    <a class="nav-link" href="#">
-                                        <i class="bi bi-search me-1"></i> TODO: Explorer
-                                    </a>
-                                </li>-->
-                            </ul>
-
-                            @if(Auth::user()->is_admin)
-                                <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-2 text-muted text-uppercase">
-                                    <span>Administration</span>
-                                </h6>
-                                <ul class="nav flex-column">
+                    <div class="row mt-2">
+                        <!-- Sidebar -->
+                        <div class="col-md-3 col-lg-2 bg-secondary border-end d-none d-md-block p-0">
+                            <div class="sticky-top pt-3" style="top: 56px; height: calc(100vh - 56px); overflow-y: auto;">
+                                <!-- Navigation Links -->
+                                <ul class="nav flex-column text-light mb-auto">
                                     <li class="nav-item">
-                                        <a class="nav-link {{ request()->routeIs('admin.dashboard') ? 'active' : '' }}" href="{{ route('admin.dashboard') }}">
-                                            {{ __('Dashboard') }}
+                                        <a class="nav-link {{ request()->routeIs('home') ? 'active' : '' }}" href="{{ route('home') }}">
+                                            <i class="bi bi-house-fill me-1"></i> Home
                                         </a>
                                     </li>
                                     <li class="nav-item">
-                                        <a class="nav-link {{ request()->routeIs('admin.spans.*') ? 'active' : '' }}" href="{{ route('admin.spans.index') }}">
-                                            <i class="bi bi-bar-chart-steps me-1"></i> Manage Spans
-                                        </a>
-                                    </li>
-                                    <li class="nav-item">
-                                        <a class="nav-link {{ request()->routeIs('admin.span-types.*') ? 'active' : '' }}" href="{{ route('admin.span-types.index') }}">
-                                            <i class="bi bi-ui-checks me-1"></i> Manage Span Types
-                                        </a>
-                                    </li>
-                                    <li class="nav-item">
-                                        <a class="nav-link {{ request()->routeIs('admin.span-access.index') ? 'active' : '' }}" href="{{ route('admin.span-access.index') }}">
-                                            <i class="bi bi-shield-lock me-1"></i> Manage Span Access
-                                        </a>
-                                    </li>
-                                    <li class="nav-item">
-                                        <a class="nav-link {{ request()->routeIs('admin.connections.*') ? 'active' : '' }}" href="{{ route('admin.connections.index') }}">
-                                            <i class="bi bi-arrow-left-right me-1"></i> Manage Connections
-                                        </a>
-                                    </li>
-                                    <li class="nav-item">
-                                        <a class="nav-link {{ request()->routeIs('admin.connection-types.*') ? 'active' : '' }}" href="{{ route('admin.connection-types.index') }}">
-                                            <i class="bi bi-sliders2 me-1"></i> Manage Connection Types
-                                        </a>
-                                    </li>
-                                    <li class="nav-item">
-                                        <a class="nav-link {{ request()->routeIs('admin.users.*') ? 'active' : '' }}" href="{{ route('admin.users.index') }}">
-                                            <i class="bi bi-people me-1"></i> Manage Users
+                                        <a class="nav-link {{ request()->routeIs('spans.*') ? 'active' : '' }}" href="{{ route('spans.index') }}">
+                                            <i class="bi bi-bar-chart-steps me-1"></i> Spans
                                         </a>
                                     </li>
                                 </ul>
 
-                                <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-2 text-muted text-uppercase">
-                                    <span>Import</span>
-                                </h6>
-                                <ul class="nav flex-column">
-                                    <li class="nav-item">
-                                        <a class="nav-link {{ request()->routeIs('admin.import.index') ? 'active' : '' }}" href="{{ route('admin.import.index') }}">
-                                            <i class="bi bi-file-earmark-text me-1"></i> YAML Import
-                                        </a>
-                                    </li>
-                                    <li class="nav-item">
-                                        <a class="nav-link {{ request()->routeIs('admin.import.musicbrainz.*') ? 'active' : '' }}" href="{{ route('admin.import.musicbrainz.index') }}">
-                                            <i class="bi bi-music-note-list me-1"></i> MusicBrainz Import
-                                        </a>
-                                    </li>
-                                </ul>
+                                @if(Auth::user()->is_admin)
+                                    <h6 class="sidebar-heading px-3 mt-4 mb-2 text-light text-uppercase">
+                                        <span>Administration</span>
+                                    </h6>
+                                    <ul class="nav flex-column">
+                                        <li class="nav-item">
+                                            <a class="nav-link {{ request()->routeIs('admin.dashboard') ? 'active' : '' }}" href="{{ route('admin.dashboard') }}">
+                                                {{ __('Dashboard') }}
+                                            </a>
+                                        </li>
+                                        <li class="nav-item">
+                                            <a class="nav-link {{ request()->routeIs('admin.spans.*') ? 'active' : '' }}" href="{{ route('admin.spans.index') }}">
+                                                <i class="bi bi-bar-chart-steps me-1"></i> Manage Spans
+                                            </a>
+                                        </li>
+                                        <li class="nav-item">
+                                            <a class="nav-link {{ request()->routeIs('admin.span-types.*') ? 'active' : '' }}" href="{{ route('admin.span-types.index') }}">
+                                                <i class="bi bi-ui-checks me-1"></i> Manage Span Types
+                                            </a>
+                                        </li>
+                                        <li class="nav-item">
+                                            <a class="nav-link {{ request()->routeIs('admin.span-access.index') ? 'active' : '' }}" href="{{ route('admin.span-access.index') }}">
+                                                <i class="bi bi-shield-lock me-1"></i> Manage Span Access
+                                            </a>
+                                        </li>
+                                        <li class="nav-item">
+                                            <a class="nav-link {{ request()->routeIs('admin.connections.*') ? 'active' : '' }}" href="{{ route('admin.connections.index') }}">
+                                                <i class="bi bi-arrow-left-right me-1"></i> Manage Connections
+                                            </a>
+                                        </li>
+                                        <li class="nav-item">
+                                            <a class="nav-link {{ request()->routeIs('admin.connection-types.*') ? 'active' : '' }}" href="{{ route('admin.connection-types.index') }}">
+                                                <i class="bi bi-sliders2 me-1"></i> Manage Connection Types
+                                            </a>
+                                        </li>
+                                        <li class="nav-item">
+                                            <a class="nav-link {{ request()->routeIs('admin.users.*') ? 'active' : '' }}" href="{{ route('admin.users.index') }}">
+                                                <i class="bi bi-people me-1"></i> Manage Users
+                                            </a>
+                                        </li>
+                                    </ul>
 
-                                <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-2 text-muted text-uppercase">
-                                    <span>Visualizers</span>
-                                </h6>
-                                <ul class="nav flex-column">
-                                    <li class="nav-item">
-                                        <a class="nav-link {{ request()->routeIs('admin.visualizer.index') ? 'active' : '' }}" href="{{ route('admin.visualizer.index') }}">
-                                            <i class="bi bi-graph-up me-1"></i> Network Explorer
+                                    <h6 class="sidebar-heading px-3 mt-4 mb-2 text-light text-uppercase">
+                                        <span>Import</span>
+                                    </h6>
+                                    <ul class="nav flex-column">
+                                        <li class="nav-item">
+                                            <a class="nav-link {{ request()->routeIs('admin.import.index') ? 'active' : '' }}" href="{{ route('admin.import.index') }}">
+                                                <i class="bi bi-file-earmark-text me-1"></i> YAML Import
+                                            </a>
+                                        </li>
+                                        <li class="nav-item">
+                                            <a class="nav-link {{ request()->routeIs('admin.import.musicbrainz.*') ? 'active' : '' }}" href="{{ route('admin.import.musicbrainz.index') }}">
+                                                <i class="bi bi-music-note-list me-1"></i> MusicBrainz Import
+                                            </a>
+                                        </li>
+                                    </ul>
+
+                                    <h6 class="sidebar-heading px-3 mt-4 mb-2 text-light text-uppercase">
+                                        <span>Visualizers</span>
+                                    </h6>
+                                    <ul class="nav flex-column">
+                                        <li class="nav-item">
+                                            <a class="nav-link {{ request()->routeIs('admin.visualizer.index') ? 'active' : '' }}" href="{{ route('admin.visualizer.index') }}">
+                                                <i class="bi bi-graph-up me-1"></i> Network Explorer
+                                            </a>
+                                        </li>
+                                        <li class="nav-item">
+                                            <a class="nav-link {{ request()->routeIs('admin.visualizer.temporal') ? 'active' : '' }}" href="{{ route('admin.visualizer.temporal') }}">
+                                                <i class="bi bi-calendar-range me-1"></i> Temporal Explorer
+                                            </a>
+                                        </li>
+                                    </ul>
+                                @endif
+
+                                <!-- Sidebar Footer -->
+                                <div class="border-top border-light mt-3">
+                                    <div class="p-3">
+                                        <a href="#" class="text-decoration-none text-light small d-block mb-1">
+                                            <i class="bi bi-info-circle me-1"></i> About
                                         </a>
-                                    </li>
-                                    <li class="nav-item">
-                                        <a class="nav-link {{ request()->routeIs('admin.visualizer.temporal') ? 'active' : '' }}" href="{{ route('admin.visualizer.temporal') }}">
-                                            <i class="bi bi-calendar-range me-1"></i> Temporal Explorer
+                                        <a href="#" class="text-decoration-none text-light small d-block mb-1">
+                                            <i class="bi bi-question-circle me-1"></i> Help
                                         </a>
-                                    </li>
-                                </ul>
-                            @endif
-                        </div>
-                        
-                        <!-- Sidebar Footer -->
-                        <div class="mt-auto border-top bg-light p-3">
-                            <div class="d-flex flex-column">
-                                <a href="#" class="text-decoration-none text-muted small mb-1">
-                                    <i class="bi bi-info-circle me-1"></i> About
-                                </a>
-                                <a href="#" class="text-decoration-none text-muted small mb-1">
-                                    <i class="bi bi-question-circle me-1"></i> Help
-                                </a>
-                                <div class="text-muted small mt-2">
-                                    <i class="bi bi-c-circle me-1"></i> {{ date('Y') }} Lifespan
+                                        <div class="text-light small mt-2">
+                                            <i class="bi bi-c-circle me-1"></i> {{ date('Y') }} Lifespan
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- Main Content Area -->
-                    <main class="col-md-9 col-lg-10 bg-white min-vh-100">
-                        <div class="p-3">
+                        <!-- Main Content Area -->
+                        <div class="col-md-9 col-lg-10 ms-auto bg-white py-3">
                             <div class="header-section mb-4">
                                 @yield('header')
                                 <x-flash-messages />
                             </div>
                             @yield('content')
                         </div>
-                    </main>
+                    </div>
                 @else
-                    <main class="col-12 bg-white min-vh-100">
-                        <div class="p-3">
+                    <div class="row">
+                        <div class="col-12 bg-white py-3">
                             <div class="header-section mb-4">
                                 @yield('header')
                                 <x-flash-messages />
                             </div>
                             @yield('content')
                         </div>
-                    </main>
+                    </div>
                 @endauth
             </div>
         </div>

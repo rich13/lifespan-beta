@@ -21,11 +21,126 @@ echo "Running improved DATABASE_URL parsing script\n";
 $databaseUrl = getenv('DATABASE_URL');
 
 if (empty($databaseUrl)) {
-    echo "DATABASE_URL is not set or empty. Skipping parsing.\n";
-    exit(0);
+    echo "DATABASE_URL is not set or empty. Checking for direct PostgreSQL variables.\n";
+    
+    // Check if individual PostgreSQL variables are set and use them
+    $pgHost = getenv('PGHOST');
+    $pgPort = getenv('PGPORT') ?: '5432';
+    $pgUser = getenv('PGUSER');
+    $pgPassword = getenv('PGPASSWORD');
+    $pgDatabase = getenv('PGDATABASE');
+    
+    if (!empty($pgHost) && !empty($pgUser) && !empty($pgDatabase)) {
+        echo "Using direct PostgreSQL variables:\n";
+        echo "- Host: $pgHost\n";
+        echo "- Port: $pgPort\n";
+        echo "- Database: $pgDatabase\n";
+        echo "- Username: $pgUser\n";
+        echo "- Password: " . (!empty($pgPassword) ? "[SET]" : "[EMPTY]") . "\n";
+        
+        // Set DB_ variables directly for Laravel
+        putenv("DB_CONNECTION=pgsql");
+        putenv("DB_HOST=$pgHost");
+        putenv("DB_PORT=$pgPort");
+        putenv("DB_DATABASE=$pgDatabase");
+        putenv("DB_USERNAME=$pgUser");
+        if (!empty($pgPassword)) {
+            putenv("DB_PASSWORD=$pgPassword");
+        }
+        
+        // Update the .env file
+        updateEnvFile([
+            'DB_CONNECTION' => 'pgsql',
+            'DB_HOST' => $pgHost,
+            'DB_PORT' => $pgPort,
+            'DB_DATABASE' => $pgDatabase,
+            'DB_USERNAME' => $pgUser,
+            'DB_PASSWORD' => $pgPassword,
+        ]);
+        
+        echo "Configuration completed using direct PostgreSQL variables.\n";
+        exit(0);
+    } else {
+        echo "Required PostgreSQL variables not set. Skipping parsing.\n";
+        exit(0);
+    }
 }
 
 echo "Parsing DATABASE_URL: " . preg_replace('/:[^:@]+@/', ':***@', $databaseUrl) . "\n";
+
+// Fix malformed URLs like "dbname='forge'" that might be causing issues
+if (strpos($databaseUrl, "dbname=") !== false) {
+    echo "Found potentially malformed URL with dbname= format. Attempting to fix...\n";
+    
+    // Extract parts of the malformed connection string
+    if (preg_match('/host=([^;]+)/', $databaseUrl, $hostMatches)) {
+        $host = trim($hostMatches[1], "'\"");
+    }
+    
+    if (preg_match('/port=([^;]+)/', $databaseUrl, $portMatches)) {
+        $port = trim($portMatches[1], "'\"");
+    } else {
+        $port = '5432';
+    }
+    
+    if (preg_match('/dbname=([^;]+)/', $databaseUrl, $dbMatches)) {
+        $database = trim($dbMatches[1], "'\"");
+    }
+    
+    if (preg_match('/user=([^;]+)/', $databaseUrl, $userMatches)) {
+        $user = trim($userMatches[1], "'\"");
+    }
+    
+    if (preg_match('/password=([^;]+)/', $databaseUrl, $passMatches)) {
+        $pass = trim($passMatches[1], "'\"");
+    } else {
+        $pass = null;
+    }
+    
+    // Check if we have the necessary components
+    if (!empty($host) && !empty($user) && !empty($database)) {
+        echo "Successfully parsed malformed URL to:\n";
+        echo "- Host: $host\n";
+        echo "- Port: $port\n";
+        echo "- Database: $database\n";
+        echo "- Username: $user\n";
+        echo "- Password: " . (!empty($pass) ? "[SET]" : "[EMPTY]") . "\n";
+        
+        // Export to environment variables
+        putenv("PGHOST=$host");
+        putenv("PGPORT=$port");
+        putenv("PGDATABASE=$database");
+        putenv("PGUSER=$user");
+        if (!empty($pass)) {
+            putenv("PGPASSWORD=$pass");
+        }
+        
+        // Set DB_ variables directly for Laravel
+        putenv("DB_CONNECTION=pgsql");
+        putenv("DB_HOST=$host");
+        putenv("DB_PORT=$port");
+        putenv("DB_DATABASE=$database");
+        putenv("DB_USERNAME=$user");
+        if (!empty($pass)) {
+            putenv("DB_PASSWORD=$pass");
+        }
+        
+        // Update the .env file
+        updateEnvFile([
+            'DB_CONNECTION' => 'pgsql',
+            'DB_HOST' => $host,
+            'DB_PORT' => $port,
+            'DB_DATABASE' => $database,
+            'DB_USERNAME' => $user,
+            'DB_PASSWORD' => $pass,
+        ]);
+        
+        echo "Configuration completed for malformed URL.\n";
+        exit(0);
+    } else {
+        echo "Could not extract all necessary components from malformed URL. Continuing to standard parsing...\n";
+    }
+}
 
 // Parse the DATABASE_URL
 $parsed = parse_url($databaseUrl);
@@ -101,48 +216,49 @@ if (!empty($pass)) {
     putenv("DB_PASSWORD=$pass");
 }
 
-// Update the .env file in Laravel
-$envFile = '/var/www/.env';
-
-if (file_exists($envFile) && is_writable($envFile)) {
-    echo "Updating Laravel .env file with database configuration\n";
-    
-    $content = file_get_contents($envFile);
-    
-    // Replace or add the connection settings in the .env file
-    $vars = [
-        'DB_CONNECTION' => 'pgsql',
-        'DB_HOST' => $host,
-        'DB_PORT' => $port,
-        'DB_DATABASE' => $database,
-        'DB_USERNAME' => $user,
-    ];
-    
-    if (!empty($pass)) {
-        $vars['DB_PASSWORD'] = $pass;
-    }
-    
-    foreach ($vars as $key => $value) {
-        $value = str_replace('"', '\"', $value); // Escape double quotes
-        
-        if (preg_match("/^{$key}=/m", $content)) {
-            // Replace existing variable
-            $content = preg_replace("/^{$key}=.*/m", "{$key}=\"{$value}\"", $content);
-        } else {
-            // Add new variable
-            $content .= PHP_EOL . "{$key}=\"{$value}\"";
-        }
-    }
-    
-    // Write back to .env file
-    if (file_put_contents($envFile, $content)) {
-        echo "Successfully updated .env file with database configuration\n";
-    } else {
-        echo "WARNING: Failed to update .env file\n";
-    }
-} else {
-    echo "WARNING: .env file not found or not writable at $envFile\n";
-}
+// Update the .env file
+updateEnvFile([
+    'DB_CONNECTION' => 'pgsql',
+    'DB_HOST' => $host,
+    'DB_PORT' => $port,
+    'DB_DATABASE' => $database,
+    'DB_USERNAME' => $user,
+    'DB_PASSWORD' => $pass,
+]);
 
 echo "Improved DATABASE_URL parsing completed successfully\n";
-exit(0); 
+exit(0);
+
+// Helper function to update the .env file
+function updateEnvFile($vars) {
+    $envFile = '/var/www/.env';
+    
+    if (file_exists($envFile) && is_writable($envFile)) {
+        echo "Updating Laravel .env file with database configuration\n";
+        
+        $content = file_get_contents($envFile);
+        
+        foreach ($vars as $key => $value) {
+            if ($value === null) continue;
+            
+            $value = str_replace('"', '\"', $value); // Escape double quotes
+            
+            if (preg_match("/^{$key}=/m", $content)) {
+                // Replace existing variable
+                $content = preg_replace("/^{$key}=.*/m", "{$key}=\"{$value}\"", $content);
+            } else {
+                // Add new variable
+                $content .= PHP_EOL . "{$key}=\"{$value}\"";
+            }
+        }
+        
+        // Write back to .env file
+        if (file_put_contents($envFile, $content)) {
+            echo "Successfully updated .env file with database configuration\n";
+        } else {
+            echo "WARNING: Failed to update .env file\n";
+        }
+    } else {
+        echo "WARNING: .env file not found or not writable at $envFile\n";
+    }
+} 

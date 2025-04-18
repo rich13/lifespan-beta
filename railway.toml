@@ -16,11 +16,21 @@ port = 8080
 APP_NAME = "Lifespan"
 APP_ENV = "production"
 APP_DEBUG = "false"
-APP_URL = "https://lifespan-beta-production.up.railway.app"
-ASSET_URL = "https://lifespan-beta-production.up.railway.app"
+APP_URL = "https://beta.lifespan.dev"
+ASSET_URL = "https://beta.lifespan.dev"
 APP_KEY = "base64:b9s0KnR3GhoY1oz5r0OAPoYb5qfDziovEqzyxHWHA1E="
 APP_TIMEZONE = "Europe/London"
 APP_LOCALE = "en_GB"
+
+# Database Configuration
+# Note: These settings provide a fallback if Railway's auto-injection fails
+DB_CONNECTION = "pgsql"
+DB_HOST = "lifespan_db.railway.internal"
+DB_PORT = "5432"
+DB_DATABASE = "railway"
+DB_USERNAME = "postgres"
+# DB_PASSWORD is intentionally not set here as it should be set as a secret variable
+# in Railway's dashboard, or automatically injected by the linked PostgreSQL service
 
 # Logging and Debug Configuration
 LOG_CHANNEL = "stack"
@@ -32,5 +42,5 @@ QUEUE_CONNECTION = "sync"
 SESSION_DRIVER = "file"
 SESSION_LIFETIME = "525600"
 
-# Database configuration will be automatically injected by Railway
-# when a PostgreSQL service is linked 
+# Railway configuration will automatically inject additional variables
+# for any linked PostgreSQL service, including the database password 
