@@ -43,11 +43,12 @@ class PublicRoutesTest extends TestCase
 
     public function test_email_auth_submission(): void
     {
+        $uniqueEmail = 'test_' . uniqid() . '@example.com';
         $response = $this->post('/auth/email', [
-            'email' => 'test@example.com'
+            'email' => $uniqueEmail
         ]);
 
         $response->assertRedirect(route('register'));
-        $response->assertSessionHas('email', 'test@example.com');
+        $response->assertSessionHas('email', $uniqueEmail);
     }
 } 
