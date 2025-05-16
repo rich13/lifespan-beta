@@ -1,3 +1,7 @@
+@php
+use Illuminate\Support\Facades\Auth;
+@endphp
+<!-- DEBUG: Admin Nav Component Loaded -->
 @if(Auth::user() && Auth::user()->is_admin)
     <h6 class="sidebar-heading px-3 mt-4 mb-2 text-light text-uppercase">
         <span>Administration</span>

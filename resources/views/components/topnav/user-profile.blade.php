@@ -1,3 +1,8 @@
+@php
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Session;
+@endphp
+<!-- DEBUG: User Profile Component Loaded -->
 <!-- User Profile Section -->
 <div class="px-3 d-flex align-items-center">
     <!-- Custom User Dropdown -->
