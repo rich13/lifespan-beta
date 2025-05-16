@@ -121,20 +121,37 @@ class DatabaseSeeder extends Seeder
 
         // Only create personal span if not in testing environment
         if (!app()->environment('testing')) {
-            // Create personal span
-            $span = Span::updateOrCreate(
-                ['owner_id' => $adminUser->id, 'type_id' => 'person'],
-                [
+            // Check if user already has a personal span
+            $existingPersonalSpan = Span::where('owner_id', $adminUser->id)
+                ->where('is_personal_span', true)
+                ->first();
+                
+            if ($existingPersonalSpan) {
+                // Use existing personal span
+                $span = $existingPersonalSpan;
+                
+                // Update fields if needed
+                $span->name = 'Richard Northover';
+                $span->start_year = 1976;
+                $span->start_month = 2;
+                $span->start_day = 13;
+                $span->updater_id = $adminUser->id;
+                $span->save();
+            } else {
+                // Create personal span
+                $span = Span::create([
                     'name' => 'Richard Northover',
+                    'type_id' => 'person',
                     'start_year' => 1976,
                     'start_month' => 2,
                     'start_day' => 13,
+                    'owner_id' => $adminUser->id,
                     'updater_id' => $adminUser->id,
                     'access_level' => 'private',
                     'state' => 'complete',
                     'is_personal_span' => true,
-                ]
-            );
+                ]);
+            }
 
             // Link user to personal span
             $adminUser->personal_span_id = $span->id;
