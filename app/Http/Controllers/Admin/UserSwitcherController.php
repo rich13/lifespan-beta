@@ -34,10 +34,24 @@ class UserSwitcherController extends Controller
             ]);
         }
 
+        // Get the target user
+        $targetUser = User::find($userId);
+        
+        if (!$targetUser) {
+            \Log::error('UserSwitcher: Target user not found', [
+                'target_user_id' => $userId
+            ]);
+            return redirect()->back()->with('error', 'User not found.');
+        }
+        
+        // Ensure target user has the correct personal span
+        $targetUser->ensureCorrectPersonalSpan();
+
         // Switch to the requested user
-        Auth::loginUsingId($userId);
+        Auth::login($targetUser);
         \Log::info('UserSwitcher: Successfully switched to user', [
-            'new_user_id' => $userId
+            'new_user_id' => $userId,
+            'personal_span_id' => $targetUser->personal_span_id
         ]);
 
         return redirect()->back()->with('status', 'Switched to user successfully.');
@@ -61,13 +75,30 @@ class UserSwitcherController extends Controller
                 'admin_user_id' => $adminUserId
             ]);
             
+            // Get the admin user
+            $adminUser = User::find($adminUserId);
+            
+            if (!$adminUser) {
+                \Log::error('UserSwitcher: Admin user not found', [
+                    'admin_user_id' => $adminUserId
+                ]);
+                $request->session()->forget('admin_user_id');
+                return redirect()->back()->with('error', 'Admin user not found.');
+            }
+            
+            // Ensure admin user has the correct personal span
+            $adminUser->ensureCorrectPersonalSpan();
+            
             // Switch back to the admin user
-            Auth::loginUsingId($adminUserId);
+            Auth::login($adminUser);
+            
+            \Log::info('UserSwitcher: Successfully switched back to admin', [
+                'admin_user_id' => $adminUserId,
+                'personal_span_id' => $adminUser->personal_span_id
+            ]);
             
             // Remove the stored admin user from the session
             $request->session()->forget('admin_user_id');
-            
-            \Log::info('UserSwitcher: Successfully switched back to admin');
             
             return redirect()->back()->with('status', 'Switched back to admin user.');
         }

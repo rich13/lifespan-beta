@@ -92,6 +92,55 @@ class User extends Authenticatable
     }
 
     /**
+     * Ensures the user is linked to the correct personal span
+     * Call this when you suspect the personal span may be incorrect
+     * 
+     * @return \App\Models\Span|null
+     */
+    public function ensureCorrectPersonalSpan(): ?Span
+    {
+        // If no personal span ID is set, try to find a personal span for this user
+        if (!$this->personal_span_id) {
+            $personalSpan = Span::where('owner_id', $this->id)
+                ->where('is_personal_span', true)
+                ->first();
+                
+            if ($personalSpan) {
+                $this->personal_span_id = $personalSpan->id;
+                $this->save();
+                return $personalSpan;
+            }
+            
+            return null;
+        }
+        
+        // Check if the current personal span is valid
+        $currentSpan = $this->personalSpan;
+        
+        // If personal span doesn't exist or doesn't belong to this user,
+        // try to find the correct one
+        if (!$currentSpan || $currentSpan->owner_id !== $this->id || !$currentSpan->is_personal_span) {
+            // Find the user's personal span
+            $correctSpan = Span::where('owner_id', $this->id)
+                ->where('is_personal_span', true)
+                ->first();
+                
+            if ($correctSpan) {
+                // Update the relationship
+                $this->personal_span_id = $correctSpan->id;
+                $this->save();
+                
+                // Reload the relationship
+                $this->load('personalSpan');
+                
+                return $correctSpan;
+            }
+        }
+        
+        return $currentSpan;
+    }
+
+    /**
      * Get the user's name from their personal span.
      * This is a convenience accessor that returns 'Unknown User' if no personal span exists.
      */
@@ -105,8 +154,22 @@ class User extends Authenticatable
      */
     public function createPersonalSpan(array $attributes = [])
     {
+        // First check: Direct reference via personal_span_id
         if ($this->personal_span_id) {
             throw new \RuntimeException('User already has a personal span');
+        }
+        
+        // Second check: Any spans marked as personal for this user
+        $existingPersonalSpan = Span::where('owner_id', $this->id)
+            ->where('is_personal_span', true)
+            ->first();
+            
+        if ($existingPersonalSpan) {
+            // Instead of failing, link to the existing personal span
+            $this->personal_span_id = $existingPersonalSpan->id;
+            $this->save();
+            
+            return $existingPersonalSpan;
         }
 
         $span = new Span();
@@ -118,6 +181,7 @@ class User extends Authenticatable
         $span->owner_id = $this->id;
         $span->updater_id = $this->id;
         $span->access_level = 'private';
+        $span->is_personal_span = true;
         $span->save();
 
         // Update user with personal span ID

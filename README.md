@@ -4,6 +4,7 @@ A Laravel application for tracking and visualising spans of time, relationships,
 
 ## Recent Updates
 
+- Fixed personal span switching issue during user switching (see `docs/personal_span_fix.md` for details)
 - System user email updated from `system@example.com` to `system@lifespan.app`
 - Added automatic system user creation if not present
 - Fixed user deletion process to properly handle span ownership transfer
@@ -48,7 +49,7 @@ Completely isolated environment for running tests without affecting development 
 **Testing Architecture:**
 - Isolated test container prevents test data from affecting development database
 - Database refreshed between test runs using PHPUnit's `RefreshDatabase` trait
-- Test script (`./scripts/run-tests.sh`) provides easy interface for running tests
+- Test script (`./tests/run-tests.sh`) provides easy interface for running tests
 - Supports parallel test execution for faster test runs
 - Additional validation ensures tests only run in the testing environment
 
@@ -157,22 +158,28 @@ The application uses a dedicated test container to isolate tests from the main a
 To run all tests:
 
 ```bash
-./scripts/run-tests.sh
+./tests/run-tests.sh
 ```
 
 To run specific tests by filter:
 
 ```bash
-./scripts/run-tests.sh ExampleTest
+./tests/run-tests.sh --filter=TestName
 ```
 
 To run tests in parallel (faster execution):
 
 ```bash
-./scripts/run-tests.sh
+./tests/run-tests.sh --parallel
 ```
 
-The test script automatically uses parallel execution when no filter is specified.
+To generate test coverage:
+
+```bash
+./tests/run-tests.sh --coverage
+```
+
+The test script provides options to customize execution (use `./tests/run-tests.sh --help` to see all options).
 
 ### Test Environment
 

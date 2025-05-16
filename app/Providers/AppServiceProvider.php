@@ -62,6 +62,9 @@ class AppServiceProvider extends ServiceProvider
             $this->configureDatabase();
         }
         
+        // Register observers
+        $this->registerObservers();
+        
         // Load testing-specific logging configuration in testing environment
         if ($this->app->environment('testing')) {
             // Override logging configuration for testing
@@ -183,5 +186,14 @@ class AppServiceProvider extends ServiceProvider
         } catch (\Exception $e) {
             Log::error('Failed to configure Railway session: ' . $e->getMessage());
         }
+    }
+    
+    /**
+     * Register model observers
+     */
+    protected function registerObservers(): void
+    {
+        // Register Span observer to enforce personal span constraints
+        \App\Models\Span::observe(\App\Observers\SpanObserver::class);
     }
 }
