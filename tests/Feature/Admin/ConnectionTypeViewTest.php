@@ -5,6 +5,7 @@ namespace Tests\Feature\Admin;
 use App\Models\ConnectionType;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class ConnectionTypeViewTest extends TestCase
@@ -32,7 +33,7 @@ class ConnectionTypeViewTest extends TestCase
     public function test_index_view_loads_with_types(): void
     {
         $type = ConnectionType::factory()->create([
-            'type' => 'test_type',
+            'type' => 'test_type_' . time() . '_' . uniqid() . '_' . Str::random(8),
             'forward_predicate' => 'is test of',
             'inverse_predicate' => 'is tested by',
             'allowed_span_types' => [
@@ -54,7 +55,7 @@ class ConnectionTypeViewTest extends TestCase
     public function test_show_view_loads_with_type(): void
     {
         $type = ConnectionType::factory()->create([
-            'type' => 'test_type',
+            'type' => 'test_type_' . time() . '_' . uniqid() . '_' . Str::random(8),
             'forward_predicate' => 'is test of',
             'inverse_predicate' => 'is tested by',
             'allowed_span_types' => [
@@ -76,7 +77,7 @@ class ConnectionTypeViewTest extends TestCase
     public function test_edit_view_loads_with_type(): void
     {
         $type = ConnectionType::factory()->create([
-            'type' => 'test_type',
+            'type' => 'test_type_' . time() . '_' . uniqid() . '_' . Str::random(8),
             'forward_predicate' => 'is test of',
             'inverse_predicate' => 'is tested by',
             'allowed_span_types' => [
