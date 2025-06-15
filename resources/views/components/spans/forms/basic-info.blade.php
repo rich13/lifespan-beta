@@ -14,6 +14,20 @@
             @enderror
         </div>
 
+        <!-- Slug -->
+        <div class="mb-3">
+            <label for="slug" class="form-label">Slug</label>
+            <input type="text" class="form-control @error('slug') is-invalid @enderror" 
+                   id="slug" name="slug" value="{{ old('slug', $span->slug) }}" 
+                   pattern="[a-z0-9-]+" title="Only lowercase letters, numbers, and hyphens allowed">
+            <div class="form-text">
+                Used in URLs. Only lowercase letters, numbers, and hyphens allowed. Leave blank to auto-generate from name.
+            </div>
+            @error('slug')
+                <div class="invalid-feedback">{{ $message }}</div>
+            @enderror
+        </div>
+
         <!-- Type -->
         <div class="mb-3">
             <label for="type_id" class="form-label">Type</label>

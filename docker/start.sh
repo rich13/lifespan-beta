@@ -123,16 +123,27 @@ fi
 log "Setting up storage directories..."
 mkdir -p /var/www/storage/logs
 mkdir -p /var/www/storage/framework/{sessions,views,cache}
-chmod -R 777 /var/www/storage
+
+# Clean up old log files (keep last 14 days)
+find /var/www/storage/logs -name "laravel-*.log" -mtime +14 -delete
+
+# Set ownership and permissions
+chown -R www-data:www-data /var/www/storage
+chmod -R 775 /var/www/storage
+find /var/www/storage/logs -type f -exec chmod 664 {} \;
+
+# Ensure log files exist with correct permissions
 touch /var/www/storage/logs/laravel.log
-chmod 666 /var/www/storage/logs/laravel.log
+chown www-data:www-data /var/www/storage/logs/laravel.log
+chmod 664 /var/www/storage/logs/laravel.log
+
 log "Storage directories configured"
 
 # Wait for the database to be ready
 log "Waiting for database to be ready..."
 max_attempts=30
 attempt=1
-while ! php artisan migrate:status > /dev/null 2>&1; do
+while ! php -r "try { new PDO('pgsql:host=${DB_HOST};port=${DB_PORT};dbname=${DB_DATABASE}', '${DB_USERNAME}', '${DB_PASSWORD}'); echo 'Connected successfully\n'; exit(0); } catch (PDOException \$e) { exit(1); }" > /dev/null 2>&1; do
     if [ $attempt -ge $max_attempts ]; then
         log "Error: Database connection failed after $max_attempts attempts"
         exit 1

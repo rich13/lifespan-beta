@@ -172,6 +172,7 @@ class SpanController extends Controller
         $validated = $request->validate([
             'id' => 'nullable|uuid|unique:spans,id',  // Allow UUID to be provided
             'name' => 'required|string|max:255',
+            'slug' => 'nullable|string|max:255|regex:/^[a-z0-9-]+$/|unique:spans,slug',
             'type_id' => 'required|string|exists:span_types,type_id',
             'state' => 'required|in:draft,placeholder,complete',
             'start_year' => 'required_unless:state,placeholder|nullable|integer',
@@ -343,6 +344,7 @@ class SpanController extends Controller
             // Custom validation for date patterns
             $validator = Validator::make($request->all(), [
                 'name' => 'sometimes|required|string|max:255',
+                'slug' => 'nullable|string|max:255|regex:/^[a-z0-9-]+$/|unique:spans,slug,' . $span->id,
                 'type_id' => 'sometimes|required|string|exists:span_types,type_id',
                 'description' => 'nullable|string',
                 'notes' => 'nullable|string',

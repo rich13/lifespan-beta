@@ -24,3 +24,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/spans/search', [SpanSearchController::class, 'search']);
     Route::post('/spans', [SpanSearchController::class, 'store']);
 });
+
+// Connection Types API Routes
+Route::apiResource('connection-types', \App\Http\Controllers\Api\ConnectionTypeController::class);

@@ -15,6 +15,14 @@
                 @endif
             </dd>
 
+            <dt class="col-sm-3">Owner</dt>
+            <dd class="col-sm-9">
+                @if($span->is_personal_span)
+                    <span class="badge bg-info me-1">Personal Span</span>
+                @endif
+                {{ $span->owner->name }}
+            </dd>
+
             <dt class="col-sm-3">State</dt>
             <dd class="col-sm-9">
                 <span class="badge bg-{{ $span->state === 'complete' ? 'success' : ($span->state === 'draft' ? 'warning' : 'secondary') }}">

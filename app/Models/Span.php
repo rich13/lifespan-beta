@@ -312,14 +312,18 @@ class Span extends Model
         });
 
         static::updating(function ($span) {
-            if ($span->isDirty('name') && empty($span->slug)) {
-                $span->slug = Str::slug($span->name);
-                
-                // Ensure unique slug
-                $count = 2;
-                $originalSlug = $span->slug;
-                while (static::where('slug', $span->slug)->where('id', '!=', $span->id)->exists()) {
-                    $span->slug = $originalSlug . '-' . $count++;
+            if ($span->isDirty('name')) {
+                $oldName = $span->getOriginal('name');
+                $oldSlug = Str::slug($oldName);
+                // Only update slug if it was empty or matched the old name's slug
+                if (empty($span->slug) || $span->slug === $oldSlug) {
+                    $baseSlug = Str::slug($span->name);
+                    $slug = $baseSlug;
+                    $counter = 1;
+                    while (static::where('slug', $slug)->where('id', '!=', $span->id)->exists()) {
+                        $slug = $baseSlug . '-' . $counter++;
+                    }
+                    $span->slug = $slug;
                 }
             }
         });

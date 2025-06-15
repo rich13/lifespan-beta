@@ -312,7 +312,7 @@
     <div class="row mx-0 hero-section">
         <div class="col-12 text-center">
             <h1 class="display-3 mb-0">Lifespan</h1>
-            <p class="lead">Map your journey through time</p>
+            <p class="lead">It's about time</p>
         </div>
     </div>
 
@@ -569,7 +569,7 @@
     <div class="row mx-0 mt-5 pt-5 text-center">
         <div class="col-md-12">
             <p class="lead">
-                <a class="btn btn-primary btn-lg ms-2" href="{{ route('login') }}" role="button">It's time</a>
+                <a class="btn btn-primary btn-lg ms-2" href="{{ route('login') }}" role="button">It's time to sign in</a>
             </p>
         </div>
     </div>
@@ -577,10 +577,324 @@
 
 @else
     <div class="container-fluid">
+        <div class="alert alert-info alert-sm py-2 mb-3">
+            <small>
+                <i class="bi bi-calendar me-1"></i>
+                Today is {{ \Carbon\Carbon::now()->format('j F Y') }}
+            </small>
+        </div>
+
         <div class="row">
-            <div class="col-12">
-                <p>This is the magic page.</p>
-                <!-- Timeline content will go here -->
+            <!-- Left Column: Personal Info -->
+            <div class="col-md-6">
+                <div class="mb-4">
+                    <h2 class="h5 mb-3">
+                        <i class="bi bi-person text-primary me-2"></i>
+                        Your Timeline
+                    </h2>
+
+                    @if(auth()->user()->personalSpan)
+                        @php
+                            $personalSpan = auth()->user()->personalSpan;
+                            $now = \Carbon\Carbon::now();
+                            $birthDate = \Carbon\Carbon::createFromDate(
+                                $personalSpan->start_year,
+                                $personalSpan->start_month ?? 1,
+                                $personalSpan->start_day ?? 1
+                            );
+                            $age = \App\Helpers\DateDurationCalculator::calculateDuration(
+                                (object)['year' => $birthDate->year, 'month' => $birthDate->month, 'day' => $birthDate->day],
+                                (object)['year' => $now->year, 'month' => $now->month, 'day' => $now->day]
+                            );
+                        @endphp
+
+                        <div class="card mb-3">
+                            <div class="card-body">
+                                <h3 class="h6 mb-3">
+                                    <i class="bi bi-person-circle text-primary me-2"></i>
+                                    Your Age
+                                </h3>
+                                <p class="mb-0">
+                                    You are {{ $age['years'] }} years, {{ $age['months'] }} months, and {{ $age['days'] }} days old
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="card mb-3">
+                            <div class="card-body">
+                                <h3 class="h6 mb-3">
+                                    <i class="bi bi-calendar-event text-primary me-2"></i>
+                                    Your Timeline
+                                </h3>
+                                <x-spans.display.card :span="$personalSpan" />
+                            </div>
+                        </div>
+
+                        @php
+                            // Get parents using the parents() method
+                            $parents = $personalSpan->parents()->get();
+                            
+                            $parentComparisons = [];
+                            foreach ($parents as $parentSpan) {
+                                $parentBirthDate = \Carbon\Carbon::createFromDate(
+                                    $parentSpan->start_year,
+                                    $parentSpan->start_month ?? 1,
+                                    $parentSpan->start_day ?? 1
+                                );
+                                
+                                // Calculate the date when parent was the user's current age
+                                $parentAgeDate = $parentBirthDate->copy()->addYears($age['years'])
+                                    ->addMonths($age['months'])
+                                    ->addDays($age['days']);
+                                
+                                $parentComparisons[] = [
+                                    'span' => $parentSpan,
+                                    'date' => $parentAgeDate
+                                ];
+                            }
+                        @endphp
+
+                        @if(!empty($parentComparisons))
+                            <div class="card mb-3">
+                                <div class="card-body">
+                                    <h3 class="h6 mb-3">
+                                        <i class="bi bi-arrow-left-right text-primary me-2"></i>
+                                        Age Comparison
+                                    </h3>
+                                    <p class="mb-0">
+                                        When your parents were your current age ({{ $age['years'] }} years, {{ $age['months'] }} months, and {{ $age['days'] }} days):
+                                    </p>
+                                    <ul class="list-unstyled mt-2 mb-0">
+                                        @foreach($parentComparisons as $comparison)
+                                            <li>
+                                                <x-spans.display.micro-card :span="$comparison['span']" /> was this age on 
+                                                <a href="{{ route('date.explore', ['date' => $comparison['date']->format('Y-m-d')]) }}" class="text-muted text-dotted-underline">
+                                                    {{ $comparison['date']->format('j F Y') }}
+                                                </a>
+                                            </li>
+                                        @endforeach
+                                    </ul>
+                                </div>
+                            </div>
+                        @endif
+                    @else
+                        <div class="card">
+                            <div class="card-body">
+                                <p class="text-center text-muted my-5">No personal span found. Please update your profile.</p>
+                            </div>
+                        </div>
+                    @endif
+                </div>
+            </div>
+
+            <!-- Right Column: Today's Events -->
+            <div class="col-md-6">
+                <div class="mb-4">
+                    <h2 class="h5 mb-3">
+                        <i class="bi bi-calendar-check text-primary me-2"></i>
+                        Today's Events
+                    </h2>
+
+                    @php
+                        $today = \Carbon\Carbon::now();
+                        $spansStartingOnDate = \App\Models\Span::where('start_year', $today->year)
+                            ->where('start_month', $today->month)
+                            ->where('start_day', $today->day)
+                            ->where(function($query) {
+                                $query->where('access_level', 'public')
+                                    ->orWhere('owner_id', auth()->id());
+                            })
+                            ->get();
+
+                        $spansEndingOnDate = \App\Models\Span::where('end_year', $today->year)
+                            ->where('end_month', $today->month)
+                            ->where('end_day', $today->day)
+                            ->where(function($query) {
+                                $query->where('access_level', 'public')
+                                    ->orWhere('owner_id', auth()->id());
+                            })
+                            ->get();
+
+                        // Get all person-type spans that the user can see
+                        $personSpans = \App\Models\Span::where('type_id', 'person')
+                            ->where(function($query) {
+                                $query->where('access_level', 'public')
+                                    ->orWhere('owner_id', auth()->id());
+                            })
+                            ->get();
+
+                        // Calculate significant dates
+                        $significantDates = [];
+                        foreach ($personSpans as $span) {
+                            if ($span->start_year && $span->start_month && $span->start_day) {
+                                $birthDate = \Carbon\Carbon::createFromDate(
+                                    $span->start_year,
+                                    $span->start_month,
+                                    $span->start_day
+                                );
+                                
+                                // Check if person is deceased
+                                $isDeceased = $span->end_year && $span->end_month && $span->end_day;
+                                
+                                if (!$isDeceased) {
+                                    // Only calculate birthdays for living people
+                                    $thisYearsBirthday = \Carbon\Carbon::createFromDate(
+                                        $today->year,
+                                        $span->start_month,
+                                        $span->start_day
+                                    );
+                                    
+                                    // Calculate next birthday
+                                    $nextBirthday = $thisYearsBirthday->copy();
+                                    if ($thisYearsBirthday->lt($today)) {
+                                        $nextBirthday = $thisYearsBirthday->addYear();
+                                    }
+                                    
+                                    // Calculate age at next birthday
+                                    $ageAtNextBirthday = $nextBirthday->year - $span->start_year;
+                                    
+                                    // Calculate days until next birthday
+                                    $daysUntilBirthday = $today->diffInDays($nextBirthday);
+                                    
+                                    // Add to significant dates if birthday is within next 30 days
+                                    if ($daysUntilBirthday <= 30) {
+                                        $significantDates[] = [
+                                            'span' => $span,
+                                            'type' => 'birthday',
+                                            'date' => $nextBirthday,
+                                            'age' => $ageAtNextBirthday,
+                                            'days_until' => $daysUntilBirthday
+                                        ];
+                                    }
+                                } else {
+                                    // Calculate death anniversaries for deceased people
+                                    $deathDate = \Carbon\Carbon::createFromDate(
+                                        $span->end_year,
+                                        $span->end_month,
+                                        $span->end_day
+                                    );
+                                    
+                                    $thisYearsDeathAnniversary = \Carbon\Carbon::createFromDate(
+                                        $today->year,
+                                        $span->end_month,
+                                        $span->end_day
+                                    );
+                                    
+                                    $nextDeathAnniversary = $thisYearsDeathAnniversary->copy();
+                                    if ($thisYearsDeathAnniversary->lt($today)) {
+                                        $nextDeathAnniversary = $thisYearsDeathAnniversary->addYear();
+                                    }
+                                    
+                                    $yearsSinceDeath = $nextDeathAnniversary->year - $span->end_year;
+                                    $daysUntilDeathAnniversary = $today->diffInDays($nextDeathAnniversary);
+                                    
+                                    // For death anniversaries, show if within next 30 days
+                                    if ($daysUntilDeathAnniversary <= 30) {
+                                        $significantDates[] = [
+                                            'span' => $span,
+                                            'type' => 'death_anniversary',
+                                            'date' => $nextDeathAnniversary,
+                                            'years' => $yearsSinceDeath,
+                                            'days_until' => $daysUntilDeathAnniversary
+                                        ];
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Sort significant dates by days until
+                        usort($significantDates, function($a, $b) {
+                            return $a['days_until'] <=> $b['days_until'];
+                        });
+                        
+                        // Debug output for all significant dates
+                        \Log::info('Significant dates:', array_map(function($date) {
+                            return [
+                                'name' => $date['span']->name,
+                                'type' => $date['type'],
+                                'days_until' => $date['days_until']
+                            ];
+                        }, $significantDates));
+                    @endphp
+
+                    @if($spansStartingOnDate->isEmpty() && $spansEndingOnDate->isEmpty() && empty($significantDates))
+                        <div class="card">
+                            <div class="card-body">
+                                <p class="text-center text-muted my-5">No events found for today.</p>
+                            </div>
+                        </div>
+                    @else
+                        @if($spansStartingOnDate->isNotEmpty())
+                            <div class="mb-4">
+                                <h3 class="h6 mb-2">
+                                    <i class="bi bi-play-circle text-success me-2"></i>
+                                    Started Today
+                                </h3>
+                                <div class="spans-list">
+                                    @foreach($spansStartingOnDate as $span)
+                                        <x-spans.display.card :span="$span" :show-date-indicator="true" :date="$today->format('Y-m-d')" />
+                                    @endforeach
+                                </div>
+                            </div>
+                        @endif
+
+                        @if($spansEndingOnDate->isNotEmpty())
+                            <div class="mb-4">
+                                <h3 class="h6 mb-2">
+                                    <i class="bi bi-stop-circle text-danger me-2"></i>
+                                    Ended Today
+                                </h3>
+                                <div class="spans-list">
+                                    @foreach($spansEndingOnDate as $span)
+                                        <x-spans.display.card :span="$span" :show-date-indicator="true" :date="$today->format('Y-m-d')" />
+                                    @endforeach
+                                </div>
+                            </div>
+                        @endif
+
+                        @if(!empty($significantDates))
+                            <div class="mb-4">
+                                <h3 class="h6 mb-2">
+                                    <i class="bi bi-calendar-heart text-primary me-2"></i>
+                                    Upcoming Anniversaries
+                                </h3>
+                                <div class="spans-list">
+                                    @foreach($significantDates as $event)
+                                        <div class="card mb-3">
+                                            <div class="card-body">
+                                                <div class="d-flex align-items-center">
+                                                    <div class="flex-grow-1">
+                                                        @if($event['type'] === 'birthday')
+                                                            @if($event['days_until'] === 0)
+                                                                <p class="mb-0">
+                                                                    <x-spans.display.micro-card :span="$event['span']" /> turns {{ $event['age'] }} today
+                                                                </p>
+                                                            @else
+                                                                <p class="mb-0">
+                                                                    <x-spans.display.micro-card :span="$event['span']" /> will be {{ $event['age'] }} in {{ $event['days_until'] }} days
+                                                                </p>
+                                                            @endif
+                                                        @else
+                                                            @if($event['days_until'] === 0)
+                                                                <p class="mb-0">
+                                                                    {{ $event['years'] }} years since <x-spans.display.micro-card :span="$event['span']" />'s death
+                                                                </p>
+                                                            @else
+                                                                <p class="mb-0">
+                                                                    {{ $event['years'] }} years since <x-spans.display.micro-card :span="$event['span']" />'s death in {{ $event['days_until'] }} days
+                                                                </p>
+                                                            @endif
+                                                        @endif
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            </div>
+                        @endif
+                    @endif
+                </div>
             </div>
         </div>
     </div>

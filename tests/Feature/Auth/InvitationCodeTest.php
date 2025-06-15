@@ -4,6 +4,7 @@ namespace Tests\Feature\Auth;
 
 use App\Models\InvitationCode;
 use App\Models\User;
+use App\Models\Span;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -72,6 +73,9 @@ class InvitationCodeTest extends TestCase
             'password' => 'password',
             'password_confirmation' => 'password',
             'invitation_code' => 'valid-code',
+            'birth_year' => 1990,
+            'birth_month' => 1,
+            'birth_day' => 1,
         ]);
 
         $response->assertRedirect('/');
@@ -81,5 +85,52 @@ class InvitationCodeTest extends TestCase
             'used' => true,
             'used_by' => 'test@example.com',
         ]);
+
+        // Verify personal span was created
+        $user = User::where('email', 'test@example.com')->first();
+        $this->assertNotNull($user->personal_span_id);
+        
+        $personalSpan = Span::find($user->personal_span_id);
+        $this->assertNotNull($personalSpan);
+        $this->assertEquals('Test User', $personalSpan->name);
+        $this->assertEquals('person', $personalSpan->type_id);
+        $this->assertEquals($user->id, $personalSpan->owner_id);
+        $this->assertTrue($personalSpan->is_personal_span);
+        $this->assertEquals('private', $personalSpan->access_level);
+        $this->assertEquals(1990, $personalSpan->start_year);
+        $this->assertEquals(1, $personalSpan->start_month);
+        $this->assertEquals(1, $personalSpan->start_day);
+    }
+
+    public function test_registration_succeeds_with_universal_code(): void
+    {
+        $response = $this->post('/register', [
+            'name' => 'Test User',
+            'email' => 'test@example.com',
+            'password' => 'password',
+            'password_confirmation' => 'password',
+            'invitation_code' => 'lifespan',
+            'birth_year' => 1990,
+            'birth_month' => 1,
+            'birth_day' => 1,
+        ]);
+
+        $response->assertRedirect('/');
+        $this->assertDatabaseHas('users', ['email' => 'test@example.com']);
+
+        // Verify personal span was created
+        $user = User::where('email', 'test@example.com')->first();
+        $this->assertNotNull($user->personal_span_id);
+        
+        $personalSpan = Span::find($user->personal_span_id);
+        $this->assertNotNull($personalSpan);
+        $this->assertEquals('Test User', $personalSpan->name);
+        $this->assertEquals('person', $personalSpan->type_id);
+        $this->assertEquals($user->id, $personalSpan->owner_id);
+        $this->assertTrue($personalSpan->is_personal_span);
+        $this->assertEquals('private', $personalSpan->access_level);
+        $this->assertEquals(1990, $personalSpan->start_year);
+        $this->assertEquals(1, $personalSpan->start_month);
+        $this->assertEquals(1, $personalSpan->start_day);
     }
 } 

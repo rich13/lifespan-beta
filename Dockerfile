@@ -38,7 +38,8 @@ RUN apt-get update && apt-get install -y \
     nginx \
     supervisor \
     libzip-dev \
-    postgresql-client
+    postgresql-client \
+    logrotate
 
 # Clear cache
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -100,6 +101,7 @@ COPY docker/prod/health-check.sh /usr/local/bin/health-check.sh
 COPY docker/prod/set-db-config.php /usr/local/bin/set-db-config.php
 COPY docker/prod/fix-db-connection.php /usr/local/bin/fix-db-connection.php
 COPY docker/prod/set-session-config.php /usr/local/bin/set-session-config.php
+COPY docker/logrotate.conf /etc/logrotate.d/laravel
 
 # Make scripts executable
 RUN chmod +x /usr/local/bin/entrypoint.sh \

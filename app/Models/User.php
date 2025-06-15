@@ -13,6 +13,7 @@ use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
 
 /**
  * User Model
@@ -154,8 +155,17 @@ class User extends Authenticatable
      */
     public function createPersonalSpan(array $attributes = [])
     {
+        Log::info('Starting personal span creation', [
+            'user_id' => $this->id,
+            'attributes' => $attributes
+        ]);
+
         // First check: Direct reference via personal_span_id
         if ($this->personal_span_id) {
+            Log::warning('User already has a personal span', [
+                'user_id' => $this->id,
+                'personal_span_id' => $this->personal_span_id
+            ]);
             throw new \RuntimeException('User already has a personal span');
         }
         
@@ -165,12 +175,24 @@ class User extends Authenticatable
             ->first();
             
         if ($existingPersonalSpan) {
+            Log::info('Found existing personal span, linking to user', [
+                'user_id' => $this->id,
+                'span_id' => $existingPersonalSpan->id
+            ]);
             // Instead of failing, link to the existing personal span
             $this->personal_span_id = $existingPersonalSpan->id;
             $this->save();
             
             return $existingPersonalSpan;
         }
+
+        Log::info('Creating new personal span', [
+            'user_id' => $this->id,
+            'name' => $attributes['name'] ?? 'Unknown User',
+            'birth_year' => $attributes['birth_year'] ?? null,
+            'birth_month' => $attributes['birth_month'] ?? null,
+            'birth_day' => $attributes['birth_day'] ?? null
+        ]);
 
         $span = new Span();
         $span->name = $attributes['name'] ?? 'Unknown User';
@@ -182,7 +204,13 @@ class User extends Authenticatable
         $span->updater_id = $this->id;
         $span->access_level = 'private';
         $span->is_personal_span = true;
+        $span->state = 'complete';
         $span->save();
+
+        Log::info('Personal span created', [
+            'user_id' => $this->id,
+            'span_id' => $span->id
+        ]);
 
         // Update user with personal span ID
         $this->personal_span_id = $span->id;
@@ -196,6 +224,11 @@ class User extends Authenticatable
             'access_level' => 'owner',
             'created_at' => now(),
             'updated_at' => now(),
+        ]);
+
+        Log::info('User-span connection created', [
+            'user_id' => $this->id,
+            'span_id' => $span->id
         ]);
 
         return $span;

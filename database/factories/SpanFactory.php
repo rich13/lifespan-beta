@@ -100,7 +100,6 @@ class SpanFactory extends Factory
             'end_day' => null,
             'start_precision' => 'day',
             'end_precision' => null,
-            'slug' => fn (array $attributes) => \Str::slug($attributes['name']),
             'access_level' => 'private',  // Personal spans are private by default
             'is_personal_span' => true
         ]);

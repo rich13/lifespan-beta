@@ -33,12 +33,20 @@ class SpanObserver
                     $existingSpan->is_personal_span = false;
                     $existingSpan->saveQuietly(); // Save without triggering observers again
                 }
-                
-                // Also ensure that user's personal_span_id is set to this span
-                DB::table('users')
-                    ->where('id', $span->owner_id)
-                    ->update(['personal_span_id' => $span->id]);
             }
+        }
+    }
+
+    /**
+     * Handle the Span "saved" event.
+     */
+    public function saved(Span $span): void
+    {
+        // If this is a personal span, update the user's personal_span_id
+        if ($span->is_personal_span) {
+            DB::table('users')
+                ->where('id', $span->owner_id)
+                ->update(['personal_span_id' => $span->id]);
         }
     }
 } 
