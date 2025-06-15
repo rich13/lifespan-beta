@@ -30,6 +30,8 @@ class Kernel extends ConsoleKernel
             Commands\CreateSampleYaml::class,
             Commands\ImportYaml::class,
             Commands\DatabaseCreateCommand::class,
+            Commands\UpdateVersion::class,
+            Commands\SetupVersionHook::class,
         ];
     }
 }
