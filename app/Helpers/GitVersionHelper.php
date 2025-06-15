@@ -5,29 +5,11 @@ namespace App\Helpers;
 class GitVersionHelper
 {
     private const VERSION_PREFIX = 'Lifespan Beta';
+    private const VERSION_NUMBER = '0.260'; // Update this when deploying
 
     public static function getVersion(): string
     {
-        // First try to get version from environment
-        $version = config('app.version');
-        
-        if ($version) {
-            return self::VERSION_PREFIX . ' ' . $version;
-        }
-
-        // If no version in env, try git (development only)
-        if (app()->environment('local', 'development')) {
-            try {
-                $commitCount = trim(shell_exec("git rev-list --count HEAD 2>/dev/null"));
-                if ($commitCount) {
-                    return self::VERSION_PREFIX . ' 0.' . $commitCount;
-                }
-            } catch (\Exception $e) {
-                \Log::error('Error getting git version: ' . $e->getMessage());
-            }
-        }
-
-        return self::VERSION_PREFIX . ' (unknown)';
+        return self::VERSION_PREFIX . ' ' . self::VERSION_NUMBER;
     }
 
     /**
@@ -36,8 +18,8 @@ class GitVersionHelper
     public static function getDetailedVersion(): array
     {
         $info = [
+            'version' => self::VERSION_NUMBER,
             'environment' => app()->environment(),
-            'version' => config('app.version'),
         ];
 
         if (app()->environment('local', 'development')) {

@@ -25,13 +25,8 @@ class Kernel extends ConsoleKernel
         require base_path('routes/console.php');
 
         $this->commands = [
-            Commands\CleanupDuplicateSpans::class,
-            Commands\CleanThingSpanNames::class,
-            Commands\CreateSampleYaml::class,
             Commands\ImportYaml::class,
             Commands\DatabaseCreateCommand::class,
-            Commands\UpdateVersion::class,
-            Commands\SetupVersionHook::class,
         ];
     }
 }

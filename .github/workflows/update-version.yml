@@ -1,0 +1,28 @@
+name: Update Railway Version
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  update-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Fetch all history for accurate commit count
+      
+      - name: Get commit count
+        id: commit_count
+        run: echo "count=$(git rev-list --count HEAD)" >> $GITHUB_OUTPUT
+      
+      - name: Update Railway Variables
+        uses: bervProject/railway-variables@v1
+        with:
+          railway_token: ${{ secrets.RAILWAY_TOKEN }}
+          project_id: ${{ secrets.RAILWAY_PROJECT_ID }}
+          variables: |
+            {
+              "APP_VERSION": "0.${{ steps.commit_count.outputs.count }}"
+            } 
