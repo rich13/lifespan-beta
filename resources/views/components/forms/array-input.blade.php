@@ -9,12 +9,6 @@
 
 @php
 $initialValue = is_array($value) ? array_values($value) : [];
-ray('Array Input Debug', [
-    'name' => $name,
-    'value' => $value,
-    'old' => old($name),
-    'initialValue' => $initialValue
-]);
 @endphp
 
 <div class="array-input" x-data='{
