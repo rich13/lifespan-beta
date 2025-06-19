@@ -41,8 +41,4 @@
         </div>
     </div>
 </form>
-@endsection
-
-@push('scripts')
-@vite(['resources/js/spans/edit.js'])
-@endpush 
+@endsection 
