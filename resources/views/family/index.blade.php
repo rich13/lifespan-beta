@@ -89,6 +89,31 @@
         height: calc(100vh - 200px);
         min-height: 500px;
         overflow-y: auto;
+        padding: 1rem;
+    }
+
+    .info-panel .card {
+        margin-bottom: 1rem;
+    }
+
+    .info-panel .card:last-child {
+        margin-bottom: 0;
+    }
+
+    /* Toggle badge styles */
+    .toggle-badge {
+        transition: all 0.3s ease;
+        user-select: none;
+    }
+
+    .toggle-badge:hover {
+        opacity: 0.8;
+        transform: scale(1.05);
+    }
+
+    .toggle-badge.inactive {
+        background-color: #6c757d !important;
+        opacity: 0.6;
     }
 </style>
 @endpush
@@ -146,14 +171,61 @@
             <div class="mb-4">
                 <h5 class="card-title mb-3">Family Tree Key</h5>
                 <div class="d-flex flex-wrap gap-2">
-                    <span class="badge" style="background-color: #3B82F6; color: white;">Current User</span>
-                    <span class="badge" style="background-color: #10B981; color: white;">Parent</span>
-                    <span class="badge" style="background-color: #8B5CF6; color: white;">Grandparent</span>
-                    <span class="badge" style="background-color: #7C3AED; color: white;">Ancestor</span>
-                    <span class="badge" style="background-color: #F59E0B; color: white;">Sibling</span>
-                    <span class="badge" style="background-color: #EF4444; color: white;">Child</span>
-                    <span class="badge" style="background-color: #EC4899; color: white;">Grandchild</span>
-                    <span class="badge" style="background-color: #FB7185; color: white;">Descendant</span>
+                    @php
+                        $existingTypes = collect($familyData['nodes'])->pluck('type')->unique();
+                    @endphp
+                    
+                    @if($existingTypes->contains('current-user'))
+                        <span class="badge toggle-badge active" data-type="current-user" style="background-color: #3B82F6; color: white; cursor: pointer;">Current User</span>
+                    @endif
+                    
+                    @if($existingTypes->contains('parent'))
+                        <span class="badge toggle-badge active" data-type="parent" style="background-color: #10B981; color: white; cursor: pointer;">Parent</span>
+                    @endif
+                    
+                    @if($existingTypes->contains('grandparent'))
+                        <span class="badge toggle-badge active" data-type="grandparent" style="background-color: #8B5CF6; color: white; cursor: pointer;">Grandparent</span>
+                    @endif
+                    
+                    @if($existingTypes->contains('great-grandparent'))
+                        <span class="badge toggle-badge active" data-type="great-grandparent" style="background-color: #6B21A8; color: white; cursor: pointer;">Great-Grandparent</span>
+                    @endif
+                    
+                    @if($existingTypes->contains('sibling'))
+                        <span class="badge toggle-badge active" data-type="sibling" style="background-color: #F59E0B; color: white; cursor: pointer;">Sibling</span>
+                    @endif
+                    
+                    @if($existingTypes->contains('uncle-aunt'))
+                        <span class="badge toggle-badge active" data-type="uncle-aunt" style="background-color: #F97316; color: white; cursor: pointer;">Uncle/Aunt</span>
+                    @endif
+                    
+                    @if($existingTypes->contains('cousin'))
+                        <span class="badge toggle-badge active" data-type="cousin" style="background-color: #EAB308; color: white; cursor: pointer;">Cousin</span>
+                    @endif
+                    
+                    @if($existingTypes->contains('niece-nephew'))
+                        <span class="badge toggle-badge active" data-type="niece-nephew" style="background-color: #FCD34D; color: white; cursor: pointer;">Niece/Nephew</span>
+                    @endif
+                    
+                    @if($existingTypes->contains('child'))
+                        <span class="badge toggle-badge active" data-type="child" style="background-color: #EF4444; color: white; cursor: pointer;">Child</span>
+                    @endif
+                    
+                    @if($existingTypes->contains('grandchild'))
+                        <span class="badge toggle-badge active" data-type="grandchild" style="background-color: #EC4899; color: white; cursor: pointer;">Grandchild</span>
+                    @endif
+                    
+                    @if($existingTypes->contains('great-grandchild'))
+                        <span class="badge toggle-badge active" data-type="great-grandchild" style="background-color: #BE185D; color: white; cursor: pointer;">Great-Grandchild</span>
+                    @endif
+                    
+                    @if($existingTypes->contains('ancestor'))
+                        <span class="badge toggle-badge active" data-type="ancestor" style="background-color: #7C3AED; color: white; cursor: pointer;">Ancestor</span>
+                    @endif
+                    
+                    @if($existingTypes->contains('descendant'))
+                        <span class="badge toggle-badge active" data-type="descendant" style="background-color: #FB7185; color: white; cursor: pointer;">Descendant</span>
+                    @endif
                 </div>
             </div>
             
@@ -166,34 +238,12 @@
                         $currentUser = $familyData['nodes'][0]; // Assuming current user is first in the array
                     @endphp
                     <div class="space-y-4">
-                        <div class="text-center">
-                            <div class="w-16 h-16 mx-auto rounded-full flex items-center justify-center text-white font-bold text-lg" 
-                                 style="background-color: {{ $currentUser['type'] === 'current-user' ? '#3B82F6' : '#6B7280' }}">
-                                {{ strtoupper(substr($currentUser['name'], 0, 1)) }}
-                            </div>
-                            <h2 class="mt-2 text-xl font-bold">{{ $currentUser['name'] }}</h2>
-                            <p class="text-sm text-muted capitalize">{{ str_replace('-', ' ', $currentUser['type']) }}</p>
-                        </div>
-                        
                         <div class="card">
                             <div class="card-body">
-                                <h5 class="card-title">Details</h5>
-                                <div class="space-y-2 text-sm">
-                                    <div class="d-flex justify-content-between">
-                                        <span class="text-muted">ID:</span>
-                                        <span class="font-monospace">{{ $currentUser['id'] }}</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between">
-                                        <span class="text-muted">Type:</span>
-                                        <span class="capitalize">{{ str_replace('-', ' ', $currentUser['type']) }}</span>
-                                    </div>
-                                </div>
-                                <div class="mt-3">
-                                    <a href="/spans/{{ $currentUser['id'] }}" class="btn btn-primary btn-sm me-2">
-                                        <i class="bi bi-eye"></i> View Full Details
-                                    </a>
-                                    <a href="/spans/{{ $currentUser['id'] }}/edit" class="btn btn-outline-secondary btn-sm">
-                                        <i class="bi bi-pencil"></i> Edit
+                                <div class="d-flex align-items-center gap-2">
+                                    <i class="bi bi-person-fill"></i>
+                                    <a href="/spans/{{ $currentUser['id'] }}" class="text-decoration-none">
+                                        <strong>{{ $currentUser['name'] }}</strong>
                                     </a>
                                 </div>
                             </div>
@@ -229,10 +279,15 @@ function getNodeColor(type) {
         case 'current-user': return "#3B82F6";
         case 'parent': return "#10B981";
         case 'grandparent': return "#8B5CF6";
+        case 'great-grandparent': return "#6B21A8";
         case 'ancestor': return "#7C3AED";
         case 'sibling': return "#F59E0B";
+        case 'uncle-aunt': return "#F97316";
+        case 'cousin': return "#EAB308";
+        case 'niece-nephew': return "#FCD34D";
         case 'child': return "#EF4444";
         case 'grandchild': return "#EC4899";
+        case 'great-grandchild': return "#BE185D";
         case 'descendant': return "#FB7185";
         default: return "#6B7280";
     }
@@ -410,34 +465,12 @@ function showNodeInfo(nodeData) {
     // Create the HTML for node information
     const html = `
         <div class="space-y-4">
-            <div class="text-center">
-                <div class="w-16 h-16 mx-auto rounded-full flex items-center justify-center text-white font-bold text-lg" 
-                     style="background-color: ${getNodeColor(nodeData.type)}">
-                    ${nodeData.name.charAt(0).toUpperCase()}
-                </div>
-                <h2 class="mt-2 text-xl font-bold">${nodeData.name}</h2>
-                <p class="text-sm text-muted capitalize">${nodeData.type.replace('-', ' ')}</p>
-            </div>
-            
             <div class="card">
                 <div class="card-body">
-                    <h5 class="card-title">Details</h5>
-                    <div class="space-y-2 text-sm">
-                        <div class="d-flex justify-content-between">
-                            <span class="text-muted">ID:</span>
-                            <span class="font-monospace">${nodeData.id}</span>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <span class="text-muted">Type:</span>
-                            <span class="capitalize">${nodeData.type.replace('-', ' ')}</span>
-                        </div>
-                    </div>
-                    <div class="mt-3">
-                        <a href="/spans/${nodeData.id}" class="btn btn-primary btn-sm me-2">
-                            <i class="bi bi-eye"></i> View Full Details
-                        </a>
-                        <a href="/spans/${nodeData.id}/edit" class="btn btn-outline-secondary btn-sm">
-                            <i class="bi bi-pencil"></i> Edit
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-person-fill"></i>
+                        <a href="/spans/${nodeData.id}" class="text-decoration-none">
+                            <strong>${nodeData.name}</strong>
                         </a>
                     </div>
                 </div>
@@ -467,11 +500,128 @@ function addParent(personId) {
     alert('Add parent functionality will be implemented here');
 }
 
+// Global variables for node visibility
+let hiddenNodeTypes = new Set();
+let nodeElements = null;
+let linkElements = null;
+let simulation = null;
+let familyData = null;
+
+// Function to toggle node visibility by type
+function toggleNodeType(type) {
+    const badge = document.querySelector(`[data-type="${type}"]`);
+    
+    if (hiddenNodeTypes.has(type)) {
+        // Show nodes of this type
+        hiddenNodeTypes.delete(type);
+        badge.classList.remove('inactive');
+        badge.classList.add('active');
+    } else {
+        // Hide nodes of this type
+        hiddenNodeTypes.add(type);
+        badge.classList.add('inactive');
+        badge.classList.remove('active');
+    }
+    
+    updateNodeVisibility();
+}
+
+// Make functions globally accessible
+window.toggleNodeType = toggleNodeType;
+window.updateNodeVisibility = updateNodeVisibility;
+
+// Function to update node and link visibility
+function updateNodeVisibility() {
+    if (!nodeElements || !linkElements || !window.familyData) return;
+    
+    // Get visible nodes and links
+    const visibleNodes = window.familyData.nodes.filter(node => !hiddenNodeTypes.has(node.type));
+    const visibleLinks = window.familyData.links.filter(link => {
+        const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+        const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+        const sourceNode = window.familyData.nodes.find(n => n.id === sourceId);
+        const targetNode = window.familyData.nodes.find(n => n.id === targetId);
+        return sourceNode && targetNode && !hiddenNodeTypes.has(sourceNode.type) && !hiddenNodeTypes.has(targetNode.type);
+    });
+    
+    console.log('Visible nodes:', visibleNodes.length, 'Visible links:', visibleLinks.length);
+    console.log('Hidden types:', Array.from(hiddenNodeTypes));
+    
+    // Update node visibility - only fade nodes that are changing state
+    nodeElements.each(function(d) {
+        const node = d3.select(this);
+        const isCurrentlyVisible = node.style('display') !== 'none';
+        const shouldBeVisible = !hiddenNodeTypes.has(d.type);
+        
+        if (isCurrentlyVisible && !shouldBeVisible) {
+            // Fade out nodes that are being hidden
+            node.transition().duration(300)
+                .style('opacity', 0)
+                .on('end', function() {
+                    d3.select(this).style('display', 'none');
+                });
+        } else if (!isCurrentlyVisible && shouldBeVisible) {
+            // Fade in nodes that are being shown
+            node.style('display', 'block')
+                .style('opacity', 0)
+                .transition().duration(300)
+                .style('opacity', 1);
+        }
+        // Nodes that aren't changing state remain unchanged
+    });
+    
+    // Update link visibility - only fade links that are changing state
+    linkElements.each(function(d) {
+        const link = d3.select(this);
+        const sourceId = typeof d.source === 'object' ? d.source.id : d.source;
+        const targetId = typeof d.target === 'object' ? d.target.id : d.target;
+        const sourceNode = window.familyData.nodes.find(n => n.id === sourceId);
+        const targetNode = window.familyData.nodes.find(n => n.id === targetId);
+        const shouldBeVisible = sourceNode && targetNode && !hiddenNodeTypes.has(sourceNode.type) && !hiddenNodeTypes.has(targetNode.type);
+        
+        const isCurrentlyVisible = link.style('display') !== 'none';
+        
+        if (isCurrentlyVisible && !shouldBeVisible) {
+            // Fade out links that are being hidden
+            link.transition().duration(300)
+                .style('opacity', 0)
+                .on('end', function() {
+                    d3.select(this).style('display', 'none');
+                });
+        } else if (!isCurrentlyVisible && shouldBeVisible) {
+            // Fade in links that are being shown
+            link.style('display', 'block')
+                .style('opacity', 0)
+                .transition().duration(300)
+                .style('opacity', 1);
+        }
+        // Links that aren't changing state remain unchanged
+    });
+    
+    // Update simulation with only visible nodes
+    if (simulation) {
+        // Update simulation data without stopping
+        simulation.nodes(visibleNodes);
+        simulation.force('link').links(visibleLinks);
+        
+        // Give a small energy boost for repositioning
+        simulation.alpha(0.3).restart();
+        
+        // Gradually reduce alpha for stability
+        setTimeout(() => {
+            simulation.alpha(0.1);
+        }, 500);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     console.log('D3 script starting...');
     
     try {
         const familyData = @json($familyData);
+        
+        // Assign to global variable
+        window.familyData = familyData;
         
         console.log('Family data:', familyData);
         console.log('Nodes count:', familyData.nodes.length);
@@ -563,7 +713,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             
             // Create the force simulation
-            const simulation = d3.forceSimulation(familyData.nodes)
+            simulation = d3.forceSimulation(familyData.nodes)
                 .force("link", d3.forceLink(familyData.links).id(d => d.id).distance(200))
                 .force("charge", d3.forceManyBody().strength(-400))
                 .force("collision", d3.forceCollide().radius(d => Math.max(50, d.name.length * 5) + 20))
@@ -800,6 +950,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     return "none"; // solid line
                 });
             
+            // Store reference to link elements
+            linkElements = link;
+            
             console.log('Links created:', familyData.links.length);
             
             // Create the nodes
@@ -833,6 +986,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     // No mouseout clearing - only on click
                 });
             
+            // Store reference to node elements
+            nodeElements = node;
+            
             console.log('Nodes created:', familyData.nodes.length);
             
             // Add rounded rectangles for the nodes
@@ -848,10 +1004,15 @@ document.addEventListener('DOMContentLoaded', function() {
                         case 'current-user': return "#3B82F6"; // Blue for current user
                         case 'parent': return "#10B981"; // Green for parents
                         case 'grandparent': return "#8B5CF6"; // Purple for grandparents
+                        case 'great-grandparent': return "#6B21A8"; // Dark purple for great-grandparents
                         case 'ancestor': return "#7C3AED"; // Dark purple for ancestors
                         case 'sibling': return "#F59E0B"; // Orange for siblings
+                        case 'uncle-aunt': return "#F97316"; // Orange for uncles/aunts
+                        case 'cousin': return "#EAB308"; // Yellow for cousins
+                        case 'niece-nephew': return "#FCD34D"; // Yellow for nieces/nephews
                         case 'child': return "#EF4444"; // Red for children
                         case 'grandchild': return "#EC4899"; // Pink for grandchildren
+                        case 'great-grandchild': return "#BE185D"; // Pink for great-grandchildren
                         case 'descendant': return "#FB7185"; // Light red for descendants
                         default: return "#6B7280"; // Gray for unknown types
                     }
@@ -934,6 +1095,14 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             
             console.log('D3 visualization complete!');
+            
+            // Add click handlers to toggle badges
+            document.querySelectorAll('.toggle-badge').forEach(badge => {
+                badge.addEventListener('click', function() {
+                    const type = this.getAttribute('data-type');
+                    window.toggleNodeType(type);
+                });
+            });
             
             // Set initial zoom to fit all nodes
             setTimeout(() => {

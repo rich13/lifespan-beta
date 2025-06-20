@@ -141,6 +141,57 @@ class FamilyController extends Controller
             }
         }
         
+        // Check if it's an uncle/aunt (sibling of parent)
+        foreach ($rootParents as $parent) {
+            $parentSiblings = $parent->siblings();
+            if ($parentSiblings->contains('id', $span->id)) {
+                return 'uncle-aunt';
+            }
+        }
+        
+        // Check if it's a cousin (child of uncle/aunt, or child of sibling)
+        // First check if it's a child of an uncle/aunt
+        foreach ($rootParents as $parent) {
+            $parentSiblings = $parent->siblings();
+            foreach ($parentSiblings as $uncleAunt) {
+                $cousins = $uncleAunt->children()->get();
+                if ($cousins->contains('id', $span->id)) {
+                    return 'cousin';
+                }
+            }
+        }
+        
+        // Check if it's a child of a sibling (niece/nephew)
+        $rootSiblings = $rootPerson->siblings();
+        foreach ($rootSiblings as $sibling) {
+            $niecesNephews = $sibling->children()->get();
+            if ($niecesNephews->contains('id', $span->id)) {
+                return 'niece-nephew';
+            }
+        }
+        
+        // Check if it's a great-grandparent
+        foreach ($rootParents as $parent) {
+            $grandparents = $parent->parents()->get();
+            foreach ($grandparents as $grandparent) {
+                $greatGrandparents = $grandparent->parents()->get();
+                if ($greatGrandparents->contains('id', $span->id)) {
+                    return 'great-grandparent';
+                }
+            }
+        }
+        
+        // Check if it's a great-grandchild
+        foreach ($rootChildren as $child) {
+            $grandchildren = $child->children()->get();
+            foreach ($grandchildren as $grandchild) {
+                $greatGrandchildren = $grandchild->children()->get();
+                if ($greatGrandchildren->contains('id', $span->id)) {
+                    return 'great-grandchild';
+                }
+            }
+        }
+        
         // Default based on whether it has children (ancestor) or parents (descendant)
         $children = $span->children()->get();
         $parents = $span->parents()->get();
