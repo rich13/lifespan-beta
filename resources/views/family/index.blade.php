@@ -133,7 +133,7 @@
                 </div>
             </div>
         @else
-            <div class="bg-white rounded shadow border family-tree-container">
+            <div class="bg-white rounded border family-tree-container">
                 <div id="family-tree" class="w-100 h-100"></div>
             </div>
         @endif
@@ -141,7 +141,7 @@
 
     <!-- Right column: Information Panel -->
     <div class="col-lg-4">
-        <div class="bg-light rounded shadow border p-4 info-panel">
+        <div class="bg-light rounded border p-4 info-panel">
             <!-- Color Key Section -->
             <div class="mb-4">
                 <h5 class="card-title mb-3">Family Tree Key</h5>
@@ -161,13 +161,60 @@
             
             <!-- Node Info Section -->
             <div id="info-panel" class="h-100">
-                <div class="text-center text-muted mt-4">
-                    <svg class="mx-auto h-12 w-12 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
-                    <h3 class="mt-2 text-sm font-medium">No person selected</h3>
-                    <p class="mt-1 text-sm">Click on a family member to see their details.</p>
-                </div>
+                @if($familyData && !empty($familyData['nodes']))
+                    @php
+                        $currentUser = $familyData['nodes'][0]; // Assuming current user is first in the array
+                    @endphp
+                    <div class="space-y-4">
+                        <div class="text-center">
+                            <div class="w-16 h-16 mx-auto rounded-full flex items-center justify-center text-white font-bold text-lg" 
+                                 style="background-color: {{ $currentUser['type'] === 'current-user' ? '#3B82F6' : '#6B7280' }}">
+                                {{ strtoupper(substr($currentUser['name'], 0, 1)) }}
+                            </div>
+                            <h2 class="mt-2 text-xl font-bold">{{ $currentUser['name'] }}</h2>
+                            <p class="text-sm text-muted capitalize">{{ str_replace('-', ' ', $currentUser['type']) }}</p>
+                        </div>
+                        
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">Details</h5>
+                                <div class="space-y-2 text-sm">
+                                    <div class="d-flex justify-content-between">
+                                        <span class="text-muted">ID:</span>
+                                        <span class="font-monospace">{{ $currentUser['id'] }}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between">
+                                        <span class="text-muted">Type:</span>
+                                        <span class="capitalize">{{ str_replace('-', ' ', $currentUser['type']) }}</span>
+                                    </div>
+                                </div>
+                                <div class="mt-3">
+                                    <a href="/spans/{{ $currentUser['id'] }}" class="btn btn-primary btn-sm me-2">
+                                        <i class="bi bi-eye"></i> View Full Details
+                                    </a>
+                                    <a href="/spans/{{ $currentUser['id'] }}/edit" class="btn btn-outline-secondary btn-sm">
+                                        <i class="bi bi-pencil"></i> Edit
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">Family Relationships</h5>
+                                <p class="text-muted small">Click on a family member to see their relationships.</p>
+                            </div>
+                        </div>
+                    </div>
+                @else
+                    <div class="text-center text-muted mt-4">
+                        <svg class="mx-auto h-12 w-12 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                        <h3 class="mt-2 text-sm font-medium">No person selected</h3>
+                        <p class="mt-1 text-sm">Click on a family member to see their details.</p>
+                    </div>
+                @endif
             </div>
         </div>
     </div>
@@ -188,6 +235,15 @@ function getNodeColor(type) {
         case 'grandchild': return "#EC4899";
         case 'descendant': return "#FB7185";
         default: return "#6B7280";
+    }
+}
+
+// Function to get gender icon
+function getGenderIcon(gender) {
+    switch(gender) {
+        case 'male': return '♂'; // Male symbol
+        case 'female': return '♀'; // Female symbol
+        default: return ''; // No icon for unknown/other
     }
 }
 
@@ -214,20 +270,114 @@ function showNodeInfo(nodeData) {
     let familyRelationships = '';
     
     if (parents.length > 0) {
+        // Separate parents by gender
+        const mothers = parents.filter(parent => parent.gender === 'female');
+        const fathers = parents.filter(parent => parent.gender === 'male');
+        const otherParents = parents.filter(parent => parent.gender !== 'female' && parent.gender !== 'male');
+        
         familyRelationships += `
-            <div class="card mb-3">
-                <div class="card-body">
-                    <h6 class="card-title">Parents</h6>
-                    <ul class="list-unstyled mb-0">
-                        ${parents.map(parent => `
-                            <li class="mb-2">
-                                <a href="/spans/${parent.id}" class="text-decoration-none d-inline-flex align-items-center gap-1">
-                                    <i class="bi bi-person-fill"></i>
-                                    <strong>${parent.name}</strong>
-                                </a>
-                            </li>
-                        `).join('')}
-                    </ul>
+            <div class="row mb-3">
+                <div class="col-6">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h6 class="card-title">
+                                <i class="bi bi-gender-female text-danger me-1"></i>
+                                Mother
+                            </h6>
+                            ${mothers.length > 0 ? `
+                                <ul class="list-unstyled mb-0">
+                                    ${mothers.map(mother => `
+                                        <li class="mb-2">
+                                            <a href="/spans/${mother.id}" class="text-decoration-none d-inline-flex align-items-center gap-1">
+                                                <i class="bi bi-person-fill"></i>
+                                                <strong>${mother.name}</strong>
+                                            </a>
+                                        </li>
+                                    `).join('')}
+                                </ul>
+                            ` : `
+                                <p class="text-muted small mb-0">Unknown</p>
+                            `}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-6">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h6 class="card-title">
+                                <i class="bi bi-gender-male text-primary me-1"></i>
+                                Father
+                            </h6>
+                            ${fathers.length > 0 ? `
+                                <ul class="list-unstyled mb-0">
+                                    ${fathers.map(father => `
+                                        <li class="mb-2">
+                                            <a href="/spans/${father.id}" class="text-decoration-none d-inline-flex align-items-center gap-1">
+                                                <i class="bi bi-person-fill"></i>
+                                                <strong>${father.name}</strong>
+                                            </a>
+                                        </li>
+                                    `).join('')}
+                                </ul>
+                            ` : `
+                                <p class="text-muted small mb-0">Unknown</p>
+                            `}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // If we have other parents (non-binary, unknown, etc.), show them in a separate card
+        if (otherParents.length > 0) {
+            familyRelationships += `
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h6 class="card-title">
+                            <i class="bi bi-person-fill text-muted me-1"></i>
+                            Other Parents
+                        </h6>
+                        <ul class="list-unstyled mb-0">
+                            ${otherParents.map(parent => `
+                                <li class="mb-2">
+                                    <a href="/spans/${parent.id}" class="text-decoration-none d-inline-flex align-items-center gap-1">
+                                        <i class="bi bi-person-fill"></i>
+                                        <strong>${parent.name}</strong>
+                                    </a>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    </div>
+                </div>
+            `;
+        }
+    } else {
+        // No parents at all - show both cards as unknown
+        familyRelationships += `
+            <div class="row mb-3">
+                <div class="col-6">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h6 class="card-title">
+                                <i class="bi bi-gender-female text-danger me-1"></i>
+                                Mother
+                            </h6>
+                            <p class="text-muted small mb-0">Unknown</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-6">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h6 class="card-title">
+                                <i class="bi bi-gender-male text-primary me-1"></i>
+                                Father
+                            </h6>
+                            <p class="text-muted small mb-0">Unknown</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         `;
@@ -237,13 +387,17 @@ function showNodeInfo(nodeData) {
         familyRelationships += `
             <div class="card mb-3">
                 <div class="card-body">
-                    <h6 class="card-title">Children</h6>
+                    <h6 class="card-title">
+                        <i class="bi bi-people-fill text-success me-1"></i>
+                        Children
+                    </h6>
                     <ul class="list-unstyled mb-0">
                         ${children.map(child => `
                             <li class="mb-2">
                                 <a href="/spans/${child.id}" class="text-decoration-none d-inline-flex align-items-center gap-1">
                                     <i class="bi bi-person-fill"></i>
                                     <strong>${child.name}</strong>
+                                    ${child.gender === 'male' ? '♂' : child.gender === 'female' ? '♀' : ''}
                                 </a>
                             </li>
                         `).join('')}
@@ -391,13 +545,50 @@ document.addEventListener('DOMContentLoaded', function() {
             // Create the main group for the visualization
             const g = svg.append('g');
             
+            // Add click handler to clear highlights when clicking on empty space
+            svg.on("click", function(event) {
+                if (event.target === svg.node()) {
+                    clearHighlights();
+                    // Clear the info panel
+                    document.getElementById('info-panel').innerHTML = `
+                        <div class="text-center text-muted mt-4">
+                            <svg class="mx-auto h-12 w-12 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                            <h3 class="mt-2 text-sm font-medium">No person selected</h3>
+                            <p class="mt-1 text-sm">Click on a family member to see their details.</p>
+                        </div>
+                    `;
+                }
+            });
+            
             // Create the force simulation
             const simulation = d3.forceSimulation(familyData.nodes)
-                .force("link", d3.forceLink(familyData.links).id(d => d.id).distance(120))
-                .force("charge", d3.forceManyBody().strength(-200))
-                .force("collision", d3.forceCollide().radius(d => Math.max(40, d.name.length * 4) + 10));
+                .force("link", d3.forceLink(familyData.links).id(d => d.id).distance(200))
+                .force("charge", d3.forceManyBody().strength(-400))
+                .force("collision", d3.forceCollide().radius(d => Math.max(50, d.name.length * 5) + 20))
+                .force("x", d3.forceX(containerWidth / 2).strength(0.1))
+                .force("y", d3.forceY(containerHeight / 2).strength(0.1));
             
             console.log('Force simulation created');
+            
+            // Function to calculate link opacity based on overlap
+            function calculateLinkOpacity(link) {
+                const overlappingLinks = familyData.links.filter(otherLink => {
+                    if (otherLink === link) return false;
+                    
+                    // Check if links share nodes
+                    const sharesSource = otherLink.source.id === link.source.id || otherLink.target.id === link.source.id;
+                    const sharesTarget = otherLink.source.id === link.target.id || otherLink.target.id === link.target.id;
+                    
+                    return sharesSource || sharesTarget;
+                });
+                
+                // Reduce opacity based on number of overlapping connections
+                const baseOpacity = 0.6;
+                const overlapPenalty = Math.min(0.3, overlappingLinks.length * 0.1);
+                return Math.max(0.2, baseOpacity - overlapPenalty);
+            }
             
             // Function to check if node has both parents
             function hasBothParents(nodeId) {
@@ -410,22 +601,155 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Function to get parent nodes
             function getParentNodes(nodeId) {
-                const parentLinks = familyData.links.filter(link => 
-                    link.target.id === nodeId && 
-                    (link.source.type === 'parent' || link.source.type === 'grandparent' || link.source.type === 'ancestor')
-                );
-                return parentLinks.map(link => link.source);
+                // Find all links where this person is the target (child)
+                const parentLinks = familyData.links.filter(link => link.target === nodeId);
+                // Return the source nodes (parents) of those links
+                return parentLinks.map(link => familyData.nodes.find(node => node.id === link.source));
             }
             
-            // Function to highlight parents
-            function highlightParents(nodeId) {
-                const parentNodes = getParentNodes(nodeId);
-                parentNodes.forEach(parent => {
+            // Function to highlight family relationships
+            function highlightFamilyRelationships(nodeId) {
+                console.log('Link data structure:', familyData.links);
+                
+                // Use the exact same logic as the sidebar
+                // Find parents of this person (nodes that have links TO this person as target)
+                const parents = familyData.links
+                    .filter(link => {
+                        const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+                        console.log('Checking parent link:', link.source, '->', targetId, 'vs', nodeId);
+                        return targetId === nodeId;
+                    })
+                    .map(link => {
+                        const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+                        return familyData.nodes.find(node => node.id === sourceId);
+                    })
+                    .filter(parent => parent);
+                
+                // Find children of this person (nodes that this person has links TO as source)
+                const children = familyData.links
+                    .filter(link => {
+                        const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+                        console.log('Checking child link:', sourceId, '->', link.target, 'vs', nodeId);
+                        return sourceId === nodeId;
+                    })
+                    .map(link => {
+                        const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+                        return familyData.nodes.find(node => node.id === targetId);
+                    })
+                    .filter(child => child);
+                
+                console.log('Highlighting for node:', nodeId);
+                console.log('Parents found:', parents.map(p => p.name));
+                console.log('Children found:', children.map(c => c.name));
+                console.log('All nodes in graph:', familyData.nodes.map(n => ({ id: n.id, name: n.name })));
+                
+                // Highlight the hovered person
+                const hoveredElement = node.filter(d => d.id === nodeId);
+                console.log('Hovered element found:', hoveredElement.size());
+                hoveredElement.select("rect")
+                    .style("stroke", "#000")
+                    .style("stroke-width", "4px")
+                    .style("filter", "brightness(1.2)");
+                
+                // Highlight parent nodes
+                parents.forEach(parent => {
+                    console.log('Highlighting parent:', parent.name, parent.id);
                     const parentElement = node.filter(d => d.id === parent.id);
+                    console.log('Parent element found:', parentElement.size());
                     parentElement.select("rect")
                         .style("stroke", "#000")
                         .style("stroke-width", "4px")
                         .style("filter", "brightness(1.2)");
+                });
+                
+                // Highlight child nodes
+                children.forEach(child => {
+                    console.log('Highlighting child:', child.name, child.id);
+                    const childElement = node.filter(d => d.id === child.id);
+                    console.log('Child element found:', childElement.size());
+                    childElement.select("rect")
+                        .style("stroke", "#000")
+                        .style("stroke-width", "4px")
+                        .style("filter", "brightness(1.2)");
+                });
+                
+                // Highlight connecting edges (both parent and child connections)
+                const allRelatedNodes = [...parents, ...children];
+                const connectingLinks = familyData.links.filter(link => {
+                    const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+                    const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+                    
+                    return (sourceId === nodeId && allRelatedNodes.some(n => n.id === targetId)) ||
+                           (targetId === nodeId && allRelatedNodes.some(n => n.id === sourceId));
+                });
+                
+                console.log('Connecting links:', connectingLinks);
+                
+                // Highlight the connecting links
+                link.style("stroke", d => {
+                    const isConnecting = connectingLinks.some(connectingLink => {
+                        const linkSourceId = typeof connectingLink.source === 'object' ? connectingLink.source.id : connectingLink.source;
+                        const linkTargetId = typeof connectingLink.target === 'object' ? connectingLink.target.id : connectingLink.target;
+                        
+                        return (d.source.id === linkSourceId && d.target.id === linkTargetId) ||
+                               (d.source.id === linkTargetId && d.target.id === linkSourceId);
+                    });
+                    return isConnecting ? "#000" : "#999";
+                })
+                .style("stroke-width", d => {
+                    const isConnecting = connectingLinks.some(connectingLink => {
+                        const linkSourceId = typeof connectingLink.source === 'object' ? connectingLink.source.id : connectingLink.source;
+                        const linkTargetId = typeof connectingLink.target === 'object' ? connectingLink.target.id : connectingLink.target;
+                        
+                        return (d.source.id === linkSourceId && d.target.id === linkTargetId) ||
+                               (d.source.id === linkTargetId && d.target.id === linkSourceId);
+                    });
+                    return isConnecting ? "4px" : "2px";
+                })
+                .style("stroke-opacity", d => {
+                    const isConnecting = connectingLinks.some(connectingLink => {
+                        const linkSourceId = typeof connectingLink.source === 'object' ? connectingLink.source.id : connectingLink.source;
+                        const linkTargetId = typeof connectingLink.target === 'object' ? connectingLink.target.id : connectingLink.target;
+                        
+                        return (d.source.id === linkSourceId && d.target.id === linkTargetId) ||
+                               (d.source.id === linkTargetId && d.target.id === linkSourceId);
+                    });
+                    return isConnecting ? 1 : calculateLinkOpacity(d);
+                })
+                .style("stroke-dasharray", d => {
+                    const isConnecting = connectingLinks.some(connectingLink => {
+                        const linkSourceId = typeof connectingLink.source === 'object' ? connectingLink.source.id : connectingLink.source;
+                        const linkTargetId = typeof connectingLink.target === 'object' ? connectingLink.target.id : connectingLink.target;
+                        
+                        return (d.source.id === linkSourceId && d.target.id === linkTargetId) ||
+                               (d.source.id === linkTargetId && d.target.id === linkSourceId);
+                    });
+                    
+                    if (!isConnecting) {
+                        return "none"; // solid line for non-highlighted
+                    }
+                    
+                    // Check if this is a parent relationship (parent -> child)
+                    const isParentRelationship = parents.some(parent => {
+                        const parentId = parent.id;
+                        return (d.source.id === parentId && d.target.id === nodeId) ||
+                               (d.target.id === parentId && d.source.id === nodeId);
+                    });
+                    
+                    // Check if this is a child relationship (child -> parent)
+                    const isChildRelationship = children.some(child => {
+                        const childId = child.id;
+                        return (d.source.id === nodeId && d.target.id === childId) ||
+                               (d.target.id === nodeId && d.source.id === childId);
+                    });
+                    
+                    if (isParentRelationship) {
+                        return "none"; // solid line for parent relationships
+                    } else if (isChildRelationship) {
+                        return "5,5"; // dotted line for child relationships
+                    } else {
+                        return "none"; // solid line for other relationships
+                    }
                 });
             }
             
@@ -434,7 +758,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 node.select("rect")
                     .style("stroke", "#fff")
                     .style("stroke-width", "2px")
-                    .style("filter", "brightness(1)");
+                    .style("filter", "brightness(1)")
+                    .classed("selected", false);
+                
+                link
+                    .style("stroke", "#999")
+                    .style("stroke-width", "2px")
+                    .style("stroke-opacity", d => calculateLinkOpacity(d))
+                    .style("stroke-dasharray", "none"); // Reset to solid lines
             }
             
             // Set initial positions to fit in viewport
@@ -457,8 +788,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 .data(familyData.links)
                 .enter().append("line")
                 .attr("stroke", "#999")
-                .attr("stroke-opacity", 0.6)
-                .attr("stroke-width", 2);
+                .attr("stroke-opacity", d => calculateLinkOpacity(d))
+                .attr("stroke-width", 2)
+                .attr("stroke-dasharray", d => {
+                    // Determine if this is a parent-child relationship
+                    // Parent edges are solid, child edges are dotted
+                    const sourceId = typeof d.source === 'object' ? d.source.id : d.source;
+                    const targetId = typeof d.target === 'object' ? d.target.id : d.target;
+                    
+                    // For now, we'll make all edges solid and handle the distinction in highlighting
+                    return "none"; // solid line
+                });
             
             console.log('Links created:', familyData.links.length);
             
@@ -476,16 +816,21 @@ document.addEventListener('DOMContentLoaded', function() {
                     node.select("rect").classed("selected", false);
                     // Add selection to clicked node
                     d3.select(this).select("rect").classed("selected", true);
+                    
+                    // Clear any existing highlights
+                    clearHighlights();
+                    
+                    // Highlight family relationships (same as sidebar)
+                    highlightFamilyRelationships(d.id);
+                    
                     // Show information in right panel
                     showNodeInfo(d);
                 })
                 .on("mouseover", function(event, d) {
-                    // Highlight parents when hovering over a node
-                    highlightParents(d.id);
+                    // No mouseover highlighting - only on click
                 })
                 .on("mouseout", function() {
-                    // Clear highlights when mouse leaves a node
-                    clearHighlights();
+                    // No mouseout clearing - only on click
                 });
             
             console.log('Nodes created:', familyData.nodes.length);
@@ -514,9 +859,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 .style("stroke", "#fff")
                 .style("stroke-width", "2px");
             
-            // Add labels for the nodes
+            // Add labels for the nodes with gender icons
             node.append("text")
-                .text(d => d.name)
+                .text(d => {
+                    const genderIcon = getGenderIcon(d.gender);
+                    return genderIcon ? `${d.name} ${genderIcon}` : d.name;
+                })
                 .attr("text-anchor", "middle")
                 .attr("dy", "0.35em")
                 .style("font-size", "11px")
@@ -600,22 +948,28 @@ document.addEventListener('DOMContentLoaded', function() {
                 const padding = 50;
                 const scaleX = (containerWidth - padding) / nodeWidth;
                 const scaleY = (containerHeight - padding) / nodeHeight;
-                const scale = Math.min(scaleX, scaleY, 1); // Don't zoom in, only out
+                const scale = Math.min(scaleX, scaleY, 1); // Don't zoom in more than 1:1
                 
-                // Calculate center of nodes
-                const centerX = (xExtent[0] + xExtent[1]) / 2;
-                const centerY = (yExtent[0] + yExtent[1]) / 2;
+                // Apply zoom
+                const transform = d3.zoomIdentity
+                    .translate(containerWidth / 2, containerHeight / 2)
+                    .scale(scale)
+                    .translate(-(xExtent[0] + xExtent[1]) / 2, -(yExtent[0] + yExtent[1]) / 2);
                 
-                // Calculate translation to center the nodes
-                const translateX = containerWidth / 2 - centerX * scale;
-                const translateY = containerHeight / 2 - centerY * scale;
+                svg.call(zoom.transform, transform);
                 
-                // Apply the transform
-                svg.transition().duration(1000).call(
-                    zoom.transform,
-                    d3.zoomIdentity.translate(translateX, translateY).scale(scale)
-                );
-            }, 2000); // Wait for simulation to settle
+                // Auto-select the current user (first node)
+                if (familyData.nodes.length > 0) {
+                    const currentUser = familyData.nodes[0];
+                    console.log('Auto-selecting current user:', currentUser.name);
+                    
+                    // Highlight the current user
+                    highlightFamilyRelationships(currentUser.id);
+                    
+                    // Show current user info in sidebar
+                    showNodeInfo(currentUser);
+                }
+            }, 1000); // Wait for simulation to settle
         }, 100);
         
     } catch (error) {

@@ -44,6 +44,7 @@ class FamilyController extends Controller
                 'id' => $span->id,
                 'name' => $span->name,
                 'type' => $this->getNodeType($span, $rootPerson),
+                'gender' => $span->getMeta('gender'),
                 'span' => $span
             ];
             $nodes[] = $node;
