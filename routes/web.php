@@ -213,6 +213,8 @@ Route::middleware('web')->group(function () {
 
         // Family routes
         Route::get('/family', [FamilyController::class, 'index'])->name('family.index');
+        Route::get('/family/data', [FamilyController::class, 'data'])->name('family.data');
+        Route::post('/api/family/connections', [FamilyController::class, 'createConnection'])->name('family.connections.create');
 
         // Admin routes
         Route::middleware('admin')->prefix('admin')->name('admin.')->group(function () {

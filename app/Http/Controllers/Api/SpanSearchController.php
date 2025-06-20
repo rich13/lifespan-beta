@@ -73,7 +73,8 @@ class SpanSearchController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'type_id' => 'required|string|exists:span_types,type_id',
-            'state' => 'required|in:placeholder'
+            'state' => 'required|in:placeholder',
+            'metadata' => 'nullable|array'
         ]);
 
         $span = new Span($validated);
@@ -85,7 +86,8 @@ class SpanSearchController extends Controller
             'id' => $span->id,
             'name' => $span->name,
             'type_id' => $span->type_id,
-            'state' => $span->state
+            'state' => $span->state,
+            'metadata' => $span->metadata
         ]);
     }
 } 

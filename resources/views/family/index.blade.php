@@ -351,7 +351,14 @@ function showNodeInfo(nodeData) {
                                     `).join('')}
                                 </ul>
                             ` : `
-                                <p class="text-muted small mb-0">Unknown</p>
+                                <form data-parent-type="mother" data-child-id="${nodeData.id}" class="mt-2">
+                                    <div class="input-group input-group-sm">
+                                        <input type="text" class="form-control" data-field="name" placeholder="Mother's name" required>
+                                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="createParent('mother', '${nodeData.id}')">
+                                            <i class="bi bi-plus"></i> Create
+                                        </button>
+                                    </div>
+                                </form>
                             `}
                         </div>
                     </div>
@@ -376,7 +383,14 @@ function showNodeInfo(nodeData) {
                                     `).join('')}
                                 </ul>
                             ` : `
-                                <p class="text-muted small mb-0">Unknown</p>
+                                <form data-parent-type="father" data-child-id="${nodeData.id}" class="mt-2">
+                                    <div class="input-group input-group-sm">
+                                        <input type="text" class="form-control" data-field="name" placeholder="Father's name" required>
+                                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="createParent('father', '${nodeData.id}')">
+                                            <i class="bi bi-plus"></i> Create
+                                        </button>
+                                    </div>
+                                </form>
                             `}
                         </div>
                     </div>
@@ -418,7 +432,14 @@ function showNodeInfo(nodeData) {
                                 <i class="bi bi-gender-female text-danger me-1"></i>
                                 Mother
                             </h6>
-                            <p class="text-muted small mb-0">Unknown</p>
+                            <form data-parent-type="mother" data-child-id="${nodeData.id}" class="mt-2">
+                                <div class="input-group input-group-sm">
+                                    <input type="text" class="form-control" data-field="name" placeholder="Mother's name" required>
+                                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="createParent('mother', '${nodeData.id}')">
+                                        <i class="bi bi-plus"></i> Create
+                                    </button>
+                                </div>
+                            </form>
                         </div>
                     </div>
                 </div>
@@ -430,7 +451,14 @@ function showNodeInfo(nodeData) {
                                 <i class="bi bi-gender-male text-primary me-1"></i>
                                 Father
                             </h6>
-                            <p class="text-muted small mb-0">Unknown</p>
+                            <form data-parent-type="father" data-child-id="${nodeData.id}" class="mt-2">
+                                <div class="input-group input-group-sm">
+                                    <input type="text" class="form-control" data-field="name" placeholder="Father's name" required>
+                                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="createParent('father', '${nodeData.id}')">
+                                        <i class="bi bi-plus"></i> Create
+                                    </button>
+                                </div>
+                            </form>
                         </div>
                     </div>
                 </div>
@@ -481,7 +509,7 @@ function showNodeInfo(nodeData) {
                     <h5 class="card-title">Family Relationships</h5>
                     ${familyRelationships ? familyRelationships : `
                         <p class="text-muted small">No family relationships found in the graph.</p>
-                        <button class="btn btn-outline-primary btn-sm w-100 mt-2" onclick="addParent(${nodeData.id})">
+                        <button class="btn btn-outline-primary btn-sm w-100 mt-2" onclick="addParent('${nodeData.id}')">
                             <i class="bi bi-plus-circle me-1"></i>Add Parent
                         </button>
                     `}
@@ -498,6 +526,202 @@ function addParent(personId) {
     console.log('Add parent for person:', personId);
     // TODO: Implement add parent functionality
     alert('Add parent functionality will be implemented here');
+}
+
+// Function to create a new parent span and family connection
+async function createParent(parentType, childId) {
+    console.log('createParent called with:', { 
+        parentType, 
+        childId, 
+        childIdType: typeof childId,
+        parentTypeType: typeof parentType 
+    });
+    
+    // Convert childId to string for comparison with data attributes
+    const childIdStr = String(childId);
+    
+    // Debug: Log all forms with data-parent-type
+    const allForms = document.querySelectorAll('[data-parent-type]');
+    console.log('All forms with data-parent-type:', allForms);
+    allForms.forEach(form => {
+        console.log('Form:', {
+            parentType: form.getAttribute('data-parent-type'),
+            childId: form.getAttribute('data-child-id'),
+            element: form
+        });
+    });
+    
+    // Try multiple selector approaches
+    let form = document.querySelector(`[data-parent-type="${parentType}"][data-child-id="${childIdStr}"]`);
+    console.log('Tried selector 1:', `[data-parent-type="${parentType}"][data-child-id="${childIdStr}"]`, 'Result:', form);
+    
+    // If not found, try with the original childId
+    if (!form) {
+        form = document.querySelector(`[data-parent-type="${parentType}"][data-child-id="${childId}"]`);
+        console.log('Tried selector 2:', `[data-parent-type="${parentType}"][data-child-id="${childId}"]`, 'Result:', form);
+    }
+    
+    // If still not found, try a more flexible approach
+    if (!form) {
+        const forms = document.querySelectorAll(`[data-parent-type="${parentType}"]`);
+        console.log('Found forms with parentType:', parentType, 'Count:', forms.length);
+        form = Array.from(forms).find(f => {
+            const formChildId = f.getAttribute('data-child-id');
+            const matches = formChildId == childId;
+            console.log('Comparing form childId:', formChildId, 'with passed childId:', childId, 'Matches:', matches);
+            return matches;
+        });
+        console.log('Flexible search result:', form);
+    }
+    
+    console.log('Final form found:', form);
+    
+    if (!form) {
+        console.error('Parent form not found');
+        console.error('Available forms:', Array.from(document.querySelectorAll('[data-parent-type]')).map(f => ({
+            parentType: f.getAttribute('data-parent-type'),
+            childId: f.getAttribute('data-child-id')
+        })));
+        return;
+    }
+    
+    const nameInput = form.querySelector('[data-field="name"]');
+    const name = nameInput.value.trim();
+    
+    if (!name) {
+        alert('Please enter a name for the parent');
+        return;
+    }
+    
+    // Show loading state
+    const button = form.querySelector('button');
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="bi bi-hourglass-split"></i> Creating...';
+    button.disabled = true;
+    
+    try {
+        // Create the parent span
+        const spanData = {
+            name: name,
+            type_id: 'person',
+            state: 'placeholder',
+            metadata: {
+                gender: parentType === 'mother' ? 'female' : 'male'
+            }
+        };
+        
+        console.log('Sending span data:', spanData);
+        
+        const spanResponse = await fetch('/spans', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            },
+            body: JSON.stringify(spanData)
+        });
+        
+        console.log('Span response status:', spanResponse.status);
+        
+        if (!spanResponse.ok) {
+            const errorText = await spanResponse.text();
+            console.error('Span creation error response:', errorText);
+            throw new Error('Failed to create parent span: ' + errorText);
+        }
+        
+        console.log('About to parse span response JSON...');
+        const responseText = await spanResponse.text();
+        console.log('Raw response text:', responseText);
+        
+        let parentSpan;
+        try {
+            parentSpan = JSON.parse(responseText);
+            console.log('Successfully parsed parent span:', parentSpan);
+        } catch (parseError) {
+            console.error('JSON parse error:', parseError);
+            console.error('Response text that failed to parse:', responseText);
+            throw new Error('Failed to parse span response: ' + parseError.message);
+        }
+        
+        // Create the family connection
+        const connectionData = {
+            parent_id: parentSpan.id,
+            child_id: childId,
+            relationship: parentType === 'mother' ? 'mother' : 'father'
+        };
+        
+        console.log('Sending connection data:', connectionData);
+        
+        const connectionResponse = await fetch('/api/family/connections', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            },
+            body: JSON.stringify(connectionData)
+        });
+        
+        console.log('Connection response status:', connectionResponse.status);
+        
+        if (!connectionResponse.ok) {
+            const errorText = await connectionResponse.text();
+            console.error('Connection creation error response:', errorText);
+            throw new Error('Failed to create family connection: ' + errorText);
+        }
+        
+        // Refresh the family tree
+        await refreshFamilyTree();
+        
+        // Clear the form
+        nameInput.value = '';
+        
+        // Show success message
+        button.innerHTML = '<i class="bi bi-check"></i> Created!';
+        setTimeout(() => {
+            button.innerHTML = originalText;
+            button.disabled = false;
+        }, 2000);
+        
+    } catch (error) {
+        console.error('Error creating parent:', error);
+        alert('Error creating parent: ' + error.message);
+        
+        // Reset button
+        button.innerHTML = originalText;
+        button.disabled = false;
+    }
+}
+
+// Function to refresh the family tree data and visualization
+async function refreshFamilyTree() {
+    try {
+        // Fetch updated family data
+        const response = await fetch('/family/data');
+        if (!response.ok) {
+            throw new Error('Failed to fetch updated family data');
+        }
+        
+        const newFamilyData = await response.json();
+        
+        // Re-render the family tree with new data
+        if (window.renderFamilyTree) {
+            window.renderFamilyTree(newFamilyData);
+        }
+        
+        // Update the info panel if a node is currently selected
+        const selectedNode = document.querySelector('.node.selected');
+        if (selectedNode) {
+            const nodeData = newFamilyData.nodes.find(n => n.id === selectedNode.__data__.id);
+            if (nodeData) {
+                showNodeInfo(nodeData);
+            }
+        }
+        
+    } catch (error) {
+        console.error('Error refreshing family tree:', error);
+        alert('Failed to refresh family tree: ' + error.message);
+    }
 }
 
 // Global variables for node visibility
@@ -529,6 +753,8 @@ function toggleNodeType(type) {
 // Make functions globally accessible
 window.toggleNodeType = toggleNodeType;
 window.updateNodeVisibility = updateNodeVisibility;
+window.createParent = createParent;
+window.refreshFamilyTree = refreshFamilyTree;
 
 // Function to update node and link visibility
 function updateNodeVisibility() {
@@ -617,529 +843,462 @@ function updateNodeVisibility() {
 document.addEventListener('DOMContentLoaded', function() {
     console.log('D3 script starting...');
     
-    try {
-        const familyData = @json($familyData);
+    // Global function to render the family tree
+    window.renderFamilyTree = function(familyData) {
+        // Clear existing visualization
+        const container = document.getElementById('family-tree');
+        if (container) {
+            container.innerHTML = '';
+        }
         
-        // Assign to global variable
+        // Stop existing simulation if running
+        if (window.simulation) {
+            window.simulation.stop();
+        }
+        
+        // Update global family data
         window.familyData = familyData;
         
-        console.log('Family data:', familyData);
+        console.log('Rendering family tree with data:', familyData);
         console.log('Nodes count:', familyData.nodes.length);
         console.log('Links count:', familyData.links.length);
         
-        // Get the container dimensions
-        const container = document.getElementById('family-tree');
         if (!container) {
             console.error('Container not found!');
             return;
         }
         
-        // Wait a bit for the layout to settle
-        setTimeout(() => {
-            let containerWidth = container.clientWidth || container.offsetWidth || container.getBoundingClientRect().width;
-            let containerHeight = container.clientHeight || container.offsetHeight || container.getBoundingClientRect().height;
+        // Get the container dimensions
+        let containerWidth = container.clientWidth || container.offsetWidth || container.getBoundingClientRect().width;
+        let containerHeight = container.clientHeight || container.offsetHeight || container.getBoundingClientRect().height;
+        
+        console.log('Container dimensions:', { width: containerWidth, height: containerHeight });
+        
+        if (containerWidth === 0 || containerHeight === 0) {
+            console.error('Container has zero dimensions!');
+            console.log('Trying alternative approach...');
             
-            console.log('Container dimensions:', { width: containerWidth, height: containerHeight });
-            console.log('Container element:', container);
-            console.log('Container styles:', window.getComputedStyle(container));
+            // Try to get dimensions from parent
+            const parent = container.parentElement;
+            const parentWidth = parent.clientWidth || parent.offsetWidth;
+            const parentHeight = parent.clientHeight || parent.offsetHeight;
             
-            if (containerWidth === 0 || containerHeight === 0) {
-                console.error('Container has zero dimensions!');
-                console.log('Trying alternative approach...');
+            console.log('Parent dimensions:', { width: parentWidth, height: parentHeight });
+            
+            if (parentWidth > 0 && parentHeight > 0) {
+                // Use parent dimensions
+                container.style.width = parentWidth + 'px';
+                container.style.height = parentHeight + 'px';
                 
-                // Try to get dimensions from parent
-                const parent = container.parentElement;
-                const parentWidth = parent.clientWidth || parent.offsetWidth;
-                const parentHeight = parent.clientHeight || parent.offsetHeight;
+                // Update our variables
+                containerWidth = parentWidth;
+                containerHeight = parentHeight;
+            } else {
+                console.error('Parent also has zero dimensions!');
+                console.log('Using fallback dimensions...');
                 
-                console.log('Parent dimensions:', { width: parentWidth, height: parentHeight });
-                
-                if (parentWidth > 0 && parentHeight > 0) {
-                    // Use parent dimensions
-                    container.style.width = parentWidth + 'px';
-                    container.style.height = parentHeight + 'px';
-                    
-                    // Update our variables
-                    containerWidth = parentWidth;
-                    containerHeight = parentHeight;
-                } else {
-                    console.error('Parent also has zero dimensions!');
-                    console.log('Using fallback dimensions...');
-                    
-                    // Force reasonable dimensions
-                    container.style.width = '800px';
-                    container.style.height = '600px';
-                    containerWidth = 800;
-                    containerHeight = 600;
-                }
+                // Force reasonable dimensions
+                container.style.width = '800px';
+                container.style.height = '600px';
+                containerWidth = 800;
+                containerHeight = 600;
             }
-            
-            // Set up the SVG
-            const svg = d3.select("#family-tree")
-                .append("svg")
-                .attr("width", containerWidth)
-                .attr("height", containerHeight)
-                .attr("class", "family-tree-svg");
-            
-            console.log('SVG created');
-            
-            // Add zoom behavior
-            const zoom = d3.zoom()
-                .scaleExtent([0.1, 3])
-                .on('zoom', (event) => {
-                    svg.select('g').attr('transform', event.transform);
-                });
-            
-            svg.call(zoom);
-            
-            // Create the main group for the visualization
-            const g = svg.append('g');
-            
-            // Add click handler to clear highlights when clicking on empty space
-            svg.on("click", function(event) {
-                if (event.target === svg.node()) {
-                    clearHighlights();
-                    // Clear the info panel
-                    document.getElementById('info-panel').innerHTML = `
-                        <div class="text-center text-muted mt-4">
-                            <svg class="mx-auto h-12 w-12 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                            </svg>
-                            <h3 class="mt-2 text-sm font-medium">No person selected</h3>
-                            <p class="mt-1 text-sm">Click on a family member to see their details.</p>
-                        </div>
-                    `;
-                }
+        }
+        
+        // Set up the SVG
+        const svg = d3.select("#family-tree")
+            .append("svg")
+            .attr("width", containerWidth)
+            .attr("height", containerHeight)
+            .attr("class", "family-tree-svg");
+        
+        console.log('SVG created');
+        
+        // Add zoom behavior
+        const zoom = d3.zoom()
+            .scaleExtent([0.1, 3])
+            .on('zoom', (event) => {
+                svg.select('g').attr('transform', event.transform);
+            });
+        
+        svg.call(zoom);
+        
+        // Create the main group for the visualization
+        const g = svg.append('g');
+        
+        // Add click handler to clear highlights when clicking on empty space
+        svg.on("click", function(event) {
+            if (event.target === svg.node()) {
+                clearHighlights();
+                // Clear the info panel
+                document.getElementById('info-panel').innerHTML = `
+                    <div class="text-center text-muted mt-4">
+                        <svg class="mx-auto h-12 w-12 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                        <h3 class="mt-2 text-sm font-medium">No person selected</h3>
+                        <p class="mt-1 text-sm">Click on a family member to see their details.</p>
+                    </div>
+                `;
+            }
+        });
+        
+        // Create the force simulation
+        window.simulation = d3.forceSimulation(familyData.nodes)
+            .force("link", d3.forceLink(familyData.links).id(d => d.id).distance(200))
+            .force("charge", d3.forceManyBody().strength(-400))
+            .force("collision", d3.forceCollide().radius(d => Math.max(50, d.name.length * 5) + 20))
+            .force("x", d3.forceX(containerWidth / 2).strength(0.1))
+            .force("y", d3.forceY(containerHeight / 2).strength(0.1));
+        
+        console.log('Force simulation created');
+        
+        // Function to calculate link opacity based on overlap
+        function calculateLinkOpacity(link) {
+            const overlappingLinks = familyData.links.filter(otherLink => {
+                if (otherLink === link) return false;
+                
+                // Check if links share nodes
+                const sharesSource = otherLink.source.id === link.source.id || otherLink.target.id === link.source.id;
+                const sharesTarget = otherLink.source.id === link.target.id || otherLink.target.id === link.target.id;
+                
+                return sharesSource || sharesTarget;
             });
             
-            // Create the force simulation
-            simulation = d3.forceSimulation(familyData.nodes)
-                .force("link", d3.forceLink(familyData.links).id(d => d.id).distance(200))
-                .force("charge", d3.forceManyBody().strength(-400))
-                .force("collision", d3.forceCollide().radius(d => Math.max(50, d.name.length * 5) + 20))
-                .force("x", d3.forceX(containerWidth / 2).strength(0.1))
-                .force("y", d3.forceY(containerHeight / 2).strength(0.1));
+            // Reduce opacity based on number of overlapping connections
+            const baseOpacity = 0.6;
+            const overlapPenalty = Math.min(0.3, overlappingLinks.length * 0.1);
+            return Math.max(0.2, baseOpacity - overlapPenalty);
+        }
+        
+        // Function to highlight family relationships
+        function highlightFamilyRelationships(nodeId) {
+            console.log('Link data structure:', familyData.links);
             
-            console.log('Force simulation created');
+            // Use the exact same logic as the sidebar
+            // Find parents of this person (nodes that have links TO this person as target)
+            const parents = familyData.links
+                .filter(link => {
+                    const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+                    console.log('Checking parent link:', link.source, '->', targetId, 'vs', nodeId);
+                    return targetId === nodeId;
+                })
+                .map(link => {
+                    const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+                    return familyData.nodes.find(node => node.id === sourceId);
+                })
+                .filter(parent => parent);
             
-            // Function to calculate link opacity based on overlap
-            function calculateLinkOpacity(link) {
-                const overlappingLinks = familyData.links.filter(otherLink => {
-                    if (otherLink === link) return false;
-                    
-                    // Check if links share nodes
-                    const sharesSource = otherLink.source.id === link.source.id || otherLink.target.id === link.source.id;
-                    const sharesTarget = otherLink.source.id === link.target.id || otherLink.target.id === link.target.id;
-                    
-                    return sharesSource || sharesTarget;
-                });
-                
-                // Reduce opacity based on number of overlapping connections
-                const baseOpacity = 0.6;
-                const overlapPenalty = Math.min(0.3, overlappingLinks.length * 0.1);
-                return Math.max(0.2, baseOpacity - overlapPenalty);
-            }
+            // Find children of this person (nodes that this person has links TO as source)
+            const children = familyData.links
+                .filter(link => {
+                    const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+                    console.log('Checking child link:', sourceId, '->', link.target, 'vs', nodeId);
+                    return sourceId === nodeId;
+                })
+                .map(link => {
+                    const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+                    return familyData.nodes.find(node => node.id === targetId);
+                })
+                .filter(child => child);
             
-            // Function to check if node has both parents
-            function hasBothParents(nodeId) {
-                const parentLinks = familyData.links.filter(link => 
-                    link.target.id === nodeId && 
-                    (link.source.type === 'parent' || link.source.type === 'grandparent' || link.source.type === 'ancestor')
-                );
-                return parentLinks.length >= 2;
-            }
+            console.log('Highlighting for node:', nodeId);
+            console.log('Parents found:', parents.map(p => p.name));
+            console.log('Children found:', children.map(c => c.name));
             
-            // Function to get parent nodes
-            function getParentNodes(nodeId) {
-                // Find all links where this person is the target (child)
-                const parentLinks = familyData.links.filter(link => link.target === nodeId);
-                // Return the source nodes (parents) of those links
-                return parentLinks.map(link => familyData.nodes.find(node => node.id === link.source));
-            }
+            // Highlight the hovered person
+            const hoveredElement = node.filter(d => d.id === nodeId);
+            console.log('Hovered element found:', hoveredElement.size());
+            hoveredElement.select("rect")
+                .style("stroke", "#000")
+                .style("stroke-width", "4px")
+                .style("filter", "brightness(1.2)");
             
-            // Function to highlight family relationships
-            function highlightFamilyRelationships(nodeId) {
-                console.log('Link data structure:', familyData.links);
-                
-                // Use the exact same logic as the sidebar
-                // Find parents of this person (nodes that have links TO this person as target)
-                const parents = familyData.links
-                    .filter(link => {
-                        const targetId = typeof link.target === 'object' ? link.target.id : link.target;
-                        console.log('Checking parent link:', link.source, '->', targetId, 'vs', nodeId);
-                        return targetId === nodeId;
-                    })
-                    .map(link => {
-                        const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
-                        return familyData.nodes.find(node => node.id === sourceId);
-                    })
-                    .filter(parent => parent);
-                
-                // Find children of this person (nodes that this person has links TO as source)
-                const children = familyData.links
-                    .filter(link => {
-                        const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
-                        console.log('Checking child link:', sourceId, '->', link.target, 'vs', nodeId);
-                        return sourceId === nodeId;
-                    })
-                    .map(link => {
-                        const targetId = typeof link.target === 'object' ? link.target.id : link.target;
-                        return familyData.nodes.find(node => node.id === targetId);
-                    })
-                    .filter(child => child);
-                
-                console.log('Highlighting for node:', nodeId);
-                console.log('Parents found:', parents.map(p => p.name));
-                console.log('Children found:', children.map(c => c.name));
-                console.log('All nodes in graph:', familyData.nodes.map(n => ({ id: n.id, name: n.name })));
-                
-                // Highlight the hovered person
-                const hoveredElement = node.filter(d => d.id === nodeId);
-                console.log('Hovered element found:', hoveredElement.size());
-                hoveredElement.select("rect")
+            // Highlight parent nodes
+            parents.forEach(parent => {
+                console.log('Highlighting parent:', parent.name, parent.id);
+                const parentElement = node.filter(d => d.id === parent.id);
+                console.log('Parent element found:', parentElement.size());
+                parentElement.select("rect")
                     .style("stroke", "#000")
                     .style("stroke-width", "4px")
                     .style("filter", "brightness(1.2)");
-                
-                // Highlight parent nodes
-                parents.forEach(parent => {
-                    console.log('Highlighting parent:', parent.name, parent.id);
-                    const parentElement = node.filter(d => d.id === parent.id);
-                    console.log('Parent element found:', parentElement.size());
-                    parentElement.select("rect")
-                        .style("stroke", "#000")
-                        .style("stroke-width", "4px")
-                        .style("filter", "brightness(1.2)");
-                });
-                
-                // Highlight child nodes
-                children.forEach(child => {
-                    console.log('Highlighting child:', child.name, child.id);
-                    const childElement = node.filter(d => d.id === child.id);
-                    console.log('Child element found:', childElement.size());
-                    childElement.select("rect")
-                        .style("stroke", "#000")
-                        .style("stroke-width", "4px")
-                        .style("filter", "brightness(1.2)");
-                });
-                
-                // Highlight connecting edges (both parent and child connections)
-                const allRelatedNodes = [...parents, ...children];
-                const connectingLinks = familyData.links.filter(link => {
-                    const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
-                    const targetId = typeof link.target === 'object' ? link.target.id : link.target;
-                    
-                    return (sourceId === nodeId && allRelatedNodes.some(n => n.id === targetId)) ||
-                           (targetId === nodeId && allRelatedNodes.some(n => n.id === sourceId));
-                });
-                
-                console.log('Connecting links:', connectingLinks);
-                
-                // Highlight the connecting links
-                link.style("stroke", d => {
-                    const isConnecting = connectingLinks.some(connectingLink => {
-                        const linkSourceId = typeof connectingLink.source === 'object' ? connectingLink.source.id : connectingLink.source;
-                        const linkTargetId = typeof connectingLink.target === 'object' ? connectingLink.target.id : connectingLink.target;
-                        
-                        return (d.source.id === linkSourceId && d.target.id === linkTargetId) ||
-                               (d.source.id === linkTargetId && d.target.id === linkSourceId);
-                    });
-                    return isConnecting ? "#000" : "#999";
-                })
-                .style("stroke-width", d => {
-                    const isConnecting = connectingLinks.some(connectingLink => {
-                        const linkSourceId = typeof connectingLink.source === 'object' ? connectingLink.source.id : connectingLink.source;
-                        const linkTargetId = typeof connectingLink.target === 'object' ? connectingLink.target.id : connectingLink.target;
-                        
-                        return (d.source.id === linkSourceId && d.target.id === linkTargetId) ||
-                               (d.source.id === linkTargetId && d.target.id === linkSourceId);
-                    });
-                    return isConnecting ? "4px" : "2px";
-                })
-                .style("stroke-opacity", d => {
-                    const isConnecting = connectingLinks.some(connectingLink => {
-                        const linkSourceId = typeof connectingLink.source === 'object' ? connectingLink.source.id : connectingLink.source;
-                        const linkTargetId = typeof connectingLink.target === 'object' ? connectingLink.target.id : connectingLink.target;
-                        
-                        return (d.source.id === linkSourceId && d.target.id === linkTargetId) ||
-                               (d.source.id === linkTargetId && d.target.id === linkSourceId);
-                    });
-                    return isConnecting ? 1 : calculateLinkOpacity(d);
-                })
-                .style("stroke-dasharray", d => {
-                    const isConnecting = connectingLinks.some(connectingLink => {
-                        const linkSourceId = typeof connectingLink.source === 'object' ? connectingLink.source.id : connectingLink.source;
-                        const linkTargetId = typeof connectingLink.target === 'object' ? connectingLink.target.id : connectingLink.target;
-                        
-                        return (d.source.id === linkSourceId && d.target.id === linkTargetId) ||
-                               (d.source.id === linkTargetId && d.target.id === linkSourceId);
-                    });
-                    
-                    if (!isConnecting) {
-                        return "none"; // solid line for non-highlighted
-                    }
-                    
-                    // Check if this is a parent relationship (parent -> child)
-                    const isParentRelationship = parents.some(parent => {
-                        const parentId = parent.id;
-                        return (d.source.id === parentId && d.target.id === nodeId) ||
-                               (d.target.id === parentId && d.source.id === nodeId);
-                    });
-                    
-                    // Check if this is a child relationship (child -> parent)
-                    const isChildRelationship = children.some(child => {
-                        const childId = child.id;
-                        return (d.source.id === nodeId && d.target.id === childId) ||
-                               (d.target.id === nodeId && d.source.id === childId);
-                    });
-                    
-                    if (isParentRelationship) {
-                        return "none"; // solid line for parent relationships
-                    } else if (isChildRelationship) {
-                        return "5,5"; // dotted line for child relationships
-                    } else {
-                        return "none"; // solid line for other relationships
-                    }
-                });
-            }
-            
-            // Function to clear all highlights
-            function clearHighlights() {
-                node.select("rect")
-                    .style("stroke", "#fff")
-                    .style("stroke-width", "2px")
-                    .style("filter", "brightness(1)")
-                    .classed("selected", false);
-                
-                link
-                    .style("stroke", "#999")
-                    .style("stroke-width", "2px")
-                    .style("stroke-opacity", d => calculateLinkOpacity(d))
-                    .style("stroke-dasharray", "none"); // Reset to solid lines
-            }
-            
-            // Set initial positions to fit in viewport
-            const nodeCount = familyData.nodes.length;
-            const radius = Math.min(containerWidth, containerHeight) * 0.3;
-            const centerX = containerWidth / 2;
-            const centerY = containerHeight / 2;
-            
-            familyData.nodes.forEach((node, i) => {
-                const angle = (i / nodeCount) * 2 * Math.PI;
-                node.x = centerX + radius * Math.cos(angle);
-                node.y = centerY + radius * Math.sin(angle);
             });
             
-            console.log('Initial positions set');
+            // Highlight child nodes
+            children.forEach(child => {
+                console.log('Highlighting child:', child.name, child.id);
+                const childElement = node.filter(d => d.id === child.id);
+                console.log('Child element found:', childElement.size());
+                childElement.select("rect")
+                    .style("stroke", "#000")
+                    .style("stroke-width", "4px")
+                    .style("filter", "brightness(1.2)");
+            });
             
-            // Create the links
-            const link = g.append("g")
-                .selectAll("line")
-                .data(familyData.links)
-                .enter().append("line")
-                .attr("stroke", "#999")
-                .attr("stroke-opacity", d => calculateLinkOpacity(d))
-                .attr("stroke-width", 2)
-                .attr("stroke-dasharray", d => {
-                    // Determine if this is a parent-child relationship
-                    // Parent edges are solid, child edges are dotted
-                    const sourceId = typeof d.source === 'object' ? d.source.id : d.source;
-                    const targetId = typeof d.target === 'object' ? d.target.id : d.target;
+            // Highlight connecting edges (both parent and child connections)
+            const allRelatedNodes = [...parents, ...children];
+            const connectingLinks = familyData.links.filter(link => {
+                const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+                const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+                
+                return (sourceId === nodeId && allRelatedNodes.some(n => n.id === targetId)) ||
+                       (targetId === nodeId && allRelatedNodes.some(n => n.id === sourceId));
+            });
+            
+            console.log('Connecting links:', connectingLinks);
+            
+            // Highlight the connecting links
+            link.style("stroke", d => {
+                const isConnecting = connectingLinks.some(connectingLink => {
+                    const linkSourceId = typeof connectingLink.source === 'object' ? connectingLink.source.id : connectingLink.source;
+                    const linkTargetId = typeof connectingLink.target === 'object' ? connectingLink.target.id : connectingLink.target;
                     
-                    // For now, we'll make all edges solid and handle the distinction in highlighting
-                    return "none"; // solid line
+                    return (d.source.id === linkSourceId && d.target.id === linkTargetId) ||
+                           (d.source.id === linkTargetId && d.target.id === linkSourceId);
                 });
-            
-            // Store reference to link elements
-            linkElements = link;
-            
-            console.log('Links created:', familyData.links.length);
-            
-            // Create the nodes
-            const node = g.append("g")
-                .selectAll("g")
-                .data(familyData.nodes)
-                .enter().append("g")
-                .call(d3.drag()
-                    .on("start", dragstarted)
-                    .on("drag", dragged)
-                    .on("end", dragended))
-                .on("click", function(event, d) {
-                    // Remove selection from all nodes
-                    node.select("rect").classed("selected", false);
-                    // Add selection to clicked node
-                    d3.select(this).select("rect").classed("selected", true);
+                return isConnecting ? "#000" : "#999";
+            })
+            .style("stroke-width", d => {
+                const isConnecting = connectingLinks.some(connectingLink => {
+                    const linkSourceId = typeof connectingLink.source === 'object' ? connectingLink.source.id : connectingLink.source;
+                    const linkTargetId = typeof connectingLink.target === 'object' ? connectingLink.target.id : connectingLink.target;
                     
-                    // Clear any existing highlights
-                    clearHighlights();
-                    
-                    // Highlight family relationships (same as sidebar)
-                    highlightFamilyRelationships(d.id);
-                    
-                    // Show information in right panel
-                    showNodeInfo(d);
-                })
-                .on("mouseover", function(event, d) {
-                    // No mouseover highlighting - only on click
-                })
-                .on("mouseout", function() {
-                    // No mouseout clearing - only on click
+                    return (d.source.id === linkSourceId && d.target.id === linkTargetId) ||
+                           (d.source.id === linkTargetId && d.target.id === linkSourceId);
                 });
-            
-            // Store reference to node elements
-            nodeElements = node;
-            
-            console.log('Nodes created:', familyData.nodes.length);
-            
-            // Add rounded rectangles for the nodes
-            node.append("rect")
-                .attr("rx", 8) // Rounded corners
-                .attr("ry", 8)
-                .attr("width", d => Math.max(80, d.name.length * 8)) // Dynamic width based on name length
-                .attr("height", 30)
-                .attr("x", d => -Math.max(80, d.name.length * 8) / 2) // Center the rectangle
-                .attr("y", -15)
-                .style("fill", d => {
-                    switch(d.type) {
-                        case 'current-user': return "#3B82F6"; // Blue for current user
-                        case 'parent': return "#10B981"; // Green for parents
-                        case 'grandparent': return "#8B5CF6"; // Purple for grandparents
-                        case 'great-grandparent': return "#6B21A8"; // Dark purple for great-grandparents
-                        case 'ancestor': return "#7C3AED"; // Dark purple for ancestors
-                        case 'sibling': return "#F59E0B"; // Orange for siblings
-                        case 'uncle-aunt': return "#F97316"; // Orange for uncles/aunts
-                        case 'cousin': return "#EAB308"; // Yellow for cousins
-                        case 'niece-nephew': return "#FCD34D"; // Yellow for nieces/nephews
-                        case 'child': return "#EF4444"; // Red for children
-                        case 'grandchild': return "#EC4899"; // Pink for grandchildren
-                        case 'great-grandchild': return "#BE185D"; // Pink for great-grandchildren
-                        case 'descendant': return "#FB7185"; // Light red for descendants
-                        default: return "#6B7280"; // Gray for unknown types
-                    }
-                })
+                return isConnecting ? "4px" : "2px";
+            })
+            .style("stroke-opacity", d => {
+                const isConnecting = connectingLinks.some(connectingLink => {
+                    const linkSourceId = typeof connectingLink.source === 'object' ? connectingLink.source.id : connectingLink.source;
+                    const linkTargetId = typeof connectingLink.target === 'object' ? connectingLink.target.id : connectingLink.target;
+                    
+                    return (d.source.id === linkSourceId && d.target.id === linkTargetId) ||
+                           (d.source.id === linkTargetId && d.target.id === linkSourceId);
+                });
+                return isConnecting ? 1 : calculateLinkOpacity(d);
+            });
+        }
+        
+        // Function to clear highlights
+        function clearHighlights() {
+            node.select("rect")
                 .style("stroke", "#fff")
-                .style("stroke-width", "2px");
+                .style("stroke-width", "2px")
+                .style("filter", "none");
             
-            // Add labels for the nodes with gender icons
-            node.append("text")
-                .text(d => {
-                    const genderIcon = getGenderIcon(d.gender);
-                    return genderIcon ? `${d.name} ${genderIcon}` : d.name;
-                })
-                .attr("text-anchor", "middle")
-                .attr("dy", "0.35em")
-                .style("font-size", "11px")
-                .style("font-weight", "bold")
-                .style("fill", "#fff")
-                .style("pointer-events", "none");
-            
-            console.log('Node styling applied');
-            
-            // Add boundary constraints
-            simulation.on("tick", () => {
-                // Keep nodes within bounds
-                familyData.nodes.forEach(d => {
-                    const nodeWidth = Math.max(80, d.name.length * 8);
-                    const nodeHeight = 30;
-                    const margin = Math.max(nodeWidth, nodeHeight) / 2 + 10;
-                    
-                    d.x = Math.max(margin, Math.min(containerWidth - margin, d.x));
-                    d.y = Math.max(margin, Math.min(containerHeight - margin, d.y));
-                });
+            link.style("stroke", "#999")
+                .style("stroke-width", "2px")
+                .style("stroke-opacity", d => calculateLinkOpacity(d));
+        }
+        
+        // Create the links
+        const link = g.append("g")
+            .selectAll("line")
+            .data(familyData.links)
+            .enter().append("line")
+            .attr("class", "link")
+            .style("stroke", "#999")
+            .style("stroke-width", "2px")
+            .style("stroke-opacity", d => calculateLinkOpacity(d));
+        
+        // Store reference to link elements
+        window.linkElements = link;
+        
+        console.log('Links created:', familyData.links.length);
+        
+        // Create the nodes
+        const node = g.append("g")
+            .selectAll("g")
+            .data(familyData.nodes)
+            .enter().append("g")
+            .call(d3.drag()
+                .on("start", dragstarted)
+                .on("drag", dragged)
+                .on("end", dragended))
+            .on("click", function(event, d) {
+                // Remove selection from all nodes
+                node.select("rect").classed("selected", false);
+                // Add selection to clicked node
+                d3.select(this).select("rect").classed("selected", true);
                 
-                // Update link positions
-                link
-                    .attr("x1", d => d.source.x)
-                    .attr("y1", d => d.source.y)
-                    .attr("x2", d => d.target.x)
-                    .attr("y2", d => d.target.y);
+                // Clear any existing highlights
+                clearHighlights();
                 
-                // Update node positions
-                node
-                    .attr("transform", d => `translate(${d.x},${d.y})`);
+                // Highlight family relationships (same as sidebar)
+                highlightFamilyRelationships(d.id);
+                
+                // Show information in right panel
+                showNodeInfo(d);
+            })
+            .on("mouseover", function(event, d) {
+                // No mouseover highlighting - only on click
+            })
+            .on("mouseout", function() {
+                // No mouseout clearing - only on click
             });
-            
-            console.log('Simulation tick handler set');
-            
-            // Drag functions
-            function dragstarted(event, d) {
-                if (!event.active) simulation.alphaTarget(0.3).restart();
-                d.fx = d.x;
-                d.fy = d.y;
-            }
-            
-            function dragged(event, d) {
-                d.fx = event.x;
-                d.fy = event.y;
-            }
-            
-            function dragended(event, d) {
-                if (!event.active) simulation.alphaTarget(0);
-                d.fx = null;
-                d.fy = null;
-            }
-            
-            // Handle window resize
-            window.addEventListener('resize', function() {
-                // Get new container dimensions
-                const newContainerWidth = container.clientWidth;
-                const newContainerHeight = container.clientHeight;
-                
-                // Update SVG size
-                svg.attr("width", newContainerWidth)
-                   .attr("height", newContainerHeight);
-                
-                // Update force center
-                simulation.force("center", d3.forceCenter(newContainerWidth / 2, newContainerHeight / 2));
-                simulation.alpha(0.3).restart();
-            });
-            
-            console.log('D3 visualization complete!');
-            
-            // Add click handlers to toggle badges
-            document.querySelectorAll('.toggle-badge').forEach(badge => {
-                badge.addEventListener('click', function() {
-                    const type = this.getAttribute('data-type');
-                    window.toggleNodeType(type);
-                });
-            });
-            
-            // Set initial zoom to fit all nodes
-            setTimeout(() => {
-                // Calculate bounds of all nodes
-                const xExtent = d3.extent(familyData.nodes, d => d.x);
-                const yExtent = d3.extent(familyData.nodes, d => d.y);
-                
-                const nodeWidth = xExtent[1] - xExtent[0];
-                const nodeHeight = yExtent[1] - yExtent[0];
-                
-                // Add some padding
-                const padding = 50;
-                const scaleX = (containerWidth - padding) / nodeWidth;
-                const scaleY = (containerHeight - padding) / nodeHeight;
-                const scale = Math.min(scaleX, scaleY, 1); // Don't zoom in more than 1:1
-                
-                // Apply zoom
-                const transform = d3.zoomIdentity
-                    .translate(containerWidth / 2, containerHeight / 2)
-                    .scale(scale)
-                    .translate(-(xExtent[0] + xExtent[1]) / 2, -(yExtent[0] + yExtent[1]) / 2);
-                
-                svg.call(zoom.transform, transform);
-                
-                // Auto-select the current user (first node)
-                if (familyData.nodes.length > 0) {
-                    const currentUser = familyData.nodes[0];
-                    console.log('Auto-selecting current user:', currentUser.name);
-                    
-                    // Highlight the current user
-                    highlightFamilyRelationships(currentUser.id);
-                    
-                    // Show current user info in sidebar
-                    showNodeInfo(currentUser);
+        
+        // Store reference to node elements
+        window.nodeElements = node;
+        
+        console.log('Nodes created:', familyData.nodes.length);
+        
+        // Add rounded rectangles for the nodes
+        node.append("rect")
+            .attr("rx", 8) // Rounded corners
+            .attr("ry", 8)
+            .attr("width", d => Math.max(80, d.name.length * 8)) // Dynamic width based on name length
+            .attr("height", 30)
+            .attr("x", d => -Math.max(80, d.name.length * 8) / 2) // Center the rectangle
+            .attr("y", -15)
+            .style("fill", d => {
+                switch(d.type) {
+                    case 'current-user': return "#3B82F6"; // Blue for current user
+                    case 'parent': return "#10B981"; // Green for parents
+                    case 'grandparent': return "#8B5CF6"; // Purple for grandparents
+                    case 'great-grandparent': return "#6B21A8"; // Dark purple for great-grandparents
+                    case 'ancestor': return "#7C3AED"; // Dark purple for ancestors
+                    case 'sibling': return "#F59E0B"; // Orange for siblings
+                    case 'uncle-aunt': return "#F97316"; // Orange for uncles/aunts
+                    case 'cousin': return "#EAB308"; // Yellow for cousins
+                    case 'niece-nephew': return "#FCD34D"; // Yellow for nieces/nephews
+                    case 'child': return "#EF4444"; // Red for children
+                    case 'grandchild': return "#EC4899"; // Pink for grandchildren
+                    case 'great-grandchild': return "#BE185D"; // Pink for great-grandchildren
+                    case 'descendant': return "#FB7185"; // Light red for descendants
+                    default: return "#6B7280"; // Gray for unknown types
                 }
-            }, 1000); // Wait for simulation to settle
-        }, 100);
+            })
+            .style("stroke", "#fff")
+            .style("stroke-width", "2px");
+        
+        // Add labels for the nodes with gender icons
+        node.append("text")
+            .text(d => {
+                const genderIcon = getGenderIcon(d.gender);
+                return genderIcon ? `${d.name} ${genderIcon}` : d.name;
+            })
+            .attr("text-anchor", "middle")
+            .attr("dy", "0.35em")
+            .style("font-size", "11px")
+            .style("font-weight", "bold")
+            .style("fill", "#fff")
+            .style("pointer-events", "none");
+        
+        console.log('Node styling applied');
+        
+        // Add boundary constraints
+        window.simulation.on("tick", () => {
+            // Keep nodes within bounds
+            familyData.nodes.forEach(d => {
+                const nodeWidth = Math.max(80, d.name.length * 8);
+                const nodeHeight = 30;
+                const margin = Math.max(nodeWidth, nodeHeight) / 2 + 10;
+                
+                d.x = Math.max(margin, Math.min(containerWidth - margin, d.x));
+                d.y = Math.max(margin, Math.min(containerHeight - margin, d.y));
+            });
+            
+            // Update link positions
+            link
+                .attr("x1", d => d.source.x)
+                .attr("y1", d => d.source.y)
+                .attr("x2", d => d.target.x)
+                .attr("y2", d => d.target.y);
+            
+            // Update node positions
+            node
+                .attr("transform", d => `translate(${d.x},${d.y})`);
+        });
+        
+        console.log('Simulation tick handler set');
+        
+        // Drag functions
+        function dragstarted(event, d) {
+            if (!event.active) window.simulation.alphaTarget(0.3).restart();
+            d.fx = d.x;
+            d.fy = d.y;
+        }
+        
+        function dragged(event, d) {
+            d.fx = event.x;
+            d.fy = event.y;
+        }
+        
+        function dragended(event, d) {
+            if (!event.active) window.simulation.alphaTarget(0);
+            d.fx = null;
+            d.fy = null;
+        }
+        
+        // Handle window resize
+        window.addEventListener('resize', function() {
+            // Get new container dimensions
+            const newContainerWidth = container.clientWidth;
+            const newContainerHeight = container.clientHeight;
+            
+            // Update SVG size
+            svg.attr("width", newContainerWidth)
+               .attr("height", newContainerHeight);
+            
+            // Update force center
+            window.simulation.force("center", d3.forceCenter(newContainerWidth / 2, newContainerHeight / 2));
+            window.simulation.alpha(0.3).restart();
+        });
+        
+        console.log('D3 visualization complete!');
+        
+        // Add click handlers to toggle badges
+        document.querySelectorAll('.toggle-badge').forEach(badge => {
+            badge.addEventListener('click', function() {
+                const type = this.getAttribute('data-type');
+                window.toggleNodeType(type);
+            });
+        });
+        
+        // Set initial zoom to fit all nodes
+        setTimeout(() => {
+            // Calculate bounds of all nodes
+            const xExtent = d3.extent(familyData.nodes, d => d.x);
+            const yExtent = d3.extent(familyData.nodes, d => d.y);
+            
+            const nodeWidth = xExtent[1] - xExtent[0];
+            const nodeHeight = yExtent[1] - yExtent[0];
+            
+            // Add some padding
+            const padding = 50;
+            const scaleX = (containerWidth - padding) / nodeWidth;
+            const scaleY = (containerHeight - padding) / nodeHeight;
+            const scale = Math.min(scaleX, scaleY, 1); // Don't zoom in more than 1:1
+            
+            // Apply zoom
+            const transform = d3.zoomIdentity
+                .translate(containerWidth / 2, containerHeight / 2)
+                .scale(scale)
+                .translate(-(xExtent[0] + xExtent[1]) / 2, -(yExtent[0] + yExtent[1]) / 2);
+            
+            svg.call(zoom.transform, transform);
+            
+            // Auto-select the current user (first node)
+            if (familyData.nodes.length > 0) {
+                const currentUser = familyData.nodes[0];
+                console.log('Auto-selecting current user:', currentUser.name);
+                
+                // Highlight the current user
+                highlightFamilyRelationships(currentUser.id);
+                
+                // Show current user info in sidebar
+                showNodeInfo(currentUser);
+            }
+        }, 1000); // Wait for simulation to settle
+    };
+    
+    try {
+        const familyData = @json($familyData);
+        
+        // Initial render
+        window.renderFamilyTree(familyData);
         
     } catch (error) {
         console.error('Error in D3 script:', error);

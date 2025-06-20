@@ -23,8 +23,7 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 Route::get('/spans/search', [SpanSearchController::class, 'search']);
 
 Route::middleware('auth:sanctum')->group(function () {
-    // Span creation endpoint
-    Route::post('/spans', [SpanSearchController::class, 'store']);
+    // Other API endpoints that need Sanctum auth can go here
 });
 
 // Connection Types API Routes
