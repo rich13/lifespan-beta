@@ -80,7 +80,7 @@ use Illuminate\Support\Facades\Route;
                         </div>
 
                         <!-- Main Content Area -->
-                        <div class="col-md-9 col-lg-10 ms-auto bg-white py-3">
+                        <div class="col-md-9 col-lg-10 ms-auto bg-light py-3">
                             <div class="header-section mb-4">
                                 @yield('header')
                                 <x-flash-messages />
@@ -90,7 +90,7 @@ use Illuminate\Support\Facades\Route;
                     </div>
                 @else
                     <div class="row">
-                        <div class="col-12 bg-white py-3">
+                        <div class="col-12 bg-light py-3">
                             <div class="header-section mb-4">
                                 @yield('header')
                                 <x-flash-messages />

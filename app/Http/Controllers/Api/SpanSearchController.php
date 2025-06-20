@@ -18,9 +18,12 @@ class SpanSearchController extends Controller
         $type = $request->get('type');
         $user = Auth::user();
 
-        // Start with spans the user can see
-        $spans = Span::query()
-            ->where(function ($q) use ($user) {
+        // Start with spans the user can see, excluding connections
+        $spans = Span::query()->whereNot('type_id', 'connection');
+        
+        if ($user) {
+            // Authenticated user - can see public, owned, and shared spans
+            $spans->where(function ($q) use ($user) {
                 $q->where('access_level', 'public')
                     ->orWhere('owner_id', $user->id)
                     ->orWhere(function ($q) use ($user) {
@@ -30,6 +33,10 @@ class SpanSearchController extends Controller
                             });
                     });
             });
+        } else {
+            // Unauthenticated user - can only see public spans
+            $spans->where('access_level', 'public');
+        }
 
         // Add type restriction if specified
         if ($type) {
@@ -38,7 +45,7 @@ class SpanSearchController extends Controller
 
         // Search by name
         if ($query) {
-            $spans->where('name', 'like', "%{$query}%");
+            $spans->where('name', 'ilike', "%{$query}%");
         }
 
         // Get results with type information

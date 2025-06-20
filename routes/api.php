@@ -19,9 +19,11 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
 
+// Span search endpoint - uses web session auth
+Route::get('/spans/search', [SpanSearchController::class, 'search']);
+
 Route::middleware('auth:sanctum')->group(function () {
-    // Span search and creation endpoints
-    Route::get('/spans/search', [SpanSearchController::class, 'search']);
+    // Span creation endpoint
     Route::post('/spans', [SpanSearchController::class, 'store']);
 });
 

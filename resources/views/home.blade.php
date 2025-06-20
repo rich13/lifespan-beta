@@ -4,8 +4,21 @@
     @guest
         Welcome to Lifespan
     @else
-        Home
+        {{ \Carbon\Carbon::now()->format('j F Y') }}
     @endguest
+@endsection
+
+@section('page_filters')
+    @auth
+        <div class="d-flex align-items-center gap-3">
+            <div class="home-search-container position-relative" style="width: 400px;">
+                <div class="d-flex align-items-center position-relative">
+                    <i class="bi bi-search position-absolute ms-2 text-muted z-index-1"></i>
+                    <input type="text" id="home-search" class="form-control form-control-sm ps-4" placeholder="Search spans..." autocomplete="off">
+                </div>
+            </div>
+        </div>
+    @endauth
 @endsection
 
 @section('scripts')
@@ -209,8 +222,8 @@
         }
         
         .card-carousel {
-            gap: 20px;
-            padding: 0 calc(25% + 24px); /* Adjusted for mobile */
+            gap: 12px;
+            padding: 0 calc(10% + 20px);
         }
         
         .secondary-carousel-container .card-carousel {
@@ -268,6 +281,80 @@
     .card-content-top .bi {
         margin: 0 auto;
         display: block;
+    }
+
+    /* Search dropdown positioning */
+    .home-search-container {
+        position: relative;
+        min-width: 250px;
+        flex: 1;
+        max-width: 500px;
+    }
+    
+    #home-search {
+        width: 100%;
+        min-width: 250px;
+    }
+    
+    #search-dropdown {
+        position: absolute !important;
+        right: 0 !important;
+        left: auto !important;
+        min-width: 300px;
+        max-width: 500px;
+        z-index: 1050;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        border: 1px solid rgba(0, 0, 0, 0.125);
+        /* Prevent overflow */
+        max-width: calc(100vw - 2rem);
+        right: 0 !important;
+    }
+    
+    /* Responsive adjustments for search dropdown */
+    @media (max-width: 768px) {
+        .home-search-container {
+            min-width: 200px;
+            max-width: 300px;
+        }
+        
+        #home-search {
+            min-width: 200px;
+        }
+        
+        #search-dropdown {
+            right: 0 !important;
+            left: 0 !important;
+            min-width: auto;
+            max-width: none;
+            width: 100%;
+        }
+    }
+    
+    /* Additional responsive adjustments for very small screens */
+    @media (max-width: 576px) {
+        .home-search-container {
+            min-width: 150px;
+            max-width: 250px;
+        }
+        
+        #home-search {
+            min-width: 150px;
+        }
+    }
+    
+    /* Ensure dropdown items are properly styled */
+    #search-dropdown .dropdown-item {
+        padding: 0.5rem 1rem;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    }
+    
+    #search-dropdown .dropdown-item:last-child {
+        border-bottom: none;
+    }
+    
+    #search-dropdown .dropdown-item:hover,
+    #search-dropdown .dropdown-item.active {
+        background-color: #f8f9fa;
     }
 </style>
 
@@ -577,13 +664,6 @@
 
 @else
     <div class="container-fluid">
-        <div class="alert alert-info alert-sm py-2 mb-3">
-            <small>
-                <i class="bi bi-calendar me-1"></i>
-                Today is {{ \Carbon\Carbon::now()->format('j F Y') }}
-            </small>
-        </div>
-
         <div class="row">
             <!-- Left Column: Personal Info -->
             <div class="col-md-6">

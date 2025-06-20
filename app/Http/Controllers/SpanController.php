@@ -32,8 +32,8 @@ class SpanController extends Controller
      */
     public function __construct(SpanComparisonService $comparisonService)
     {
-        // Require auth for all routes except show and index
-        $this->middleware('auth')->except(['show', 'index']);
+        // Require auth for all routes except show, index, and search
+        $this->middleware('auth')->except(['show', 'index', 'search']);
         $this->comparisonService = $comparisonService;
     }
 
@@ -656,5 +656,61 @@ class SpanController extends Controller
             'connectionsEndingInYear',
             'date'
         ));
+    }
+
+    /**
+     * Search for spans (JSON API for autocomplete)
+     */
+    public function search(Request $request)
+    {
+        $query = $request->get('q');
+        $type = $request->get('type');
+        $user = Auth::user();
+
+        // Start with spans the user can see, excluding connections
+        $spans = Span::query()->whereNot('type_id', 'connection');
+        
+        if ($user) {
+            // Authenticated user - can see public, owned, and shared spans
+            $spans->where(function ($q) use ($user) {
+                $q->where('access_level', 'public')
+                    ->orWhere('owner_id', $user->id)
+                    ->orWhere(function ($q) use ($user) {
+                        $q->where('access_level', 'shared')
+                            ->whereHas('permissions', function ($q) use ($user) {
+                                $q->where('user_id', $user->id);
+                            });
+                    });
+            });
+        } else {
+            // Unauthenticated user - can only see public spans
+            $spans->where('access_level', 'public');
+        }
+
+        // Add type restriction if specified
+        if ($type) {
+            $spans->where('type_id', $type);
+        }
+
+        // Search by name
+        if ($query) {
+            $spans->where('name', 'ilike', "%{$query}%");
+        }
+
+        // Get results with type information
+        $results = $spans->with('type')
+            ->limit(10)
+            ->get()
+            ->map(function ($span) {
+                return [
+                    'id' => $span->id,
+                    'name' => $span->name,
+                    'type_id' => $span->type_id,
+                    'type_name' => $span->type->name,
+                    'state' => $span->state
+                ];
+            });
+
+        return response()->json($results);
     }
 }

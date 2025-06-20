@@ -181,6 +181,9 @@ Route::middleware('web')->group(function () {
 
     // Span routes
     Route::prefix('spans')->group(function () {
+        // Search route (works with session auth)
+        Route::get('/search', [SpanController::class, 'search'])->name('spans.search');
+        
         // Protected routes
         Route::middleware('auth')->group(function () {
             Route::get('/create', [SpanController::class, 'create'])->name('spans.create');
