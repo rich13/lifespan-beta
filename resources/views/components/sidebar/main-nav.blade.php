@@ -10,4 +10,9 @@
             <i class="bi bi-bar-chart-steps me-1"></i> Spans
         </a>
     </li>
+    <li class="nav-item">
+        <a class="nav-link {{ request()->routeIs('family.*') ? 'active' : '' }}" href="{{ route('family.index') }}">
+            <i class="bi bi-people-fill me-1"></i> Family
+        </a>
+    </li>
 </ul> 

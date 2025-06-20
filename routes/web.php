@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SpanController;
+use App\Http\Controllers\FamilyController;
 use App\Http\Controllers\Auth\EmailFirstAuthController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\SpanController as AdminSpanController;
@@ -209,6 +210,9 @@ Route::middleware('web')->group(function () {
         Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password.update');
         Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
         Route::post('logout', [EmailFirstAuthController::class, 'destroy'])->name('logout');
+
+        // Family routes
+        Route::get('/family', [FamilyController::class, 'index'])->name('family.index');
 
         // Admin routes
         Route::middleware('admin')->prefix('admin')->name('admin.')->group(function () {
