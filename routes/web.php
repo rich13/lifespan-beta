@@ -16,6 +16,7 @@ use App\Http\Controllers\Admin\ConnectionController;
 use App\Http\Controllers\Admin\ImportController;
 use App\Http\Controllers\Admin\VisualizerController;
 use App\Http\Controllers\Admin\MusicBrainzImportController;
+use App\Http\Controllers\FriendsController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
@@ -193,6 +194,9 @@ Route::middleware('web')->group(function () {
             Route::put('/{span}', [SpanController::class, 'update'])->name('spans.update');
             Route::delete('/{span}', [SpanController::class, 'destroy'])->name('spans.destroy');
             Route::get('/{span}/compare', [SpanController::class, 'compare'])->name('spans.compare');
+            
+            // API search endpoint for AJAX calls (authenticated)
+            Route::get('/api/search', [App\Http\Controllers\Api\SpanSearchController::class, 'search'])->name('spans.api.search');
         });
 
         // Public routes
@@ -215,6 +219,11 @@ Route::middleware('web')->group(function () {
         Route::get('/family', [FamilyController::class, 'index'])->name('family.index');
         Route::get('/family/data', [FamilyController::class, 'data'])->name('family.data');
         Route::post('/api/family/connections', [FamilyController::class, 'createConnection'])->name('family.connections.create');
+
+        // Friends routes
+        Route::get('/friends', [FriendsController::class, 'index'])->name('friends.index');
+        Route::get('/friends/data', [FriendsController::class, 'data'])->name('friends.data');
+        Route::post('/api/friends/connections', [FriendsController::class, 'createConnection'])->name('friends.connections.create');
 
         // Admin routes
         Route::middleware('admin')->prefix('admin')->name('admin.')->group(function () {

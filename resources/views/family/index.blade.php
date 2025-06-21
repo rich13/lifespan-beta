@@ -306,29 +306,67 @@ function getGenderIcon(gender) {
 function showNodeInfo(nodeData) {
     const infoPanel = document.getElementById('info-panel');
     
-    // Get family relationships from the existing graph data
-    const familyData = @json($familyData);
+    // Get family relationships from the current graph data (not static JSON)
+    const familyData = window.familyData || @json($familyData);
+    
+    console.log('=== FAMILY DATA DEBUG ===');
+    console.log('Family data source:', window.familyData ? 'window.familyData' : 'static JSON');
+    console.log('Family data structure:', familyData);
+    console.log('Links structure:', familyData.links);
+    console.log('Sample link:', familyData.links[0]);
     
     // Find parents of this person (nodes that have links TO this person as target)
     const parents = familyData.links
-        .filter(link => link.target === nodeData.id)
-        .map(link => familyData.nodes.find(node => node.id === link.source))
+        .filter(link => {
+            const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+            console.log('Checking parent link:', link.source, '->', targetId, 'vs', nodeData.id);
+            return targetId === nodeData.id;
+        })
+        .map(link => {
+            const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+            return familyData.nodes.find(node => node.id === sourceId);
+        })
         .filter(parent => parent);
+    
+    // Debug logging
+    console.log('Node data:', nodeData);
+    console.log('All family links:', familyData.links);
+    console.log('Parents found:', parents);
+    console.log('Parent genders:', parents.map(p => ({ name: p.name, gender: p.gender })));
     
     // Find children of this person (nodes that this person has links TO as source)
     const children = familyData.links
-        .filter(link => link.source === nodeData.id)
-        .map(link => familyData.nodes.find(node => node.id === link.target))
+        .filter(link => {
+            const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+            console.log('Checking child link:', sourceId, '->', link.target, 'vs', nodeData.id);
+            return sourceId === nodeData.id;
+        })
+        .map(link => {
+            const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+            return familyData.nodes.find(node => node.id === targetId);
+        })
         .filter(child => child);
+    
+    // Debug logging
+    console.log('Children found:', children);
+    console.log('Children genders:', children.map(c => ({ name: c.name, gender: c.gender })));
     
     // Create family relationships HTML
     let familyRelationships = '';
+    
+    console.log('=== PARENT DETECTION DEBUG ===');
+    console.log('Total parents found:', parents.length);
+    console.log('All parents:', parents);
     
     if (parents.length > 0) {
         // Separate parents by gender
         const mothers = parents.filter(parent => parent.gender === 'female');
         const fathers = parents.filter(parent => parent.gender === 'male');
         const otherParents = parents.filter(parent => parent.gender !== 'female' && parent.gender !== 'male');
+        
+        console.log('Mothers found:', mothers.length, mothers);
+        console.log('Fathers found:', fathers.length, fathers);
+        console.log('Other parents found:', otherParents.length, otherParents);
         
         familyRelationships += `
             <div class="row mb-3">
@@ -485,6 +523,43 @@ function showNodeInfo(nodeData) {
                             </li>
                         `).join('')}
                     </ul>
+                    <button type="button" class="btn btn-outline-success btn-sm mt-2" onclick="showAddChildForm('${nodeData.id}')">
+                        <i class="bi bi-plus-circle me-1"></i>Add Child
+                    </button>
+                </div>
+            </div>
+        `;
+    } else {
+        // No children - show add child form
+        familyRelationships += `
+            <div class="card mb-3">
+                <div class="card-body">
+                    <h6 class="card-title">
+                        <i class="bi bi-people-fill text-success me-1"></i>
+                        Children
+                    </h6>
+                    <form data-child-form="true" data-parent-id="${nodeData.id}" class="mt-2">
+                        <div class="mb-2">
+                            <input type="text" class="form-control form-control-sm" data-field="name" placeholder="Child's name" required>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small mb-1">Gender:</label>
+                            <div class="btn-group btn-group-sm w-100" role="group">
+                                <input type="radio" class="btn-check" name="gender_${nodeData.id}" id="male_${nodeData.id}" value="male" checked>
+                                <label class="btn btn-outline-primary" for="male_${nodeData.id}">
+                                    <i class="bi bi-gender-male me-1"></i>Male
+                                </label>
+                                
+                                <input type="radio" class="btn-check" name="gender_${nodeData.id}" id="female_${nodeData.id}" value="female">
+                                <label class="btn btn-outline-danger" for="female_${nodeData.id}">
+                                    <i class="bi bi-gender-female me-1"></i>Female
+                                </label>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-outline-success btn-sm" onclick="createChild('${nodeData.id}')">
+                            <i class="bi bi-plus"></i> Create
+                        </button>
+                    </form>
                 </div>
             </div>
         `;
@@ -754,6 +829,8 @@ function toggleNodeType(type) {
 window.toggleNodeType = toggleNodeType;
 window.updateNodeVisibility = updateNodeVisibility;
 window.createParent = createParent;
+window.showAddChildForm = showAddChildForm;
+window.createChild = createChild;
 window.refreshFamilyTree = refreshFamilyTree;
 
 // Function to update node and link visibility
@@ -837,6 +914,188 @@ function updateNodeVisibility() {
         setTimeout(() => {
             simulation.alpha(0.1);
         }, 500);
+    }
+}
+
+// Function to show the add child form when there are existing children
+function showAddChildForm(parentId) {
+    const childrenCard = document.querySelector('.card:has(.btn-outline-success)');
+    if (childrenCard) {
+        const cardBody = childrenCard.querySelector('.card-body');
+        const existingContent = cardBody.innerHTML;
+        
+        // Replace the content with the form
+        cardBody.innerHTML = `
+            <h6 class="card-title">
+                <i class="bi bi-people-fill text-success me-1"></i>
+                Children
+            </h6>
+            <form data-child-form="true" data-parent-id="${parentId}" class="mt-2">
+                <div class="mb-2">
+                    <input type="text" class="form-control form-control-sm" data-field="name" placeholder="Child's name" required>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small mb-1">Gender:</label>
+                    <div class="btn-group btn-group-sm w-100" role="group">
+                        <input type="radio" class="btn-check" name="gender_${parentId}" id="male_${parentId}" value="male" checked>
+                        <label class="btn btn-outline-primary" for="male_${parentId}">
+                            <i class="bi bi-gender-male me-1"></i>Male
+                        </label>
+                        
+                        <input type="radio" class="btn-check" name="gender_${parentId}" id="female_${parentId}" value="female">
+                        <label class="btn btn-outline-danger" for="female_${parentId}">
+                            <i class="bi bi-gender-female me-1"></i>Female
+                        </label>
+                    </div>
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-success btn-sm" onclick="createChild('${parentId}')">
+                        <i class="bi bi-plus"></i> Create
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="cancelAddChild()">
+                        <i class="bi bi-x"></i> Cancel
+                    </button>
+                </div>
+            </form>
+        `;
+        
+        // Store the original content for restoration
+        childrenCard.setAttribute('data-original-content', existingContent);
+    }
+}
+
+// Function to cancel adding a child and restore the original content
+function cancelAddChild() {
+    const childrenCard = document.querySelector('.card:has([data-child-form="true"])');
+    if (childrenCard) {
+        const originalContent = childrenCard.getAttribute('data-original-content');
+        if (originalContent) {
+            childrenCard.querySelector('.card-body').innerHTML = originalContent;
+            childrenCard.removeAttribute('data-original-content');
+        }
+    }
+}
+
+// Function to create a new child span and family connection
+async function createChild(parentId) {
+    console.log('createChild called with:', { parentId });
+    
+    const form = document.querySelector(`[data-child-form="true"][data-parent-id="${parentId}"]`);
+    if (!form) {
+        console.error('Child form not found');
+        return;
+    }
+    
+    const nameInput = form.querySelector('[data-field="name"]');
+    const name = nameInput.value.trim();
+    
+    if (!name) {
+        alert('Please enter a name for the child');
+        return;
+    }
+    
+    // Get the selected gender
+    const selectedGender = form.querySelector(`input[name="gender_${parentId}"]:checked`);
+    if (!selectedGender) {
+        alert('Please select a gender');
+        return;
+    }
+    
+    const gender = selectedGender.value;
+    
+    // Show loading state
+    const button = form.querySelector('button[onclick*="createChild"]');
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="bi bi-hourglass-split"></i> Creating...';
+    button.disabled = true;
+    
+    try {
+        // Create the child span
+        const spanData = {
+            name: name,
+            type_id: 'person',
+            state: 'placeholder',
+            metadata: {
+                gender: gender
+            }
+        };
+        
+        console.log('Sending child span data:', spanData);
+        
+        const spanResponse = await fetch('/spans', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            },
+            body: JSON.stringify(spanData)
+        });
+        
+        console.log('Child span response status:', spanResponse.status);
+        
+        if (!spanResponse.ok) {
+            const errorText = await spanResponse.text();
+            console.error('Child span creation error response:', errorText);
+            throw new Error('Failed to create child span: ' + errorText);
+        }
+        
+        const responseText = await spanResponse.text();
+        let childSpan;
+        try {
+            childSpan = JSON.parse(responseText);
+            console.log('Successfully parsed child span:', childSpan);
+        } catch (parseError) {
+            console.error('JSON parse error:', parseError);
+            throw new Error('Failed to parse child span response: ' + parseError.message);
+        }
+        
+        // Create the family connection
+        const connectionData = {
+            parent_id: parentId,
+            child_id: childSpan.id,
+            relationship: 'parent'
+        };
+        
+        console.log('Sending child connection data:', connectionData);
+        
+        const connectionResponse = await fetch('/api/family/connections', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            },
+            body: JSON.stringify(connectionData)
+        });
+        
+        console.log('Child connection response status:', connectionResponse.status);
+        
+        if (!connectionResponse.ok) {
+            const errorText = await connectionResponse.text();
+            console.error('Child connection creation error response:', errorText);
+            throw new Error('Failed to create family connection: ' + errorText);
+        }
+        
+        // Refresh the family tree
+        await refreshFamilyTree();
+        
+        // Clear the form
+        nameInput.value = '';
+        
+        // Show success message
+        button.innerHTML = '<i class="bi bi-check"></i> Created!';
+        setTimeout(() => {
+            button.innerHTML = originalText;
+            button.disabled = false;
+        }, 2000);
+        
+    } catch (error) {
+        console.error('Error creating child:', error);
+        alert('Error creating child: ' + error.message);
+        
+        // Reset button
+        button.innerHTML = originalText;
+        button.disabled = false;
     }
 }
 
@@ -943,9 +1202,16 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
         
+        // Function to calculate link distance based on relationship type
+        function calculateLinkDistance(link) {
+            // All family links in our system are parent-child relationships
+            // Make them shorter for a more compact family tree
+            return 120;
+        }
+        
         // Create the force simulation
         window.simulation = d3.forceSimulation(familyData.nodes)
-            .force("link", d3.forceLink(familyData.links).id(d => d.id).distance(200))
+            .force("link", d3.forceLink(familyData.links).id(d => d.id).distance(d => calculateLinkDistance(d)))
             .force("charge", d3.forceManyBody().strength(-400))
             .force("collision", d3.forceCollide().radius(d => Math.max(50, d.name.length * 5) + 20))
             .force("x", d3.forceX(containerWidth / 2).strength(0.1))

@@ -26,24 +26,15 @@
             @php
                 $parentGender = $connection->parent->getMeta('gender');
                 $childGender = $connection->child->getMeta('gender');
-                $isParent = $connection->parent->start_year < $connection->child->start_year;
                 
-                if ($isParent) {
-                    if ($parentGender === 'male') {
-                        $relation = 'is father of';
-                    } elseif ($parentGender === 'female') {
-                        $relation = 'is mother of';
-                    } else {
-                        $relation = 'is parent of';
-                    }
+                // Use the database relationship - parent_id and child_id define the relationship
+                // The parent is always the parent, regardless of birth years
+                if ($parentGender === 'male') {
+                    $relation = 'is father of';
+                } elseif ($parentGender === 'female') {
+                    $relation = 'is mother of';
                 } else {
-                    if ($childGender === 'male') {
-                        $relation = 'is son of';
-                    } elseif ($childGender === 'female') {
-                        $relation = 'is daughter of';
-                    } else {
-                        $relation = 'is child of';
-                    }
+                    $relation = 'is parent of';
                 }
             @endphp
             <span class="text-muted">{{ $relation }}</span>

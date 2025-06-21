@@ -25,6 +25,3 @@ Route::get('/spans/search', [SpanSearchController::class, 'search']);
 Route::middleware('auth:sanctum')->group(function () {
     // Other API endpoints that need Sanctum auth can go here
 });
-
-// Connection Types API Routes
-Route::apiResource('connection-types', \App\Http\Controllers\Api\ConnectionTypeController::class);

@@ -83,10 +83,13 @@ class FamilyController extends Controller
                 'type_id' => 'connection',
                 'owner_id' => Auth::id(),
                 'updater_id' => Auth::id(),
-                'start_year' => $child->start_year,
-                'start_month' => $child->start_month,
-                'start_day' => $child->start_day,
-                'access_level' => 'private'
+                'start_year' => $child->start_year ?? null,
+                'start_month' => $child->start_month ?? null,
+                'start_day' => $child->start_day ?? null,
+                'access_level' => 'private',
+                'state' => 'placeholder', // Set as placeholder since we don't have exact dates
+                'start_precision' => 'year', // Set default precision
+                'end_precision' => 'year' // Set default precision
             ]);
 
             // Create the family connection

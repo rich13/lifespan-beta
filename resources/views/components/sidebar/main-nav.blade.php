@@ -15,4 +15,9 @@
             <i class="bi bi-people-fill me-1"></i> Family
         </a>
     </li>
+    <li class="nav-item">
+        <a class="nav-link {{ request()->routeIs('friends.*') ? 'active' : '' }}" href="{{ route('friends.index') }}">
+            <i class="bi bi-person-heart me-1"></i> Friends
+        </a>
+    </li>
 </ul> 

@@ -16,6 +16,7 @@ class SpanSearchController extends Controller
     {
         $query = $request->get('q');
         $type = $request->get('type');
+        $excludeConnected = $request->get('exclude_connected', false);
         $user = Auth::user();
 
         // Start with spans the user can see, excluding connections
@@ -33,6 +34,23 @@ class SpanSearchController extends Controller
                             });
                     });
             });
+            
+            // Exclude people already connected to the current user
+            if ($excludeConnected && $user->personalSpan) {
+                $connectedPersonIds = collect();
+                
+                // Get friends
+                $friends = $user->personalSpan->friends()->pluck('id');
+                $connectedPersonIds = $connectedPersonIds->merge($friends);
+                
+                // Get relationships
+                $relationships = $user->personalSpan->relationships()->pluck('id');
+                $connectedPersonIds = $connectedPersonIds->merge($relationships);
+                
+                if ($connectedPersonIds->isNotEmpty()) {
+                    $spans->whereNotIn('id', $connectedPersonIds->unique());
+                }
+            }
         } else {
             // Unauthenticated user - can only see public spans
             $spans->where('access_level', 'public');

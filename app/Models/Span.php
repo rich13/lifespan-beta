@@ -651,6 +651,36 @@ class Span extends Model
     }
 
     /**
+     * Get friend connections for this span
+     */
+    public function friends()
+    {
+        return $this->belongsToMany(Span::class, 'connections', 'parent_id', 'child_id')
+            ->select('spans.*', 'connections.parent_id as pivot_parent_id', 'connections.child_id as pivot_child_id')
+            ->where('connections.type_id', 'friend')
+            ->union(
+                $this->belongsToMany(Span::class, 'connections', 'child_id', 'parent_id')
+                    ->select('spans.*', 'connections.parent_id as pivot_parent_id', 'connections.child_id as pivot_child_id')
+                    ->where('connections.type_id', 'friend')
+            );
+    }
+
+    /**
+     * Get relationship connections for this span
+     */
+    public function relationships()
+    {
+        return $this->belongsToMany(Span::class, 'connections', 'parent_id', 'child_id')
+            ->select('spans.*', 'connections.parent_id as pivot_parent_id', 'connections.child_id as pivot_child_id')
+            ->where('connections.type_id', 'relationship')
+            ->union(
+                $this->belongsToMany(Span::class, 'connections', 'child_id', 'parent_id')
+                    ->select('spans.*', 'connections.parent_id as pivot_parent_id', 'connections.child_id as pivot_child_id')
+                    ->where('connections.type_id', 'relationship')
+            );
+    }
+
+    /**
      * Check if the span is public
      */
     public function isPublic(): bool
