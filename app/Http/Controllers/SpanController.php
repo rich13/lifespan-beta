@@ -16,8 +16,10 @@ use Illuminate\Support\Facades\DB;
 use App\Models\SpanType;
 use App\Models\ConnectionType;
 use App\Services\Comparison\SpanComparisonService;
+use App\Services\YamlSpanService;
 use InvalidArgumentException;
 use App\Models\Connection;
+use App\Models\ConnectionType as ConnectionTypeModel;
 
 /**
  * Handle span viewing and management
@@ -26,15 +28,17 @@ use App\Models\Connection;
 class SpanController extends Controller
 {
     protected $comparisonService;
+    protected $yamlService;
 
     /**
      * Create a new controller instance.
      */
-    public function __construct(SpanComparisonService $comparisonService)
+    public function __construct(SpanComparisonService $comparisonService, YamlSpanService $yamlService)
     {
         // Require auth for all routes except show, index, and search
         $this->middleware('auth')->except(['show', 'index', 'search']);
         $this->comparisonService = $comparisonService;
+        $this->yamlService = $yamlService;
     }
 
     /**
@@ -712,5 +716,82 @@ class SpanController extends Controller
             });
 
         return response()->json($results);
+    }
+
+    /**
+     * Show the YAML editor for a span
+     */
+    public function yamlEditor(Span $span)
+    {
+        $this->authorize('update', $span);
+        
+        // Convert span to YAML
+        $yamlContent = $this->yamlService->spanToYaml($span);
+        
+        // Get all connection types and span types for help text
+        $connectionTypes = ConnectionTypeModel::orderBy('type')->get();
+        $spanTypes = SpanType::orderBy('type_id')->get();
+        
+        return view('spans.yaml-editor', compact('span', 'yamlContent', 'connectionTypes', 'spanTypes'));
+    }
+
+    /**
+     * Validate YAML content without applying changes
+     */
+    public function validateYaml(Request $request, Span $span)
+    {
+        $this->authorize('update', $span);
+        
+        $validated = $request->validate([
+            'yaml_content' => 'required|string'
+        ]);
+        
+        $result = $this->yamlService->yamlToSpanData($validated['yaml_content']);
+        
+        // Add visual translation if validation was successful
+        if ($result['success']) {
+            $result['visual'] = $this->yamlService->translateToVisual($result['data']);
+        }
+        
+        return response()->json($result);
+    }
+
+    /**
+     * Apply validated YAML to span
+     */
+    public function applyYaml(Request $request, Span $span)
+    {
+        $this->authorize('update', $span);
+        
+        $validated = $request->validate([
+            'yaml_content' => 'required|string'
+        ]);
+        
+        // First validate the YAML
+        $validationResult = $this->yamlService->yamlToSpanData($validated['yaml_content']);
+        
+        if (!$validationResult['success']) {
+            return response()->json([
+                'success' => false,
+                'message' => 'YAML validation failed',
+                'errors' => $validationResult['errors']
+            ], 422);
+        }
+        
+        // Apply the changes to the database
+        $applyResult = $this->yamlService->applyYamlToSpan($span, $validationResult['data']);
+        
+        if ($applyResult['success']) {
+            return response()->json([
+                'success' => true,
+                'message' => $applyResult['message'],
+                'redirect' => route('spans.show', $span)
+            ]);
+        } else {
+            return response()->json([
+                'success' => false,
+                'message' => $applyResult['message']
+            ], 500);
+        }
     }
 }

@@ -17,6 +17,9 @@
                 <a href="{{ route('spans.edit', $span) }}" class="btn btn-sm btn-outline-primary">
                     <i class="bi bi-pencil me-1"></i> Edit
                 </a>
+                <a href="{{ route('spans.yaml-editor', $span) }}" class="btn btn-sm btn-outline-secondary">
+                    <i class="bi bi-code-square me-1"></i> YAML Editor
+                </a>
             @endcan
             @can('delete', $span)
                 <a href="#" class="btn btn-sm btn-outline-danger" id="delete-span-btn">
