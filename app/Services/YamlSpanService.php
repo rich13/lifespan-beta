@@ -677,13 +677,29 @@ class YamlSpanService
         
         // Basic span info with badges
         if (isset($data['name']) && isset($data['type'])) {
-            $article = in_array(strtolower($data['type'][0] ?? ''), ['a', 'e', 'i', 'o', 'u']) ? 'an' : 'a';
             $nameBadge = $this->createEntityBadge($data['name'], $data['type']);
-            $typeBadge = $this->createEntityBadge($data['type'], 'type');
-            $translations[] = [
-                'section' => 'identity',
-                'text' => "{$nameBadge} is {$article} {$typeBadge}"
-            ];
+            
+            // Check if we have subtype information in metadata
+            $subtype = $data['metadata']['subtype'] ?? null;
+            
+            if ($subtype) {
+                // Create descriptive text with subtype
+                $subtypeBadge = $this->createEntityBadge($subtype, 'subtype');
+                $typeBadge = $this->createEntityBadge($data['type'], 'type');
+                $article = in_array(strtolower($subtype[0] ?? ''), ['a', 'e', 'i', 'o', 'u']) ? 'an' : 'a';
+                $translations[] = [
+                    'section' => 'identity',
+                    'text' => "{$nameBadge} is {$article} {$subtypeBadge} {$typeBadge}"
+                ];
+            } else {
+                // Fallback to basic type description
+                $article = in_array(strtolower($data['type'][0] ?? ''), ['a', 'e', 'i', 'o', 'u']) ? 'an' : 'a';
+                $typeBadge = $this->createEntityBadge($data['type'], 'type');
+                $translations[] = [
+                    'section' => 'identity',
+                    'text' => "{$nameBadge} is {$article} {$typeBadge}"
+                ];
+            }
         }
         
         // Date information with badges
@@ -951,6 +967,8 @@ class YamlSpanService
                 return 'bg-secondary';
             case 'type':
                 return 'bg-light text-dark border';
+            case 'subtype':
+                return 'bg-info text-dark';
             default:
                 return 'bg-secondary';
         }

@@ -71,11 +71,14 @@ class SpanTypeController extends Controller
                 // Add options for select type
                 if ($config['type'] === 'select' && !empty($config['options'])) {
                     $schema[$fieldName]['options'] = array_map(function($option) {
-                        return [
-                            'value' => $option['value'],
-                            'label' => $option['label']
-                        ];
-                    }, $config['options']);
+                        // Handle both string values and object values for backwards compatibility
+                        if (is_string($option)) {
+                            return $option;
+                        } else {
+                            // Legacy format with value/label objects
+                            return $option['value'] ?? $option['label'] ?? '';
+                        }
+                    }, array_filter($config['options'])); // Filter out empty values
                 }
 
                 // Add array item schema for array type

@@ -175,8 +175,137 @@
             </div>
         </div>
         
-        <!-- Right column: Information & Help -->
+        <!-- Right column: Tools & Information -->
         <div class="col-lg-4">
+            
+            <!-- YAML Tools -->
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h6 class="card-title mb-0">
+                        <i class="bi bi-tools me-2"></i>YAML Tools
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label small mb-1">Add Connection:</label>
+                        <div class="row g-2">
+                            <div class="col-8">
+                                <select class="form-select form-select-sm" id="connection-type-select">
+                                    <option value="">Select type...</option>
+                                    @if($span->type_id === 'person')
+                                        <option value="parents" data-allowed-types='["person"]'>Parents</option>
+                                        <option value="children" data-allowed-types='["person"]'>Children</option>
+                                    @endif
+                                    @foreach($connectionTypes as $connectionType)
+                                        @if($connectionType->type !== 'family')
+                                            @php
+                                                // Check if this span type can be the subject (parent) of this connection
+                                                $canBeSubject = $connectionType->isSpanTypeAllowed($span->type_id, 'parent');
+                                                // Check if this span type can be the object (child) of this connection
+                                                $canBeObject = $connectionType->isSpanTypeAllowed($span->type_id, 'child');
+                                            @endphp
+                                            
+                                            @if($canBeSubject)
+                                                <option value="{{ $connectionType->type }}" data-allowed-types='{{ json_encode($connectionType->getAllowedObjectTypes()) }}'>
+                                                    {{ ucfirst($connectionType->type) }}
+                                                </option>
+                                            @endif
+                                            
+                                            @if($canBeObject)
+                                                <option value="{{ $connectionType->type }}_incoming" data-allowed-types='{{ json_encode($connectionType->getAllowedSubjectTypes()) }}'>
+                                                    {{ ucfirst($connectionType->type) }} (Incoming)
+                                                </option>
+                                            @endif
+                                        @endif
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="col-4">
+                                <button class="btn btn-outline-primary btn-sm w-100" onclick="startConnectionFlow()">
+                                    <i class="bi bi-plus"></i>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Connection Name Input (Hidden by default) -->
+                        <div id="connection-name-input" class="mt-2" style="display: none;">
+                            <div class="card border-primary">
+                                <div class="card-body p-3">
+                                    <h6 class="card-title mb-2" id="connection-title">Add Connection</h6>
+                                    <div class="mb-2">
+                                        <label class="form-label small mb-1">Name:</label>
+                                        <input type="text" class="form-control form-control-sm" id="connection-name-field" 
+                                               placeholder="Enter name..." autocomplete="off">
+                                        <div class="form-text small">Start typing to search existing spans or create a new one</div>
+                                    </div>
+                                    
+                                    <!-- Search Results -->
+                                    <div id="connection-search-results" style="display: none;">
+                                        <label class="form-label small mb-1">Existing spans:</label>
+                                        <div class="list-group list-group-flush" id="search-results-list">
+                                            <!-- Search results will appear here -->
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Create New Option -->
+                                    <div id="connection-create-new" style="display: none;" class="mt-2">
+                                        <div class="alert alert-info py-2 mb-2">
+                                            <i class="bi bi-plus-circle me-1"></i>
+                                            <small>No existing span found. Click below to create a new one.</small>
+                                        </div>
+                                        
+                                        <!-- Type Selection (only shown if multiple types allowed) -->
+                                        <div id="new-span-type-selection" style="display: none;" class="mb-2">
+                                            <label class="form-label small mb-1">Span Type:</label>
+                                            <select class="form-select form-select-sm" id="new-span-type-select">
+                                                <!-- Options will be populated by JavaScript -->
+                                            </select>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="d-flex gap-2 mt-3">
+                                        <button class="btn btn-success btn-sm" id="create-new-span-btn" onclick="createNewSpanConnection()" style="display: none;">
+                                            <i class="bi bi-plus-circle me-1"></i>Create New
+                                        </button>
+                                        <button class="btn btn-secondary btn-sm" onclick="cancelConnectionFlow()">
+                                            <i class="bi bi-x me-1"></i>Cancel
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label small mb-1">Add Metadata Field:</label>
+                        <div class="row g-2">
+                            <div class="col-8">
+                                <input type="text" class="form-control form-control-sm" id="metadata-key-input" placeholder="Field name...">
+                            </div>
+                            <div class="col-4">
+                                <button class="btn btn-outline-secondary btn-sm w-100" onclick="addMetadataField()">
+                                    <i class="bi bi-plus"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label small mb-1">Quick Actions:</label>
+                        <div class="d-grid gap-1">
+                            <button class="btn btn-outline-info btn-sm" onclick="addDateFields()">
+                                <i class="bi bi-calendar-range me-1"></i>Add Start/End Dates
+                            </button>
+                            <button class="btn btn-outline-warning btn-sm" onclick="addAccessControl()">
+                                <i class="bi bi-shield-lock me-1"></i>Add Access Control
+                            </button>
+                            <button class="btn btn-outline-success btn-sm" onclick="addCustomFields()">
+                                <i class="bi bi-gear me-1"></i>Add Custom Fields
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
             
             <!-- Information Panel -->
             <div class="card mb-3">
@@ -209,15 +338,18 @@
                 </div>
             </div>
             
-            <!-- YAML Format Help -->
+            <!-- YAML Format Help (Collapsible) -->
             <div class="card">
                 <div class="card-header">
-                    <h6 class="card-title mb-0">
-                        <i class="bi bi-question-circle me-2"></i>YAML Format Help
+                    <h6 class="mb-0">
+                        <button class="btn btn-link p-0 text-decoration-none w-100 text-start" type="button" data-bs-toggle="collapse" data-bs-target="#help-content" aria-expanded="false" aria-controls="help-content">
+                            <i class="bi bi-question-circle me-2"></i>YAML Format Help
+                            <i class="bi bi-chevron-down float-end mt-1"></i>
+                        </button>
                     </h6>
                 </div>
-                <div class="card-body">
-                    <div class="small text-muted">
+                <div class="collapse" id="help-content">
+                    <div class="card-body small text-muted">
                         <h6>Required Fields:</h6>
                         <ul class="mb-3">
                             <li><code>name</code> - The span name</li>
@@ -231,27 +363,15 @@
                             <li><code>2023-06-15</code> - Full date</li>
                         </ul>
                         
-                        <h6>Connection Types:</h6>
-                        <ul class="mb-3">
-                            <li><code>parents</code> - Parent relationships</li>
-                            <li><code>children</code> - Child relationships</li>
-                            @foreach($connectionTypes as $connectionType)
-                                @if($connectionType->type !== 'family')
-                                    <li><code>{{ $connectionType->type }}</code> - {{ $connectionType->forward_description }}</li>
-                                @endif
-                            @endforeach
-                        </ul>
-                        
-                        <h6>Connection Dates:</h6>
-                        <p class="mb-2">Each connection can include date information:</p>
+                        <h6>Connection Example:</h6>
                         <pre class="small bg-light p-2 rounded mb-0">employment:
-  - name: 'The University of Edinburgh'
-    id: abc123...
+  - name: 'Company Name'
+    id: ''  # Leave empty for new
     type: organisation
-    start_date: '2005-01'
-    end_date: '2006-02'
+    start_date: '2020-01'
+    end_date: '2023-12'
     metadata:
-      role: 'Web Developer'</pre>
+      role: 'Developer'</pre>
                     </div>
                 </div>
             </div>
@@ -790,6 +910,388 @@ $(document).ready(function() {
     // Auto-validate on load if content exists
     if (yamlTextarea.val().trim()) {
         setTimeout(validateYaml, 500);
+    }
+    
+    // Connection search functionality
+    $('#connection-name-field').on('input', function() {
+        const searchTerm = $(this).val().trim();
+        
+        // Clear existing timeout
+        if (searchTimeout) {
+            clearTimeout(searchTimeout);
+        }
+        
+        if (searchTerm.length < 2) {
+            $('#connection-search-results').hide();
+            $('#connection-create-new').hide();
+            $('#create-new-span-btn').hide();
+            return;
+        }
+        
+        // Debounce search
+        searchTimeout = setTimeout(() => {
+            searchForSpans(searchTerm);
+        }, 300);
+    });
+    
+    // YAML Tools Functions - Enhanced Connection Flow
+    let currentConnectionType = null;
+    let currentAllowedTypes = null;
+    let searchTimeout = null;
+    
+    window.startConnectionFlow = function() {
+        const selectElement = $('#connection-type-select');
+        const connectionType = selectElement.val();
+        
+        if (!connectionType) {
+            alert('Please select a connection type');
+            return;
+        }
+        
+        // Get allowed types from the selected option
+        const selectedOption = selectElement.find('option:selected');
+        const allowedTypesJson = selectedOption.data('allowed-types');
+        
+        // Store current connection details
+        currentConnectionType = connectionType;
+        currentAllowedTypes = allowedTypesJson;
+        
+        // Update UI
+        const connectionTitle = $('#connection-title');
+        const typeDisplay = connectionType.replace('_incoming', ' (incoming)');
+        connectionTitle.text(`Add ${typeDisplay.charAt(0).toUpperCase() + typeDisplay.slice(1)} Connection`);
+        
+        // Show the connection input form
+        $('#connection-name-input').slideDown();
+        $('#connection-name-field').focus();
+        
+        // Clear previous state
+        $('#connection-name-field').val('');
+        $('#connection-search-results').hide();
+        $('#connection-create-new').hide();
+        $('#create-new-span-btn').hide();
+        $('#search-results-list').empty();
+    };
+    
+    window.cancelConnectionFlow = function() {
+        $('#connection-name-input').slideUp();
+        $('#connection-type-select').val('');
+        currentConnectionType = null;
+        currentAllowedTypes = null;
+    };
+    
+    window.createNewSpanConnection = function() {
+        const name = $('#connection-name-field').val().trim();
+        if (!name) {
+            alert('Please enter a name');
+            return;
+        }
+        
+        // Determine the span type - use selected type if available, otherwise default
+        let spanType;
+        const typeSelect = $('#new-span-type-select');
+        if (typeSelect.is(':visible') && typeSelect.val()) {
+            spanType = typeSelect.val();
+        } else {
+            spanType = currentAllowedTypes && currentAllowedTypes.length > 0 ? currentAllowedTypes[0] : 'person';
+        }
+        
+        // Create the connection YAML with placeholder for new span
+        addConnectionWithNewSpan(name, spanType);
+    };
+    
+    window.addConnectionWithExistingSpan = function(spanId, spanName, spanType) {
+        // Create the connection YAML with existing span details
+        addConnectionWithSpan(spanId, spanName, spanType);
+    };
+    
+    function addConnectionWithSpan(spanId, spanName, spanType) {
+        // Don't include empty date fields to avoid validation issues
+        const connectionTemplate = `
+${currentConnectionType}:
+  - name: '${spanName}'
+    id: '${spanId}'
+    type: ${spanType}
+    metadata: {}`;
+        
+        insertYamlSection('connections', connectionTemplate);
+        cancelConnectionFlow();
+    }
+    
+    function addConnectionWithNewSpan(spanName, spanType) {
+        // Generate a new UUID for the span
+        const newUuid = generateUUID();
+        
+        // For new spans, don't include empty date fields to avoid validation issues
+        const connectionTemplate = `
+${currentConnectionType}:
+  - name: '${spanName}'
+    id: '${newUuid}'
+    type: ${spanType}
+    metadata: {}`;
+        
+        insertYamlSection('connections', connectionTemplate);
+        cancelConnectionFlow();
+    }
+    
+    // Simple UUID generator (v4)
+    function generateUUID() {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            const r = Math.random() * 16 | 0;
+            const v = c == 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    }
+    
+    // Legacy function for backwards compatibility
+    window.addConnection = function() {
+        startConnectionFlow();
+    };
+    
+    // Make the create form function globally accessible
+    window.showCreateNewForm = showCreateNewForm;
+    
+    // Search for existing spans
+    function searchForSpans(searchTerm) {
+        if (!currentAllowedTypes || currentAllowedTypes.length === 0) {
+            return;
+        }
+        
+        // Build search parameters
+        const searchParams = new URLSearchParams({
+            q: searchTerm,
+            types: currentAllowedTypes.join(','),
+            limit: 5
+        });
+        
+        // Make AJAX request to search for spans
+        fetch(`/api/spans/search?${searchParams.toString()}`, {
+            headers: {
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            displaySearchResults(data.spans || [], searchTerm);
+        })
+        .catch(error => {
+            console.error('Search error:', error);
+            displaySearchResults([], searchTerm);
+        });
+    }
+    
+    function displaySearchResults(spans, searchTerm) {
+        const resultsContainer = $('#search-results-list');
+        const searchResults = $('#connection-search-results');
+        const createNew = $('#connection-create-new');
+        const createNewBtn = $('#create-new-span-btn');
+        const typeSelection = $('#new-span-type-selection');
+        const typeSelect = $('#new-span-type-select');
+        
+        resultsContainer.empty();
+        
+        if (spans.length > 0) {
+            // Show existing spans
+            searchResults.show();
+            createNew.hide();
+            createNewBtn.hide();
+            typeSelection.hide();
+            
+            spans.forEach(span => {
+                const resultItem = $(`
+                    <button type="button" class="list-group-item list-group-item-action" 
+                            onclick="addConnectionWithExistingSpan('${span.id}', '${span.name}', '${span.type_id}')">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>${span.name}</strong>
+                                <small class="text-muted d-block">${span.type_id} • ${span.state}</small>
+                            </div>
+                            <span class="badge bg-primary">Existing</span>
+                        </div>
+                    </button>
+                `);
+                resultsContainer.append(resultItem);
+            });
+            
+            // Also show create new option
+            const defaultType = currentAllowedTypes && currentAllowedTypes.length > 0 ? currentAllowedTypes[0] : 'person';
+            const createNewItem = $(`
+                <button type="button" class="list-group-item list-group-item-action list-group-item-light" 
+                        onclick="showCreateNewForm('${searchTerm}')">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>Create: "${searchTerm}"</strong>
+                            <small class="text-muted d-block">New ${defaultType} span</small>
+                        </div>
+                        <span class="badge bg-success">New</span>
+                    </div>
+                </button>
+            `);
+            resultsContainer.append(createNewItem);
+        } else {
+            // No existing spans found, show create new option
+            searchResults.hide();
+            showCreateNewForm(searchTerm);
+        }
+    }
+    
+    function showCreateNewForm(searchTerm) {
+        const createNew = $('#connection-create-new');
+        const createNewBtn = $('#create-new-span-btn');
+        const typeSelection = $('#new-span-type-selection');
+        const typeSelect = $('#new-span-type-select');
+        
+        createNew.show();
+        createNewBtn.show();
+        createNewBtn.html(`<i class="bi bi-plus-circle me-1"></i>Create "${searchTerm}"`);
+        
+        // Set up type selection if multiple types are allowed
+        if (currentAllowedTypes && currentAllowedTypes.length > 1) {
+            typeSelection.show();
+            typeSelect.empty();
+            
+            currentAllowedTypes.forEach(type => {
+                typeSelect.append(`<option value="${type}">${type.charAt(0).toUpperCase() + type.slice(1)}</option>`);
+            });
+        } else {
+            typeSelection.hide();
+        }
+    }
+    
+    window.addMetadataField = function() {
+        const fieldName = $('#metadata-key-input').val().trim();
+        if (!fieldName) {
+            alert('Please enter a field name');
+            return;
+        }
+        
+        const metadataTemplate = `
+${fieldName}: ''`;
+        
+        insertYamlSection('metadata', metadataTemplate);
+        $('#metadata-key-input').val('');
+    };
+    
+    window.addDateFields = function() {
+        const dateTemplate = `
+start: ''
+end: ''`;
+        
+        insertYamlAtLevel('root', dateTemplate);
+    };
+    
+    window.addAccessControl = function() {
+        const accessTemplate = `
+access_level: private
+permissions: 420
+permission_mode: own`;
+        
+        insertYamlAtLevel('root', accessTemplate);
+    };
+    
+    window.addCustomFields = function() {
+        const customTemplate = `
+custom_fields:
+  field_name: ''
+  another_field: ''`;
+        
+        insertYamlAtLevel('root', customTemplate);
+    };
+    
+    // Helper function to insert YAML sections
+    function insertYamlSection(sectionName, content) {
+        const currentYaml = yamlTextarea.val();
+        const lines = currentYaml.split('\n');
+        
+        // Find the section or create it
+        let sectionStartIndex = -1;
+        let sectionEndIndex = -1;
+        let indentLevel = 0;
+        
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            if (line.trim().startsWith(sectionName + ':')) {
+                sectionStartIndex = i;
+                indentLevel = line.length - line.trimStart().length;
+                
+                // Find the end of this section
+                for (let j = i + 1; j < lines.length; j++) {
+                    const nextLine = lines[j];
+                    if (nextLine.trim() === '' || nextLine.startsWith(' ')) {
+                        continue; // Still in the section
+                    } else if (nextLine.length - nextLine.trimStart().length <= indentLevel) {
+                        sectionEndIndex = j - 1;
+                        break;
+                    }
+                }
+                
+                if (sectionEndIndex === -1) {
+                    sectionEndIndex = lines.length - 1;
+                }
+                break;
+            }
+        }
+        
+        if (sectionStartIndex === -1) {
+            // Section doesn't exist, add it at the end
+            const newSection = `${sectionName}:${content}`;
+            const updatedYaml = currentYaml + (currentYaml.endsWith('\n') ? '' : '\n') + newSection + '\n';
+            yamlTextarea.val(updatedYaml);
+        } else {
+            // Section exists, add to it
+            const beforeSection = lines.slice(0, sectionEndIndex + 1);
+            const afterSection = lines.slice(sectionEndIndex + 1);
+            const indentedContent = content.split('\n').map(line => 
+                line.trim() ? '  ' + line : line
+            ).join('\n');
+            
+            const updatedLines = [...beforeSection, indentedContent, ...afterSection];
+            yamlTextarea.val(updatedLines.join('\n'));
+        }
+        
+        // Trigger validation
+        yamlTextarea.trigger('input');
+        
+        // Focus and scroll to the added content
+        yamlTextarea.focus();
+        const textArea = yamlTextarea[0];
+        textArea.scrollTop = textArea.scrollHeight;
+    }
+    
+    // Helper function to insert YAML at root level
+    function insertYamlAtLevel(level, content) {
+        const currentYaml = yamlTextarea.val();
+        const lines = currentYaml.split('\n');
+        
+        // Find a good place to insert (after existing root-level fields)
+        let insertIndex = -1;
+        
+        for (let i = lines.length - 1; i >= 0; i--) {
+            const line = lines[i];
+            if (line.trim() && !line.startsWith(' ')) {
+                insertIndex = i + 1;
+                break;
+            }
+        }
+        
+        if (insertIndex === -1) {
+            insertIndex = lines.length;
+        }
+        
+        const beforeInsert = lines.slice(0, insertIndex);
+        const afterInsert = lines.slice(insertIndex);
+        
+        const updatedLines = [...beforeInsert, ...content.split('\n'), ...afterInsert];
+        yamlTextarea.val(updatedLines.join('\n'));
+        
+        // Trigger validation
+        yamlTextarea.trigger('input');
+        
+        // Focus and scroll to the added content
+        yamlTextarea.focus();
+        const textArea = yamlTextarea[0];
+        textArea.scrollTop = textArea.scrollHeight;
     }
 });
 </script>

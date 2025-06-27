@@ -45,6 +45,10 @@ class ConnectionTypeTest extends TestCase
     /** @test */
     public function it_formats_example_using_subject_object()
     {
+        // TODO: Fix test isolation issue - factory creates duplicate primary keys
+        // Error: SQLSTATE[23505]: Unique violation: duplicate key value violates unique constraint "connection_types_pkey"
+        // This appears to be a database transaction rollback issue in the test suite
+        
         $this->assertEquals(
             'Subject worked at Object',
             $this->type->getExample(false)

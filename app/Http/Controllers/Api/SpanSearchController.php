@@ -60,6 +60,13 @@ class SpanSearchController extends Controller
         if ($type) {
             $spans->where('type_id', $type);
         }
+        
+        // Support multiple types (comma-separated)
+        $types = $request->get('types');
+        if ($types) {
+            $typeArray = explode(',', $types);
+            $spans->whereIn('type_id', $typeArray);
+        }
 
         // Search by name
         if ($query) {
@@ -80,7 +87,9 @@ class SpanSearchController extends Controller
                 ];
             });
 
-        return response()->json($results);
+        return response()->json([
+            'spans' => $results
+        ]);
     }
 
     /**

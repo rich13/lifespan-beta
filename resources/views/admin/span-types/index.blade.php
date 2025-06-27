@@ -23,6 +23,7 @@
                             <th>Description</th>
                             <th>Spans</th>
                             <th>Schema Fields</th>
+                            <th>Subtypes</th>
                             <th>Required Fields</th>
                             <th>Actions</th>
                         </tr>
@@ -41,6 +42,23 @@
                                         <span class="badge bg-info">
                                             {{ count($type->metadata['schema']) }} fields
                                         </span>
+                                    @else
+                                        <span class="badge bg-light text-dark">None</span>
+                                    @endif
+                                </td>
+                                <td>
+                                    @php
+                                        $subtypes = $type->metadata['schema']['subtype']['options'] ?? [];
+                                    @endphp
+                                    @if(!empty($subtypes))
+                                        <div class="d-flex flex-wrap gap-1">
+                                            @foreach($subtypes as $subtype)
+                                                <span class="badge bg-primary text-white" style="font-size: 0.7em;">
+                                                    {{ $subtype }}
+                                                </span>
+                                            @endforeach
+                                        </div>
+                                        <small class="text-muted mt-1 d-block">{{ count($subtypes) }} subtypes</small>
                                     @else
                                         <span class="badge bg-light text-dark">None</span>
                                     @endif

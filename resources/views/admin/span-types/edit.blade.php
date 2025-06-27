@@ -82,6 +82,7 @@ $(document).ready(function() {
                             <button type="button" class="btn btn-sm btn-outline-secondary add-option">
                                 Add Option
                             </button>
+                            <div class="form-text">Enter simple values like "business", "educational", etc. Each value will be used as both the stored value and display label.</div>
                         </div>
 
                         <!-- Schema for array type -->
@@ -139,11 +140,10 @@ $(document).ready(function() {
         const template = `
             <div class="input-group mb-2">
                 <input type="text" class="form-control" 
-                       name="metadata[schema][${fieldName}][options][][value]" 
-                       placeholder="Value" required>
-                <input type="text" class="form-control" 
-                       name="metadata[schema][${fieldName}][options][][label]" 
-                       placeholder="Label" required>
+                       name="metadata[schema][${fieldName}][options][]" 
+                       placeholder="Option value" 
+                       title="Enter the option value (will be used as both value and label)"
+                       required>
                 <button type="button" class="btn btn-outline-danger remove-option">
                     <i class="bi bi-trash"></i>
                 </button>
@@ -362,15 +362,17 @@ $(document).ready(function() {
                                                     <div class="options-container">
                                                         @if(isset($schema['options']))
                                                             @foreach($schema['options'] as $option)
+                                                                @php
+                                                                    // Handle both string arrays and object arrays
+                                                                    $optionValue = is_string($option) ? $option : ($option['value'] ?? '');
+                                                                    $optionLabel = is_string($option) ? ucfirst($option) : ($option['label'] ?? '');
+                                                                @endphp
                                                                 <div class="input-group mb-2">
                                                                     <input type="text" class="form-control" 
-                                                                           name="metadata[schema][{{ $fieldName }}][options][][value]" 
-                                                                           placeholder="Value"
-                                                                           value="{{ $option['value'] ?? '' }}">
-                                                                    <input type="text" class="form-control" 
-                                                                           name="metadata[schema][{{ $fieldName }}][options][][label]" 
-                                                                           placeholder="Label"
-                                                                           value="{{ $option['label'] ?? '' }}">
+                                                                           name="metadata[schema][{{ $fieldName }}][options][]" 
+                                                                           placeholder="Option value"
+                                                                           value="{{ $optionValue }}"
+                                                                           title="Enter the option value (will be used as both value and label)">
                                                                     <button type="button" class="btn btn-outline-danger" onclick="removeOption(this)">
                                                                         <i class="bi bi-trash"></i>
                                                                     </button>
@@ -378,6 +380,23 @@ $(document).ready(function() {
                                                             @endforeach
                                                         @endif
                                                     </div>
+                                                    @if($fieldName === 'subtype')
+                                                        <div class="alert alert-info mt-2 mb-3">
+                                                            <small><strong>Subtypes</strong> help categorize spans of this type. Common examples:
+                                                            @if($spanType->type_id === 'organisation')
+                                                                business, educational, government, non-profit, religious, other
+                                                            @elseif($spanType->type_id === 'event')
+                                                                personal, historical, cultural, political, other
+                                                            @elseif($spanType->type_id === 'place')
+                                                                city, country, region, building, landmark, other
+                                                            @elseif($spanType->type_id === 'thing')
+                                                                book, album, painting, sculpture, recording, other
+                                                            @else
+                                                                Add relevant subtypes for this span type
+                                                            @endif
+                                                            </small>
+                                                        </div>
+                                                    @endif
                                                     <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addOption(this)">
                                                         Add Option
                                                     </button>
