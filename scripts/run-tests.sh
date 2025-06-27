@@ -23,11 +23,10 @@ if ! docker ps | grep -q "$CONTAINER_NAME"; then
     exit 1
 fi
 
-# Process command line arguments
-FILTER=""
-if [ $# -gt 0 ]; then
-    FILTER="--filter $1"
-    log_message "Running tests filtered by: $1"
+# Pass all script arguments to PHPUnit
+PHPUNIT_ARGS="$*"
+if [ -n "$PHPUNIT_ARGS" ]; then
+    log_message "Running tests with arguments: $PHPUNIT_ARGS"
 else
     log_message "Running all tests"
 fi
@@ -48,7 +47,7 @@ docker exec -it "$CONTAINER_NAME" bash -c "cd /var/www && \
     export DB_CONNECTION=pgsql && \
     export DB_DATABASE=$TEST_DATABASE && \
     php artisan migrate:fresh --env=testing && \
-    ./vendor/bin/phpunit --testdox --colors=always $FILTER"
+    ./vendor/bin/phpunit --testdox --colors=always $PHPUNIT_ARGS"
 
 TEST_EXIT_CODE=$?
 
