@@ -152,7 +152,10 @@ class Span extends Model
 
         // Validate required fields
         static::saving(function ($span) {
-            if (!$span->start_year && $span->state !== 'placeholder') {
+            // Some span types (like place, role) represent concepts that exist independently of time
+            $timelessSpanTypes = ['place', 'role'];
+            
+            if (!$span->start_year && $span->state !== 'placeholder' && !in_array($span->type_id, $timelessSpanTypes)) {
                 throw new \InvalidArgumentException(sprintf(
                     'Start year is required for %s span "%s". Expected format: YYYY-MM-DD, YYYY-MM, or YYYY',
                     $span->type_id ?? 'unknown type',
@@ -205,14 +208,7 @@ class Span extends Model
                 $span->end_day
             );
 
-            // Validate date requirements based on state
-            if ($span->state !== 'placeholder' && $span->start_year === null) {
-                throw new \InvalidArgumentException(sprintf(
-                    'Start year is required for %s span "%s". Expected format: YYYY-MM-DD, YYYY-MM, or YYYY',
-                    $span->type_id ?? 'unknown type',
-                    $span->name ?? 'unnamed'
-                ));
-            }
+
 
             // Validate date consistency
             if (!$span->hasValidDateCombination('start')) {
@@ -397,9 +393,12 @@ class Span extends Model
         $month = $this->{$prefix . '_month'};
         $day = $this->{$prefix . '_day'};
 
-        // Allow null dates for placeholder state or end dates
+        // Allow null dates for placeholder state, end dates, or timeless span types
         if ($year === null) {
-            return $this->state === 'placeholder' || $prefix === 'end';
+            $timelessSpanTypes = ['place', 'role'];
+            return $this->state === 'placeholder' || 
+                   $prefix === 'end' || 
+                   in_array($this->type_id, $timelessSpanTypes);
         }
 
         // Validate year range

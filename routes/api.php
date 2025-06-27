@@ -19,8 +19,7 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
 
-// Span search endpoint - uses web session auth
-Route::get('/spans/search', [SpanSearchController::class, 'search']);
+// Note: Span search endpoint moved to web routes (/spans/search) for better session auth support
 
 Route::middleware('auth:sanctum')->group(function () {
     // Other API endpoints that need Sanctum auth can go here

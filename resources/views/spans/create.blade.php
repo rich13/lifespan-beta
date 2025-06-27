@@ -66,7 +66,7 @@
                             <div class="col-md-4 mb-3">
                                 <label for="start_year" class="form-label">Start Year</label>
                                 <input type="number" class="form-control @error('start_year') is-invalid @enderror" 
-                                       id="start_year" name="start_year" value="{{ old('start_year') }}" required>
+                                       id="start_year" name="start_year" value="{{ old('start_year') }}">
                                 @error('start_year')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                 @enderror
@@ -121,4 +121,38 @@
         </div>
     </div>
 </div>
-@endsection 
+@endsection
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const typeSelect = document.getElementById('type_id');
+    const stateSelect = document.getElementById('state');
+    const startYearInput = document.getElementById('start_year');
+    
+    // Span types that don't require start dates
+    const timelessSpanTypes = ['place', 'role'];
+    
+    function updateStartYearRequirement() {
+        const selectedType = typeSelect.value;
+        const selectedState = stateSelect.value;
+        
+        const isTimeless = timelessSpanTypes.includes(selectedType);
+        const isPlaceholder = selectedState === 'placeholder';
+        
+        if (isTimeless || isPlaceholder) {
+            startYearInput.removeAttribute('required');
+        } else {
+            startYearInput.setAttribute('required', 'required');
+        }
+    }
+    
+    // Update on change
+    typeSelect.addEventListener('change', updateStartYearRequirement);
+    stateSelect.addEventListener('change', updateStartYearRequirement);
+    
+    // Set initial state
+    updateStartYearRequirement();
+});
+</script>
+@endpush 

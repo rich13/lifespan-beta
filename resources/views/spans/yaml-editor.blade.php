@@ -83,18 +83,19 @@
         margin-bottom: 0.5rem;
     }
     
-    .action-buttons {
-        position: sticky;
-        bottom: 0;
-        background: white;
-        border-top: 1px solid #e9ecef;
-        padding: 1rem 0;
-        margin-top: 1rem;
-    }
+
     
     .spinner-border-sm {
         width: 1rem;
         height: 1rem;
+    }
+    
+    /* Enhanced Visual Translation Styling */
+    #visual-translation .badge {
+        font-size: 0.9rem;
+        padding: 0.4rem 0.6rem;
+        margin-right: 0.3rem;
+        margin-bottom: 0.3rem;
     }
 </style>
 @endpush
@@ -103,7 +104,7 @@
 <div class="container-fluid">
     <div class="row">
         <!-- Left column: YAML Editor -->
-        <div class="col-lg-4">
+        <div class="col-lg-3">
             <div class="card h-100">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <h5 class="card-title mb-0">
@@ -126,7 +127,7 @@
         </div>
         
         <!-- Middle column: Visual Translation -->
-        <div class="col-lg-4">
+        <div class="col-lg-6">
             <div class="middle-column">
                 <!-- Combined Analysis Card -->
                 <div class="card mb-2">
@@ -164,7 +165,7 @@
                         </h6>
                     </div>
                     <div class="card-body p-3">
-                        <div id="visual-translation">
+                        <div id="visual-translation" style="font-size: 1rem; line-height: 1.5;">
                             <div class="text-muted">
                                 <i class="bi bi-info-circle me-1"></i>
                                 Visual translation will appear here when YAML is valid
@@ -176,7 +177,7 @@
         </div>
         
         <!-- Right column: Tools & Information -->
-        <div class="col-lg-4">
+        <div class="col-lg-3">
             
             <!-- YAML Tools -->
             <div class="card mb-3">
@@ -339,7 +340,7 @@
             </div>
             
             <!-- YAML Format Help (Collapsible) -->
-            <div class="card">
+            <div class="card mb-3">
                 <div class="card-header">
                     <h6 class="mb-0">
                         <button class="btn btn-link p-0 text-decoration-none w-100 text-start" type="button" data-bs-toggle="collapse" data-bs-target="#help-content" aria-expanded="false" aria-controls="help-content">
@@ -375,20 +376,25 @@
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
-    
-    <!-- Action Buttons (Sticky) -->
-    <div class="action-buttons">
-        <div class="d-flex justify-content-between align-items-center">
-            <div class="text-muted small">
-                <i class="bi bi-exclamation-triangle-fill text-warning me-1"></i>
-                Changes are not saved until you click "Apply Changes"
-            </div>
-            <div class="d-flex gap-2">
-                <button type="button" id="apply-btn" class="btn btn-success" disabled>
-                    <i class="bi bi-cloud-upload me-1"></i>Apply Changes
-                </button>
+            
+            <!-- Apply Changes Section -->
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="card-title mb-0">
+                        <i class="bi bi-cloud-upload me-2"></i>Apply Changes
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-warning d-flex align-items-center py-2 mb-3">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        <small>Changes are not saved until you apply them to the database.</small>
+                    </div>
+                    <div class="d-grid">
+                        <button type="button" id="apply-btn" class="btn btn-success" disabled>
+                            <i class="bi bi-cloud-upload me-2"></i>Apply Changes to Database
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -522,7 +528,7 @@ $(document).ready(function() {
                 `;
             }
             
-            html += `<div class="small mb-1">${translation.text}</div>`;
+            html += `<div class="mb-2">${translation.text}</div>`;
         });
 
         if (currentSection !== '') {
@@ -952,9 +958,29 @@ $(document).ready(function() {
         const selectedOption = selectElement.find('option:selected');
         const allowedTypesJson = selectedOption.data('allowed-types');
         
+        console.log('startConnectionFlow - connectionType:', connectionType);
+        console.log('startConnectionFlow - allowedTypesJson:', allowedTypesJson);
+        console.log('startConnectionFlow - allowedTypesJson type:', typeof allowedTypesJson);
+        
         // Store current connection details
         currentConnectionType = connectionType;
-        currentAllowedTypes = allowedTypesJson;
+        
+        // Handle the case where allowedTypesJson might be a string that needs parsing
+        if (typeof allowedTypesJson === 'string') {
+            try {
+                currentAllowedTypes = JSON.parse(allowedTypesJson);
+            } catch (e) {
+                console.error('Failed to parse allowed types JSON:', e);
+                currentAllowedTypes = [];
+            }
+        } else if (Array.isArray(allowedTypesJson)) {
+            currentAllowedTypes = allowedTypesJson;
+        } else {
+            console.error('allowedTypesJson is neither string nor array:', allowedTypesJson);
+            currentAllowedTypes = [];
+        }
+        
+        console.log('startConnectionFlow - final currentAllowedTypes:', currentAllowedTypes);
         
         // Update UI
         const connectionTitle = $('#connection-title');
@@ -1053,7 +1079,11 @@ ${currentConnectionType}:
     
     // Search for existing spans
     function searchForSpans(searchTerm) {
+        console.log('searchForSpans called with:', searchTerm);
+        console.log('currentAllowedTypes:', currentAllowedTypes);
+        
         if (!currentAllowedTypes || currentAllowedTypes.length === 0) {
+            console.log('No allowed types, exiting search');
             return;
         }
         
@@ -1064,15 +1094,21 @@ ${currentConnectionType}:
             limit: 5
         });
         
+        console.log('Search URL:', `/api/spans/search?${searchParams.toString()}`);
+        
         // Make AJAX request to search for spans
-        fetch(`/api/spans/search?${searchParams.toString()}`, {
+        fetch(`/spans/search?${searchParams.toString()}`, {
             headers: {
                 'Accept': 'application/json',
                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
             }
         })
-        .then(response => response.json())
+        .then(response => {
+            console.log('Search response status:', response.status);
+            return response.json();
+        })
         .then(data => {
+            console.log('Search response data:', data);
             displaySearchResults(data.spans || [], searchTerm);
         })
         .catch(error => {

@@ -41,6 +41,8 @@ class SpanController extends Controller
         $this->yamlService = $yamlService;
     }
 
+
+
     /**
      * Display a listing of spans.
      */
@@ -173,13 +175,23 @@ class SpanController extends Controller
     public function store(Request $request)
     {
         $this->authorize('create', Span::class);
+        // Get validation rules with special handling for timeless span types
+        $timelessSpanTypes = ['place', 'role'];
+        $typeId = $request->input('type_id');
+        $state = $request->input('state', 'draft');
+        
+        $startYearRule = 'nullable|integer';
+        if (!in_array($typeId, $timelessSpanTypes) && $state !== 'placeholder') {
+            $startYearRule = 'required|integer';
+        }
+
         $validated = $request->validate([
             'id' => 'nullable|uuid|unique:spans,id',  // Allow UUID to be provided
             'name' => 'required|string|max:255',
             'slug' => 'nullable|string|max:255|regex:/^[a-z0-9-]+$/|unique:spans,slug',
             'type_id' => 'required|string|exists:span_types,type_id',
             'state' => 'required|in:draft,placeholder,complete',
-            'start_year' => 'required_unless:state,placeholder|nullable|integer',
+            'start_year' => $startYearRule,
             'start_month' => 'nullable|integer|between:1,12',
             'start_day' => 'nullable|integer|between:1,31',
             'end_year' => 'nullable|integer',
@@ -345,6 +357,16 @@ class SpanController extends Controller
                 'has_type_change' => $request->has('type_id') && $request->type_id !== $span->type_id
             ]);
             
+            // Get validation rules with special handling for timeless span types
+            $timelessSpanTypes = ['place', 'role'];
+            $typeId = $request->input('type_id', $span->type_id);
+            $state = $request->input('state', $span->state);
+            
+            $startYearRule = 'nullable|integer';
+            if (!in_array($typeId, $timelessSpanTypes) && $state !== 'placeholder') {
+                $startYearRule = 'required|integer';
+            }
+
             // Custom validation for date patterns
             $validator = Validator::make($request->all(), [
                 'name' => 'sometimes|required|string|max:255',
@@ -353,7 +375,7 @@ class SpanController extends Controller
                 'description' => 'nullable|string',
                 'notes' => 'nullable|string',
                 'state' => 'required|in:draft,placeholder,complete',
-                'start_year' => 'required_unless:state,placeholder|nullable|integer',
+                'start_year' => $startYearRule,
                 'start_month' => 'nullable|integer|between:1,12',
                 'start_day' => 'nullable|integer|between:1,31',
                 'end_year' => 'nullable|integer',
@@ -695,6 +717,13 @@ class SpanController extends Controller
         if ($type) {
             $spans->where('type_id', $type);
         }
+        
+        // Support multiple types (comma-separated)
+        $types = $request->get('types');
+        if ($types) {
+            $typeArray = explode(',', $types);
+            $spans->whereIn('type_id', $typeArray);
+        }
 
         // Search by name
         if ($query) {
@@ -715,7 +744,9 @@ class SpanController extends Controller
                 ];
             });
 
-        return response()->json($results);
+        return response()->json([
+            'spans' => $results
+        ]);
     }
 
     /**

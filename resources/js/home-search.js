@@ -88,8 +88,10 @@ $(document).ready(function() {
                 'Accept': 'application/json'
             }
         })
-        .done(function(results) {
-            console.log('Search results:', results);
+        .done(function(response) {
+            console.log('Search results:', response);
+            // Handle both array response and object with spans property
+            const results = Array.isArray(response) ? response : (response.spans || []);
             searchResults = results;
             displayResults(results);
         })

@@ -6,6 +6,7 @@ use App\Models\Span;
 use App\Models\Connection;
 use App\Models\ConnectionType;
 use App\Models\SpanType;
+use App\Services\Import\Connections\ConnectionImporter;
 use Symfony\Component\Yaml\Yaml;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
@@ -114,6 +115,17 @@ class YamlSpanService
             // Add connection dates from the connection span if available
             if ($connection->connectionSpan) {
                 $this->addConnectionDates($connectionData, $connection->connectionSpan);
+                
+                // Add nested connections from the connection span
+                $nestedConnections = $this->getNestedConnections($connection->connectionSpan);
+                if (!empty($nestedConnections)) {
+                    $connectionData['nested_connections'] = $nestedConnections;
+                }
+                
+                // Special handling for has_role connections: extract dates from nested at_organisation connection span
+                if ($connectionType === 'has_role' && !isset($connectionData['start_date']) && !isset($connectionData['end_date'])) {
+                    $this->extractDatesFromNestedConnections($connectionData, $connection->connectionSpan);
+                }
             }
             
             // Add connection metadata if present
@@ -151,6 +163,17 @@ class YamlSpanService
             // Add connection dates from the connection span if available
             if ($connection->connectionSpan) {
                 $this->addConnectionDates($connectionData, $connection->connectionSpan);
+                
+                // Add nested connections from the connection span
+                $nestedConnections = $this->getNestedConnections($connection->connectionSpan);
+                if (!empty($nestedConnections)) {
+                    $connectionData['nested_connections'] = $nestedConnections;
+                }
+                
+                // Special handling for has_role connections: extract dates from nested at_organisation connection span
+                if ($connectionType === 'has_role' && !isset($connectionData['start_date']) && !isset($connectionData['end_date'])) {
+                    $this->extractDatesFromNestedConnections($connectionData, $connection->connectionSpan);
+                }
             }
             
             // Add connection metadata if present
@@ -319,6 +342,123 @@ class YamlSpanService
     }
 
     /**
+     * Extract dates from nested connection spans for sophisticated role descriptions
+     */
+    private function extractDatesFromNestedConnections(array &$connectionData, \App\Models\Span $connectionSpan): void
+    {
+        // Load nested connections with their connection spans
+        $connectionSpan->load([
+            'connectionsAsSubject.child.type',
+            'connectionsAsSubject.type',
+            'connectionsAsSubject.connectionSpan'
+        ]);
+        
+        // Look for at_organisation connections with dates
+        foreach ($connectionSpan->connectionsAsSubject as $nestedConnection) {
+            if ($nestedConnection->type_id === 'at_organisation' && $nestedConnection->connectionSpan) {
+                $nestedConnectionSpan = $nestedConnection->connectionSpan;
+                
+                // Add dates from the nested connection span
+                if ($nestedConnectionSpan->start_year) {
+                    $start = (string) $nestedConnectionSpan->start_year;
+                    if ($nestedConnectionSpan->start_month) {
+                        $start .= '-' . str_pad($nestedConnectionSpan->start_month, 2, '0', STR_PAD_LEFT);
+                        if ($nestedConnectionSpan->start_day) {
+                            $start .= '-' . str_pad($nestedConnectionSpan->start_day, 2, '0', STR_PAD_LEFT);
+                        }
+                    }
+                    $connectionData['start_date'] = $start;
+                }
+
+                if ($nestedConnectionSpan->end_year) {
+                    $end = (string) $nestedConnectionSpan->end_year;
+                    if ($nestedConnectionSpan->end_month) {
+                        $end .= '-' . str_pad($nestedConnectionSpan->end_month, 2, '0', STR_PAD_LEFT);
+                        if ($nestedConnectionSpan->end_day) {
+                            $end .= '-' . str_pad($nestedConnectionSpan->end_day, 2, '0', STR_PAD_LEFT);
+                        }
+                    }
+                    $connectionData['end_date'] = $end;
+                }
+                
+                // We found the at_organisation connection with dates, so break
+                break;
+            }
+        }
+    }
+
+    /**
+     * Get nested connections from a connection span (e.g., at_organisation connections)
+     */
+    private function getNestedConnections(\App\Models\Span $connectionSpan): array
+    {
+        $nestedConnections = [];
+        
+        // Load all connections from the connection span
+        $connectionSpan->load([
+            'connectionsAsSubject.child.type',
+            'connectionsAsObject.parent.type', 
+            'connectionsAsSubject.type',
+            'connectionsAsObject.type'
+        ]);
+        
+        // Process outgoing connections
+        foreach ($connectionSpan->connectionsAsSubject as $connection) {
+            $connectionType = $connection->type_id;
+            $targetSpan = $connection->child;
+            
+            $nestedConnections[] = [
+                'type' => $connectionType,
+                'direction' => 'outgoing',
+                'target_name' => $targetSpan->name,
+                'target_id' => $targetSpan->id,
+                'target_type' => $targetSpan->type_id,
+            ];
+        }
+        
+        // Process incoming connections
+        foreach ($connectionSpan->connectionsAsObject as $connection) {
+            $connectionType = $connection->type_id;
+            $sourceSpan = $connection->parent;
+            
+            $nestedConnections[] = [
+                'type' => $connectionType,
+                'direction' => 'incoming',
+                'target_name' => $sourceSpan->name,
+                'target_id' => $sourceSpan->id,
+                'target_type' => $sourceSpan->type_id,
+            ];
+        }
+        
+        return $nestedConnections;
+    }
+
+    /**
+     * Find organisation information from nested connections (for sophisticated role descriptions)
+     */
+    private function findNestedOrganisation(array $connectionData): ?array
+    {
+        if (!isset($connectionData['nested_connections'])) {
+            return null;
+        }
+        
+        foreach ($connectionData['nested_connections'] as $nestedConnection) {
+            // Look for outgoing at_organisation connections
+            if ($nestedConnection['type'] === 'at_organisation' && 
+                $nestedConnection['direction'] === 'outgoing' &&
+                $nestedConnection['target_type'] === 'organisation') {
+                return [
+                    'name' => $nestedConnection['target_name'],
+                    'type' => $nestedConnection['target_type'],
+                    'id' => $nestedConnection['target_id']
+                ];
+            }
+        }
+        
+        return null;
+    }
+
+    /**
      * Validate required fields
      */
     private function validateRequiredFields(array $data): void
@@ -482,32 +622,111 @@ class YamlSpanService
      */
     private function updateConnections(Span $span, array $connectionsData): void
     {
-        // This is a complex operation that would need careful handling
-        // For now, we'll leave existing connections unchanged to avoid data loss
-        // In a full implementation, we'd need to:
-        // 1. Compare existing connections with YAML connections
-        // 2. Add new connections
-        // 3. Remove connections not in YAML
-        // 4. Update existing connections
-        // 5. Handle the special family structure (parents/children vs family connections)
+        $connectionImporter = new ConnectionImporter($span->owner);
         
-        // Map the YAML structure back to database connections
-        $connectionTypes = [];
-        foreach ($connectionsData as $key => $connections) {
-            if ($key === 'parents') {
-                $connectionTypes['family_incoming'] = $connections;
-            } elseif ($key === 'children') {
-                $connectionTypes['family_outgoing'] = $connections;
-            } else {
-                $connectionTypes[$key] = $connections;
+        foreach ($connectionsData as $connectionType => $connections) {
+            if (!is_array($connections)) {
+                continue;
+            }
+            
+            foreach ($connections as $connectionData) {
+                if (!is_array($connectionData) || !isset($connectionData['name'], $connectionData['type'])) {
+                    continue;
+                }
+                
+                try {
+                    // Handle special family connection mapping
+                    $actualConnectionType = $this->mapConnectionType($connectionType);
+                    
+                    // Parse connection dates if present
+                    $dates = null;
+                    if (isset($connectionData['start_date']) || isset($connectionData['end_date'])) {
+                        $dates = $connectionImporter->parseDatesFromStrings(
+                            $connectionData['start_date'] ?? null,
+                            $connectionData['end_date'] ?? null
+                        );
+                    }
+                    
+                    // Prepare metadata
+                    $metadata = $connectionData['metadata'] ?? [];
+                    if (isset($connectionData['connection_metadata'])) {
+                        $metadata = array_merge($metadata, $connectionData['connection_metadata']);
+                    }
+                    
+                    // Find or create the connected span using the same logic as import
+                    $connectedSpan = $connectionImporter->findOrCreateConnectedSpan(
+                        $connectionData['name'],
+                        $connectionData['type'],
+                        null, // Don't pass connection dates as span dates
+                        $metadata
+                    );
+                    
+                    // Determine parent/child relationship based on connection type
+                    [$parent, $child] = $this->determineConnectionDirection(
+                        $span, 
+                        $connectedSpan, 
+                        $actualConnectionType, 
+                        $connectionType
+                    );
+                    
+                    // Create or update the connection
+                    $connectionImporter->createConnection(
+                        $parent,
+                        $child,
+                        $actualConnectionType,
+                        $dates,
+                        $metadata
+                    );
+                    
+                    Log::info('YAML connection processed', [
+                        'connection_type' => $actualConnectionType,
+                        'parent' => $parent->name,
+                        'child' => $child->name,
+                        'connected_span_created' => $connectedSpan->wasRecentlyCreated ?? false
+                    ]);
+                    
+                } catch (\Exception $e) {
+                    Log::error('Failed to process YAML connection', [
+                        'span_id' => $span->id,
+                        'connection_type' => $connectionType,
+                        'connection_data' => $connectionData,
+                        'error' => $e->getMessage()
+                    ]);
+                    // Continue processing other connections instead of failing completely
+                }
+            }
+        }
+    }
+    
+    /**
+     * Map YAML connection types to database connection types
+     */
+    private function mapConnectionType(string $yamlConnectionType): string
+    {
+        return match($yamlConnectionType) {
+            'parents' => 'family',
+            'children' => 'family',
+            default => $yamlConnectionType
+        };
+    }
+    
+    /**
+     * Determine parent/child relationship based on connection type and context
+     */
+    private function determineConnectionDirection(Span $mainSpan, Span $connectedSpan, string $connectionType, string $yamlConnectionType): array
+    {
+        // For family connections, YAML structure determines direction
+        if ($connectionType === 'family') {
+            if ($yamlConnectionType === 'parents') {
+                return [$connectedSpan, $mainSpan]; // Parent -> Child
+            } elseif ($yamlConnectionType === 'children') {
+                return [$mainSpan, $connectedSpan]; // Parent -> Child
             }
         }
         
-        Log::info('Connection updates not yet implemented in YAML editor', [
-            'span_id' => $span->id,
-            'connections_in_yaml' => array_keys($connectionsData),
-            'mapped_types' => array_keys($connectionTypes)
-        ]);
+        // For other connection types, use the main span as parent by default
+        // This matches the YAML export structure where outgoing connections are listed
+        return [$mainSpan, $connectedSpan];
     }
 
     /**
@@ -616,10 +835,21 @@ class YamlSpanService
                 // Find the actual span in the database
                 $referencedSpan = Span::find($connection['id']);
                 if (!$referencedSpan) {
-                    $impacts[] = [
-                        'type' => 'danger',
-                        'message' => "Referenced {$type} span '{$connection['name']}' not found in database (ID: {$connection['id']})"
-                    ];
+                    // Check if this is a new span that can be created
+                    $connectionSpanType = $connection['type'] ?? 'unknown';
+                    
+                    // For certain span types (like roles), allow creation of new spans
+                    if ($this->isCreatableSpanType($connectionSpanType, $type)) {
+                        $impacts[] = [
+                            'type' => 'info',
+                            'message' => "Will create new {$connectionSpanType} span '{$connection['name']}' when applying changes"
+                        ];
+                    } else {
+                        $impacts[] = [
+                            'type' => 'danger',
+                            'message' => "Referenced {$type} span '{$connection['name']}' not found in database (ID: {$connection['id']})"
+                        ];
+                    }
                     continue;
                 }
                 
@@ -666,6 +896,39 @@ class YamlSpanService
         $count += Connection::where('parent_id', $spanId)->count();
         
         return $count;
+    }
+
+    /**
+     * Determine if a span type can be auto-created when referenced in connections
+     */
+    private function isCreatableSpanType(string $spanType, string $connectionType): bool
+    {
+        // Define which span types can be auto-created in which connection contexts
+        $creatableTypes = [
+            // Role spans can always be created when referenced in has_role connections
+            'role' => ['has_role'],
+            
+            // People can be created in most connection types (family, relationships, etc.)
+            'person' => ['family', 'has_role', 'relationship', 'employment', 'education', 'membership'],
+            
+            // Organizations can be created when referenced in employment, education, etc.
+            'organisation' => ['employment', 'education', 'membership', 'at_organisation'],
+            
+            // Places can be created when referenced in residence, travel, etc.
+            'place' => ['residence', 'travel'],
+            
+            // Things can be created when referenced in ownership, creation, etc.
+            'thing' => ['ownership', 'created', 'contains'],
+            
+            // Events can be created when referenced in participation
+            'event' => ['participation', 'attendance'],
+            
+            // Bands can be created when referenced in membership
+            'band' => ['membership']
+        ];
+        
+        return isset($creatableTypes[$spanType]) && 
+               in_array($connectionType, $creatableTypes[$spanType]);
     }
 
     /**
@@ -732,6 +995,9 @@ class YamlSpanService
             $translations = array_merge($translations, $connectionTranslations);
         }
         
+        // Sort connection translations by date (chronological order)
+        $this->sortTranslationsByDate($translations);
+        
         return $translations;
     }
 
@@ -759,16 +1025,88 @@ class YamlSpanService
                 
                 $sentence = $this->buildConnectionSentence($spanName, $type, $connectionName, $connectionType, $connection, $spanType);
                 if ($sentence) {
-                    $translations[] = [
+                    $translation = [
                         'section' => 'connections',
                         'subsection' => $type,
                         'text' => $sentence
                     ];
+                    
+                    // Add sort date for chronological ordering
+                    $sortDate = $this->extractSortDate($connection);
+                    if ($sortDate) {
+                        $translation['sort_date'] = $sortDate;
+                    }
+                    
+                    $translations[] = $translation;
                 }
             }
         }
         
         return $translations;
+    }
+
+    /**
+     * Extract a sortable date from connection data for chronological ordering
+     */
+    private function extractSortDate(array $connectionData): ?string
+    {
+        // Use start_date if available, otherwise use end_date
+        if (!empty($connectionData['start_date'])) {
+            return $this->normalizeDateForSorting($connectionData['start_date']);
+        } elseif (!empty($connectionData['end_date'])) {
+            return $this->normalizeDateForSorting($connectionData['end_date']);
+        }
+        
+        return null;
+    }
+
+    /**
+     * Normalize a date string to a sortable format (YYYY-MM-DD)
+     */
+    private function normalizeDateForSorting(string $date): string
+    {
+        // Handle different date formats and convert to YYYY-MM-DD for sorting
+        $parts = explode('-', $date);
+        
+        // Ensure we have at least year
+        if (empty($parts[0])) {
+            return '9999-12-31'; // Push undated items to the end
+        }
+        
+        $year = str_pad($parts[0], 4, '0', STR_PAD_LEFT);
+        $month = isset($parts[1]) && $parts[1] !== '' ? str_pad($parts[1], 2, '0', STR_PAD_LEFT) : '01';
+        $day = isset($parts[2]) && $parts[2] !== '' ? str_pad($parts[2], 2, '0', STR_PAD_LEFT) : '01';
+        
+        return "{$year}-{$month}-{$day}";
+    }
+
+    /**
+     * Sort translations by date while preserving the order of non-connection items
+     */
+    private function sortTranslationsByDate(array &$translations): void
+    {
+        // Separate identity/dates from connections
+        $identityItems = [];
+        $connectionItems = [];
+        
+        foreach ($translations as $translation) {
+            if ($translation['section'] === 'connections') {
+                $connectionItems[] = $translation;
+            } else {
+                $identityItems[] = $translation;
+            }
+        }
+        
+        // Sort connection items by date
+        usort($connectionItems, function ($a, $b) {
+            $dateA = $a['sort_date'] ?? '9999-12-31';
+            $dateB = $b['sort_date'] ?? '9999-12-31';
+            
+            return strcmp($dateA, $dateB);
+        });
+        
+        // Rebuild the translations array: identity first, then sorted connections
+        $translations = array_merge($identityItems, $connectionItems);
     }
 
     /**
@@ -870,6 +1208,27 @@ class YamlSpanService
                     $baseSentence = "{$subjectBadge} {$predicateBadge} {$objectBadge}";
                 }
                 break;
+            case 'has_role':
+                if ($isIncoming) {
+                    $baseSentence = "{$objectBadge} role is held by {$subjectBadge}";
+                } else {
+                    // Check for nested at_organisation connections for sophisticated role descriptions
+                    $organisationInfo = $this->findNestedOrganisation($connectionData);
+                    if ($organisationInfo) {
+                        $orgBadge = $this->createEntityBadge($organisationInfo['name'], $organisationInfo['type']);
+                        $baseSentence = "{$subjectBadge} has role {$objectBadge} at {$orgBadge}";
+                    } else {
+                        $baseSentence = "{$subjectBadge} is a {$objectBadge}";
+                    }
+                }
+                break;
+            case 'at_organisation':
+                if ($isIncoming) {
+                    $baseSentence = "{$objectBadge} hosts {$subjectBadge}";
+                } else {
+                    $baseSentence = "{$subjectBadge} is at {$objectBadge}";
+                }
+                break;
             default:
                 // For unknown types, provide a generic but informative sentence
                 if ($isIncoming) {
@@ -965,6 +1324,8 @@ class YamlSpanService
                 return 'bg-dark';
             case 'thing':
                 return 'bg-secondary';
+            case 'role':
+                return 'bg-info text-dark';
             case 'type':
                 return 'bg-light text-dark border';
             case 'subtype':
@@ -1004,6 +1365,10 @@ class YamlSpanService
                 return $isIncoming ? 'was attended by' : 'attended';
             case 'ownership':
                 return $isIncoming ? 'was owned by' : 'owned';
+            case 'has_role':
+                return $isIncoming ? 'role is held by' : 'has role';
+            case 'at_organisation':
+                return $isIncoming ? 'hosts' : 'at';
             default:
                 return $connectionType;
         }
