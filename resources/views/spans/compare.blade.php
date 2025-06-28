@@ -533,6 +533,13 @@ $(document).ready(function() {
 
 @section('content')
 <div class="container-fluid py-4">
+    <!-- Comparison Timeline -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <x-spans.comparison-timeline :span1="$span" :span2="$personalSpan" />
+        </div>
+    </div>
+
     <div class="row">
         <!-- First Column: Current Span's Connections (50%) -->
         <div class="col-md-6">

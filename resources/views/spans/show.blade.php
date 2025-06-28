@@ -37,6 +37,13 @@
 
 @section('content')
     <div data-span-id="{{ $span->id }}" class="container-fluid py-4">
+        <!-- Timeline Card -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <x-spans.timeline :span="$span" />
+            </div>
+        </div>
+
         <div class="row">
             <div class="col-md-8">
                 <!-- Main Content -->
@@ -59,4 +66,21 @@
             </div>
         </div>
     </div>
-@endsection 
+@endsection
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Delete span confirmation
+    const deleteBtn = document.getElementById('delete-span-btn');
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (confirm('Are you sure you want to delete this span?')) {
+                document.getElementById('delete-span-form').submit();
+            }
+        });
+    }
+});
+</script>
+@endpush 

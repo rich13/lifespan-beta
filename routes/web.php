@@ -186,6 +186,9 @@ Route::middleware('web')->group(function () {
         // Search route (works with session auth)
         Route::get('/search', [SpanController::class, 'search'])->name('spans.search');
         
+        // Timeline route (works with session auth)
+        Route::get('/{span}/timeline', [App\Http\Controllers\Api\SpanSearchController::class, 'timeline'])->name('spans.timeline');
+        
         // Protected routes
         Route::middleware('auth')->group(function () {
             Route::get('/create', [SpanController::class, 'create'])->name('spans.create');

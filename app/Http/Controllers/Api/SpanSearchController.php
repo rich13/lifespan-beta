@@ -145,4 +145,54 @@ class SpanSearchController extends Controller
             'metadata' => $span->metadata
         ]);
     }
+
+    /**
+     * Get timeline data for a span (all connection types)
+     */
+    public function timeline(Span $span)
+    {
+        // Check access permissions
+        $user = Auth::user();
+        if (!$span->isPublic() && (!$user || !$span->hasPermission($user, 'view'))) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        // Get all connections for this span that have temporal data
+        $connections = $span->connectionsAsSubject()
+            ->with(['child', 'connectionSpan', 'type'])
+            ->get()
+            ->map(function ($connection) {
+                $connectionSpan = $connection->connectionSpan;
+                return [
+                    'id' => $connection->id,
+                    'type_id' => $connection->type_id,
+                    'type_name' => $connection->type->forward_predicate ?? $connection->type_id,
+                    'target_name' => $connection->child->name,
+                    'target_id' => $connection->child->id,
+                    'start_year' => $connectionSpan ? $connectionSpan->start_year : null,
+                    'start_month' => $connectionSpan ? $connectionSpan->start_month : null,
+                    'start_day' => $connectionSpan ? $connectionSpan->start_day : null,
+                    'end_year' => $connectionSpan ? $connectionSpan->end_year : null,
+                    'end_month' => $connectionSpan ? $connectionSpan->end_month : null,
+                    'end_day' => $connectionSpan ? $connectionSpan->end_day : null,
+                    'metadata' => $connection->metadata ?? []
+                ];
+            })
+            ->filter(function ($connection) {
+                // Only include connections with start dates
+                return $connection['start_year'] !== null;
+            })
+            ->sortBy('start_year')
+            ->values();
+
+        return response()->json([
+            'span' => [
+                'id' => $span->id,
+                'name' => $span->name,
+                'start_year' => $span->start_year,
+                'end_year' => $span->end_year
+            ],
+            'connections' => $connections
+        ]);
+    }
 } 
