@@ -1,7 +1,7 @@
 @props(['span'])
 
 <a href="{{ route('spans.show', $span) }}" 
-   class="text-decoration-none d-inline-flex align-items-center gap-1 {{ $span->state === 'placeholder' ? 'text-danger' : '' }}">
+   class="text-decoration-none d-inline-flex align-items-center gap-1 {{ $span->state === 'placeholder' ? 'text-placeholder' : 'text-' . $span->type_id }}">
     @switch($span->type_id)
         @case('person')
             <i class="bi bi-person-fill"></i>

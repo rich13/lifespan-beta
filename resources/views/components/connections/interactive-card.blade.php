@@ -30,7 +30,7 @@
     <!-- Single continuous button group for the entire sentence -->
     <div class="btn-group btn-group-sm" role="group">
         <!-- Connection type icon button -->
-        <button type="button" class="btn btn-outline-secondary disabled" style="min-width: 40px;">
+        <button type="button" class="btn btn-outline-{{ $connection->type_id }} disabled" style="min-width: 40px;">
             @switch($connection->type_id)
                 @case('education')
                     <i class="bi bi-mortarboard-fill"></i>
@@ -81,72 +81,101 @@
             @endswitch
         </button>
         
-        <!-- Subject span name button -->
+        <!-- Subject span name -->
         <a href="{{ route('spans.show', $connection->parent) }}" 
-           class="btn btn-primary text-start {{ $connection->parent->state === 'placeholder' ? 'btn-danger' : '' }}">
-            <strong>{{ $connection->parent->name }}</strong>
+           class="btn {{ $connection->parent->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $connection->parent->type_id }}">
+            {{ $connection->parent->name }}
         </a>
         
-        <!-- Relationship predicate -->
-        <button type="button" class="btn btn-outline-light text-dark inactive" disabled>
-            @if($connection->type_id === 'family')
-                @php
-                    $parentGender = $connection->parent->getMeta('gender');
-                    if ($parentGender === 'male') {
-                        $relation = 'is father of';
-                    } elseif ($parentGender === 'female') {
-                        $relation = 'is mother of';
-                    } else {
-                        $relation = 'is parent of';
-                    }
-                @endphp
-                {{ $relation }}
-            @elseif($connection->type_id === 'has_role' && $nestedOrganisation)
-                has role
-            @else
-                {{ strtolower($connection->type->forward_predicate ?? $connection->type_id) }}
-            @endif
+        <!-- Predicate -->
+        <button type="button" class="btn btn-{{ $connection->type_id }}">
+            {{ $connection->type->forward_predicate }}
         </button>
         
-        <!-- Object span name button -->
-        <a href="{{ route('spans.show', $connection->child) }}" 
-           class="btn btn-primary text-start {{ $connection->child->state === 'placeholder' ? 'btn-danger' : '' }}">
-            <strong>{{ $connection->child->name }}</strong>
-        </a>
-        
-        <!-- Nested organisation for has_role connections -->
-        @if($connection->type_id === 'has_role' && $nestedOrganisation)
-            <button type="button" class="btn btn-outline-light text-dark inactive" disabled>at</button>
-            <a href="{{ route('spans.show', $nestedOrganisation) }}" 
-               class="btn btn-primary text-start {{ $nestedOrganisation->state === 'placeholder' ? 'btn-danger' : '' }}">
-                <strong>{{ $nestedOrganisation->name }}</strong>
+        <!-- Object span name -->
+        @if($connection->child)
+            <a href="{{ route('spans.show', $connection->child) }}" 
+               class="btn {{ $connection->child->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $connection->child->type_id }}">
+                {{ $connection->child->name }}
             </a>
+        @else
+            <button type="button" class="btn btn-placeholder">
+                [Missing Object]
+            </button>
         @endif
         
-        <!-- Date information - use nested dates for has_role if available, otherwise use connection span dates -->
-        @php
-            $dateSource = $nestedDates ?? $connection->connectionSpan;
-        @endphp
-        @if($dateSource && ($dateSource->start_year || $dateSource->end_year))
-            @if($dateSource->end_year)
-                <!-- Connection with end date: [subject] [predicate] [object] [at] [organisation] from [start] to [end] -->
-                <button type="button" class="btn btn-outline-light text-dark inactive" disabled>from</button>
-                <a href="{{ route('date.explore', ['date' => $dateSource->start_date_link]) }}" 
-                   class="btn btn-outline-info">
-                    {{ $dateSource->human_readable_start_date }}
+        @if($connection->connectionSpan && $connection->connectionSpan->start_year && $connection->connectionSpan->start_year > 0)
+            <!-- Date information -->
+            @if($connection->connectionSpan->end_year)
+                <button type="button" class="btn inactive">
+                    from
+                </button>
+                <!-- Start date -->
+                <a href="{{ route('date.explore', ['date' => $connection->connectionSpan->start_year . '-01-01']) }}" 
+                   class="btn btn-outline-date">
+                    {{ $connection->connectionSpan->human_readable_start_date }}
                 </a>
-                <button type="button" class="btn btn-outline-light text-dark inactive" disabled>to</button>
-                <a href="{{ route('date.explore', ['date' => $dateSource->end_date_link]) }}" 
-                   class="btn btn-outline-info">
-                    {{ $dateSource->human_readable_end_date }}
+                <button type="button" class="btn inactive">
+                    to
+                </button>
+                <!-- End date -->
+                <a href="{{ route('date.explore', ['date' => $connection->connectionSpan->end_year . '-01-01']) }}" 
+                   class="btn btn-outline-date">
+                    {{ $connection->connectionSpan->human_readable_end_date }}
                 </a>
             @else
-                <!-- Connection ongoing: [subject] [predicate] [object] [at] [organisation] starting [start] -->
-                <button type="button" class="btn btn-outline-light text-dark inactive" disabled>starting</button>
-                <a href="{{ route('date.explore', ['date' => $dateSource->start_date_link]) }}" 
-                   class="btn btn-outline-info">
-                    {{ $dateSource->human_readable_start_date }}
+                <button type="button" class="btn inactive">
+                    from
+                </button>
+                <!-- Start date -->
+                <a href="{{ route('date.explore', ['date' => $connection->connectionSpan->start_year . '-01-01']) }}" 
+                   class="btn btn-outline-date">
+                    {{ $connection->connectionSpan->human_readable_start_date }}
                 </a>
+            @endif
+        @endif
+        
+        <!-- Nested connections (e.g., has_role with at_organisation) -->
+        @if($nestedOrganisation)
+            <!-- Nested predicate -->
+            <button type="button" class="btn inactive">
+                at
+            </button>
+            
+            <!-- Nested organisation -->
+            <a href="{{ route('spans.show', $nestedOrganisation) }}" 
+               class="btn {{ $nestedOrganisation->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $nestedOrganisation->type_id }}">
+                {{ $nestedOrganisation->name }}
+            </a>
+            
+            @if($nestedDates && $nestedDates->start_year && $nestedDates->start_year > 0)
+                @if($nestedDates->end_year)
+                    <button type="button" class="btn inactive">
+                        from
+                    </button>
+                    <!-- Nested start date -->
+                    <a href="{{ route('date.explore', ['date' => $nestedDates->start_year . '-01-01']) }}" 
+                       class="btn btn-outline-date">
+                        {{ $nestedDates->human_readable_start_date }}
+                    </a>
+                    <button type="button" class="btn inactive">
+                        to
+                    </button>
+                    <!-- Nested end date -->
+                    <a href="{{ route('date.explore', ['date' => $nestedDates->end_year . '-01-01']) }}" 
+                       class="btn btn-outline-date">
+                        {{ $nestedDates->human_readable_end_date }}
+                    </a>
+                @else
+                    <button type="button" class="btn inactive">
+                        from
+                    </button>
+                    <!-- Nested start date -->
+                    <a href="{{ route('date.explore', ['date' => $nestedDates->start_year . '-01-01']) }}" 
+                       class="btn btn-outline-date">
+                        {{ $nestedDates->human_readable_start_date }}
+                    </a>
+                @endif
             @endif
         @endif
     </div>

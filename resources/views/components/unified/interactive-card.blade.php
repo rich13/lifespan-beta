@@ -34,14 +34,14 @@
     }
 @endphp
 
-<div class="interactive-card-base mb-3">
-    <!-- Single continuous button group for the entire sentence -->
-    <div class="btn-group btn-group-sm" role="group">
-        @if($isSpan)
-            {{-- SPAN MODE --}}
-            
+@if($span)
+    {{-- SPAN MODE --}}
+    
+    <div class="interactive-card-base mb-3">
+        <!-- Single continuous button group for the entire sentence -->
+        <div class="btn-group btn-group-sm" role="group">
             <!-- Span type icon button -->
-            <button type="button" class="btn btn-outline-secondary disabled" style="min-width: 40px;">
+            <button type="button" class="btn btn-outline-{{ $span->type_id }} disabled" style="min-width: 40px;">
                 @switch($span->type_id)
                     @case('person')
                         <i class="bi bi-person-fill"></i>
@@ -55,75 +55,96 @@
                     @case('event')
                         <i class="bi bi-calendar-event-fill"></i>
                         @break
-                    @case('connection')
-                        <i class="bi bi-link-45deg"></i>
-                        @break
                     @case('band')
                         <i class="bi bi-cassette"></i>
                         @break
-                    @default
+                    @case('thing')
                         <i class="bi bi-box"></i>
+                        @break
+                    @default
+                        <i class="bi bi-question-circle"></i>
                 @endswitch
             </button>
-            
-            <!-- Span name button (main link) -->
+
+            <!-- Span name -->
             <a href="{{ route('spans.show', $span) }}" 
-               class="btn btn-primary text-start {{ $span->state === 'placeholder' ? 'btn-danger' : '' }}">
-                <strong>{{ $span->name }}</strong>
+               class="btn {{ $span->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $span->type_id }}">
+                {{ $span->name }}
             </a>
-            
+
             @if($span->start_year || $span->end_year)
-                @if($span->type_id === 'person')
-                    @if($span->end_year)
-                        <!-- Person with death date: [person] [name] lived from [start] to [end] -->
-                        <button type="button" class="btn btn-outline-light text-dark inactive" disabled>lived</button>
-                        <button type="button" class="btn btn-outline-light text-dark inactive" disabled>from</button>
-                        <a href="{{ route('date.explore', ['date' => $span->start_date_link]) }}" 
-                           class="btn btn-outline-info">
-                            {{ $span->human_readable_start_date }}
-                        </a>
-                        <button type="button" class="btn btn-outline-light text-dark inactive" disabled>to</button>
-                        <a href="{{ route('date.explore', ['date' => $span->end_date_link]) }}" 
-                           class="btn btn-outline-info">
-                            {{ $span->human_readable_end_date }}
-                        </a>
-                    @else
-                        <!-- Person alive: [person] [name] was born [start] -->
-                        <button type="button" class="btn btn-outline-light text-dark inactive" disabled>was born</button>
-                        <a href="{{ route('date.explore', ['date' => $span->start_date_link]) }}" 
-                           class="btn btn-outline-info">
-                            {{ $span->human_readable_start_date }}
-                        </a>
-                    @endif
-                @else
-                    @if($span->end_year)
-                        <!-- Other span with end date: [span] [name] from [start] to [end] -->
-                        <button type="button" class="btn btn-outline-light text-dark inactive" disabled>from</button>
-                        <a href="{{ route('date.explore', ['date' => $span->start_date_link]) }}" 
-                           class="btn btn-outline-info">
-                            {{ $span->human_readable_start_date }}
-                        </a>
-                        <button type="button" class="btn btn-outline-light text-dark inactive" disabled>to</button>
-                        <a href="{{ route('date.explore', ['date' => $span->end_date_link]) }}" 
-                           class="btn btn-outline-info">
-                            {{ $span->human_readable_end_date }}
-                        </a>
-                    @else
-                        <!-- Other span ongoing: [span] [name] starting [start] -->
-                        <button type="button" class="btn btn-outline-light text-dark inactive" disabled>started</button>
-                        <a href="{{ route('date.explore', ['date' => $span->start_date_link]) }}" 
-                           class="btn btn-outline-info">
-                            {{ $span->human_readable_start_date }}
-                        </a>
-                    @endif
+                @if($span->start_year)
+                    <!-- Action word -->
+                    <button type="button" class="btn inactive">
+                        @switch($span->type_id)
+                            @case('person')
+                                was born
+                                @break
+                            @case('organisation')
+                                was founded
+                                @break
+                            @case('event')
+                                began
+                                @break
+                            @case('band')
+                                was formed
+                                @break
+                            @default
+                                started
+                        @endswitch
+                    </button>
+
+                    <!-- Start date -->
+                    <a href="{{ route('date.explore', ['date' => $span->start_year . '-01-01']) }}" 
+                       class="btn btn-outline-date">
+                        {{ $span->human_readable_start_date }}
+                    </a>
+                @endif
+
+                @if($span->end_year)
+                    <!-- Connector word -->
+                    <button type="button" class="btn inactive">
+                        to
+                    </button>
+
+                    <!-- End action word -->
+                    <button type="button" class="btn inactive">
+                        @switch($span->type_id)
+                            @case('person')
+                                died
+                                @break
+                            @case('organisation')
+                                was dissolved
+                                @break
+                            @case('event')
+                                ended
+                                @break
+                            @case('band')
+                                disbanded
+                                @break
+                            @default
+                                ended
+                        @endswitch
+                    </button>
+
+                    <!-- End date -->
+                    <a href="{{ route('date.explore', ['date' => $span->end_year . '-01-01']) }}" 
+                       class="btn btn-outline-date">
+                        {{ $span->human_readable_end_date }}
+                    </a>
                 @endif
             @endif
-            
-        @else
-            {{-- CONNECTION MODE --}}
-            
+        </div>
+    </div>
+
+@elseif($connection)
+    {{-- CONNECTION MODE --}}
+    
+    <div class="interactive-card-base mb-3">
+        <!-- Single continuous button group for the entire sentence -->
+        <div class="btn-group btn-group-sm" role="group">
             <!-- Connection type icon button -->
-            <button type="button" class="btn btn-outline-secondary disabled" style="min-width: 40px;">
+            <button type="button" class="btn btn-outline-{{ $connection->type_id }} disabled" style="min-width: 40px;">
                 @switch($connection->type_id)
                     @case('education')
                         <i class="bi bi-mortarboard-fill"></i>
@@ -173,86 +194,78 @@
                         <i class="bi bi-link-45deg"></i>
                 @endswitch
             </button>
-            
-            <!-- Subject span name button -->
+
+            <!-- Subject span name -->
             <a href="{{ route('spans.show', $connection->parent) }}" 
-               class="btn btn-primary text-start {{ $connection->parent->state === 'placeholder' ? 'btn-danger' : '' }}">
-                <strong>{{ $connection->parent->name }}</strong>
+               class="btn {{ $connection->parent->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $connection->parent->type_id }}">
+                {{ $connection->parent->name }}
             </a>
-            
-            <!-- Relationship predicate -->
-            <button type="button" class="btn btn-outline-light text-dark inactive" disabled>
-                @if($connection->type_id === 'family')
-                    @php
-                        $parentGender = $connection->parent->getMeta('gender');
-                        if ($parentGender === 'male') {
-                            $relation = 'is father of';
-                        } elseif ($parentGender === 'female') {
-                            $relation = 'is mother of';
-                        } else {
-                            $relation = 'is parent of';
-                        }
-                    @endphp
-                    {{ $relation }}
-                @elseif($connection->type_id === 'has_role' && $nestedOrganisation)
-                    has role
-                @else
-                    {{ strtolower($connection->type->forward_predicate ?? $connection->type_id) }}
-                @endif
+
+            <!-- Predicate -->
+            <button type="button" class="btn btn-{{ $connection->type_id }}">
+                {{ $connection->type->forward_predicate }}
             </button>
-            
-            <!-- Object span name button -->
-            <a href="{{ route('spans.show', $connection->child) }}" 
-               class="btn btn-primary text-start {{ $connection->child->state === 'placeholder' ? 'btn-danger' : '' }}">
-                <strong>{{ $connection->child->name }}</strong>
-            </a>
-            
-            <!-- Nested organisation for has_role connections -->
-            @if($connection->type_id === 'has_role' && $nestedOrganisation)
-                <button type="button" class="btn btn-outline-light text-dark inactive" disabled>at</button>
-                <a href="{{ route('spans.show', $nestedOrganisation) }}" 
-                   class="btn btn-primary text-start {{ $nestedOrganisation->state === 'placeholder' ? 'btn-danger' : '' }}">
-                    <strong>{{ $nestedOrganisation->name }}</strong>
+
+            <!-- Object span name -->
+            @if($connection->child)
+                <a href="{{ route('spans.show', $connection->child) }}" 
+                   class="btn {{ $connection->child->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $connection->child->type_id }}">
+                    {{ $connection->child->name }}
                 </a>
+            @else
+                <button type="button" class="btn btn-placeholder">
+                    [Missing Object]
+                </button>
             @endif
-            
-            <!-- Date information - use nested dates for has_role if available, otherwise use connection span dates -->
-            @php
-                $dateSource = $nestedDates ?? $connection->connectionSpan;
-            @endphp
-            @if($dateSource && ($dateSource->start_year || $dateSource->end_year))
-                @if($dateSource->end_year)
-                    <!-- Connection with end date: [subject] [predicate] [object] [at] [organisation] from [start] to [end] -->
-                    <button type="button" class="btn btn-outline-light text-dark inactive" disabled>from</button>
-                    <a href="{{ route('date.explore', ['date' => $dateSource->start_date_link]) }}" 
-                       class="btn btn-outline-info">
-                        {{ $dateSource->human_readable_start_date }}
+
+            <!-- Nested connections (e.g., has_role at_organisation) -->
+            @if($connection->connectionSpan && $connection->connectionSpan->connectionsAsChild)
+                @foreach($connection->connectionSpan->connectionsAsChild as $nestedConnection)
+                    @if($nestedConnection->type_id === 'at_organisation' && $nestedConnection->child)
+                        <button type="button" class="btn inactive">
+                            at
+                        </button>
+                        <a href="{{ route('spans.show', $nestedConnection->child) }}" 
+                           class="btn {{ $nestedConnection->child->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $nestedConnection->child->type_id }}">
+                            {{ $nestedConnection->child->name }}
+                        </a>
+                    @endif
+                @endforeach
+            @endif
+
+            <!-- Date information -->
+            @if($connection->connectionSpan && ($connection->connectionSpan->start_year || $connection->connectionSpan->end_year))
+                @if($connection->connectionSpan->start_year)
+                    <button type="button" class="btn inactive">
+                        from
+                    </button>
+                    <a href="{{ route('date.explore', ['date' => $connection->connectionSpan->start_year . '-01-01']) }}" 
+                       class="btn btn-outline-date">
+                        {{ $connection->connectionSpan->human_readable_start_date }}
                     </a>
-                    <button type="button" class="btn btn-outline-light text-dark inactive" disabled>to</button>
-                    <a href="{{ route('date.explore', ['date' => $dateSource->end_date_link]) }}" 
-                       class="btn btn-outline-info">
-                        {{ $dateSource->human_readable_end_date }}
-                    </a>
-                @else
-                    <!-- Connection ongoing: [subject] [predicate] [object] [at] [organisation] starting [start] -->
-                    <button type="button" class="btn btn-outline-light text-dark inactive" disabled>starting</button>
-                    <a href="{{ route('date.explore', ['date' => $dateSource->start_date_link]) }}" 
-                       class="btn btn-outline-info">
-                        {{ $dateSource->human_readable_start_date }}
+                @endif
+
+                @if($connection->connectionSpan->end_year)
+                    <button type="button" class="btn inactive">
+                        to
+                    </button>
+                    <a href="{{ route('date.explore', ['date' => $connection->connectionSpan->end_year . '-01-01']) }}" 
+                       class="btn btn-outline-date">
+                        {{ $connection->connectionSpan->human_readable_end_date }}
                     </a>
                 @endif
             @endif
-        @endif
+        </div>
     </div>
-    
-    <!-- Description (if available) -->
-    @if($isSpan && $span->description)
-        <div class="mt-2">
-            <small class="text-muted">{{ Str::limit($span->description, 150) }}</small>
-        </div>
-    @elseif($isConnection && $connection->connectionSpan && $connection->connectionSpan->description)
-        <div class="mt-2">
-            <small class="text-muted">{{ Str::limit($connection->connectionSpan->description, 150) }}</small>
-        </div>
-    @endif
-</div> 
+@endif
+
+<!-- Description (if available) -->
+@if($isSpan && $span->description)
+    <div class="mt-2">
+        <small class="text-muted">{{ Str::limit($span->description, 150) }}</small>
+    </div>
+@elseif($isConnection && $connection->connectionSpan && $connection->connectionSpan->description)
+    <div class="mt-2">
+        <small class="text-muted">{{ Str::limit($connection->connectionSpan->description, 150) }}</small>
+    </div>
+@endif 

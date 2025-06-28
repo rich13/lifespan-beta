@@ -25,7 +25,7 @@
 
             <dt class="col-sm-3">State</dt>
             <dd class="col-sm-9">
-                <span class="badge bg-{{ $span->state === 'complete' ? 'success' : ($span->state === 'draft' ? 'warning' : 'secondary') }}">
+                <span class="badge bg-{{ $span->state === 'complete' ? 'success' : ($span->state === 'draft' ? 'warning' : 'placeholder') }}">
                     {{ ucfirst($span->state) }}
                 </span>
             </dd>

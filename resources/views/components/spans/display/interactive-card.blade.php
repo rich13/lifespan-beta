@@ -6,7 +6,7 @@
     <!-- Single continuous button group for the entire sentence -->
     <div class="btn-group btn-group-sm" role="group">
         <!-- Span type icon button -->
-        <button type="button" class="btn btn-outline-secondary disabled" style="min-width: 40px;">
+        <button type="button" class="btn btn-outline-{{ $span->type_id }} disabled" style="min-width: 40px;">
             @switch($span->type_id)
                 @case('person')
                     <i class="bi bi-person-fill"></i>
@@ -33,7 +33,7 @@
         
         <!-- Span name button (main link) -->
         <a href="{{ route('spans.show', $span) }}" 
-           class="btn btn-primary text-start {{ $span->state === 'placeholder' ? 'btn-danger' : '' }}">
+           class="btn {{ $span->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $span->type_id }} text-start">
             <strong>{{ $span->name }}</strong>
         </a>
         
@@ -44,19 +44,19 @@
                     <button type="button" class="btn btn-outline-light text-dark inactive" disabled>lived</button>
                     <button type="button" class="btn btn-outline-light text-dark inactive" disabled>from</button>
                     <a href="{{ route('date.explore', ['date' => $span->start_date_link]) }}" 
-                       class="btn btn-outline-info">
+                       class="btn btn-outline-date">
                         {{ $span->human_readable_start_date }}
                     </a>
                     <button type="button" class="btn btn-outline-light text-dark inactive" disabled>to</button>
                     <a href="{{ route('date.explore', ['date' => $span->end_date_link]) }}" 
-                       class="btn btn-outline-info">
+                       class="btn btn-outline-date">
                         {{ $span->human_readable_end_date }}
                     </a>
                 @else
                     <!-- Person alive: [person] [name] was born [start] -->
                     <button type="button" class="btn btn-outline-light text-dark inactive" disabled>was born</button>
                     <a href="{{ route('date.explore', ['date' => $span->start_date_link]) }}" 
-                       class="btn btn-outline-info">
+                       class="btn btn-outline-date">
                         {{ $span->human_readable_start_date }}
                     </a>
                 @endif
@@ -65,19 +65,19 @@
                     <!-- Other span with end date: [span] [name] from [start] to [end] -->
                     <button type="button" class="btn btn-outline-light text-dark inactive" disabled>from</button>
                     <a href="{{ route('date.explore', ['date' => $span->start_date_link]) }}" 
-                       class="btn btn-outline-info">
+                       class="btn btn-outline-date">
                         {{ $span->human_readable_start_date }}
                     </a>
                     <button type="button" class="btn btn-outline-light text-dark inactive" disabled>to</button>
                     <a href="{{ route('date.explore', ['date' => $span->end_date_link]) }}" 
-                       class="btn btn-outline-info">
+                       class="btn btn-outline-date">
                         {{ $span->human_readable_end_date }}
                     </a>
                 @else
                     <!-- Other span ongoing: [span] [name] starting [start] -->
                     <button type="button" class="btn btn-outline-light text-dark inactive" disabled>started</button>
                     <a href="{{ route('date.explore', ['date' => $span->start_date_link]) }}" 
-                       class="btn btn-outline-info">
+                       class="btn btn-outline-date">
                         {{ $span->human_readable_start_date }}
                     </a>
                 @endif
