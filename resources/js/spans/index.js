@@ -1,4 +1,9 @@
 document.addEventListener('DOMContentLoaded', function() {
+    // Only run this code on the spans index page
+    if (!window.location.pathname.match(/^\/spans\/?$/)) {
+        return;
+    }
+
     // Auto-submit form when any filter button is clicked
     const filterCheckboxes = document.querySelectorAll('#type-filter-form .btn-check');
     if (filterCheckboxes.length > 0) {
