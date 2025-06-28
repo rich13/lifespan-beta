@@ -97,6 +97,177 @@
         margin-right: 0.3rem;
         margin-bottom: 0.3rem;
     }
+
+    /* Interactive Button Styling */
+    #visual-translation .interactive-entity,
+    #visual-translation .interactive-predicate,
+    #visual-translation .interactive-date {
+        font-size: 0.85rem;
+        padding: 0.3rem 0.6rem;
+        margin: 0.1rem 0.2rem;
+        border-radius: 0.375rem;
+        transition: all 0.2s ease-in-out;
+        cursor: pointer;
+        white-space: nowrap;
+        display: inline-block;
+        text-decoration: none;
+        border: 1px solid transparent;
+    }
+
+    #visual-translation .interactive-entity:hover,
+    #visual-translation .interactive-predicate:hover,
+    #visual-translation .interactive-date:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        border-color: rgba(0,0,0,0.1);
+    }
+
+    #visual-translation .interactive-entity:active,
+    #visual-translation .interactive-predicate:active,
+    #visual-translation .interactive-date:active {
+        transform: translateY(0);
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    }
+
+    /* Entity button colors */
+    #visual-translation .interactive-entity.btn-primary {
+        background-color: #0d6efd;
+        color: white;
+    }
+
+    #visual-translation .interactive-entity.btn-success {
+        background-color: #198754;
+        color: white;
+    }
+
+    #visual-translation .interactive-entity.btn-warning {
+        background-color: #ffc107;
+        color: #000;
+    }
+
+    #visual-translation .interactive-entity.btn-danger {
+        background-color: #dc3545;
+        color: white;
+    }
+
+    #visual-translation .interactive-entity.btn-info {
+        background-color: #0dcaf0;
+        color: #000;
+    }
+
+    #visual-translation .interactive-entity.btn-dark {
+        background-color: #212529;
+        color: white;
+    }
+
+    #visual-translation .interactive-entity.btn-secondary {
+        background-color: #6c757d;
+        color: white;
+    }
+
+    /* Predicate button styling */
+    #visual-translation .interactive-predicate {
+        background-color: #f8f9fa;
+        color: #495057;
+        border-color: #dee2e6;
+    }
+
+    #visual-translation .interactive-predicate:hover {
+        background-color: #e9ecef;
+        border-color: #adb5bd;
+    }
+
+    /* Date button styling */
+    #visual-translation .interactive-date {
+        background-color: #e7f3ff;
+        color: #0c63e4;
+        border-color: #b6d4fe;
+    }
+
+    #visual-translation .interactive-date:hover {
+        background-color: #d1ecf1;
+        border-color: #9bd3d6;
+    }
+
+    /* Connector button styling */
+    #visual-translation .interactive-connector {
+        background-color: #f8f9fa;
+        color: #6c757d;
+        border-color: #dee2e6;
+        font-weight: 500;
+    }
+
+    #visual-translation .interactive-connector:hover {
+        background-color: #e9ecef;
+        border-color: #adb5bd;
+        color: #495057;
+    }
+
+    /* Inactive connector button styling */
+    #visual-translation .btn.inactive {
+        background-color: #e9ecef;
+        color: #6c757d;
+        border-color: #ced4da;
+        font-weight: 500;
+        opacity: 0.8;
+        cursor: default;
+    }
+
+    #visual-translation .btn.inactive:hover {
+        background-color: #e9ecef;
+        color: #6c757d;
+        border-color: #ced4da;
+        opacity: 0.8;
+    }
+
+    /* Button group styling */
+    #visual-translation .btn-group {
+        margin: 0.2rem 0.3rem;
+        display: inline-flex;
+        vertical-align: middle;
+    }
+
+    #visual-translation .btn-group .btn {
+        border-radius: 0;
+        margin: 0;
+        border-right-width: 0;
+    }
+
+    #visual-translation .btn-group .btn:first-child {
+        border-top-left-radius: 0.375rem;
+        border-bottom-left-radius: 0.375rem;
+    }
+
+    #visual-translation .btn-group .btn:last-child {
+        border-top-right-radius: 0.375rem;
+        border-bottom-right-radius: 0.375rem;
+        border-right-width: 1px;
+    }
+
+    #visual-translation .btn-group .btn:only-child {
+        border-radius: 0.375rem;
+        border-right-width: 1px;
+    }
+
+    /* Sentence container styling */
+    #visual-translation .sentence-container {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.2rem;
+        margin-bottom: 0.5rem;
+        padding: 0.5rem;
+        background-color: #f8f9fa;
+        border-radius: 0.5rem;
+        border: 1px solid #e9ecef;
+    }
+
+    /* Text elements between buttons */
+    #visual-translation .sentence-text {
+        color: #6c757d;
+        font-size: 0.9rem;
+        margin: 0 0.2rem;
+    }
 </style>
 @endpush
 
@@ -403,6 +574,9 @@
 
 @push('scripts')
 <script>
+let yamlTextarea;
+let activeDropdown = null; // Track the currently active dropdown
+
 $(document).ready(function() {
     const yamlTextarea = $('#yaml-content');
     const validateBtn = $('#validate-btn');
@@ -536,6 +710,11 @@ $(document).ready(function() {
         }
 
         $('#visual-translation').html(html);
+        
+        // Initialize interactive buttons after a short delay to ensure DOM is ready
+        setTimeout(() => {
+            initializeInteractiveButtons();
+        }, 100);
     }
 
     // Show impact analysis
@@ -1328,6 +1507,523 @@ custom_fields:
         yamlTextarea.focus();
         const textArea = yamlTextarea[0];
         textArea.scrollTop = textArea.scrollHeight;
+    }
+
+    // Initialize interactive buttons after visual translation is shown
+    function initializeInteractiveButtons() {
+        // Initialize tooltips
+        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+
+        // Handle entity button clicks
+        $(document).on('click', '.interactive-entity', function(e) {
+            e.preventDefault();
+            const entityName = $(this).data('entity-name');
+            const entityType = $(this).data('entity-type');
+            const role = $(this).data('role');
+            
+            console.log('Entity clicked:', { entityName, entityType, role });
+            
+            // Show edit dialog for entity
+            showEntityEditDialog(entityName, entityType, role);
+        });
+
+        // Handle predicate button clicks
+        $(document).on('click', '.interactive-predicate', function(e) {
+            e.preventDefault();
+            const connectionType = $(this).data('connection-type');
+            const isIncoming = $(this).data('is-incoming') === 'true';
+            
+            console.log('Predicate clicked:', { connectionType, isIncoming });
+            
+            // Show relationship type selector
+            showRelationshipTypeSelector(connectionType, isIncoming);
+        });
+
+        // Handle date button clicks
+        $(document).on('click', '.interactive-date', function(e) {
+            e.preventDefault();
+            const date = $(this).data('date');
+            const dateType = $(this).data('date-type');
+            
+            console.log('Date clicked:', { date, dateType });
+            
+            // Show date picker
+            showDatePicker(date, dateType);
+        });
+
+        // Handle connector button clicks
+        $(document).on('click', '.interactive-connector', function(e) {
+            e.preventDefault();
+            const connectorText = $(this).data('connector-text');
+            
+            console.log('Connector clicked:', { connectorText });
+            
+            // Show connector edit dialog
+            showConnectorEditDialog(connectorText);
+        });
+    }
+
+    // Show entity edit dialog
+    function showEntityEditDialog(entityName, entityType, role) {
+        // Close any existing dropdown
+        if (activeDropdown) {
+            activeDropdown.remove();
+            activeDropdown = null;
+        }
+        
+        // Create dropdown menu with searchable filter
+        const dropdownId = 'entityDropdown_' + Date.now();
+        const dropdown = $(`
+            <div class="dropdown-menu pt-0 mx-0 rounded-3 shadow overflow-hidden w-280px" 
+                 id="${dropdownId}" data-bs-theme="light" style="z-index: 9999; display: block;">
+                <form class="p-2 mb-2 bg-body-tertiary border-bottom">
+                    <input type="search" class="form-control" autocomplete="false" placeholder="Type to filter...">
+                </form>
+                <ul class="list-unstyled mb-0">
+                    <li><a class="dropdown-item d-flex align-items-center gap-2 py-2" href="#" data-value="${entityName}">
+                        <span class="d-inline-block bg-primary rounded-circle p-1"></span>
+                        ${entityName} (current)
+                    </a></li>
+                    <li><a class="dropdown-item d-flex align-items-center gap-2 py-2" href="#" data-value="New Name 1">
+                        <span class="d-inline-block bg-success rounded-circle p-1"></span>
+                        New Name 1
+                    </a></li>
+                    <li><a class="dropdown-item d-flex align-items-center gap-2 py-2" href="#" data-value="New Name 2">
+                        <span class="d-inline-block bg-info rounded-circle p-1"></span>
+                        New Name 2
+                    </a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item d-flex align-items-center gap-2 py-2" href="#" data-value="custom">
+                        <span class="d-inline-block bg-warning rounded-circle p-1"></span>
+                        Enter custom name...
+                    </a></li>
+                </ul>
+            </div>
+        `);
+        
+        // Set as active dropdown
+        activeDropdown = dropdown;
+        
+        // Position the dropdown near the clicked button
+        const button = $(`.interactive-entity[data-entity-name="${entityName}"]`);
+        const buttonPos = button.offset();
+        const buttonWidth = button.outerWidth();
+        const dropdownWidth = 280; // Width of the dropdown
+        
+        dropdown.css({
+            position: 'absolute',
+            top: buttonPos.top - 10, // Position above the button
+            left: buttonPos.left + (buttonWidth / 2) - (dropdownWidth / 2), // Center over the button
+            zIndex: 9999
+        });
+        
+        $('body').append(dropdown);
+        
+        // Handle search filter
+        dropdown.find('input[type="search"]').on('input', function() {
+            const searchTerm = $(this).val().toLowerCase();
+            dropdown.find('.dropdown-item').each(function() {
+                const text = $(this).text().toLowerCase();
+                $(this).toggle(text.includes(searchTerm));
+            });
+        });
+        
+        // Handle dropdown item clicks
+        dropdown.find('.dropdown-item').on('click', function(e) {
+            e.preventDefault();
+            const value = $(this).data('value');
+            
+            if (value === 'custom') {
+                const customName = prompt(`Enter custom ${role} name:`, entityName);
+                if (customName && customName.trim() !== entityName) {
+                    updateEntityInYaml(entityName, customName.trim(), entityType, role);
+                }
+            } else if (value !== entityName) {
+                updateEntityInYaml(entityName, value, entityType, role);
+            }
+            
+            dropdown.remove();
+            activeDropdown = null;
+        });
+        
+        // Close dropdown when clicking outside
+        $(document).on('click.dropdown', function(e) {
+            if (!dropdown.is(e.target) && dropdown.has(e.target).length === 0) {
+                dropdown.remove();
+                activeDropdown = null;
+                $(document).off('click.dropdown');
+            }
+        });
+        
+        // Focus on search input
+        setTimeout(() => dropdown.find('input[type="search"]').focus(), 100);
+    }
+
+    // Show relationship type selector
+    function showRelationshipTypeSelector(currentType, isIncoming) {
+        // Close any existing dropdown
+        if (activeDropdown) {
+            activeDropdown.remove();
+            activeDropdown = null;
+        }
+        
+        const relationshipTypes = [
+            { value: 'education', label: 'Education', color: 'success' },
+            { value: 'employment', label: 'Employment', color: 'primary' },
+            { value: 'residence', label: 'Residence', color: 'info' },
+            { value: 'membership', label: 'Membership', color: 'warning' },
+            { value: 'created', label: 'Created', color: 'danger' },
+            { value: 'friend', label: 'Friend', color: 'secondary' },
+            { value: 'relationship', label: 'Relationship', color: 'dark' },
+            { value: 'contains', label: 'Contains', color: 'success' },
+            { value: 'travel', label: 'Travel', color: 'info' },
+            { value: 'participation', label: 'Participation', color: 'warning' },
+            { value: 'ownership', label: 'Ownership', color: 'danger' },
+            { value: 'has_role', label: 'Has Role', color: 'primary' },
+            { value: 'at_organisation', label: 'At Organisation', color: 'secondary' }
+        ];
+        
+        const dropdownId = 'relationshipDropdown_' + Date.now();
+        const dropdown = $(`
+            <div class="dropdown-menu pt-0 mx-0 rounded-3 shadow overflow-hidden w-280px" 
+                 id="${dropdownId}" data-bs-theme="light" style="z-index: 9999; display: block;">
+                <form class="p-2 mb-2 bg-body-tertiary border-bottom">
+                    <input type="search" class="form-control" autocomplete="false" placeholder="Type to filter...">
+                </form>
+                <ul class="list-unstyled mb-0">
+                    ${relationshipTypes.map(type => `
+                        <li><a class="dropdown-item d-flex align-items-center gap-2 py-2" href="#" data-value="${type.value}">
+                            <span class="d-inline-block bg-${type.color} rounded-circle p-1"></span>
+                            ${type.label}${type.value === currentType ? ' (current)' : ''}
+                        </a></li>
+                    `).join('')}
+                </ul>
+            </div>
+        `);
+        
+        // Set as active dropdown
+        activeDropdown = dropdown;
+        
+        // Position the dropdown near the clicked button
+        const button = $(`.interactive-predicate[data-connection-type="${currentType}"]`);
+        const buttonPos = button.offset();
+        const buttonWidth = button.outerWidth();
+        const dropdownWidth = 280; // Width of the dropdown
+        
+        dropdown.css({
+            position: 'absolute',
+            top: buttonPos.top - 10, // Position above the button
+            left: buttonPos.left + (buttonWidth / 2) - (dropdownWidth / 2), // Center over the button
+            zIndex: 9999
+        });
+        
+        $('body').append(dropdown);
+        
+        // Handle search filter
+        dropdown.find('input[type="search"]').on('input', function() {
+            const searchTerm = $(this).val().toLowerCase();
+            dropdown.find('.dropdown-item').each(function() {
+                const text = $(this).text().toLowerCase();
+                $(this).toggle(text.includes(searchTerm));
+            });
+        });
+        
+        // Handle dropdown item clicks
+        dropdown.find('.dropdown-item').on('click', function(e) {
+            e.preventDefault();
+            const newType = $(this).data('value');
+            if (newType !== currentType) {
+                updateRelationshipType(currentType, isIncoming, newType);
+            }
+            dropdown.remove();
+            activeDropdown = null;
+        });
+        
+        // Close dropdown when clicking outside
+        $(document).on('click.dropdown', function(e) {
+            if (!dropdown.is(e.target) && dropdown.has(e.target).length === 0) {
+                dropdown.remove();
+                activeDropdown = null;
+                $(document).off('click.dropdown');
+            }
+        });
+        
+        // Focus on search input
+        setTimeout(() => dropdown.find('input[type="search"]').focus(), 100);
+    }
+
+    // Show date picker
+    function showDatePicker(currentDate, dateType) {
+        // Close any existing dropdown
+        if (activeDropdown) {
+            activeDropdown.remove();
+            activeDropdown = null;
+        }
+        
+        const dropdownId = 'dateDropdown_' + Date.now();
+        const dropdown = $(`
+            <div class="dropdown-menu pt-0 mx-0 rounded-3 shadow overflow-hidden w-280px" 
+                 id="${dropdownId}" data-bs-theme="light" style="z-index: 9999; display: block;">
+                <form class="p-2 mb-2 bg-body-tertiary border-bottom">
+                    <input type="search" class="form-control" autocomplete="false" placeholder="Type to filter...">
+                </form>
+                <ul class="list-unstyled mb-0">
+                    <li><a class="dropdown-item d-flex align-items-center gap-2 py-2" href="#" data-value="${currentDate}">
+                        <span class="d-inline-block bg-primary rounded-circle p-1"></span>
+                        ${currentDate} (current)
+                    </a></li>
+                    <li><a class="dropdown-item d-flex align-items-center gap-2 py-2" href="#" data-value="1990">
+                        <span class="d-inline-block bg-success rounded-circle p-1"></span>
+                        1990
+                    </a></li>
+                    <li><a class="dropdown-item d-flex align-items-center gap-2 py-2" href="#" data-value="1995">
+                        <span class="d-inline-block bg-info rounded-circle p-1"></span>
+                        1995
+                    </a></li>
+                    <li><a class="dropdown-item d-flex align-items-center gap-2 py-2" href="#" data-value="2000">
+                        <span class="d-inline-block bg-warning rounded-circle p-1"></span>
+                        2000
+                    </a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item d-flex align-items-center gap-2 py-2" href="#" data-value="custom">
+                        <span class="d-inline-block bg-secondary rounded-circle p-1"></span>
+                        Enter custom date...
+                    </a></li>
+                </ul>
+            </div>
+        `);
+        
+        // Set as active dropdown
+        activeDropdown = dropdown;
+        
+        // Position the dropdown near the clicked button
+        const button = $(`.interactive-date[data-date="${currentDate}"]`);
+        const buttonPos = button.offset();
+        const buttonWidth = button.outerWidth();
+        const dropdownWidth = 280; // Width of the dropdown
+        
+        dropdown.css({
+            position: 'absolute',
+            top: buttonPos.top - 10, // Position above the button
+            left: buttonPos.left + (buttonWidth / 2) - (dropdownWidth / 2), // Center over the button
+            zIndex: 9999
+        });
+        
+        $('body').append(dropdown);
+        
+        // Handle search filter
+        dropdown.find('input[type="search"]').on('input', function() {
+            const searchTerm = $(this).val().toLowerCase();
+            dropdown.find('.dropdown-item').each(function() {
+                const text = $(this).text().toLowerCase();
+                $(this).toggle(text.includes(searchTerm));
+            });
+        });
+        
+        // Handle dropdown item clicks
+        dropdown.find('.dropdown-item').on('click', function(e) {
+            e.preventDefault();
+            const value = $(this).data('value');
+            
+            if (value === 'custom') {
+                const customDate = prompt(`Edit ${dateType} date (YYYY-MM-DD):`, currentDate);
+                if (customDate && customDate.trim() !== currentDate) {
+                    updateDateInYaml(currentDate, customDate.trim(), dateType);
+                }
+            } else if (value !== currentDate) {
+                updateDateInYaml(currentDate, value, dateType);
+            }
+            
+            dropdown.remove();
+            activeDropdown = null;
+        });
+        
+        // Close dropdown when clicking outside
+        $(document).on('click.dropdown', function(e) {
+            if (!dropdown.is(e.target) && dropdown.has(e.target).length === 0) {
+                dropdown.remove();
+                activeDropdown = null;
+                $(document).off('click.dropdown');
+            }
+        });
+        
+        // Focus on search input
+        setTimeout(() => dropdown.find('input[type="search"]').focus(), 100);
+    }
+
+    // Show connector edit dialog
+    function showConnectorEditDialog(currentConnector) {
+        // Close any existing dropdown
+        if (activeDropdown) {
+            activeDropdown.remove();
+            activeDropdown = null;
+        }
+        
+        const connectorOptions = [
+            { value: 'is the child of', label: 'Is the child of', color: 'primary' },
+            { value: 'is the parent of', label: 'Is the parent of', color: 'success' },
+            { value: 'was educated at', label: 'Was educated at', color: 'info' },
+            { value: 'was employed by', label: 'Was employed by', color: 'warning' },
+            { value: 'lived in', label: 'Lived in', color: 'danger' },
+            { value: 'was a member of', label: 'Was a member of', color: 'secondary' },
+            { value: 'created', label: 'Created', color: 'dark' },
+            { value: 'was friends with', label: 'Was friends with', color: 'primary' },
+            { value: 'had a relationship with', label: 'Had a relationship with', color: 'success' },
+            { value: 'contains', label: 'Contains', color: 'info' },
+            { value: 'traveled to', label: 'Traveled to', color: 'warning' },
+            { value: 'participated in', label: 'Participated in', color: 'danger' },
+            { value: 'owned', label: 'Owned', color: 'secondary' },
+            { value: 'had role', label: 'Had role', color: 'dark' },
+            { value: 'was at', label: 'Was at', color: 'primary' }
+        ];
+        
+        const dropdownId = 'connectorDropdown_' + Date.now();
+        const dropdown = $(`
+            <div class="dropdown-menu pt-0 mx-0 rounded-3 shadow overflow-hidden w-280px" 
+                 id="${dropdownId}" data-bs-theme="light" style="z-index: 9999; display: block;">
+                <form class="p-2 mb-2 bg-body-tertiary border-bottom">
+                    <input type="search" class="form-control" autocomplete="false" placeholder="Type to filter...">
+                </form>
+                <ul class="list-unstyled mb-0">
+                    ${connectorOptions.map(option => `
+                        <li><a class="dropdown-item d-flex align-items-center gap-2 py-2" href="#" data-value="${option.value}">
+                            <span class="d-inline-block bg-${option.color} rounded-circle p-1"></span>
+                            ${option.label}${option.value === currentConnector ? ' (current)' : ''}
+                        </a></li>
+                    `).join('')}
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item d-flex align-items-center gap-2 py-2" href="#" data-value="custom">
+                        <span class="d-inline-block bg-secondary rounded-circle p-1"></span>
+                        Enter custom connector...
+                    </a></li>
+                </ul>
+            </div>
+        `);
+        
+        // Set as active dropdown
+        activeDropdown = dropdown;
+        
+        // Position the dropdown near the clicked button
+        const button = $(`.interactive-connector[data-connector-text="${currentConnector}"]`);
+        const buttonPos = button.offset();
+        const buttonWidth = button.outerWidth();
+        const dropdownWidth = 280; // Width of the dropdown
+        
+        dropdown.css({
+            position: 'absolute',
+            top: buttonPos.top - 10, // Position above the button
+            left: buttonPos.left + (buttonWidth / 2) - (dropdownWidth / 2), // Center over the button
+            zIndex: 9999
+        });
+        
+        $('body').append(dropdown);
+        
+        // Handle search filter
+        dropdown.find('input[type="search"]').on('input', function() {
+            const searchTerm = $(this).val().toLowerCase();
+            dropdown.find('.dropdown-item').each(function() {
+                const text = $(this).text().toLowerCase();
+                $(this).toggle(text.includes(searchTerm));
+            });
+        });
+        
+        // Handle dropdown item clicks
+        dropdown.find('.dropdown-item').on('click', function(e) {
+            e.preventDefault();
+            const value = $(this).data('value');
+            
+            if (value === 'custom') {
+                const customConnector = prompt(`Edit connector:`, currentConnector);
+                if (customConnector && customConnector.trim() !== currentConnector) {
+                    updateConnectorInYaml(currentConnector, customConnector.trim());
+                }
+            } else if (value !== currentConnector) {
+                updateConnectorInYaml(currentConnector, value);
+            }
+            
+            dropdown.remove();
+            activeDropdown = null;
+        });
+        
+        // Close dropdown when clicking outside
+        $(document).on('click.dropdown', function(e) {
+            if (!dropdown.is(e.target) && dropdown.has(e.target).length === 0) {
+                dropdown.remove();
+                activeDropdown = null;
+                $(document).off('click.dropdown');
+            }
+        });
+        
+        // Focus on search input
+        setTimeout(() => dropdown.find('input[type="search"]').focus(), 100);
+    }
+
+    // Update relationship type in YAML
+    window.updateRelationshipType = function(oldType, isIncoming, newType) {
+        const currentYaml = yamlTextarea.val();
+        const oldTypeWithIncoming = isIncoming === 'true' ? `${oldType}_incoming` : oldType;
+        const newTypeWithIncoming = isIncoming === 'true' ? `${newType}_incoming` : newType;
+        
+        const updatedYaml = currentYaml.replace(new RegExp(`\\b${oldTypeWithIncoming}\\b`, 'g'), newTypeWithIncoming);
+        yamlTextarea.val(updatedYaml);
+        yamlTextarea.trigger('input');
+        
+        // Show feedback
+        showUpdateFeedback(`Updated relationship type from "${oldType}" to "${newType}"`);
+    };
+
+    // Update entity in YAML
+    function updateEntityInYaml(oldName, newName, entityType, role) {
+        const currentYaml = yamlTextarea.val();
+        const updatedYaml = currentYaml.replace(new RegExp(`\\b${oldName}\\b`, 'g'), newName);
+        yamlTextarea.val(updatedYaml);
+        yamlTextarea.trigger('input');
+        
+        // Show feedback
+        showUpdateFeedback(`Updated ${role} name from "${oldName}" to "${newName}"`);
+    }
+
+    // Show update feedback
+    function showUpdateFeedback(message) {
+        const feedback = $(`
+            <div class="alert alert-success alert-dismissible fade show position-fixed" 
+                 style="top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
+                <i class="bi bi-check-circle me-2"></i>${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        `);
+        
+        $('body').append(feedback);
+        
+        // Auto-dismiss after 3 seconds
+        setTimeout(() => {
+            feedback.alert('close');
+        }, 3000);
+    }
+
+    // Update date in YAML
+    function updateDateInYaml(oldDate, newDate, dateType) {
+        const currentYaml = yamlTextarea.val();
+        const updatedYaml = currentYaml.replace(new RegExp(`\\b${oldDate}\\b`, 'g'), newDate);
+        yamlTextarea.val(updatedYaml);
+        yamlTextarea.trigger('input');
+        
+        // Show feedback
+        showUpdateFeedback(`Updated ${dateType} date from "${oldDate}" to "${newDate}"`);
+    }
+
+    // Update connector in YAML
+    function updateConnectorInYaml(oldConnector, newConnector) {
+        const currentYaml = yamlTextarea.val();
+        const updatedYaml = currentYaml.replace(new RegExp(`\\b${oldConnector}\\b`, 'g'), newConnector);
+        yamlTextarea.val(updatedYaml);
+        yamlTextarea.trigger('input');
+        
+        // Show feedback
+        showUpdateFeedback(`Updated connector from "${oldConnector}" to "${newConnector}"`);
     }
 });
 </script>

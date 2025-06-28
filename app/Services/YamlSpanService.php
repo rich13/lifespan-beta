@@ -905,23 +905,20 @@ class YamlSpanService
     {
         // Define which span types can be auto-created in which connection contexts
         $creatableTypes = [
-            // Role spans can always be created when referenced in has_role connections
-            'role' => ['has_role'],
+            // People can be created when referenced in family, relationships, etc.
+            'person' => ['family', 'relationship', 'employment', 'education', 'residence', 'membership', 'travel', 'participation'],
             
-            // People can be created in most connection types (family, relationships, etc.)
-            'person' => ['family', 'has_role', 'relationship', 'employment', 'education', 'membership'],
-            
-            // Organizations can be created when referenced in employment, education, etc.
-            'organisation' => ['employment', 'education', 'membership', 'at_organisation'],
+            // Organisations can be created when referenced in employment, membership, etc.
+            'organisation' => ['employment', 'membership', 'ownership', 'participation'],
             
             // Places can be created when referenced in residence, travel, etc.
-            'place' => ['residence', 'travel'],
+            'place' => ['residence', 'travel', 'participation'],
             
             // Things can be created when referenced in ownership, creation, etc.
             'thing' => ['ownership', 'created', 'contains'],
             
             // Events can be created when referenced in participation
-            'event' => ['participation', 'attendance'],
+            'event' => ['participation'],
             
             // Bands can be created when referenced in membership
             'band' => ['membership']
@@ -1023,7 +1020,7 @@ class YamlSpanService
                 $connectionName = $connection['name'];
                 $connectionType = $connection['type'] ?? 'thing';
                 
-                $sentence = $this->buildConnectionSentence($spanName, $type, $connectionName, $connectionType, $connection, $spanType);
+                $sentence = $this->buildInteractiveSentence($spanName, $type, $connectionName, $connectionType, $connection, $spanType);
                 if ($sentence) {
                     $translation = [
                         'section' => 'connections',
@@ -1110,172 +1107,352 @@ class YamlSpanService
     }
 
     /**
-     * Build a natural language sentence for a connection with color-coded badges
+     * Build an interactive sentence using Bootstrap button groups for each part
      */
-    private function buildConnectionSentence(string $spanName, string $connectionType, string $connectionName, string $connectionSpanType, array $connectionData = [], string $spanType = 'thing'): ?string
+    private function buildInteractiveSentence(string $spanName, string $connectionType, string $connectionName, string $connectionSpanType, array $connectionData = [], string $spanType = 'thing'): ?string
     {
         // Handle _incoming variants by using inverse language
         $isIncoming = str_ends_with($connectionType, '_incoming');
         $baseType = $isIncoming ? str_replace('_incoming', '', $connectionType) : $connectionType;
         
-        // Create badges for subject, object, and predicate
-        $subjectBadge = $this->createEntityBadge($spanName, $spanType);
-        $objectBadge = $this->createEntityBadge($connectionName, $connectionSpanType);
-        $predicateBadge = $this->createPredicateBadge($baseType, $isIncoming);
+        // Create interactive buttons for subject, object, and predicate
+        $subjectButton = $this->createInteractiveEntityButton($spanName, $spanType, 'subject');
+        $objectButton = $this->createInteractiveEntityButton($connectionName, $connectionSpanType, 'object');
+        $predicateButton = $this->createInteractivePredicateButton($baseType, $isIncoming);
         
-        // Build the base sentence with badges
-        $baseSentence = '';
+        // Build the base sentence buttons array
+        $sentenceButtons = [];
         switch ($baseType) {
             case 'parents':
-                $baseSentence = "{$subjectBadge} is the child of {$objectBadge}";
+                $sentenceButtons = [
+                    $subjectButton,
+                    $this->createConnectorButton('is the child of', 'connector'),
+                    $objectButton
+                ];
                 break;
             case 'children':
-                $baseSentence = "{$subjectBadge} is the parent of {$objectBadge}";
+                $sentenceButtons = [
+                    $subjectButton,
+                    $this->createConnectorButton('is the parent of', 'connector'),
+                    $objectButton
+                ];
                 break;
             case 'education':
                 if ($isIncoming) {
-                    $baseSentence = "{$objectBadge} {$predicateBadge} {$subjectBadge}";
+                    $sentenceButtons = [
+                        $objectButton,
+                        $predicateButton,
+                        $subjectButton
+                    ];
                 } else {
-                    $baseSentence = "{$subjectBadge} {$predicateBadge} {$objectBadge}";
+                    $sentenceButtons = [
+                        $subjectButton,
+                        $predicateButton,
+                        $objectButton
+                    ];
                 }
                 break;
             case 'employment':
                 if ($isIncoming) {
-                    $baseSentence = "{$objectBadge} {$predicateBadge} {$subjectBadge}";
+                    $sentenceButtons = [
+                        $objectButton,
+                        $predicateButton,
+                        $subjectButton
+                    ];
                 } else {
-                    $baseSentence = "{$subjectBadge} {$predicateBadge} {$objectBadge}";
+                    $sentenceButtons = [
+                        $subjectButton,
+                        $predicateButton,
+                        $objectButton
+                    ];
                 }
                 break;
             case 'residence':
                 if ($isIncoming) {
-                    $baseSentence = "{$objectBadge} was home to {$subjectBadge}";
+                    $sentenceButtons = [
+                        $objectButton,
+                        $this->createConnectorButton('was home to', 'connector'),
+                        $subjectButton
+                    ];
                 } else {
-                    $baseSentence = "{$subjectBadge} {$predicateBadge} {$objectBadge}";
+                    $sentenceButtons = [
+                        $subjectButton,
+                        $predicateButton,
+                        $objectButton
+                    ];
                 }
                 break;
             case 'membership':
                 if ($isIncoming) {
-                    $baseSentence = "{$subjectBadge} has member {$objectBadge}";
+                    $sentenceButtons = [
+                        $subjectButton,
+                        $this->createConnectorButton('has member', 'connector'),
+                        $objectButton
+                    ];
                 } else {
-                    $baseSentence = "{$subjectBadge} {$predicateBadge} {$objectBadge}";
+                    $sentenceButtons = [
+                        $subjectButton,
+                        $predicateButton,
+                        $objectButton
+                    ];
                 }
                 break;
             case 'created':
                 if ($isIncoming) {
-                    $baseSentence = "{$objectBadge} was created by {$subjectBadge}";
+                    $sentenceButtons = [
+                        $objectButton,
+                        $this->createConnectorButton('was created by', 'connector'),
+                        $subjectButton
+                    ];
                 } else {
-                    $baseSentence = "{$subjectBadge} {$predicateBadge} {$objectBadge}";
+                    $sentenceButtons = [
+                        $subjectButton,
+                        $predicateButton,
+                        $objectButton
+                    ];
                 }
                 break;
             case 'friend':
-                $baseSentence = "{$subjectBadge} {$predicateBadge} {$objectBadge}";
+                $sentenceButtons = [
+                    $subjectButton,
+                    $predicateButton,
+                    $objectButton
+                ];
                 break;
             case 'relationship':
-                $baseSentence = "{$subjectBadge} {$predicateBadge} {$objectBadge}";
+                $sentenceButtons = [
+                    $subjectButton,
+                    $predicateButton,
+                    $objectButton
+                ];
                 break;
             case 'contains':
                 if ($isIncoming) {
-                    $baseSentence = "{$objectBadge} is contained in {$subjectBadge}";
+                    $sentenceButtons = [
+                        $objectButton,
+                        $this->createConnectorButton('is contained in', 'connector'),
+                        $subjectButton
+                    ];
                 } else {
-                    $baseSentence = "{$subjectBadge} {$predicateBadge} {$objectBadge}";
+                    $sentenceButtons = [
+                        $subjectButton,
+                        $predicateButton,
+                        $objectButton
+                    ];
                 }
                 break;
             case 'travel':
                 if ($isIncoming) {
-                    $baseSentence = "{$objectBadge} was visited by {$subjectBadge}";
+                    $sentenceButtons = [
+                        $objectButton,
+                        $this->createConnectorButton('was visited by', 'connector'),
+                        $subjectButton
+                    ];
                 } else {
-                    $baseSentence = "{$subjectBadge} {$predicateBadge} {$objectBadge}";
+                    $sentenceButtons = [
+                        $subjectButton,
+                        $predicateButton,
+                        $objectButton
+                    ];
                 }
                 break;
             case 'participation':
                 if ($isIncoming) {
-                    $baseSentence = "{$objectBadge} had participant {$subjectBadge}";
+                    $sentenceButtons = [
+                        $objectButton,
+                        $this->createConnectorButton('had participant', 'connector'),
+                        $subjectButton
+                    ];
                 } else {
-                    $baseSentence = "{$subjectBadge} {$predicateBadge} {$objectBadge}";
-                }
-                break;
-            case 'attendance':
-                if ($isIncoming) {
-                    $baseSentence = "{$objectBadge} was attended by {$subjectBadge}";
-                } else {
-                    $baseSentence = "{$subjectBadge} {$predicateBadge} {$objectBadge}";
+                    $sentenceButtons = [
+                        $subjectButton,
+                        $predicateButton,
+                        $objectButton
+                    ];
                 }
                 break;
             case 'ownership':
                 if ($isIncoming) {
-                    $baseSentence = "{$objectBadge} was owned by {$subjectBadge}";
+                    $sentenceButtons = [
+                        $objectButton,
+                        $this->createConnectorButton('was owned by', 'connector'),
+                        $subjectButton
+                    ];
                 } else {
-                    $baseSentence = "{$subjectBadge} {$predicateBadge} {$objectBadge}";
+                    $sentenceButtons = [
+                        $subjectButton,
+                        $predicateButton,
+                        $objectButton
+                    ];
                 }
                 break;
             case 'has_role':
                 if ($isIncoming) {
-                    $baseSentence = "{$objectBadge} role is held by {$subjectBadge}";
+                    $sentenceButtons = [
+                        $subjectButton,
+                        $this->createConnectorButton('is held by', 'connector'),
+                        $objectButton
+                    ];
                 } else {
                     // Check for nested at_organisation connections for sophisticated role descriptions
                     $organisationInfo = $this->findNestedOrganisation($connectionData);
                     if ($organisationInfo) {
-                        $orgBadge = $this->createEntityBadge($organisationInfo['name'], $organisationInfo['type']);
-                        $baseSentence = "{$subjectBadge} has role {$objectBadge} at {$orgBadge}";
+                        $orgButton = $this->createInteractiveEntityButton($organisationInfo['name'], $organisationInfo['type'], 'organisation');
+                        $sentenceButtons = [
+                            $subjectButton,
+                            $this->createConnectorButton('has role', 'connector'),
+                            $objectButton,
+                            $this->createConnectorButton('at', 'connector'),
+                            $orgButton
+                        ];
                     } else {
-                        $baseSentence = "{$subjectBadge} is a {$objectBadge}";
+                        $sentenceButtons = [
+                            $subjectButton,
+                            $this->createConnectorButton('is a', 'connector'),
+                            $objectButton
+                        ];
                     }
                 }
                 break;
             case 'at_organisation':
                 if ($isIncoming) {
-                    $baseSentence = "{$objectBadge} hosts {$subjectBadge}";
+                    $sentenceButtons = [
+                        $objectButton,
+                        $this->createConnectorButton('hosts', 'connector'),
+                        $subjectButton
+                    ];
                 } else {
-                    $baseSentence = "{$subjectBadge} is at {$objectBadge}";
+                    $sentenceButtons = [
+                        $subjectButton,
+                        $this->createConnectorButton('is at', 'connector'),
+                        $objectButton
+                    ];
                 }
                 break;
             default:
                 // For unknown types, provide a generic but informative sentence
                 if ($isIncoming) {
-                    $baseSentence = "{$objectBadge} has {$predicateBadge} relationship with {$subjectBadge}";
+                    $sentenceButtons = [
+                        $objectButton,
+                        $this->createConnectorButton('has', 'connector'),
+                        $predicateButton,
+                        $this->createConnectorButton('relationship with', 'connector'),
+                        $subjectButton
+                    ];
                 } else {
-                    $baseSentence = "{$subjectBadge} is connected to {$objectBadge} via {$predicateBadge}";
+                    $sentenceButtons = [
+                        $subjectButton,
+                        $this->createConnectorButton('is connected to', 'connector'),
+                        $objectButton,
+                        $this->createConnectorButton('via', 'connector'),
+                        $predicateButton
+                    ];
                 }
         }
         
         // Add date information if available
-        $dateInfo = $this->buildDatePhrase($connectionData);
-        if ($dateInfo) {
-            $baseSentence .= " {$dateInfo}";
+        $dateButtons = $this->buildInteractiveDateButtons($connectionData);
+        if ($dateButtons) {
+            $sentenceButtons = array_merge($sentenceButtons, $dateButtons);
         }
         
-        return $baseSentence;
+        // Create the final button group with all elements
+        return $this->createButtonGroup($sentenceButtons);
     }
 
     /**
-     * Build a date phrase for connections with badges (e.g., "from January 2005 to February 2006")
+     * Create a Bootstrap button group from an array of buttons
      */
-    private function buildDatePhrase(array $connectionData): string
+    private function createButtonGroup(array $buttons): string
     {
-        $hasStart = !empty($connectionData['start_date']);
-        $hasEnd = !empty($connectionData['end_date']);
+        $buttonHtml = implode('', $buttons);
+        return "<div class=\"btn-group\" role=\"group\">{$buttonHtml}</div>";
+    }
+
+    /**
+     * Create an interactive button for connector words
+     */
+    private function createConnectorButton(string $text, string $type): string
+    {
+        return "<button type=\"button\" class=\"btn btn-outline-light text-dark btn-sm inactive\" disabled>
+                    {$text}
+                </button>";
+    }
+
+    /**
+     * Build interactive date buttons for a connection
+     */
+    private function buildInteractiveDateButtons(array $connectionData): ?array
+    {
+        $dateButtons = [];
         
-        if (!$hasStart && !$hasEnd) {
-            return '';
+        // Check for start date
+        if (!empty($connectionData['start_date'])) {
+            $dateButtons[] = $this->createConnectorButton('from', 'connector');
+            $dateButtons[] = $this->createInteractiveDateButton($connectionData['start_date'], 'start_date');
         }
         
-        $startPhrase = $hasStart ? $this->formatDateForTranslation($connectionData['start_date']) : '';
-        $endPhrase = $hasEnd ? $this->formatDateForTranslation($connectionData['end_date']) : '';
-        
-        if ($hasStart && $hasEnd) {
-            // Remove "on" or "in" prefixes for range formatting
-            $startPhrase = str_replace(['on ', 'in '], '', $startPhrase);
-            $endPhrase = str_replace(['on ', 'in '], '', $endPhrase);
-            $startBadge = $this->createDateBadge($startPhrase);
-            $endBadge = $this->createDateBadge($endPhrase);
-            return "from {$startBadge} to {$endBadge}";
-        } elseif ($hasStart) {
-            $startBadge = $this->createDateBadge($startPhrase);
-            return "starting {$startBadge}";
-        } else {
-            $endBadge = $this->createDateBadge($endPhrase);
-            return "ending {$endBadge}";
+        // Check for end date
+        if (!empty($connectionData['end_date'])) {
+            if (!empty($connectionData['start_date'])) {
+                $dateButtons[] = $this->createConnectorButton('to', 'connector');
+            } else {
+                $dateButtons[] = $this->createConnectorButton('until', 'connector');
+            }
+            $dateButtons[] = $this->createInteractiveDateButton($connectionData['end_date'], 'end_date');
         }
+        
+        // Check for single date (no start/end range)
+        if (empty($connectionData['start_date']) && empty($connectionData['end_date']) && !empty($connectionData['date'])) {
+            $dateButtons[] = $this->createConnectorButton('on', 'connector');
+            $dateButtons[] = $this->createInteractiveDateButton($connectionData['date'], 'date');
+        }
+        
+        return !empty($dateButtons) ? $dateButtons : null;
+    }
+
+    /**
+     * Create an interactive date button
+     */
+    private function createInteractiveDateButton(string $date, string $dateType): string
+    {
+        $formattedDate = $this->formatDateForTranslation($date);
+        // Remove "on " or "in " prefixes for cleaner display
+        $formattedDate = str_replace(['on ', 'in '], '', $formattedDate);
+        
+        return sprintf(
+            '<button type="button" class="btn btn-outline-info btn-sm interactive-date" data-date="%s" data-date-type="%s" title="Edit date">%s</button>',
+            htmlspecialchars($date),
+            htmlspecialchars($dateType),
+            htmlspecialchars($formattedDate)
+        );
+    }
+
+    /**
+     * Create an interactive button for entity names
+     */
+    private function createInteractiveEntityButton(string $name, string $type, string $role): string
+    {
+        $buttonClass = $this->getEntityButtonClass($type);
+        $icon = $this->getEntityIcon($type);
+        $dataAttributes = "data-entity-name=\"{$name}\" data-entity-type=\"{$type}\" data-role=\"{$role}\"";
+        
+        return "<button type=\"button\" class=\"btn {$buttonClass} btn-sm interactive-entity\" {$dataAttributes} data-bs-toggle=\"tooltip\" title=\"Click to edit {$name}\">
+                    <i class=\"{$icon} me-1\"></i>{$name}
+                </button>";
+    }
+
+    /**
+     * Create an interactive button for relationship predicates
+     */
+    private function createInteractivePredicateButton(string $connectionType, bool $isIncoming = false): string
+    {
+        $predicate = $this->getPredicateText($connectionType, $isIncoming);
+        $dataAttributes = "data-connection-type=\"{$connectionType}\" data-is-incoming=\"" . ($isIncoming ? 'true' : 'false') . "\"";
+        
+        return "<button type=\"button\" class=\"btn btn-outline-secondary btn-sm interactive-predicate\" {$dataAttributes} data-bs-toggle=\"tooltip\" title=\"Click to change relationship type\">
+                    <i class=\"bi bi-arrow-left-right me-1\"></i>{$predicate}
+                </button>";
     }
 
     /**
@@ -1285,15 +1462,6 @@ class YamlSpanService
     {
         $badgeClass = $this->getEntityBadgeClass($type);
         return "<span class=\"badge {$badgeClass} me-1\">{$name}</span>";
-    }
-
-    /**
-     * Create a badge for relationship predicates
-     */
-    private function createPredicateBadge(string $connectionType, bool $isIncoming = false): string
-    {
-        $predicate = $this->getPredicateText($connectionType, $isIncoming);
-        return "<span class=\"badge bg-secondary me-1\">{$predicate}</span>";
     }
 
     /**
@@ -1317,19 +1485,19 @@ class YamlSpanService
             case 'organisation':
                 return 'bg-success';
             case 'place':
-                return 'bg-warning text-dark';
+                return 'bg-warning';
             case 'event':
                 return 'bg-danger';
+            case 'thing':
+                return 'bg-info';
             case 'band':
                 return 'bg-dark';
-            case 'thing':
-                return 'bg-secondary';
             case 'role':
-                return 'bg-info text-dark';
-            case 'type':
-                return 'bg-light text-dark border';
+                return 'bg-secondary';
             case 'subtype':
-                return 'bg-info text-dark';
+                return 'bg-light text-dark';
+            case 'type':
+                return 'bg-secondary';
             default:
                 return 'bg-secondary';
         }
@@ -1361,8 +1529,6 @@ class YamlSpanService
                 return $isIncoming ? 'was visited by' : 'traveled to';
             case 'participation':
                 return $isIncoming ? 'had participant' : 'participated in';
-            case 'attendance':
-                return $isIncoming ? 'was attended by' : 'attended';
             case 'ownership':
                 return $isIncoming ? 'was owned by' : 'owned';
             case 'has_role':
@@ -1427,6 +1593,56 @@ class YamlSpanService
                 return 'disbanded';
             default:
                 return 'ended';
+        }
+    }
+
+    /**
+     * Get button class for entity types
+     */
+    private function getEntityButtonClass(string $type): string
+    {
+        switch ($type) {
+            case 'person':
+                return 'btn-primary';
+            case 'organisation':
+                return 'btn-success';
+            case 'place':
+                return 'btn-warning';
+            case 'event':
+                return 'btn-danger';
+            case 'thing':
+                return 'btn-info';
+            case 'band':
+                return 'btn-dark';
+            case 'role':
+                return 'btn-secondary';
+            default:
+                return 'btn-outline-secondary';
+        }
+    }
+
+    /**
+     * Get icon for entity types
+     */
+    private function getEntityIcon(string $type): string
+    {
+        switch ($type) {
+            case 'person':
+                return 'bi-person-fill';
+            case 'organisation':
+                return 'bi-building';
+            case 'place':
+                return 'bi-geo-alt-fill';
+            case 'event':
+                return 'bi-calendar-event-fill';
+            case 'thing':
+                return 'bi-box';
+            case 'band':
+                return 'bi-cassette';
+            case 'role':
+                return 'bi-person-badge';
+            default:
+                return 'bi-question-circle';
         }
     }
 } 
