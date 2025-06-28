@@ -24,3 +24,6 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 Route::middleware('auth:sanctum')->group(function () {
     // Other API endpoints that need Sanctum auth can go here
 });
+
+// Span search API
+Route::get('/spans/search', [SpanSearchController::class, 'search']);

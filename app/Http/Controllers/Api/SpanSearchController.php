@@ -19,6 +19,8 @@ class SpanSearchController extends Controller
         $excludeConnected = $request->get('exclude_connected', false);
         $user = Auth::user();
 
+        $results = collect();
+
         // Start with spans the user can see, excluding connections
         $spans = Span::query()->whereNot('type_id', 'connection');
         
@@ -73,9 +75,9 @@ class SpanSearchController extends Controller
             $spans->where('name', 'ilike', "%{$query}%");
         }
 
-        // Get results with type information
-        $results = $spans->with('type')
-            ->limit(10)
+        // Get existing results with type information (including placeholders)
+        $existingResults = $spans->with('type')
+            ->limit(5)
             ->get()
             ->map(function ($span) {
                 return [
@@ -83,12 +85,38 @@ class SpanSearchController extends Controller
                     'name' => $span->name,
                     'type_id' => $span->type_id,
                     'type_name' => $span->type->name,
-                    'state' => $span->state
+                    'state' => $span->state,
+                    'is_placeholder' => $span->state === 'placeholder'
                 ];
             });
 
+        $results = $results->merge($existingResults);
+
+        // Add placeholder suggestions if we have a query and types and no exact match exists
+        if ($query && ($type || $types)) {
+            $placeholderTypes = $types ? explode(',', $types) : [$type];
+            
+            foreach ($placeholderTypes as $placeholderType) {
+                // Check if we already have an exact match for this type (including existing placeholders)
+                $hasExactMatch = $existingResults->contains(function ($span) use ($query, $placeholderType) {
+                    return strtolower($span['name']) === strtolower($query) && $span['type_id'] === $placeholderType;
+                });
+                
+                if (!$hasExactMatch) {
+                    $results->push([
+                        'id' => null,
+                        'name' => $query,
+                        'type_id' => $placeholderType,
+                        'type_name' => ucfirst($placeholderType),
+                        'state' => 'placeholder',
+                        'is_placeholder' => true
+                    ]);
+                }
+            }
+        }
+
         return response()->json([
-            'spans' => $results
+            'spans' => $results->take(5)->values()
         ]);
     }
 
