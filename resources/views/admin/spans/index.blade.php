@@ -88,7 +88,7 @@
                                 <td>{{ $span->formatted_start_date }}</td>
                                 <td>{{ $span->formatted_end_date }}</td>
                                 <td>
-                                    <span class="badge bg-{{ $span->state === 'complete' ? 'success' : ($span->state === 'draft' ? 'warning' : 'secondary') }}">
+                                    <span class="badge bg-{{ $span->state === 'complete' ? 'success' : ($span->state === 'draft' ? 'warning' : 'placeholder') }}">
                                         {{ ucfirst($span->state) }}
                                     </span>
                                 </td>
@@ -109,12 +109,8 @@
             </div>
 
             <!-- Pagination -->
-            <div class="d-flex justify-content-between align-items-center">
-                <div class="text-muted small">
-                    Showing {{ $spans->firstItem() ?? 0 }} to {{ $spans->lastItem() ?? 0 }} 
-                    of {{ $spans->total() }} spans
-                </div>
-                <x-pagination :paginator="$spans" :showInfo="false" />
+            <div class="d-flex justify-content-center mt-4">
+                {{ $spans->appends(request()->query())->links() }}
             </div>
         </div>
     </div>

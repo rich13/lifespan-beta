@@ -17,11 +17,13 @@
 @endsection
 
 @section('page_tools')
-    @auth
-        <a href="{{ route('spans.create') }}" class="btn btn-sm btn-primary">
-            <i class="bi bi-plus-circle me-1"></i>New Span
-        </a>
-    @endauth
+    <div class="d-flex gap-2 align-items-center">
+        @auth
+            <a href="{{ route('spans.create') }}" class="btn btn-sm btn-primary">
+                <i class="bi bi-plus-circle me-1"></i>New Span
+            </a>
+        @endauth
+    </div>
 @endsection
 
 @section('content')
@@ -42,9 +44,10 @@
             </div>
         </div>
     @else
+        <!-- Interactive Button Group View -->
         <div class="spans-list">
             @foreach($spans as $span)
-                <x-spans.display.card :span="$span" />
+                <x-spans.display.interactive-card :span="$span" />
             @endforeach
         </div>
 

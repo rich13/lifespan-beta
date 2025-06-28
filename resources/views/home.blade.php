@@ -912,7 +912,7 @@
                                 </h3>
                                 <div class="spans-list">
                                     @foreach($spansStartingOnDate as $span)
-                                        <x-spans.display.card :span="$span" :show-date-indicator="true" :date="$today->format('Y-m-d')" />
+                                        <x-spans.display.interactive-card :span="$span" />
                                     @endforeach
                                 </div>
                             </div>
@@ -926,7 +926,7 @@
                                 </h3>
                                 <div class="spans-list">
                                     @foreach($spansEndingOnDate as $span)
-                                        <x-spans.display.card :span="$span" :show-date-indicator="true" :date="$today->format('Y-m-d')" />
+                                        <x-spans.display.interactive-card :span="$span" />
                                     @endforeach
                                 </div>
                             </div>

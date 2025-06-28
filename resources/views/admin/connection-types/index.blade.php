@@ -1,16 +1,22 @@
 @extends('layouts.app')
 
 @section('page_title')
-    Manage Connection Types
+    Connection Types
+@endsection
+
+@section('page_tools')
+    <a href="{{ route('admin.connection-types.create') }}" class="btn btn-primary">
+        <i class="bi bi-plus-circle me-1"></i>New Connection Type
+    </a>
 @endsection
 
 @section('content')
-<div class="container-fluid">
-    <div class="d-flex justify-content-end mb-4">
-        <a href="{{ route('admin.connection-types.create') }}" class="btn btn-primary">
-            <i class="bi bi-plus-lg"></i> New Connection Type
-        </a>
-    </div>
+<div class="py-4">
+    @if (session('status'))
+        <div class="alert alert-success">
+            {{ session('status') }}
+        </div>
+    @endif
 
     <div class="card">
         <div class="card-body">
@@ -38,14 +44,14 @@
                             <tr>
                                 <td><code>{{ $type->type }}</code></td>
                                 <td>
-                                    <span class="badge bg-subject text-white">subject</span>
-                                    <span class="badge bg-secondary">{{ $type->forward_predicate }}</span>
-                                    <span class="badge bg-object text-white">object</span>
+                                    <span class="badge bg-person text-white">subject</span>
+                                    <span class="badge bg-{{ $type->type }}">{{ $type->forward_predicate }}</span>
+                                    <span class="badge bg-place text-white">object</span>
                                 </td>
                                 <td>
-                                    <span class="badge bg-object text-white">object</span>
-                                    <span class="badge bg-secondary">{{ $type->inverse_predicate }}</span>
-                                    <span class="badge bg-subject text-white">subject</span>
+                                    <span class="badge bg-place text-white">object</span>
+                                    <span class="badge bg-{{ $type->type }}">{{ $type->inverse_predicate }}</span>
+                                    <span class="badge bg-person text-white">subject</span>
                                 </td>
                                 <td>
                                     @if($type->constraint_type === 'single')
@@ -56,40 +62,28 @@
                                 </td>
                                 <td>
                                     @foreach($type->getAllowedSpanTypes('parent') as $spanType)
-                                        <span class="badge bg-subject text-white">{{ $spanType }}</span>
+                                        <span class="badge bg-{{ $spanType }} text-white">{{ $spanType }}</span>
                                     @endforeach
                                 </td>
                                 <td>
                                     @foreach($type->getAllowedSpanTypes('child') as $spanType)
-                                        <span class="badge bg-object text-white">{{ $spanType }}</span>
+                                        <span class="badge bg-{{ $spanType }} text-white">{{ $spanType }}</span>
                                     @endforeach
                                 </td>
                                 <td>
                                     <span class="badge bg-secondary">{{ $type->connections_count }}</span>
                                 </td>
                                 <td>
-                                    <div class="btn-group">
-                                        <a href="{{ route('admin.connection-types.show', $type) }}" 
-                                           class="btn btn-sm btn-outline-secondary">
-                                            <i class="bi bi-eye"></i>
-                                        </a>
+                                    <div class="btn-group btn-group-sm">
                                         <a href="{{ route('admin.connection-types.edit', $type) }}" 
-                                           class="btn btn-sm btn-outline-primary">
+                                           class="btn btn-outline-primary">
                                             <i class="bi bi-pencil"></i>
                                         </a>
-                                        @if($type->connections_count === 0)
-                                            <form action="{{ route('admin.connection-types.destroy', $type) }}" 
-                                                  method="POST" 
-                                                  class="d-inline">
-                                                @csrf
-                                                @method('DELETE')
-                                                <button type="submit" 
-                                                        class="btn btn-sm btn-outline-danger"
-                                                        onclick="return confirm('Are you sure you want to delete this connection type?')">
-                                                    <i class="bi bi-trash"></i>
-                                                </button>
-                                            </form>
-                                        @endif
+                                        <button type="button" 
+                                                class="btn btn-outline-danger" 
+                                                onclick="deleteConnectionType('{{ $type->id }}', '{{ $type->type }}')">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
                                     </div>
                                 </td>
                             </tr>
@@ -100,4 +94,33 @@
         </div>
     </div>
 </div>
+
+@push('scripts')
+<script>
+function deleteConnectionType(id, type) {
+    if (confirm(`Are you sure you want to delete the connection type "${type}"? This action cannot be undone.`)) {
+        fetch(`/admin/connection-types/${id}`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                window.location.reload();
+            } else {
+                alert('Error deleting connection type: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error deleting connection type');
+        });
+    }
+}
+</script>
+@endpush
 @endsection 

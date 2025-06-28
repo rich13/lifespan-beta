@@ -1481,17 +1481,17 @@ class YamlSpanService
     {
         switch ($type) {
             case 'person':
-                return 'bg-primary';
+                return 'bg-person';
             case 'organisation':
-                return 'bg-success';
+                return 'bg-organisation';
             case 'place':
-                return 'bg-warning';
+                return 'bg-place';
             case 'event':
-                return 'bg-danger';
+                return 'bg-event';
             case 'thing':
-                return 'bg-info';
+                return 'bg-thing';
             case 'band':
-                return 'bg-dark';
+                return 'bg-band';
             case 'role':
                 return 'bg-secondary';
             case 'subtype':
@@ -1603,17 +1603,17 @@ class YamlSpanService
     {
         switch ($type) {
             case 'person':
-                return 'btn-primary';
+                return 'btn-person';
             case 'organisation':
-                return 'btn-success';
+                return 'btn-organisation';
             case 'place':
-                return 'btn-warning';
+                return 'btn-place';
             case 'event':
-                return 'btn-danger';
+                return 'btn-event';
             case 'thing':
-                return 'btn-info';
+                return 'btn-thing';
             case 'band':
-                return 'btn-dark';
+                return 'btn-band';
             case 'role':
                 return 'btn-secondary';
             default:

@@ -54,7 +54,7 @@
                             </h3>
                             <div class="spans-list">
                                 @foreach($spansStartingOnDate as $span)
-                                    <x-spans.display.card :span="$span" :show-date-indicator="true" :date="$date" />
+                                    <x-spans.display.interactive-card :span="$span" />
                                 @endforeach
                             </div>
                         </div>
@@ -68,7 +68,7 @@
                             </h3>
                             <div class="spans-list">
                                 @foreach($spansStartingInMonth as $span)
-                                    <x-spans.display.card :span="$span" :show-date-indicator="true" :date="$date" />
+                                    <x-spans.display.interactive-card :span="$span" />
                                 @endforeach
                             </div>
                         </div>
@@ -82,7 +82,7 @@
                             </h3>
                             <div class="spans-list">
                                 @foreach($spansStartingInYear as $span)
-                                    <x-spans.display.card :span="$span" :show-date-indicator="true" :date="$date" />
+                                    <x-spans.display.interactive-card :span="$span" />
                                 @endforeach
                             </div>
                         </div>
@@ -103,7 +103,7 @@
                             </h3>
                             <div class="spans-list">
                                 @foreach($connectionsStartingOnDate as $connection)
-                                    <x-connections.card :connection="$connection" />
+                                    <x-connections.interactive-card :connection="$connection" />
                                 @endforeach
                             </div>
                         </div>
@@ -117,7 +117,7 @@
                             </h3>
                             <div class="spans-list">
                                 @foreach($connectionsStartingInMonth as $connection)
-                                    <x-connections.card :connection="$connection" />
+                                    <x-connections.interactive-card :connection="$connection" />
                                 @endforeach
                             </div>
                         </div>
@@ -126,12 +126,12 @@
                     @if($connectionsStartingInYear->isNotEmpty())
                         <div class="mb-4">
                             <h3 class="h6 mb-2">
-                                <i class="bi bi-calendar-year text-success me-2"></i>
+                                <i class="bi bi-calendar-week text-success me-2"></i>
                                 Started in {{ \Carbon\Carbon::parse($date)->format('Y') }}
                             </h3>
                             <div class="spans-list">
                                 @foreach($connectionsStartingInYear as $connection)
-                                    <x-connections.card :connection="$connection" />
+                                    <x-connections.interactive-card :connection="$connection" />
                                 @endforeach
                             </div>
                         </div>
@@ -155,7 +155,7 @@
                             </h3>
                             <div class="spans-list">
                                 @foreach($spansEndingOnDate as $span)
-                                    <x-spans.display.card :span="$span" :show-date-indicator="true" :date="$date" />
+                                    <x-spans.display.interactive-card :span="$span" />
                                 @endforeach
                             </div>
                         </div>
@@ -169,7 +169,7 @@
                             </h3>
                             <div class="spans-list">
                                 @foreach($spansEndingInMonth as $span)
-                                    <x-spans.display.card :span="$span" :show-date-indicator="true" :date="$date" />
+                                    <x-spans.display.interactive-card :span="$span" />
                                 @endforeach
                             </div>
                         </div>
@@ -183,7 +183,7 @@
                             </h3>
                             <div class="spans-list">
                                 @foreach($spansEndingInYear as $span)
-                                    <x-spans.display.card :span="$span" :show-date-indicator="true" :date="$date" />
+                                    <x-spans.display.interactive-card :span="$span" />
                                 @endforeach
                             </div>
                         </div>
@@ -204,7 +204,7 @@
                             </h3>
                             <div class="spans-list">
                                 @foreach($connectionsEndingOnDate as $connection)
-                                    <x-connections.card :connection="$connection" />
+                                    <x-connections.interactive-card :connection="$connection" />
                                 @endforeach
                             </div>
                         </div>
@@ -218,7 +218,7 @@
                             </h3>
                             <div class="spans-list">
                                 @foreach($connectionsEndingInMonth as $connection)
-                                    <x-connections.card :connection="$connection" />
+                                    <x-connections.interactive-card :connection="$connection" />
                                 @endforeach
                             </div>
                         </div>
@@ -232,7 +232,7 @@
                             </h3>
                             <div class="spans-list">
                                 @foreach($connectionsEndingInYear as $connection)
-                                    <x-connections.card :connection="$connection" />
+                                    <x-connections.interactive-card :connection="$connection" />
                                 @endforeach
                             </div>
                         </div>
