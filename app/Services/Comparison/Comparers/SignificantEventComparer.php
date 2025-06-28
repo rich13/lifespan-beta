@@ -28,7 +28,7 @@ class SignificantEventComparer
         ],
         'education' => [
             'icon' => 'bi-mortarboard',
-            'predicates' => ['education', 'attendance']
+            'predicates' => ['education']
         ],
         'residence' => [
             'icon' => 'bi-house',
@@ -251,7 +251,6 @@ class SignificantEventComparer
             case 'membership':
                 return "worked at";
             case 'education':
-            case 'attendance':
                 return "studied at";
             case 'residence':
                 return "lived in";
