@@ -34,11 +34,30 @@ class MusicBrainzImportController extends Controller
             ]);
         }
 
+        // Get bands
         $bands = Span::where('type_id', $bandType->type_id)
             ->orderBy('name')
             ->get();
 
-        return view('admin.import.musicbrainz.index', compact('bands'));
+        // Get spans connected to the "musician" role
+        $musicianRole = Span::where('name', 'Musician')->first();
+        $musicians = collect();
+        
+        if ($musicianRole) {
+            $musicianConnections = Connection::where('child_id', $musicianRole->id)
+                ->where('type_id', 'has_role')
+                ->with('parent')
+                ->get();
+            
+            $musicians = $musicianConnections->map(function ($connection) {
+                return $connection->parent;
+            })->sortBy('name');
+        }
+
+        // Combine bands and musicians
+        $allArtists = $bands->concat($musicians)->sortBy('name');
+
+        return view('admin.import.musicbrainz.index', compact('allArtists'));
     }
 
     public function search(Request $request)
@@ -461,7 +480,7 @@ class MusicBrainzImportController extends Controller
                                     'isrc' => $track['isrc'],
                                     'length' => $track['length'],
                                     'artist_credits' => $track['artist_credits'],
-                                    'subtype' => 'recording'
+                                    'subtype' => 'track'
                                 ]),
                                 'updater_id' => $request->user()->id,
                                 'start_year' => $track['first_release_date'] ? date('Y', strtotime($track['first_release_date'])) : null,
@@ -480,7 +499,7 @@ class MusicBrainzImportController extends Controller
                                     'isrc' => $track['isrc'],
                                     'length' => $track['length'],
                                     'artist_credits' => $track['artist_credits'],
-                                    'subtype' => 'recording'
+                                    'subtype' => 'track'
                                 ],
                                 'owner_id' => $request->user()->id,
                                 'updater_id' => $request->user()->id,

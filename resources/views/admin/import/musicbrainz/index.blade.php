@@ -18,14 +18,14 @@
                     
                     <!-- Step 1: Select Band -->
                     <div class="mb-4">
-                        <h6 class="mb-3">Step 1: Select a Band</h6>
+                        <h6 class="mb-3">Step 1: Select an Artist</h6>
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="input-group">
                                     <select id="bandSelect" class="form-select">
-                                        <option value="">Select a band...</option>
-                                        @foreach($bands as $band)
-                                            <option value="{{ $band->id }}" data-name="{{ $band->name }}">{{ $band->name }}</option>
+                                        <option value="">Select an artist...</option>
+                                        @foreach($allArtists as $artist)
+                                            <option value="{{ $artist->id }}" data-name="{{ $artist->name }}">{{ $artist->name }}</option>
                                         @endforeach
                                     </select>
                                     <button class="btn btn-primary" id="searchButton" disabled>

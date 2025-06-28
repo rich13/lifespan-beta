@@ -160,7 +160,7 @@ class MusicBrainzImportTest extends TestCase
         $track1 = Span::where('name', 'Track 1')->first();
         $this->assertNotNull($track1);
         $this->assertEquals('thing', $track1->type_id);
-        $this->assertEquals('recording', $track1->metadata['subtype']);
+        $this->assertEquals('track', $track1->metadata['subtype']);
         $this->assertEquals('track-id-1', $track1->metadata['musicbrainz_id']);
         $this->assertEquals('USABC1234567', $track1->metadata['isrc']);
         $this->assertEquals(180000, $track1->metadata['length']);
@@ -169,7 +169,7 @@ class MusicBrainzImportTest extends TestCase
         $track2 = Span::where('name', 'Track 2')->first();
         $this->assertNotNull($track2);
         $this->assertEquals('thing', $track2->type_id);
-        $this->assertEquals('recording', $track2->metadata['subtype']);
+        $this->assertEquals('track', $track2->metadata['subtype']);
         $this->assertEquals('track-id-2', $track2->metadata['musicbrainz_id']);
         $this->assertEquals('USABC1234568', $track2->metadata['isrc']);
         $this->assertEquals(240000, $track2->metadata['length']);
