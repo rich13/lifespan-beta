@@ -200,6 +200,70 @@ Route::middleware('web')->group(function () {
             
             // API search endpoint for AJAX calls (authenticated)
             Route::get('/api/search', [App\Http\Controllers\Api\SpanSearchController::class, 'search'])->name('spans.api.search');
+            
+            // API endpoints for comparison page functionality
+            Route::post('/api/spans', function (Request $request) {
+                $validated = $request->validate([
+                    'name' => 'required|string|max:255',
+                    'type_id' => 'required|string|exists:span_types,type_id',
+                    'access_level' => 'required|in:public,private,shared'
+                ]);
+                
+                $span = \App\Models\Span::create([
+                    'name' => $validated['name'],
+                    'type_id' => $validated['type_id'],
+                    'owner_id' => auth()->id(),
+                    'updater_id' => auth()->id(),
+                    'access_level' => $validated['access_level']
+                ]);
+                
+                return response()->json([
+                    'success' => true,
+                    'span' => $span
+                ]);
+            });
+            
+            Route::post('/api/connections', function (Request $request) {
+                $validated = $request->validate([
+                    'parent_id' => 'required|uuid|exists:spans,id',
+                    'child_id' => 'required|uuid|exists:spans,id',
+                    'type_id' => 'required|string|exists:connection_types,type',
+                    'age' => 'nullable|integer|min:0'
+                ]);
+                
+                // Get the parent span to calculate the connection date
+                $parentSpan = \App\Models\Span::find($validated['parent_id']);
+                $connectionYear = null;
+                
+                if ($parentSpan && $parentSpan->start_year && isset($validated['age'])) {
+                    $connectionYear = $parentSpan->start_year + $validated['age'];
+                }
+                
+                // Create a placeholder connection span with calculated temporal information
+                $connectionSpan = \App\Models\Span::create([
+                    'name' => "Connection between spans",
+                    'type_id' => 'connection',
+                    'start_year' => $connectionYear,
+                    'owner_id' => auth()->id(),
+                    'updater_id' => auth()->id(),
+                    'access_level' => 'private',
+                    'state' => 'placeholder'  // Still marked as placeholder for editing
+                ]);
+                
+                // Create the connection
+                $connection = \App\Models\Connection::create([
+                    'parent_id' => $validated['parent_id'],
+                    'child_id' => $validated['child_id'],
+                    'type_id' => $validated['type_id'],
+                    'connection_span_id' => $connectionSpan->id
+                ]);
+                
+                return response()->json([
+                    'success' => true,
+                    'connection' => $connection,
+                    'connection_span' => $connectionSpan
+                ]);
+            });
         });
 
         // Public routes

@@ -15,7 +15,6 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use App\Models\SpanType;
 use App\Models\ConnectionType;
-use App\Services\Comparison\SpanComparisonService;
 use App\Services\YamlSpanService;
 use InvalidArgumentException;
 use App\Models\Connection;
@@ -27,17 +26,15 @@ use App\Models\ConnectionType as ConnectionTypeModel;
  */
 class SpanController extends Controller
 {
-    protected $comparisonService;
     protected $yamlService;
 
     /**
      * Create a new controller instance.
      */
-    public function __construct(SpanComparisonService $comparisonService, YamlSpanService $yamlService)
+    public function __construct(YamlSpanService $yamlService)
     {
         // Require auth for all routes except show, index, and search
         $this->middleware('auth')->except(['show', 'index', 'search']);
-        $this->comparisonService = $comparisonService;
         $this->yamlService = $yamlService;
     }
 
@@ -72,16 +69,45 @@ class SpanController extends Controller
                 $types = is_array($request->types) ? $request->types : explode(',', $request->types);
                 $query->whereIn('type_id', $types);
 
-                // Handle subtype filtering
-                foreach ($types as $typeId) {
-                    $subtypeParam = $request->input($typeId . '_subtype');
-                    if ($subtypeParam) {
-                        $subtypes = explode(',', $subtypeParam);
-                        $query->where(function($q) use ($typeId, $subtypes) {
-                            foreach ($subtypes as $subtype) {
-                                $q->orWhereJsonContains('metadata->subtype', $subtype);
+                // Handle person category filtering
+                if (in_array('person', $types) && $request->has('person_category') && Auth::check()) {
+                    $personCategories = is_array($request->person_category) ? $request->person_category : explode(',', $request->person_category);
+                    
+                    if (!empty($personCategories)) {
+                        $userSpan = Auth::user()->personalSpan;
+                        if ($userSpan) {
+                            $relationshipService = app(\App\Services\PersonRelationshipService::class);
+                            
+                            // Get all people in the requested categories
+                            $categoryPeople = collect();
+                            foreach ($personCategories as $category) {
+                                $people = $relationshipService->getPeopleByCategory($category, $userSpan);
+                                $categoryPeople = $categoryPeople->merge($people);
                             }
-                        });
+                            
+                            // Filter to only show people in the selected categories
+                            if ($categoryPeople->isNotEmpty()) {
+                                $query->whereIn('id', $categoryPeople->pluck('id'));
+                            } else {
+                                // If no people found in categories, return empty result
+                                $query->whereRaw('1 = 0');
+                            }
+                        }
+                    }
+                }
+
+                // Handle subtype filtering for non-person types
+                foreach ($types as $typeId) {
+                    if ($typeId !== 'person') {
+                        $subtypeParam = $request->input($typeId . '_subtype');
+                        if ($subtypeParam) {
+                            $subtypes = explode(',', $subtypeParam);
+                            $query->where(function($q) use ($typeId, $subtypes) {
+                                foreach ($subtypes as $subtype) {
+                                    $q->orWhereJsonContains('metadata->subtype', $subtype);
+                                }
+                            });
+                        }
                     }
                 }
             }
@@ -276,7 +302,7 @@ class SpanController extends Controller
     }
 
     /**
-     * Show the full-page comparison view for a span
+     * Show the new comparison page
      */
     public function compare(Span $span)
     {
@@ -295,27 +321,11 @@ class SpanController extends Controller
             return redirect()->back()->with('error', 'Cannot compare a span with itself.');
         }
 
-        try {
-            // Get all comparisons from the service
-            $comparisons = $this->comparisonService->compare($personalSpan, $span);
-            $yearRange = $this->comparisonService->getComparisonYearRange($personalSpan, $span);
-            
-            // Group comparisons by type for the view
-            $groupedComparisons = $comparisons->groupBy('type')->map(function($group) {
-                return $group->sortBy('year');
-            });
-            
-            return view('spans.compare', [
-                'span' => $span,
-                'personalSpan' => $personalSpan,
-                'comparisons' => $comparisons,
-                'groupedComparisons' => $groupedComparisons,
-                'minYear' => $yearRange['min'],
-                'maxYear' => $yearRange['max']
-            ]);
-        } catch (InvalidArgumentException $e) {
-            return redirect()->back()->with('error', $e->getMessage());
-        }
+        // Show the new comparison page directly
+        return view('spans.compare', [
+            'span' => $span,
+            'personalSpan' => $personalSpan
+        ]);
     }
 
     /**

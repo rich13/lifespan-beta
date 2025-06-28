@@ -4,400 +4,715 @@
     Comparing {{ $personalSpan->name }} with {{ $span->name }}
 @endsection
 
+<x-shared.interactive-card-styles />
+
 @push('styles')
 <link rel="stylesheet" href="{{ asset('css/comparison.css') }}">
+<style>
+    .comparison-input-dropdown {
+        position: absolute;
+        z-index: 9999;
+        background: white;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+        max-height: 300px;
+        overflow-y: auto;
+        min-width: 250px;
+    }
+    
+    .comparison-input-dropdown .dropdown-item {
+        padding: 0.5rem 1rem;
+        border-bottom: 1px solid #f8f9fa;
+        cursor: pointer;
+    }
+    
+    .comparison-input-dropdown .dropdown-item:hover {
+        background-color: #f8f9fa;
+    }
+    
+    .comparison-input-dropdown .dropdown-item:last-child {
+        border-bottom: none;
+    }
+    
+    .comparison-input-container {
+        position: relative;
+    }
+</style>
 @endpush
 
 @push('scripts')
 <script src="{{ asset('js/comparison.js') }}"></script>
+<script>
+$(document).ready(function() {
+    let searchTimeout = null;
+    let activeDropdown = null;
+    
+    // Handle input interactions
+    $(document).on('focus', '.comparison-input-field', function() {
+        console.log('Focus event triggered on comparison input');
+        const input = $(this);
+        const connectionType = input.data('connection-type');
+        const searchTerm = input.val().trim();
+        
+        console.log('Focus debug:', {
+            input: input[0],
+            connectionType: connectionType,
+            searchTerm: searchTerm,
+            inputClasses: input.attr('class')
+        });
+        
+        // Show dropdown immediately when focused, even if empty
+        if (searchTerm) {
+            console.log('Search term exists, calling searchForSpans');
+            searchForSpans(searchTerm, connectionType, input);
+        } else {
+            console.log('No search term, showing empty dropdown');
+            // Show empty state or recent items
+            showEmptyDropdown(input, connectionType);
+        }
+    });
+    
+    $(document).on('input', '.comparison-input-field', function() {
+        console.log('Input event triggered on comparison input');
+        const input = $(this);
+        const connectionType = input.data('connection-type');
+        const searchTerm = input.val().trim();
+        
+        console.log('Input debug:', {
+            input: input[0],
+            connectionType: connectionType,
+            searchTerm: searchTerm,
+            searchTermLength: searchTerm.length
+        });
+        
+        // Clear any existing timeout
+        if (searchTimeout) {
+            clearTimeout(searchTimeout);
+        }
+        
+        if (searchTerm.length > 0) {
+            console.log('Setting up debounced search for:', searchTerm);
+            // Debounce the search
+            searchTimeout = setTimeout(() => {
+                console.log('Executing debounced search for:', searchTerm);
+                searchForSpans(searchTerm, connectionType, input);
+            }, 300);
+        } else {
+            console.log('Search term empty, showing empty dropdown');
+            // Show empty state when input is cleared
+            showEmptyDropdown(input, connectionType);
+        }
+    });
+    
+    // Hide dropdown when clicking outside
+    $(document).on('click', function(e) {
+        if (!$(e.target).closest('.comparison-input-container').length) {
+            hideDropdown();
+        }
+    });
+    
+    function searchForSpans(searchTerm, connectionType, input) {
+        console.log('searchForSpans called with:', { searchTerm, connectionType });
+        
+        // Determine allowed span types based on connection type
+        const allowedTypes = getAllowedSpanTypes(connectionType);
+        
+        console.log('Allowed types for', connectionType, ':', allowedTypes);
+        
+        if (!allowedTypes || allowedTypes.length === 0) {
+            console.log('No allowed types found, returning');
+            return;
+        }
+        
+        // Build search parameters
+        const searchParams = new URLSearchParams({
+            q: searchTerm,
+            types: allowedTypes.join(',')
+        });
+        
+        const searchUrl = `/spans/search?${searchParams.toString()}`;
+        console.log('Making search request to:', searchUrl);
+        console.log('Search parameters:', {
+            q: searchTerm,
+            types: allowedTypes.join(',')
+        });
+        
+        // Make AJAX request to search for spans (using web route, not API)
+        fetch(searchUrl, {
+            headers: {
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            }
+        })
+        .then(response => {
+            console.log('Search response status:', response.status);
+            return response.json();
+        })
+        .then(data => {
+            console.log('Search response data:', data);
+            displaySearchResults(data.spans || [], searchTerm, input, connectionType);
+        })
+        .catch(error => {
+            console.error('Search error:', error);
+            displaySearchResults([], searchTerm, input, connectionType);
+        });
+    }
+    
+    function displaySearchResults(spans, searchTerm, input, connectionType) {
+        console.log('displaySearchResults called with:', { spans: spans.length, searchTerm, connectionType });
+        
+        hideDropdown();
+        
+        if (spans.length === 0) {
+            console.log('No spans to display');
+            return;
+        }
+        
+        console.log('Creating dropdown for', spans.length, 'spans');
+        
+        const dropdown = $(`
+            <div class="dropdown-menu show position-absolute" 
+                 style="top: 100%; left: 0; right: 0; z-index: 1000; max-height: 200px; overflow-y: auto;">
+            </div>
+        `);
+        
+        spans.forEach((span, index) => {
+            console.log('Processing span', index, ':', span);
+            const itemClass = span.is_placeholder ? 'dropdown-item text-muted' : 'dropdown-item';
+            const icon = span.is_placeholder ? 'bi-plus-circle' : 'bi-' + getTypeIcon(span.type_id);
+            const badge = span.is_placeholder ? '<span class="badge bg-secondary ms-2">New</span>' : '';
+            
+            const item = $(`
+                <a class="${itemClass}" href="#" data-span-id="${span.id || ''}" data-span-name="${span.name}" data-span-type="${span.type_id}">
+                    <i class="bi ${icon} me-2"></i>
+                    ${span.name}
+                    <small class="text-muted">(${span.type_name})</small>
+                    ${badge}
+                </a>
+            `);
+            
+            item.on('click', function(e) {
+                e.preventDefault();
+                console.log('Dropdown item clicked:', span);
+                
+                // Show preview with save/cancel buttons
+                showConnectionPreview(input, span, connectionType);
+                
+                hideDropdown();
+            });
+            
+            dropdown.append(item);
+        });
+        
+        console.log('Appending dropdown to input parent');
+        input.parent().append(dropdown);
+        activeDropdown = dropdown;
+    }
+    
+    function createConnectionWithExistingSpan(spanId, spanName, spanType, input, connectionType) {
+        const parentSpanId = input.data('span-id');
+        const age = input.data('age');
+        
+        console.log('Creating connection with existing span:', { spanId, spanName, spanType, parentSpanId, age, connectionType });
+        
+        // Create the connection via AJAX
+        fetch('/spans/api/connections', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            },
+            body: JSON.stringify({
+                parent_id: parentSpanId,
+                child_id: spanId,
+                type_id: connectionType,
+                age: age
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('Connection creation response:', data);
+            if (data.success) {
+                // Show success message
+                showFeedback('Connection created successfully!', 'success');
+                
+                // Reload the page to show the updated mirror sentences
+                setTimeout(() => {
+                    location.reload();
+                }, 1000); // Small delay to show the success message
+            } else {
+                showFeedback('Failed to create connection: ' + (data.message || 'Unknown error'), 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error creating connection:', error);
+            showFeedback('Error creating connection', 'error');
+        });
+    }
+    
+    function createConnectionWithNewSpan(spanName, spanType, input, connectionType) {
+        const parentSpanId = input.data('span-id');
+        const age = input.data('age');
+        
+        console.log('Creating connection with new span:', { spanName, spanType, parentSpanId, age, connectionType });
+        
+        // First create the new span, then create the connection
+        fetch('/spans/api/spans', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            },
+            body: JSON.stringify({
+                name: spanName,
+                type_id: spanType,
+                access_level: 'private'
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('Span creation response:', data);
+            if (data.success) {
+                // Now create the connection with the new span
+                return createConnectionWithExistingSpan(data.span.id, spanName, spanType, input, connectionType);
+                        } else {
+                showFeedback('Failed to create span: ' + data.message, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error creating span:', error);
+            showFeedback('Error creating span', 'error');
+        });
+    }
+    
+    function replaceInputWithConnection(input, spanName, connectionType) {
+        // Handle both jQuery objects and mock objects
+        let container;
+        let age;
+        
+        if (input.closest && typeof input.closest === 'function') {
+            // It's a jQuery object
+            container = input.closest('.comparison-input-container');
+            age = input.data('age');
+        } else {
+            // It's a mock object, find the original input element
+            const parentSpanId = input.data('span-id');
+            const ageNum = input.data('age');
+            
+            // Find the input element that matches these data attributes
+            const originalInput = $(`.comparison-input-field[data-span-id="${parentSpanId}"][data-age="${ageNum}"]`);
+            if (originalInput.length > 0) {
+                container = originalInput.closest('.comparison-input-container');
+                age = ageNum;
+            } else {
+                console.error('Could not find original input element');
+                return;
+            }
+        }
+        
+        // Create a placeholder connection display
+        const connectionHtml = `
+            <div class="interactive-card-base">
+                <div class="btn-group btn-group-sm" role="group">
+                    <button type="button" class="btn btn-outline-secondary disabled" style="min-width: 40px;">
+                        <i class="bi bi-clock"></i>
+                    </button>
+                    <button type="button" class="btn btn-outline-info">
+                        at age ${age}
+                    </button>
+                    <button type="button" class="btn inactive">
+                        you ${getConnectionTypePredicate(connectionType)}
+                    </button>
+                    <a href="#" class="btn btn-primary">
+                        ${spanName}
+                    </a>
+                    <button type="button" class="btn btn-outline-warning">
+                        <small>Placeholder</small>
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        container.html(connectionHtml);
+    }
+    
+    function getTypeIcon(typeId) {
+        const iconMap = {
+            'person': 'person',
+            'place': 'geo-alt',
+            'organisation': 'building',
+            'event': 'calendar-event',
+            'thing': 'box',
+            'band': 'music-note',
+            'role': 'person-badge'
+        };
+        
+        return iconMap[typeId] || 'question-circle';
+    }
+    
+    function getAllowedSpanTypes(connectionType) {
+        const typeMap = {
+            'residence': ['place'],
+            'employment': ['organisation'],
+            'education': ['organisation'],
+            'membership': ['organisation', 'band'],
+            'has_role': ['organisation'],
+            'at_organisation': ['organisation'],
+            'travel': ['place'],
+            'participation': ['event'],
+            'ownership': ['thing'],
+            'contains': ['thing'],
+            'created': ['thing'],
+            'family': ['person'],
+            'relationship': ['person'],
+            'friend': ['person']
+        };
+        
+        return typeMap[connectionType] || ['person'];
+    }
+    
+    function getConnectionTypePredicate(connectionType) {
+        const predicateMap = {
+            'residence': 'lived in',
+            'employment': 'worked at',
+            'education': 'studied at',
+            'membership': 'member of',
+            'has_role': 'has role',
+            'at_organisation': 'at',
+            'travel': 'traveled to',
+            'participation': 'participated in',
+            'ownership': 'owned',
+            'contains': 'contains',
+            'created': 'created',
+            'family': 'related to',
+            'relationship': 'has relationship with',
+            'friend': 'is friend of'
+        };
+        
+        return predicateMap[connectionType] || 'connected to';
+    }
+    
+    function hideDropdown() {
+        if (activeDropdown) {
+            activeDropdown.remove();
+            activeDropdown = null;
+        }
+    }
+    
+    function showFeedback(message, type) {
+        const alertClass = type === 'success' ? 'alert-success' : 
+                          type === 'error' ? 'alert-danger' : 
+                          type === 'info' ? 'alert-info' : 'alert-secondary';
+        const iconClass = type === 'success' ? 'check-circle' : 
+                         type === 'error' ? 'exclamation-triangle' : 
+                         type === 'info' ? 'info-circle' : 'question-circle';
+        
+        const feedback = $(`
+            <div class="alert ${alertClass} alert-dismissible fade show position-fixed" 
+                 style="top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
+                <i class="bi bi-${iconClass} me-2"></i>${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        `);
+        
+        $('body').append(feedback);
+        
+        // Auto-dismiss after 3 seconds
+        setTimeout(() => {
+            feedback.alert('close');
+        }, 3000);
+    }
+    
+    function showEmptyDropdown(input, connectionType) {
+        console.log('showEmptyDropdown called with:', { connectionType });
+        
+        hideDropdown();
+        
+        const allowedTypes = getAllowedSpanTypes(connectionType);
+        const typeNames = allowedTypes.map(type => type.charAt(0).toUpperCase() + type.slice(1)).join(', ');
+        
+        console.log('Allowed types:', allowedTypes, 'Type names:', typeNames);
+        
+        const dropdown = $(`
+            <div class="dropdown-menu show position-absolute" 
+                 style="top: 100%; left: 0; right: 0; z-index: 1000;">
+                <div class="dropdown-item text-muted">
+                    <i class="bi bi-search me-2"></i>
+                    Start typing to search for ${typeNames}...
+                            </div>
+                        </div>
+        `);
+        
+        console.log('Appending empty dropdown to input parent');
+        input.parent().append(dropdown);
+        activeDropdown = dropdown;
+    }
+    
+    function showConnectionPreview(input, span, connectionType) {
+        const container = input.closest('.comparison-input-container');
+        const age = input.data('age');
+        const parentSpanId = input.data('span-id');
+        
+        // Create preview HTML
+        const previewHtml = `
+            <div class="interactive-card-base">
+                <div class="btn-group btn-group-sm" role="group">
+                    <button type="button" class="btn btn-outline-secondary disabled" style="min-width: 40px;">
+                        <i class="bi bi-clock"></i>
+                    </button>
+                    <button type="button" class="btn btn-outline-info">
+                        at age ${age}
+                    </button>
+                    <button type="button" class="btn inactive">
+                        you ${getConnectionTypePredicate(connectionType)}
+                    </button>
+                    <a href="#" class="btn btn-primary">
+                        ${span.name}
+                    </a>
+                    ${span.is_placeholder ? '<button type="button" class="btn btn-outline-warning"><small>New</small></button>' : ''}
+                </div>
+                <div class="mt-2">
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button type="button" class="btn btn-success" onclick="saveConnection('${span.id || ''}', '${span.name}', '${span.type_id}', '${connectionType}', '${parentSpanId}', '${age}')">
+                            <i class="bi bi-check me-1"></i>Save
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="cancelConnection()">
+                            <i class="bi bi-x me-1"></i>Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        container.html(previewHtml);
+    }
+    
+    function saveConnection(spanId, spanName, spanType, connectionType, parentSpanId, age) {
+        console.log('Saving connection:', { spanId, spanName, spanType, connectionType, parentSpanId, age });
+        
+        // Convert age back to number
+        const ageNum = parseInt(age);
+        
+        // Create a mock input object with the data method
+        const mockInput = {
+            data: function(key) {
+                if (key === 'span-id') return parentSpanId;
+                if (key === 'age') return ageNum;
+                return null;
+            }
+        };
+        
+        if (spanId) {
+            // Use existing span
+            createConnectionWithExistingSpan(spanId, spanName, spanType, mockInput, connectionType);
+        } else {
+            // Create new span
+            createConnectionWithNewSpan(spanName, spanType, mockInput, connectionType);
+        }
+    }
+    
+    function cancelConnection() {
+        // Show cancellation message
+        showFeedback('Connection creation cancelled', 'info');
+        
+        // Reload the page to reset the form
+        setTimeout(() => {
+            location.reload();
+        }, 1000);
+    }
+    
+    // Make functions globally accessible
+    window.saveConnection = saveConnection;
+    window.cancelConnection = cancelConnection;
+});
+</script>
 @endpush
 
 @section('content')
 <div class="container-fluid py-4">
     <div class="row">
-        <div class="col-12">
-            <nav aria-label="breadcrumb">
-                <ol class="breadcrumb">
-                    <li class="breadcrumb-item"><a href="{{ route('spans.index') }}">Spans</a></li>
-                    <li class="breadcrumb-item"><a href="{{ route('spans.show', $span) }}">{{ $span->name }}</a></li>
-                    <li class="breadcrumb-item active">Compare</li>
-                </ol>
-            </nav>
-        </div>
-    </div>
-
-    <div class="row">
-        <div class="col-md-8">
-            @php
-                // Calculate various date comparisons
-                $personalStartYear = $personalSpan->start_year;
-                $personalEndYear = $personalSpan->end_year;
-                $spanStartYear = $span->start_year;
-                $spanEndYear = $span->end_year;
-                
-                $comparisons = [];
-                $lifeStageComparisons = [];
-                
-                // Get all connections for both spans
-                $personalConnections = $personalSpan->connectionsAsSubject()
-                    ->whereNotNull('connection_span_id')
-                    ->whereHas('connectionSpan')
-                    ->with(['connectionSpan', 'child', 'type'])
-                    ->get()
-                    ->concat($personalSpan->connectionsAsObject()
-                        ->whereNotNull('connection_span_id')
-                        ->whereHas('connectionSpan')
-                        ->with(['connectionSpan', 'parent', 'type'])
-                        ->get());
-
-                $spanConnections = $span->connectionsAsSubject()
-                    ->whereNotNull('connection_span_id')
-                    ->whereHas('connectionSpan')
-                    ->with(['connectionSpan', 'child', 'type'])
-                    ->get()
-                    ->concat($span->connectionsAsObject()
-                        ->whereNotNull('connection_span_id')
-                        ->whereHas('connectionSpan')
-                        ->with(['connectionSpan', 'parent', 'type'])
-                        ->get());
-
-                // Group connections by year for life stage comparisons
-                $personalConnectionsByYear = [];
-                foreach ($personalConnections as $connection) {
-                    $connSpan = $connection->connectionSpan;
-                    $startYear = $connSpan->start_year;
-                    $endYear = $connSpan->end_year ?? date('Y');
-                    
-                    for ($year = $startYear; $year <= $endYear; $year++) {
-                        $age = $year - $personalStartYear;
-                        if ($age >= 0) {
-                            $personalConnectionsByYear[$year][] = [
-                                'age' => $age,
-                                'connection' => $connection->parent_id === $personalSpan->id ? 
-                                    $connection->child->name :
-                                    $connection->parent->name
-                            ];
-                        }
-                    }
-                }
-
-                $spanConnectionsByYear = [];
-                foreach ($spanConnections as $connection) {
-                    $connSpan = $connection->connectionSpan;
-                    $startYear = $connSpan->start_year;
-                    $endYear = $connSpan->end_year ?? date('Y');
-                    
-                    for ($year = $startYear; $year <= $endYear; $year++) {
-                        $age = $year - $spanStartYear;
-                        if ($age >= 0) {
-                            $spanConnectionsByYear[$year][] = [
-                                'age' => $age,
-                                'connection' => $connection->parent_id === $span->id ? 
-                                    $connection->child->name :
-                                    $connection->parent->name
-                            ];
-                        }
-                    }
-                }
-
-                // Find years where both had connections
-                $sharedYears = array_intersect(array_keys($personalConnectionsByYear), array_keys($spanConnectionsByYear));
-                sort($sharedYears);
-
-                // Create life stage comparisons
-                foreach ($sharedYears as $year) {
-                    $personalAge = $year - $personalStartYear;
-                    $spanAge = $year - $spanStartYear;
-                    
-                    $personalActivities = collect($personalConnectionsByYear[$year])
-                        ->pluck('connection')
-                        ->unique()
-                        ->join(', ');
-                    
-                    $spanActivities = collect($spanConnectionsByYear[$year])
-                        ->pluck('connection')
-                        ->unique()
-                        ->join(', ');
-
-                    $lifeStageComparisons[] = [
-                        'icon' => 'bi-clock',
-                        'text' => "At age {$personalAge} you were at {$personalActivities}, while they were at {$spanActivities} at age {$spanAge}",
-                        'year' => $year
-                    ];
-                }
-
-                // Sort life stage comparisons by year
-                usort($lifeStageComparisons, function($a, $b) {
-                    return $a['year'] - $b['year'];
-                });
-
-                // Add life stage comparisons to main comparisons array
-                $comparisons = array_merge($comparisons, $lifeStageComparisons);
-
-                // When one was born relative to the other
-                if ($personalStartYear && $spanStartYear) {
-                    $yearDiff = $spanStartYear - $personalStartYear;
-                    
-                    if ($yearDiff > 0) {
-                        // The span person was born after you
-                        // Check if you were still alive when they were born
-                        if (!$personalEndYear || $personalEndYear >= $spanStartYear) {
-                            // Find what you were doing when they were born
-                            $activeConnections = $personalConnections->filter(function($connection) use ($spanStartYear) {
-                                $connSpan = $connection->connectionSpan;
-                                return $connSpan->start_year <= $spanStartYear && 
-                                    (!$connSpan->end_year || $connSpan->end_year >= $spanStartYear);
-                            });
-                            
-                            $comparisons[] = [
-                                'icon' => 'bi-calendar-event',
-                                'text' => "You were {$yearDiff} years old when {$span->name} was born",
-                                'year' => $spanStartYear,
-                                'subtext' => $activeConnections->isNotEmpty() ? 
-                                    "At this time you were at: " . $activeConnections->map(function($conn) use ($personalSpan) {
-                                        return $conn->parent_id === $personalSpan->id ? 
-                                            $conn->child->name :
-                                            $conn->parent->name;
-                                    })->join(', ') : null
-                            ];
-                        }
-                    } elseif ($yearDiff < 0) {
-                        // You were born after the span person
-                        $yearDiff = abs($yearDiff);
-                        // Check if they were still alive when you were born
-                        if (!$spanEndYear || $spanEndYear >= $personalStartYear) {
-                            // Find what they were doing when you were born
-                            $activeConnections = $spanConnections->filter(function($connection) use ($personalStartYear) {
-                                $connSpan = $connection->connectionSpan;
-                                return $connSpan->start_year <= $personalStartYear && 
-                                    (!$connSpan->end_year || $connSpan->end_year >= $personalStartYear);
-                            });
-                            
-                            $comparisons[] = [
-                                'icon' => 'bi-calendar-event',
-                                'text' => "{$span->name} was {$yearDiff} years old when you were born",
-                                'year' => $personalStartYear,
-                                'subtext' => $activeConnections->isNotEmpty() ? 
-                                    "At this time they were at: " . $activeConnections->map(function($conn) use ($span) {
-                                        return $conn->parent_id === $span->id ? 
-                                            $conn->child->name :
-                                            $conn->parent->name;
-                                    })->join(', ') : null
-                            ];
-                        } else {
-                            // They had already passed away
-                            $yearsSinceDeath = $personalStartYear - $spanEndYear;
-                            $comparisons[] = [
-                                'icon' => 'bi-calendar-x',
-                                'text' => "{$span->name} had passed away {$yearsSinceDeath} years before you were born",
-                                'year' => $personalStartYear
-                            ];
-                        }
-                    }
-                }
-                
-                // Overlapping lifetimes
-                if ($personalStartYear && $spanStartYear) {
-                    $overlapStart = max($personalStartYear, $spanStartYear);
-                    $overlapEnd = min(
-                        $personalEndYear ?? date('Y'),
-                        $spanEndYear ?? date('Y')
-                    );
-                    
-                    if ($overlapEnd >= $overlapStart) {
-                        $overlapYears = $overlapEnd - $overlapStart;
-                        if ($overlapYears > 0) {
-                            // Find overlapping connections during this period
-                            $personalOverlappingConns = $personalConnections->filter(function($connection) use ($overlapStart, $overlapEnd) {
-                                $connSpan = $connection->connectionSpan;
-                                return $connSpan->start_year <= $overlapEnd && 
-                                    (!$connSpan->end_year || $connSpan->end_year >= $overlapStart);
-                            });
-                            
-                            $spanOverlappingConns = $spanConnections->filter(function($connection) use ($overlapStart, $overlapEnd) {
-                                $connSpan = $connection->connectionSpan;
-                                return $connSpan->start_year <= $overlapEnd && 
-                                    (!$connSpan->end_year || $connSpan->end_year >= $overlapStart);
-                            });
-                            
-                            $subtext = "During this time:";
-                            if ($personalOverlappingConns->isNotEmpty()) {
-                                $subtext .= "\nYou: " . $personalOverlappingConns->map(function($conn) use ($personalSpan) {
-                                    return $conn->parent_id === $personalSpan->id ? 
-                                        $conn->child->name :
-                                        $conn->parent->name;
-                                })->join(', ');
-                            }
-                            if ($spanOverlappingConns->isNotEmpty()) {
-                                $subtext .= "\nThey: " . $spanOverlappingConns->map(function($conn) use ($span) {
-                                    return $conn->parent_id === $span->id ? 
-                                        $conn->child->name :
-                                        $conn->parent->name;
-                                })->join(', ');
-                            }
-
-                            $comparisons[] = [
-                                'icon' => 'bi-arrow-left-right',
-                                'text' => (!$personalEndYear && !$spanEndYear) ?
-                                    "Your lives have overlapped for {$overlapYears} years so far" :
-                                    "Your lives overlapped for {$overlapYears} years",
-                                'year' => $overlapStart,
-                                'duration' => $overlapYears,
-                                'subtext' => $subtext !== "During this time:" ? $subtext : null
-                            ];
-                        }
-                    }
-                }
-                
-                // Compare total lifespan lengths (only for completed lives)
-                if ($personalStartYear && $spanStartYear && $personalEndYear && $spanEndYear) {
-                    $personalLifespan = $personalEndYear - $personalStartYear;
-                    $spanLifespan = $spanEndYear - $spanStartYear;
-                    $lifespanDiff = abs($personalLifespan - $spanLifespan);
-                    
-                    if ($personalLifespan > $spanLifespan) {
-                        $comparisons[] = [
-                            'icon' => 'bi-clock-history',
-                            'text' => "You lived {$lifespanDiff} years longer",
-                            'year' => max($personalEndYear, $spanEndYear)
-                        ];
-                    } elseif ($spanLifespan > $personalLifespan) {
-                        $comparisons[] = [
-                            'icon' => 'bi-clock-history',
-                            'text' => "{$span->name} lived {$lifespanDiff} years longer",
-                            'year' => max($personalEndYear, $spanEndYear)
-                        ];
-                    }
-                }
-
-                // Sort all comparisons by year
-                usort($comparisons, function($a, $b) {
-                    return $a['year'] - $b['year'];
-                });
-
-                // Calculate timeline range
-                $minYear = min($personalStartYear, $spanStartYear);
-                $maxYear = max($personalEndYear ?? date('Y'), $spanEndYear ?? date('Y'));
-            @endphp
-
-            <div class="card mb-4">
-                <div class="card-body">
-                    <h2 class="card-title h5 mb-4">
-                        <i class="bi bi-clock-history text-primary me-2"></i>
-                        Timeline Comparison
+        <!-- First Column: Current Span's Connections (50%) -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="h5 mb-0">
+                        <i class="bi bi-person-fill text-primary me-2"></i>
+                        {{ $span->name }}'s Life
                     </h2>
+                </div>
+                        <div class="card-body">
+                    <!-- Span details header -->
+                    <div class="mb-4">
+                        <x-spans.display.interactive-card :span="$span" />
+                    </div>
 
-                    <div class="timeline-container">
-                        <div class="timeline-bar position-relative h-60">
-                            <!-- Personal span bar -->
-                            <div class="position-absolute top-0 bg-primary bg-opacity-20 rounded-3 h-20" 
-                                 data-left="{{ (($personalSpan->start_year - $minYear) / ($maxYear - $minYear)) * 100 }}"
-                                 data-width="{{ (($personalSpan->end_year ?? date('Y')) - $personalSpan->start_year) / ($maxYear - $minYear) * 100 }}">
-                                <div class="position-absolute top-n20 small text-muted">You</div>
+                    <!-- Connections -->
+                    <h3 class="h6 mb-3">Connections & Events</h3>
+                    @php
+                        // Get connections where this span is the subject (parent) and has temporal information
+                        $spanConnections = $span->connectionsAsSubject()
+                            ->whereNotNull('connection_span_id')
+                            ->whereHas('connectionSpan', function($query) {
+                                $query->whereNotNull('start_year'); // Only connections with dates
+                            })
+                            ->where('child_id', '!=', $span->id) // Exclude self-referential connections
+                            ->with(['connectionSpan', 'child', 'type'])
+                            ->get()
+                            ->sortBy(function($connection) {
+                                return $connection->connectionSpan->start_year;
+                            });
+                                    @endphp
+
+                    @if($spanConnections->isEmpty())
+                        <p class="text-muted">No temporal connections recorded yet.</p>
+                    @else
+                        @foreach($spanConnections as $connection)
+                            <div class="mb-3">
+                                <x-connections.interactive-card-age :connection="$connection" :span="$span" />
                             </div>
-                            
-                            <!-- Compared span bar -->
-                            <div class="position-absolute top-40 bg-primary bg-opacity-20 rounded-3 h-20" 
-                                 data-left="{{ (($span->start_year - $minYear) / ($maxYear - $minYear)) * 100 }}"
-                                 data-width="{{ (($span->end_year ?? date('Y')) - $span->start_year) / ($maxYear - $minYear) * 100 }}">
-                                <div class="position-absolute top-n20 small text-muted">{{ $span->name }}</div>
-                            </div>
+                        @endforeach
+                    @endif
                         </div>
                     </div>
+        </div>
+
+        <!-- Second Column: User's Personal Span Connections (50%) -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="h5 mb-0">
+                        <i class="bi bi-person-fill text-success me-2"></i>
+                        Your Life
+                    </h2>
                 </div>
-            </div>
+                <div class="card-body">
+                    <!-- Personal span details header -->
+                    <div class="mb-4">
+                        <x-spans.display.interactive-card :span="$personalSpan" />
+                    </div>
 
-            @foreach($groupedComparisons as $type => $typeComparisons)
-                @if(!in_array($type, ['connection_pattern', 'tech_era', 'historical_event']))
-                    <div class="card mb-4">
-                        <div class="card-body">
-                            <h2 class="card-title h5 mb-4">
-                                <i class="bi bi-list-ul text-primary me-2"></i>
-                                {{ ucfirst(str_replace('_', ' ', $type)) }}
-                            </h2>
+                    <!-- Mirror Connections -->
+                    <h3 class="h6 mb-3">Your Life During the Same Periods</h3>
+                    @php
+                        // Get all user connections for overlap calculations
+                        $userConnections = $personalSpan->connectionsAsSubject()
+                            ->whereNotNull('connection_span_id')
+                            ->whereHas('connectionSpan', function($query) {
+                                $query->whereNotNull('start_year');
+                            })
+                            ->where('child_id', '!=', $personalSpan->id)
+                            ->with(['connectionSpan', 'child', 'type'])
+                            ->get();
 
-                            <div class="comparison-list">
-                                @foreach($typeComparisons as $comparison)
-                                    @php
-                                        // Handle both array and DTO formats
-                                        $text = is_array($comparison) ? $comparison['text'] : $comparison->text;
-                                        $subtext = is_array($comparison) ? ($comparison['subtext'] ?? null) : $comparison->subtext;
-                                        $year = is_array($comparison) ? $comparison['year'] : $comparison->year;
-                                        $icon = is_array($comparison) ? ($comparison['icon'] ?? 'bi-clock') : $comparison->icon;
-                                    @endphp
-                                    <div class="comparison-item d-flex align-items-center mb-3">
-                                        <div class="comparison-icon me-3">
-                                            <i class="bi {{ $icon }} text-primary"></i>
-                                        </div>
-                                        <div class="comparison-content">
-                                            <div class="comparison-text">{{ $text }}</div>
-                                            @if($subtext)
-                                                <div class="comparison-subtext small text-muted">{{ $subtext }}</div>
-                                            @endif
-                                        </div>
-                                        <div class="comparison-year ms-auto text-muted">
-                                            {{ $year }}
+                        // Create mirror sentences for each span connection
+                        $mirrorSentences = [];
+                        
+                        foreach ($spanConnections as $spanConnection) {
+                            $spanStartAge = $spanConnection->connectionSpan->start_year - $span->start_year;
+                            $spanEndAge = $spanConnection->connectionSpan->end_year ? 
+                                $spanConnection->connectionSpan->end_year - $span->start_year : null;
+                            
+                            // Calculate user's current age
+                            $userCurrentAge = now()->year - $personalSpan->start_year;
+                            
+                            // Skip if this would be in the future for the user
+                            if ($spanStartAge > $userCurrentAge) {
+                                continue;
+                            }
+                            
+                            // Find overlapping user connections of the same type
+                            $matchingUserConnections = $userConnections->filter(function($userConn) use ($spanConnection, $personalSpan, $spanStartAge, $spanEndAge) {
+                                // Check if it's the same connection type
+                                if ($userConn->type_id !== $spanConnection->type_id) {
+                                    return false;
+                                }
+                                
+                                // Calculate user ages for this connection
+                                $userStartAge = $userConn->connectionSpan->start_year - $personalSpan->start_year;
+                                $userEndAge = $userConn->connectionSpan->end_year ? 
+                                    $userConn->connectionSpan->end_year - $personalSpan->start_year : null;
+                                
+                                // Check for overlap using Allen interval algebra
+                                if ($spanEndAge && $userEndAge) {
+                                    // Both have end ages - check for overlap
+                                    return max($spanStartAge, $userStartAge) <= min($spanEndAge, $userEndAge);
+                                } elseif ($spanEndAge && !$userEndAge) {
+                                    // Span has end age, user doesn't - check if user started before span ended
+                                    return $userStartAge <= $spanEndAge;
+                                } elseif (!$spanEndAge && $userEndAge) {
+                                    // User has end age, span doesn't - check if span started before user ended
+                                    return $spanStartAge <= $userEndAge;
+                                } else {
+                                    // Neither has end age - they overlap if both are ongoing
+                                    return true;
+                                }
+                            });
+                            
+                            if ($matchingUserConnections->isNotEmpty()) {
+                                // We have matching data - create mirror sentence
+                                $mirrorSentences[] = [
+                                    'type' => 'mirror',
+                                    'connection' => $matchingUserConnections->first(),
+                                    'spanConnection' => $spanConnection,
+                                    'spanStartAge' => $spanStartAge,
+                                    'spanEndAge' => $spanEndAge
+                                ];
+                            } else {
+                                // No matching data - create input prompt
+                                $mirrorSentences[] = [
+                                    'type' => 'input',
+                                    'spanConnection' => $spanConnection,
+                                    'spanStartAge' => $spanStartAge,
+                                    'spanEndAge' => $spanEndAge,
+                                    'connectionType' => $spanConnection->type
+                                ];
+                            }
+                        }
+                    @endphp
+
+                    @if(empty($mirrorSentences))
+                        <p class="text-muted">No corresponding periods to compare.</p>
+                    @else
+                        @foreach($mirrorSentences as $mirror)
+                            @if($mirror['type'] === 'mirror')
+                                <!-- Mirror sentence with actual data -->
+                                <div class="mb-3">
+                                    <x-connections.interactive-card-age :connection="$mirror['connection']" :span="$personalSpan" />
+                                </div>
+                            @else
+                                <!-- Input prompt for missing data -->
+                                <div class="mb-3">
+                                    <div class="comparison-input-container">
+                                        <div class="interactive-card-base">
+                                            <div class="btn-group btn-group-sm" role="group">
+                                                <!-- Age prompt -->
+                                                <button type="button" class="btn btn-outline-info">
+                                                    at age {{ $mirror['spanStartAge'] }}
+                                                </button>
+                                                
+                                                <!-- Question -->
+                                                <button type="button" class="btn inactive">
+                                                    you {{ $mirror['connectionType']->forward_predicate }}
+                                                </button>
+                                                
+                                                <!-- Input field -->
+                                                <input type="text" 
+                                                       class="form-control form-control-sm comparison-input-field" 
+                                                       placeholder="{{ in_array($mirror['connectionType']->type, ['family', 'relationship', 'friend']) ? 'who?' : (in_array($mirror['connectionType']->type, ['has_role', 'created', 'contains', 'membership']) ? 'what?' : 'where?') }}" 
+                                                       style="width: 200px;"
+                                                       data-connection-type="{{ $mirror['connectionType']->type }}"
+                                                       data-span-id="{{ $personalSpan->id }}"
+                                                       data-age="{{ $mirror['spanStartAge'] }}">
+                                            </div>
                                         </div>
                                     </div>
-                                @endforeach
-                            </div>
-                        </div>
-                    </div>
-                @endif
-            @endforeach
-        </div>
-
-        <div class="col-md-4">
-            <div class="card mb-4">
-                <div class="card-body">
-                    <h2 class="card-title h5 mb-4">
-                        <i class="bi bi-info-circle text-primary me-2"></i>
-                        About {{ $span->name }}
-                    </h2>
-
-                    <dl class="row mb-0">
-                        <dt class="col-sm-4">Type</dt>
-                        <dd class="col-sm-8">{{ ucfirst($span->type_id) }}</dd>
-
-                        @if($span->start_year)
-                            <dt class="col-sm-4">Born</dt>
-                            <dd class="col-sm-8">{{ $span->start_year }}</dd>
+                                </div>
+                            @endif
+                        @endforeach
                         @endif
-
-                        @if($span->end_year)
-                            <dt class="col-sm-4">Died</dt>
-                            <dd class="col-sm-8">{{ $span->end_year }}</dd>
-                        @endif
-
-                        @if($span->start_year && ($span->end_year ?? now()->year))
-                            <dt class="col-sm-4">Age</dt>
-                            <dd class="col-sm-8">{{ ($span->end_year ?? now()->year) - $span->start_year }} years</dd>
-                        @endif
-                    </dl>
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="card-body">
-                    <h3 class="h5 mb-3">About You</h3>
-                    <dl class="row mb-0">
-                        <dt class="col-sm-4">Type</dt>
-                        <dd class="col-sm-8">
-                            <x-spans.partials.type :span="$personalSpan" />
-                        </dd>
-
-                        <dt class="col-sm-4">Lifespan</dt>
-                        <dd class="col-sm-8">
-                            <x-spans.partials.age :span="$personalSpan" />
-                        </dd>
-
-                        @if($personalSpan->description)
-                            <dt class="col-sm-4">Description</dt>
-                            <dd class="col-sm-8">
-                                {{ Str::limit($personalSpan->description, 200) }}
-                            </dd>
-                        @endif
-                    </dl>
                 </div>
             </div>
         </div>

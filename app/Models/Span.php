@@ -545,6 +545,88 @@ class Span extends Model
     }
 
     /**
+     * Format a date for human-readable display (like YAML editor)
+     */
+    public function formatDateForDisplay($year, $month = null, $day = null): string
+    {
+        if (!$year) {
+            return '';
+        }
+
+        if ($day && $month) {
+            return date('F j, Y', mktime(0, 0, 0, $month, $day, $year));
+        } elseif ($month) {
+            return date('F Y', mktime(0, 0, 0, $month, 1, $year));
+        } else {
+            return (string) $year;
+        }
+    }
+
+    /**
+     * Get the human-readable start date
+     */
+    public function getHumanReadableStartDateAttribute(): ?string
+    {
+        if (!$this->start_year) {
+            return null;
+        }
+        return $this->formatDateForDisplay($this->start_year, $this->start_month, $this->start_day);
+    }
+
+    /**
+     * Get the human-readable end date
+     */
+    public function getHumanReadableEndDateAttribute(): ?string
+    {
+        if (!$this->end_year) {
+            return null;
+        }
+        return $this->formatDateForDisplay($this->end_year, $this->end_month, $this->end_day);
+    }
+
+    /**
+     * Get the start date link for date exploration
+     */
+    public function getStartDateLinkAttribute(): ?string
+    {
+        if (!$this->start_year) {
+            return null;
+        }
+
+        if ($this->start_month && $this->start_day) {
+            // Full date: YYYY-MM-DD
+            return sprintf('%04d-%02d-%02d', $this->start_year, $this->start_month, $this->start_day);
+        } elseif ($this->start_month) {
+            // Month and year: YYYY-MM-01
+            return sprintf('%04d-%02d-01', $this->start_year, $this->start_month);
+        } else {
+            // Year only: YYYY-01-01
+            return sprintf('%04d-01-01', $this->start_year);
+        }
+    }
+
+    /**
+     * Get the end date link for date exploration
+     */
+    public function getEndDateLinkAttribute(): ?string
+    {
+        if (!$this->end_year) {
+            return null;
+        }
+
+        if ($this->end_month && $this->end_day) {
+            // Full date: YYYY-MM-DD
+            return sprintf('%04d-%02d-%02d', $this->end_year, $this->end_month, $this->end_day);
+        } elseif ($this->end_month) {
+            // Month and year: YYYY-MM-01
+            return sprintf('%04d-%02d-01', $this->end_year, $this->end_month);
+        } else {
+            // Year only: YYYY-01-01
+            return sprintf('%04d-01-01', $this->end_year);
+        }
+    }
+
+    /**
      * Get the start year display
      */
     public function getStartYearDisplayAttribute(): ?string
