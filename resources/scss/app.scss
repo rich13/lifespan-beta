@@ -15,7 +15,275 @@
        url("/build/fonts/bootstrap-icons.woff") format("woff");
 }
 
-// Custom colors
+// ============================================================================
+// LIFESPAN CUSTOM COLOR THEME
+// ============================================================================
+
+// Lifespan semantic color system with background and text colors for proper contrast
+$lifespan-colors: (
+  // Span Types
+  'person': (
+    'bg': #3b82f6,      // Blue - people
+    'text': #ffffff     // White text on blue
+  ),
+  'organisation': (
+    'bg': #059669,      // Emerald - organizations
+    'text': #ffffff     // White text on emerald
+  ),
+  'place': (
+    'bg': #d97706,      // Orange - locations
+    'text': #ffffff     // White text on orange
+  ),
+  'event': (
+    'bg': #dc2626,      // Red - events
+    'text': #ffffff     // White text on red
+  ),
+  'band': (
+    'bg': #7c3aed,      // Violet - musical groups
+    'text': #ffffff     // White text on violet
+  ),
+  'role': (
+    'bg': #6366f1,      // Indigo - roles
+    'text': #ffffff     // White text on indigo
+  ),
+  'thing': (
+    'bg': #06b6d4,      // Cyan - represents objects
+    'text': #ffffff     // White text on cyan
+  ),
+  'connection': (
+    'bg': #6b7280,      // Gray - represents relationships
+    'text': #ffffff     // White text on gray
+  ),
+  
+  // Connection Types
+  'education': (
+    'bg': #0891b2,      // Teal - learning
+    'text': #ffffff     // White text on teal
+  ),
+  'employment': (
+    'bg': #059669,      // Emerald - work
+    'text': #ffffff     // White text on emerald
+  ),
+  'residence': (
+    'bg': #d97706,      // Orange - home
+    'text': #ffffff     // White text on orange
+  ),
+  'membership': (
+    'bg': #7c3aed,      // Violet - belonging
+    'text': #ffffff     // White text on violet
+  ),
+  'family': (
+    'bg': #d57a7a,      // Light Pink - family bonds
+    'text': #ffffff     // White text on pink
+  ),
+  'relationship': (
+    'bg': #be185d,      // Pink - personal relationships
+    'text': #ffffff     // White text on pink
+  ),
+  'travel': (
+    'bg': #0ea5e9,      // Sky - movement
+    'text': #ffffff     // White text on sky
+  ),
+  'participation': (
+    'bg': #f97316,      // Orange - involvement
+    'text': #ffffff     // White text on orange
+  ),
+  'ownership': (
+    'bg': #84cc16,      // Lime - possession
+    'text': #000000     // Black text on lime
+  ),
+  'created': (
+    'bg': #ec4899,      // Pink - creation
+    'text': #ffffff     // White text on pink
+  ),
+  'contains': (
+    'bg': #14b8a6,      // Teal - containment
+    'text': #ffffff     // White text on teal
+  ),
+  'has_role': (
+    'bg': #6366f1,      // Indigo - roles
+    'text': #ffffff     // White text on indigo
+  ),
+  'at_organisation': (
+    'bg': #059669,      // Emerald - organizational context
+    'text': #ffffff     // White text on emerald
+  ),
+  'friend': (
+    'bg': #be185d,      // Pink - friendship
+    'text': #ffffff     // White text on pink
+  ),
+  
+  // States
+  'placeholder': (
+    'bg': #dc2626,      // Red - incomplete data
+    'text': #ffffff     // White text on red
+  ),
+  'complete': (
+    'bg': #059669,      // Green - complete data
+    'text': #ffffff     // White text on green
+  ),
+  'draft': (
+    'bg': #6b7280,      // Gray - work in progress
+    'text': #ffffff     // White text on gray
+  ),
+  'published': (
+    'bg': #059669,      // Green - public
+    'text': #ffffff     // White text on green
+  ),
+  
+  // Special semantic colors
+  'date': (
+    'bg': #0ea5e9,      // Sky - temporal information
+    'text': #ffffff     // White text on sky
+  ),
+  'age': (
+    'bg': #0891b2,      // Teal - age information
+    'text': #ffffff     // White text on teal
+  ),
+  'subject': (
+    'bg': #3b82f6,      // Blue - primary entity
+    'text': #ffffff     // White text on blue
+  ),
+  'object': (
+    'bg': #06b6d4,      // Cyan - secondary entity
+    'text': #ffffff     // White text on cyan
+  )
+);
+
+// Generate Bootstrap-compatible color classes for all our semantic colors
+@each $name, $colors in $lifespan-colors {
+  $bg-color: map-get($colors, 'bg');
+  $text-color: map-get($colors, 'text');
+  
+  // Button variants with custom text color
+  .btn-#{$name} {
+    background-color: $bg-color !important;
+    border-color: $bg-color !important;
+    color: $text-color !important;
+    
+    &:hover {
+      background-color: color.scale($bg-color, $lightness: -10%) !important;
+      border-color: color.scale($bg-color, $lightness: -10%) !important;
+      color: $text-color !important;
+    }
+    
+    &:focus {
+      background-color: color.scale($bg-color, $lightness: -10%) !important;
+      border-color: color.scale($bg-color, $lightness: -10%) !important;
+      color: $text-color !important;
+      box-shadow: 0 0 0 0.2rem color.scale($bg-color, $alpha: -50%) !important;
+    }
+  }
+  
+  .btn-outline-#{$name} {
+    background-color: transparent !important;
+    border-color: $bg-color !important;
+    color: $bg-color !important;
+    
+    &:hover {
+      background-color: $bg-color !important;
+      border-color: $bg-color !important;
+      color: $text-color !important;
+    }
+    
+    &:focus {
+      background-color: $bg-color !important;
+      border-color: $bg-color !important;
+      color: $text-color !important;
+      box-shadow: 0 0 0 0.2rem color.scale($bg-color, $alpha: -50%) !important;
+    }
+  }
+  
+  // Badge variants
+  .bg-#{$name} {
+    background-color: $bg-color !important;
+    color: $text-color !important;
+  }
+  
+  .text-#{$name} {
+    color: $bg-color !important;
+  }
+  
+  .border-#{$name} {
+    border-color: $bg-color !important;
+  }
+  
+  // Alert variants (simplified for Bootstrap 5)
+  .alert-#{$name} {
+    color: $bg-color;
+    background-color: color.scale($bg-color, $lightness: 95%);
+    border-color: color.scale($bg-color, $lightness: 80%);
+    
+    .alert-link {
+      color: color.scale($bg-color, $lightness: -10%);
+    }
+  }
+  
+  // Form control focus states
+  .form-control:focus.is-#{$name} {
+    border-color: $bg-color;
+    box-shadow: 0 0 0 0.2rem color.scale($bg-color, $alpha: -80%);
+  }
+  
+  // Link colors
+  .link-#{$name} {
+    color: $bg-color;
+    text-decoration: none;
+    
+    &:hover {
+      color: color.scale($bg-color, $lightness: -10%);
+    }
+  }
+}
+
+// Special utility classes for interactive cards
+.interactive-card-base {
+  .btn-group {
+    .btn {
+      // Ensure consistent spacing and sizing
+      font-size: 0.875rem;
+      padding: 0.25rem 0.5rem;
+      
+      // Smooth transitions for hover states
+      transition: all 0.15s ease-in-out;
+      
+      // Ensure consistent border styling in button groups
+      &:not(:first-child) {
+        margin-left: -1px; // Overlap borders for seamless appearance
+      }
+      
+      // Ensure consistent border colors between adjacent buttons
+      &:hover {
+        z-index: 1; // Bring hovered button to front
+      }
+      
+      // Force consistent border color for all buttons in group
+      border-color: #dee2e6 !important;
+      
+      // Inactive button styling (for connectors and predicates)
+      &.inactive {
+        background-color: #f8f9fa;
+        border-color: #dee2e6;
+        color: #6c757d;
+        cursor: default;
+        
+        &:hover {
+          background-color: #f8f9fa;
+          border-color: #dee2e6;
+          color: #6c757d;
+        }
+      }
+      
+      // Disabled button styling (for icons)
+      &.disabled {
+        opacity: 0.6;
+        cursor: default;
+      }
+    }
+  }
+}
+
+// Custom colors (keeping existing ones for backward compatibility)
 $subject: #0d6efd;  // Bootstrap primary
 $object: #0dcaf0;   // Bootstrap info
 
@@ -145,11 +413,23 @@ main {
     z-index: 1050;
 }
 
-// Custom badge styles
+// Legacy badge styles (keeping for backward compatibility)
 .bg-subject {
     background-color: $subject !important;
 }
 
 .bg-object {
     background-color: $object !important;
+}
+
+.btn-placeholder {
+  color: #ffffff !important; // White text
+  border-color: #dc2626 !important;
+  background-color: #dc2626 !important; // Red background
+  
+  &:hover, &:focus, &:active {
+    color: #dc2626 !important;
+    background-color: #f8d7da !important; // Light red background for contrast
+    border-color: #dc2626 !important;
+  }
 } 

@@ -40,29 +40,6 @@
     }
 }
 
-// Button group styling
-.btn-group {
-    > .btn {
-        &:not(:first-child):not(:last-child) {
-            border-radius: 0;
-        }
-
-        &:first-child {
-            border-top-right-radius: 0;
-            border-bottom-right-radius: 0;
-        }
-
-        &:last-child {
-            border-top-left-radius: 0;
-            border-bottom-left-radius: 0;
-        }
-
-        &:only-child {
-            border-radius: 0.25rem;
-        }
-    }
-}
-
 #customUserDropdownToggle {
     .spans-micro-card {
         color: inherit;
