@@ -180,4 +180,42 @@ class Connection extends Model
             }
         });
     }
+
+    /**
+     * Get the effective sort date for this connection (handles nested connections)
+     *
+     * @return array
+     */
+    public function getEffectiveSortDate(): array
+    {
+        // For has_role connections, check for nested at_organisation dates
+        if ($this->type_id === 'has_role' && $this->connectionSpan) {
+            // Load nested connections
+            $this->connectionSpan->load([
+                'connectionsAsSubject.child.type',
+                'connectionsAsSubject.type',
+                'connectionsAsSubject.connectionSpan'
+            ]);
+
+            // Look for at_organisation connections with dates
+            foreach ($this->connectionSpan->connectionsAsSubject as $nestedConnection) {
+                if ($nestedConnection->type_id === 'at_organisation' && $nestedConnection->connectionSpan) {
+                    $nestedSpan = $nestedConnection->connectionSpan;
+                    return [
+                        $nestedSpan->start_year ?? PHP_INT_MAX,
+                        $nestedSpan->start_month ?? PHP_INT_MAX,
+                        $nestedSpan->start_day ?? PHP_INT_MAX
+                    ];
+                }
+            }
+        }
+
+        // Default to connection span dates
+        $span = $this->connectionSpan;
+        return [
+            $span->start_year ?? PHP_INT_MAX,
+            $span->start_month ?? PHP_INT_MAX,
+            $span->start_day ?? PHP_INT_MAX
+        ];
+    }
 } 

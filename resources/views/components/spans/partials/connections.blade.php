@@ -9,12 +9,7 @@
             ->with(['connectionSpan', 'child', 'type'])
             ->get()
             ->sortBy(function ($connection) {
-                $span = $connection->connectionSpan;
-                return [
-                    $span->start_year ?? PHP_INT_MAX,
-                    $span->start_month ?? PHP_INT_MAX,
-                    $span->start_day ?? PHP_INT_MAX
-                ];
+                return $connection->getEffectiveSortDate();
             });
     }
 
@@ -25,12 +20,7 @@
             ->with(['connectionSpan', 'parent', 'type'])
             ->get()
             ->sortBy(function ($connection) {
-                $span = $connection->connectionSpan;
-                return [
-                    $span->start_year ?? PHP_INT_MAX,
-                    $span->start_month ?? PHP_INT_MAX,
-                    $span->start_day ?? PHP_INT_MAX
-                ];
+                return $connection->getEffectiveSortDate();
             });
     }
 @endphp
@@ -45,7 +35,7 @@
                 <div class="connection-spans mb-4">
                     @foreach($parentConnections as $connection)
                         @if($connection->connectionSpan)
-                            <x-connections.card :connection="$connection" />
+                            <x-connections.interactive-card :connection="$connection" />
                         @endif
                     @endforeach
                 </div>
@@ -56,7 +46,7 @@
                 <div class="connection-spans">
                     @foreach($childConnections as $connection)
                         @if($connection->connectionSpan)
-                            <x-connections.card :connection="$connection" />
+                            <x-connections.interactive-card :connection="$connection" />
                         @endif
                     @endforeach
                 </div>
