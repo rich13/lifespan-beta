@@ -198,22 +198,55 @@ function renderMiniComparisonTimeline_{{ str_replace('-', '_', $span->id) }}(dat
         .selectAll('text')
         .style('font-size', '10px');
 
-    // Define colors for different connection types
+    // Define colors for different connection types - now reading from CSS
+    function getConnectionColor(typeId) {
+        // Try to get color from CSS custom property first
+        const cssColor = getComputedStyle(document.documentElement)
+            .getPropertyValue(`--connection-${typeId}-color`);
+        
+        if (cssColor && cssColor.trim() !== '') {
+            return cssColor.trim();
+        }
+        
+        // Fallback to a function that reads from the existing CSS classes
+        const testElement = document.createElement('div');
+        testElement.className = `bg-${typeId}`;
+        testElement.style.display = 'none';
+        document.body.appendChild(testElement);
+        
+        const computedStyle = getComputedStyle(testElement);
+        const backgroundColor = computedStyle.backgroundColor;
+        
+        document.body.removeChild(testElement);
+        
+        // If we got a valid color, return it
+        if (backgroundColor && backgroundColor !== 'rgba(0, 0, 0, 0)' && backgroundColor !== 'transparent') {
+            return backgroundColor;
+        }
+        
+        // Final fallback colors
+        const fallbackColors = {
+            'residence': '#007bff',
+            'employment': '#28a745',
+            'education': '#ffc107',
+            'membership': '#dc3545',
+            'family': '#6f42c1',
+            'relationship': '#fd7e14',
+            'travel': '#20c997',
+            'participation': '#e83e8c',
+            'ownership': '#6c757d',
+            'created': '#17a2b8',
+            'contains': '#6610f2',
+            'has_role': '#fd7e14',
+            'at_organisation': '#20c997',
+            'life': '#000000' // Black for the life span
+        };
+        
+        return fallbackColors[typeId] || '#6c757d';
+    }
+
     const connectionColors = {
-        'residence': '#007bff',
-        'employment': '#28a745',
-        'education': '#ffc107',
-        'membership': '#dc3545',
-        'family': '#6f42c1',
-        'relationship': '#fd7e14',
-        'travel': '#20c997',
-        'participation': '#e83e8c',
-        'ownership': '#6c757d',
-        'created': '#17a2b8',
-        'contains': '#6610f2',
-        'has_role': '#fd7e14',
-        'at_organisation': '#20c997',
-        'life': '#000000' // Black for the life span
+        'life': '#000000' // Keep life span color as black
     };
 
     // Calculate swimlane positions
@@ -273,7 +306,7 @@ function renderMiniComparisonTimeline_{{ str_replace('-', '_', $span->id) }}(dat
                 return xScale(endYear) - xScale(d.start_year);
             })
             .attr('height', swimlaneHeight - 4)
-            .attr('fill', d => connectionColors[d.type_id] || '#6c757d')
+            .attr('fill', d => getConnectionColor(d.type_id))
             .attr('stroke', 'white')
             .attr('stroke-width', 0.5)
             .attr('rx', 1)
@@ -296,7 +329,7 @@ function renderMiniComparisonTimeline_{{ str_replace('-', '_', $span->id) }}(dat
                 return xScale(endYear) - xScale(d.start_year);
             })
             .attr('height', swimlaneHeight - 4)
-            .attr('fill', d => connectionColors[d.type_id] || '#6c757d')
+            .attr('fill', d => getConnectionColor(d.type_id))
             .attr('stroke', 'white')
             .attr('stroke-width', 0.5)
             .attr('rx', 1)

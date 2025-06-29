@@ -432,4 +432,16 @@ main {
     background-color: #f8d7da !important; // Light red background for contrast
     border-color: #dc2626 !important;
   }
+}
+
+// ============================================================================
+// CSS CUSTOM PROPERTIES FOR JAVASCRIPT ACCESS
+// ============================================================================
+
+// Make connection colors available to JavaScript via CSS custom properties
+:root {
+  @each $name, $colors in $lifespan-colors {
+    $bg-color: map-get($colors, 'bg');
+    --connection-#{$name}-color: #{$bg-color};
+  }
 } 
