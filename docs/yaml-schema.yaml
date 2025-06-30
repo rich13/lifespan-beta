@@ -1,0 +1,212 @@
+# Lifespan YAML Schema
+# This file shows the complete structure for span data in YAML format
+# All dates should be quoted to avoid YAML interpreting them as mathematical expressions
+
+# Basic span information
+id: "<UUID>"  # UUID - required for existing spans, omit for new spans
+name: "<Full Name>"  # Full name - required
+type: "<span_type>"  # Required: person, organisation, place, event, thing, band, role
+state: "<state>"  # Required: complete, draft, placeholder
+start: "<YYYY-MM-DD>"  # Start date in YYYY-MM-DD format, or YYYY-MM, or YYYY
+end: null  # End date in same format, or null if ongoing
+description: "<Description>"  # Optional description
+notes: "<Notes>"  # Optional notes
+metadata:
+  # Person-specific metadata
+  gender: "<gender>"  # male, female, other, or null
+  birth_name: "<Birth Name>"  # Birth name if different from current name, or null
+  nationality: "<Nationality>"  # Nationality, or null
+  occupation: "<Occupation>"  # Current or primary occupation, or null
+  
+  # Organisation-specific metadata
+  org_type: "<org_type>"  # business, educational, government, non-profit, religious, other
+  industry: "<Industry>"  # Primary industry or sector, or null
+  size: "<size>"  # small, medium, large, or null
+  
+  # Place-specific metadata
+  place_type: "<place_type>"  # city, country, region, building, landmark, other
+  coordinates: "<lat,long>"  # Geographic coordinates, or null
+  country: "<Country>"  # Country where this place is located, or null
+  
+  # Event-specific metadata
+  event_type: "<event_type>"  # personal, historical, cultural, political, other
+  significance: "<Significance>"  # Why this event is significant, or null
+  location: "<Location>"  # Where the event took place, or null
+  
+  # Thing-specific metadata
+  creator: "<Creator Span ID>"  # UUID of creator span, or null
+  subtype: "<subtype>"  # album, song, book, film, etc., or null
+  
+  # General metadata
+  tags: ["<tag1>", "<tag2>"]  # Array of tags for categorization
+
+# Sources (optional)
+sources: ["<source1>", "<source2>"]  # Array of source references
+
+# Access control
+access_level: "<access_level>"  # private, public
+permissions: 0  # Numeric permission code
+permission_mode: "<permission_mode>"  # own, shared, inherited
+
+# Connections - relationships to other spans
+connections:
+  # Family connections (special handling - maps to 'family' connection type)
+  children:
+    - name: "<Child Name>"
+      id: "<UUID>"
+      type: "person"
+      connection_id: "<UUID>"
+      start_date: "<YYYY-MM-DD>"  # Date of birth
+      metadata:
+        relationship: "<relationship>"  # child, adopted, step-child, etc.
+
+  parents:
+    - name: "<Parent Name>"
+      id: "<UUID>"
+      type: "person"
+      connection_id: "<UUID>"
+      start_date: "<YYYY-MM-DD or YYYY>"
+      metadata:
+        relationship: "<relationship>"  # father, mother, step-father, step-mother, etc.
+
+  # Education connections
+  education:
+    - name: "<Institution Name>"
+      id: "<UUID>"
+      type: "organisation"
+      connection_id: "<UUID>"
+      start_date: "<YYYY-MM or YYYY>"
+      end_date: "<YYYY-MM or YYYY>"
+      metadata:
+        level: "<level>"  # primary, secondary, undergraduate, postgraduate
+        course: "<Course Name>"  # Course name, or null
+        degree: "<Degree>"  # Degree awarded, or null
+
+  # Employment connections
+  employment:
+    - name: "<Organisation Name>"
+      id: "<UUID>"
+      type: "organisation"
+      connection_id: "<UUID>"
+      start_date: "<YYYY-MM or YYYY>"
+      end_date: "<YYYY-MM or null>"
+      metadata:
+        role: "<Job Title>"  # Job title, or null
+        notes: "<Notes>"  # Additional notes, or null
+        connection_type: "<connection_type>"  # full-time, part-time, contract, freelance, etc.
+
+  # Residence connections
+  residence:
+    - name: "<Place Name>"
+      id: "<UUID>"
+      type: "place"
+      connection_id: "<UUID>"
+      start_date: "<YYYY-MM-DD or YYYY>"
+      end_date: "<YYYY-MM-DD or null>"
+      metadata:
+        reason: "<reason>"  # childhood, university, career, retirement, etc.
+        address: "<Address>"  # Specific address, or null
+
+  # Relationship connections
+  relationship:
+    - name: "<Partner Name>"
+      id: "<UUID>"
+      type: "person"
+      connection_id: "<UUID>"
+      start_date: "<YYYY-MM-DD or YYYY>"
+      end_date: "<YYYY-MM-DD or YYYY>"
+      metadata:
+        type: "<type>"  # marriage, partnership, dating, etc.
+        status: "<status>"  # married, divorced, separated, etc.
+
+  # Membership connections
+  membership:
+    - name: "<Group or Band Name>"
+      id: "<UUID>"
+      type: "band"
+      connection_id: "<UUID>"
+      start_date: "<YYYY-MM or YYYY>"
+      end_date: "<YYYY-MM or null>"
+      metadata:
+        role: "<Role>"  # Role in the group, or null
+        notes: "<Notes>"  # Additional notes, or null
+        connection_type: "<connection_type>"  # founding-member, member, guest, etc.
+
+  # Travel connections
+  travel:
+    - name: "<Place Name>"
+      id: "<UUID>"
+      type: "place"
+      connection_id: "<UUID>"
+      start_date: "<YYYY-MM-DD>"
+      end_date: "<YYYY-MM-DD>"
+      metadata:
+        purpose: "<purpose>"  # vacation, business, study, etc.
+        notes: "<Notes>"
+
+  # Ownership connections
+  ownership:
+    - name: "<Thing Name>"
+      id: "<UUID>"
+      type: "thing"
+      connection_id: "<UUID>"
+      start_date: "<YYYY-MM>"
+      metadata:
+        type: "<type>"  # property, vehicle, business, etc.
+        notes: "<Notes>"
+
+  # Participation in events
+  participation:
+    - name: "<Event Name>"
+      id: "<UUID>"
+      type: "event"
+      connection_id: "<UUID>"
+      start_date: "<YYYY-MM-DD>"
+      end_date: "<YYYY-MM-DD>"
+      metadata:
+        role: "<role>"  # participant, spectator, organizer, etc.
+        notes: "<Notes>"
+
+  # Attendance connections
+  attendance:
+    - name: "<Institution Name>"
+      id: "<UUID>"
+      type: "organisation"
+      connection_id: "<UUID>"
+      start_date: "<YYYY-MM or YYYY>"
+      end_date: "<YYYY-MM or YYYY>"
+      metadata:
+        role: "<Role>"  # student, teacher, visitor, etc.
+        notes: "<Notes>"
+
+  # Role connections with nested connections
+  has_role:
+    - name: "<Role Title>"
+      id: "<UUID>"
+      type: "role"
+      connection_id: "<UUID>"
+      start_date: "<YYYY-MM or YYYY>"
+      end_date: "<YYYY-MM or null>"
+      metadata:
+        role: "<Role Details>"  # Additional role details, or null
+        notes: "<Notes>"  # Additional notes, or null
+        connection_type: "<connection_type>"  # Connection type, or null
+      # Nested connections - relationships FROM this role TO other entities
+      nested_connections:
+        - type: "at_organisation"  # Connection type from the role
+          direction: "outgoing"  # outgoing (role -> target) or incoming (target -> role)
+          target_name: "<Organisation Name>"  # Name of the target entity
+          target_id: "<UUID>"  # UUID of target entity, or omit for new entities
+          target_type: "organisation"  # Type of target entity
+
+# Notes:
+# - All dates should be quoted to prevent YAML from interpreting them as mathematical expressions
+# - UUIDs should be valid UUID v4 format
+# - For new spans that don't exist in the database, omit the 'id' field
+# - For new connections, omit the 'connection_id' field
+# - Nested connections allow complex relationships like "Person has Role at Organisation"
+# - Metadata fields are optional and can contain any additional information
+# - Connection types can be extended based on your specific needs
+# - Span types: person, organisation, place, event, thing, band, role
+# - Connection types: employment, residence, attendance, ownership, membership, family, relationship, travel, participation, education, has_role
+# - Family connections are special: 'parents' and 'children' map to the 'family' connection type 

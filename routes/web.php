@@ -272,7 +272,7 @@ Route::middleware('web')->group(function () {
             });
         });
 
-        // Public routes
+        // Public routes with span access control
         Route::middleware('span.access')->group(function () {
             Route::get('/', [SpanController::class, 'index'])->name('spans.index');
             Route::get('/{span}', [SpanController::class, 'show'])->name('spans.show');

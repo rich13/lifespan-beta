@@ -1,0 +1,364 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\SpanType;
+use App\Models\ConnectionType;
+use Illuminate\Support\Facades\Log;
+
+class YamlValidationService
+{
+    /**
+     * Validate YAML structure against database schema
+     */
+    public function validateSchema(array $data): array
+    {
+        $errors = [];
+        
+        // Get base schema from database
+        $baseSchema = $this->getBaseSchema();
+        
+        // Check for unknown fields
+        foreach ($data as $field => $value) {
+            if (!isset($baseSchema[$field])) {
+                $errors[] = "Unknown field '{$field}'. Valid fields are: " . implode(', ', array_keys($baseSchema));
+            }
+        }
+        
+        // Check required fields
+        foreach ($baseSchema as $field => $config) {
+            if ($config['required'] && !isset($data[$field])) {
+                $errors[] = "Required field '{$field}' is missing";
+            }
+        }
+        
+        // Check data types
+        foreach ($data as $field => $value) {
+            if (isset($baseSchema[$field])) {
+                $expectedType = $baseSchema[$field]['type'];
+                $actualType = $this->getValueType($value);
+                
+                if (!$this->isTypeCompatible($actualType, $expectedType)) {
+                    $errors[] = "Field '{$field}' should be of type '{$expectedType}', got '{$actualType}'";
+                }
+            }
+        }
+        
+        // Validate metadata structure if present
+        if (isset($data['metadata']) && is_array($data['metadata'])) {
+            $metadataErrors = $this->validateMetadataStructure($data['metadata'], $data['type'] ?? null);
+            $errors = array_merge($errors, $metadataErrors);
+        }
+        
+        // Validate connections structure if present
+        if (isset($data['connections']) && is_array($data['connections'])) {
+            $connectionErrors = $this->validateConnectionSchema($data['connections']);
+            $errors = array_merge($errors, $connectionErrors);
+        }
+        
+        return $errors;
+    }
+    
+    /**
+     * Get base schema from database configuration
+     */
+    private function getBaseSchema(): array
+    {
+        return [
+            'id' => ['type' => 'string', 'required' => false],
+            'name' => ['type' => 'string', 'required' => true],
+            'type' => ['type' => 'string', 'required' => true],
+            'state' => ['type' => 'string', 'required' => false],
+            'start' => ['type' => 'string', 'required' => false],
+            'end' => ['type' => 'string|null', 'required' => false],
+            'description' => ['type' => 'string|null', 'required' => false],
+            'notes' => ['type' => 'string|null', 'required' => false],
+            'metadata' => ['type' => 'array', 'required' => false],
+            'sources' => ['type' => 'array|null', 'required' => false],
+            'access_level' => ['type' => 'string', 'required' => false],
+            'connections' => ['type' => 'array', 'required' => false],
+        ];
+    }
+    
+    /**
+     * Validate metadata structure based on span type from database
+     */
+    private function validateMetadataStructure(array $metadata, ?string $spanType): array
+    {
+        $errors = [];
+        
+        if (!$spanType) {
+            return $errors;
+        }
+        
+        // Get span type from database
+        $spanTypeModel = SpanType::where('type_id', $spanType)->first();
+        if (!$spanTypeModel) {
+            $errors[] = "Unknown span type '{$spanType}'";
+            return $errors;
+        }
+        
+        // Get metadata schema from database
+        $metadataSchema = $spanTypeModel->metadata['schema'] ?? [];
+        
+        // Check for unknown metadata fields
+        foreach ($metadata as $field => $value) {
+            if (!isset($metadataSchema[$field])) {
+                $validFields = array_keys($metadataSchema);
+                $errors[] = "Unknown metadata field '{$field}' for span type '{$spanType}'. Valid fields are: " . implode(', ', $validFields);
+            }
+        }
+        
+        // Check data types and required fields
+        foreach ($metadataSchema as $field => $config) {
+            if (isset($metadata[$field])) {
+                $expectedType = $this->mapSchemaTypeToValidationType($config['type'] ?? 'text');
+                $actualType = $this->getValueType($metadata[$field]);
+                
+                if (!$this->isTypeCompatible($actualType, $expectedType)) {
+                    $errors[] = "Metadata field '{$field}' should be of type '{$expectedType}', got '{$actualType}'";
+                }
+            } elseif ($config['required'] ?? false) {
+                $errors[] = "Required metadata field '{$field}' is missing for span type '{$spanType}'";
+            }
+        }
+        
+        return $errors;
+    }
+    
+    /**
+     * Validate connection schema structure using database connection types
+     */
+    private function validateConnectionSchema(array $connections): array
+    {
+        $errors = [];
+        
+        // Get valid connection types from database
+        $validConnectionTypes = ConnectionType::pluck('type')->toArray();
+        $validConnectionTypes = array_merge($validConnectionTypes, ['parents', 'children']); // Special family handling
+        
+        // Define connection item schema
+        $connectionItemSchema = [
+            'name' => ['type' => 'string', 'required' => true],
+            'id' => ['type' => 'string', 'required' => false],
+            'type' => ['type' => 'string', 'required' => true],
+            'connection_id' => ['type' => 'string', 'required' => false],
+            'start_date' => ['type' => 'string|integer', 'required' => false],
+            'end_date' => ['type' => 'string|integer', 'required' => false],
+            'metadata' => ['type' => 'array', 'required' => false],
+            'nested_connections' => ['type' => 'array', 'required' => false],
+        ];
+        
+        foreach ($connections as $connectionType => $connectionList) {
+            // Validate connection type
+            if (!in_array($connectionType, $validConnectionTypes) && !str_ends_with($connectionType, '_incoming')) {
+                $errors[] = "Unknown connection type '{$connectionType}'. Valid types are: " . implode(', ', $validConnectionTypes);
+                continue;
+            }
+            
+            if (!is_array($connectionList)) {
+                $errors[] = "Connection type '{$connectionType}' must be an array";
+                continue;
+            }
+            
+            foreach ($connectionList as $index => $connection) {
+                if (!is_array($connection)) {
+                    $errors[] = "Connection {$index} in '{$connectionType}' must be an array";
+                    continue;
+                }
+                
+                // Check for unknown fields
+                foreach ($connection as $field => $value) {
+                    if (!isset($connectionItemSchema[$field])) {
+                        $errors[] = "Unknown field '{$field}' in connection {$index} of type '{$connectionType}'. Valid fields are: " . implode(', ', array_keys($connectionItemSchema));
+                    }
+                }
+                
+                // Check required fields
+                foreach ($connectionItemSchema as $field => $config) {
+                    if ($config['required'] && !isset($connection[$field])) {
+                        $errors[] = "Required field '{$field}' is missing in connection {$index} of type '{$connectionType}'";
+                    }
+                }
+                
+                // Check data types
+                foreach ($connection as $field => $value) {
+                    if (isset($connectionItemSchema[$field])) {
+                        $expectedType = $connectionItemSchema[$field]['type'];
+                        $actualType = $this->getValueType($value);
+                        // Accept string or integer for start_date and end_date
+                        if (in_array($field, ['start_date', 'end_date'])) {
+                            if (!in_array($actualType, ['string', 'integer'])) {
+                                $errors[] = "Field '{$field}' in connection {$index} of type '{$connectionType}' should be a string or integer, got '{$actualType}'";
+                            }
+                        } else if (!$this->isTypeCompatible($actualType, $expectedType)) {
+                            $errors[] = "Field '{$field}' in connection {$index} of type '{$connectionType}' should be of type '{$expectedType}', got '{$actualType}'";
+                        }
+                    }
+                }
+                
+                // Validate nested connections if present
+                if (isset($connection['nested_connections']) && is_array($connection['nested_connections'])) {
+                    $nestedErrors = $this->validateNestedConnectionSchema($connection['nested_connections'], $connectionType, $index);
+                    $errors = array_merge($errors, $nestedErrors);
+                }
+            }
+        }
+        
+        return $errors;
+    }
+    
+    /**
+     * Validate nested connection schema structure
+     */
+    private function validateNestedConnectionSchema(array $nestedConnections, string $connectionType, int $connectionIndex): array
+    {
+        $errors = [];
+        
+        $nestedSchema = [
+            'type' => ['type' => 'string', 'required' => true],
+            'direction' => ['type' => 'string', 'required' => false],
+            'target_name' => ['type' => 'string', 'required' => true],
+            'target_id' => ['type' => 'string', 'required' => false],
+            'target_type' => ['type' => 'string', 'required' => true],
+            'start_date' => ['type' => 'string|integer', 'required' => false],
+            'end_date' => ['type' => 'string|integer', 'required' => false],
+        ];
+        
+        foreach ($nestedConnections as $index => $nestedConnection) {
+            if (!is_array($nestedConnection)) {
+                $errors[] = "Nested connection {$index} in connection {$connectionIndex} of type '{$connectionType}' must be an array";
+                continue;
+            }
+            
+            // Check for unknown fields
+            foreach ($nestedConnection as $field => $value) {
+                if (!isset($nestedSchema[$field])) {
+                    $errors[] = "Unknown field '{$field}' in nested connection {$index} of connection {$connectionIndex} in type '{$connectionType}'. Valid fields are: " . implode(', ', array_keys($nestedSchema));
+                }
+            }
+            
+            // Check required fields
+            foreach ($nestedSchema as $field => $config) {
+                if ($config['required'] && !isset($nestedConnection[$field])) {
+                    $errors[] = "Required field '{$field}' is missing in nested connection {$index} of connection {$connectionIndex} in type '{$connectionType}'";
+                }
+            }
+            
+            // Check data types
+            foreach ($nestedConnection as $field => $value) {
+                if (isset($nestedSchema[$field])) {
+                    $expectedType = $nestedSchema[$field]['type'];
+                    $actualType = $this->getValueType($value);
+                    // Accept string or integer for start_date and end_date
+                    if (in_array($field, ['start_date', 'end_date'])) {
+                        if (!in_array($actualType, ['string', 'integer'])) {
+                            $errors[] = "Field '{$field}' in nested connection {$index} of connection {$connectionIndex} in type '{$connectionType}' should be a string or integer, got '{$actualType}'";
+                        }
+                    } else if (!$this->isTypeCompatible($actualType, $expectedType)) {
+                        $errors[] = "Field '{$field}' in nested connection {$index} of connection {$connectionIndex} in type '{$connectionType}' should be of type '{$expectedType}', got '{$actualType}'";
+                    }
+                }
+            }
+        }
+        
+        return $errors;
+    }
+    
+    /**
+     * Get the type of a value for validation
+     */
+    private function getValueType($value): string
+    {
+        if (is_null($value)) {
+            return 'null';
+        }
+        if (is_string($value)) {
+            return 'string';
+        }
+        if (is_int($value)) {
+            return 'integer';
+        }
+        if (is_float($value)) {
+            return 'float';
+        }
+        if (is_bool($value)) {
+            return 'boolean';
+        }
+        if (is_array($value)) {
+            return 'array';
+        }
+        return 'unknown';
+    }
+    
+    /**
+     * Check if actual type is compatible with expected type
+     */
+    private function isTypeCompatible(string $actualType, string $expectedType): bool
+    {
+        // Handle nullable types (e.g., 'string|null', 'array|null')
+        if (str_contains($expectedType, '|')) {
+            $allowedTypes = explode('|', $expectedType);
+            return in_array($actualType, $allowedTypes);
+        }
+        
+        return $actualType === $expectedType;
+    }
+    
+    /**
+     * Map database schema types to validation types
+     */
+    private function mapSchemaTypeToValidationType(string $schemaType): string
+    {
+        $typeMap = [
+            'text' => 'string',
+            'textarea' => 'string',
+            'select' => 'string',
+            'span' => 'string', // Span references are stored as UUIDs (strings)
+            'array' => 'array',
+            'boolean' => 'boolean',
+            'integer' => 'integer',
+            'float' => 'float',
+        ];
+        
+        return $typeMap[$schemaType] ?? 'string';
+    }
+    
+    /**
+     * Validate span types against database
+     */
+    public function validateSpanType(string $spanType): bool
+    {
+        return SpanType::where('type_id', $spanType)->exists();
+    }
+    
+    /**
+     * Validate connection types against database
+     */
+    public function validateConnectionType(string $connectionType): bool
+    {
+        // Handle special family connection types
+        if (in_array($connectionType, ['parents', 'children'])) {
+            return true;
+        }
+        
+        return ConnectionType::where('type', $connectionType)->exists();
+    }
+    
+    /**
+     * Get all valid span types from database
+     */
+    public function getValidSpanTypes(): array
+    {
+        return SpanType::pluck('type_id')->toArray();
+    }
+    
+    /**
+     * Get all valid connection types from database
+     */
+    public function getValidConnectionTypes(): array
+    {
+        $types = ConnectionType::pluck('type')->toArray();
+        return array_merge($types, ['parents', 'children']); // Include special family types
+    }
+} 

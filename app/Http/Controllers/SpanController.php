@@ -766,6 +766,9 @@ class SpanController extends Controller
     {
         $this->authorize('update', $span);
         
+        // Eager load connections for proper comparison in the changes summary
+        $span->load(['connectionsAsSubject.type', 'connectionsAsObject.type']);
+        
         // Convert span to YAML
         $yamlContent = $this->yamlService->spanToYaml($span);
         
@@ -826,7 +829,7 @@ class SpanController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => $applyResult['message'],
-                'redirect' => route('spans.show', $span)
+                'redirect' => route('spans.yaml-editor', $span)
             ]);
         } else {
             return response()->json([

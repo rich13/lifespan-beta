@@ -37,11 +37,6 @@ class YamlSpanService
             $result = '';
             $isSequential = array_keys($data) === range(0, count($data) - 1);
             
-            // Handle empty arrays - always output them
-            if (empty($data)) {
-                return '{}';
-            }
-            
             foreach ($data as $key => $value) {
                 $indentation = str_repeat(' ', $level * $indent);
                 
@@ -52,11 +47,7 @@ class YamlSpanService
                 }
                 
                 if (is_array($value)) {
-                    if (empty($value)) {
-                        $result .= "{}\n";
-                    } else {
-                        $result .= "\n" . $this->dumpYamlWithQuotedDates($value, $inline, $indent, $level + 1);
-                    }
+                    $result .= "\n" . $this->dumpYamlWithQuotedDates($value, $inline, $indent, $level + 1);
                 } else {
                     $result .= $this->formatValue($value) . "\n";
                 }
@@ -122,23 +113,35 @@ class YamlSpanService
         ]);
 
         $data = [
+            'id' => $span->id,
             'name' => $span->name,
             'type' => $span->type_id,
             'state' => $span->state,
-            'description' => $span->description,
-            'notes' => $span->notes,
-            'metadata' => $span->metadata ?? [],
-            'sources' => $span->sources,
-            'access_level' => $span->access_level,
         ];
-        // Add start and end as strings if present
-        $start = $span->getFormattedStartDateAttribute();
-        if ($start) {
+
+        // Add dates if present
+        if ($span->start_year) {
+            $start = (string) $span->start_year;
+            if ($span->start_month) {
+                $start .= '-' . str_pad($span->start_month, 2, '0', STR_PAD_LEFT);
+                if ($span->start_day) {
+                    $start .= '-' . str_pad($span->start_day, 2, '0', STR_PAD_LEFT);
+                }
+            }
             $data['start'] = $start;
         }
-        $end = $span->getFormattedEndDateAttribute();
-        if ($end) {
+
+        if ($span->end_year) {
+            $end = (string) $span->end_year;
+            if ($span->end_month) {
+                $end .= '-' . str_pad($span->end_month, 2, '0', STR_PAD_LEFT);
+                if ($span->end_day) {
+                    $end .= '-' . str_pad($span->end_day, 2, '0', STR_PAD_LEFT);
+                }
+            }
             $data['end'] = $end;
+        } else {
+            $data['end'] = null;
         }
 
         // Add optional fields
@@ -149,8 +152,10 @@ class YamlSpanService
             $data['notes'] = $span->notes;
         }
 
-        // Add metadata (always include for consistency)
-        $data['metadata'] = $span->metadata ?? [];
+        // Add metadata (excluding empty arrays/nulls)
+        if (!empty($span->metadata)) {
+            $data['metadata'] = $span->metadata;
+        }
 
         // Add sources if present
         if (!empty($span->sources)) {
@@ -159,6 +164,8 @@ class YamlSpanService
 
         // Add access control information
         $data['access_level'] = $span->access_level;
+        $data['permissions'] = $span->permissions;
+        $data['permission_mode'] = $span->permission_mode;
 
         // Group connections by type with special handling for family relationships
         $connections = [];
@@ -279,10 +286,7 @@ class YamlSpanService
             $data = Yaml::parse($yamlContent);
             
             if (!is_array($data)) {
-                return [
-                    'success' => false,
-                    'errors' => ['YAML must parse to an array']
-                ];
+                throw new \InvalidArgumentException('YAML must parse to an array');
             }
             
             // Use the new validation service for schema validation
@@ -290,10 +294,7 @@ class YamlSpanService
             $schemaErrors = $validationService->validateSchema($data);
             
             if (!empty($schemaErrors)) {
-                return [
-                    'success' => false,
-                    'errors' => $schemaErrors
-                ];
+                throw new \InvalidArgumentException("Schema validation failed:\n" . implode("\n", $schemaErrors));
             }
             
             // Then validate required fields
@@ -305,26 +306,10 @@ class YamlSpanService
             // Validate connections
             $this->validateConnections($data);
             
-            return [
-                'success' => true,
-                'data' => $data
-            ];
+            return $data;
             
         } catch (\Symfony\Component\Yaml\Exception\ParseException $e) {
-            return [
-                'success' => false,
-                'errors' => ['Invalid YAML syntax: ' . $e->getMessage()]
-            ];
-        } catch (\InvalidArgumentException $e) {
-            return [
-                'success' => false,
-                'errors' => [ $e->getMessage() ]
-            ];
-        } catch (\Exception $e) {
-            return [
-                'success' => false,
-                'errors' => ['Unexpected error: ' . $e->getMessage()]
-            ];
+            throw new \InvalidArgumentException('Invalid YAML syntax: ' . $e->getMessage());
         }
     }
     
@@ -638,6 +623,8 @@ class YamlSpanService
                 'end_month' => $validatedData['end_month'] ?? null,
                 'end_day' => $validatedData['end_day'] ?? null,
                 'access_level' => $validatedData['access_level'] ?? $span->access_level,
+                'permissions' => $validatedData['permissions'] ?? $span->permissions,
+                'permission_mode' => $validatedData['permission_mode'] ?? $span->permission_mode,
             ]);
 
             // Handle connections if present
@@ -842,13 +829,13 @@ class YamlSpanService
      */
     private function validateAndNormalizeDates(array &$data): void
     {
-        // Parse start and end dates from YAML if present
         if (isset($data['start'])) {
             $parsedStart = $this->parseDate($data['start']);
             $data['start_year'] = $parsedStart['year'];
             $data['start_month'] = $parsedStart['month'];
             $data['start_day'] = $parsedStart['day'];
         }
+        
         if (isset($data['end']) && $data['end'] !== null) {
             $parsedEnd = $this->parseDate($data['end']);
             $data['end_year'] = $parsedEnd['year'];
@@ -1084,7 +1071,7 @@ class YamlSpanService
                     
                     // Parse connection dates if present
                     $dates = null;
-                    if (isset($connectionData['start_date'])) {
+                    if (isset($connectionData['start_date']) || isset($connectionData['end_date'])) {
                         $dates = $connectionImporter->parseDatesFromStrings(
                             $connectionData['start_date'] ?? null,
                             $connectionData['end_date'] ?? null

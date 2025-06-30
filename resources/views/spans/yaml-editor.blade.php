@@ -322,6 +322,15 @@
                             </div>
                         </div>
                         
+                        <div id="changes-summary" class="mt-3" style="display: none;">
+                            <h6 class="text-primary mb-2">
+                                <i class="bi bi-list-check me-1"></i>Changes Summary
+                            </h6>
+                            <div id="changes-list">
+                                <!-- Changes will be listed here -->
+                            </div>
+                        </div>
+                        
                         <div id="impact-results" class="mt-3" style="display: none;">
                             <!-- Impact analysis will appear here -->
                         </div>
@@ -358,6 +367,12 @@
                     </h6>
                 </div>
                 <div class="card-body">
+                    <div class="mb-3">
+                        <a href="{{ asset('docs/yaml-schema.yaml') }}" target="_blank" class="btn btn-outline-info btn-sm w-100 mb-3">
+                            <i class="bi bi-file-text me-1"></i>View YAML Schema
+                        </a>
+                    </div>
+                    
                     <div class="mb-3">
                         <label class="form-label small mb-1">Add Connection:</label>
                         <div class="row g-2">
@@ -468,9 +483,6 @@
                             <button class="btn btn-outline-info btn-sm" onclick="addDateFields()">
                                 <i class="bi bi-calendar-range me-1"></i>Add Start/End Dates
                             </button>
-                            <button class="btn btn-outline-warning btn-sm" onclick="addAccessControl()">
-                                <i class="bi bi-shield-lock me-1"></i>Add Access Control
-                            </button>
                             <button class="btn btn-outline-success btn-sm" onclick="addCustomFields()">
                                 <i class="bi bi-gear me-1"></i>Add Custom Fields
                             </button>
@@ -573,6 +585,7 @@
 @endsection
 
 @push('scripts')
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
 <script>
 let yamlTextarea;
 let activeDropdown = null; // Track the currently active dropdown
@@ -585,7 +598,6 @@ $(document).ready(function() {
     const validationResults = $('#validation-results');
     const charCount = $('#char-count');
     
-    let validationTimer;
     let lastValidationResult = null;
     let originalContent = yamlTextarea.val();
     
@@ -603,6 +615,20 @@ $(document).ready(function() {
             .text(status);
     }
     
+    // Update apply button text based on state
+    function updateApplyButtonText() {
+        const hasChanges = yamlTextarea.val() !== originalContent;
+        const isValid = lastValidationResult && lastValidationResult.success;
+        
+        if (!hasChanges) {
+            applyBtn.html('<i class="bi bi-cloud-upload me-2"></i>No Changes to Apply');
+        } else if (!isValid) {
+            applyBtn.html('<i class="bi bi-cloud-upload me-2"></i>Validate YAML First');
+        } else {
+            applyBtn.html('<i class="bi bi-cloud-upload me-2"></i>Apply Changes to Database');
+        }
+    }
+    
     // Show validation results
     function showValidationResults(result) {
         let html = '';
@@ -618,12 +644,18 @@ $(document).ready(function() {
                 </div>
             `;
             yamlTextarea.removeClass('is-invalid').addClass('is-valid');
-            applyBtn.prop('disabled', false);
+            
+            // Only enable apply button if there are changes
+            const hasChanges = yamlTextarea.val() !== originalContent;
+            applyBtn.prop('disabled', !hasChanges);
+            updateApplyButtonText();
+            
             updateValidationStatus('Valid', 'success');
             
             // Show visual translation and impact analysis
             showVisualTranslation(result.visual || []);
             showImpactAnalysis(result.impacts || []);
+            showChangesSummary(result.data || {});
         } else {
             html = `
                 <div class="text-danger">
@@ -636,6 +668,7 @@ $(document).ready(function() {
             `;
             yamlTextarea.removeClass('is-valid').addClass('is-invalid');
             applyBtn.prop('disabled', true);
+            updateApplyButtonText();
             updateValidationStatus('Invalid', 'danger');
             
             // Hide visual translation and impact analysis on error  
@@ -646,6 +679,7 @@ $(document).ready(function() {
                 </div>
             `);
             $('#impact-results').hide();
+            $('#changes-summary').hide();
         }
         
         validationResults.html(html);
@@ -753,7 +787,7 @@ $(document).ready(function() {
                         <span class="badge ${badgeClass} me-2 mt-1">
                             <i class="${icon}"></i>
                         </span>
-                        <div class="small">${impact.message}</div>
+                        <div class="small ${impact.indent ? 'ms-4' : ''}">${impact.message}</div>
                     </div>
             `;
             
@@ -1036,7 +1070,9 @@ $(document).ready(function() {
             },
             complete: function() {
                 applyBtn.html(originalText);
-                applyBtn.prop('disabled', lastValidationResult && !lastValidationResult.success);
+                // After successful application, disable the button since there are no changes
+                applyBtn.prop('disabled', true);
+                updateApplyButtonText();
             }
         });
     }
@@ -1050,12 +1086,24 @@ $(document).ready(function() {
             yamlTextarea.removeClass('is-valid is-invalid');
             updateValidationStatus('Modified', 'warning');
             applyBtn.prop('disabled', true);
+            updateApplyButtonText();
             
-            // Clear existing timer
-            clearTimeout(validationTimer);
-            
-            // Set new timer for auto-validation
-            validationTimer = setTimeout(validateYaml, 1000);
+            // Hide analysis sections while editing
+            $('#changes-summary').hide();
+            $('#impact-results').hide();
+        } else {
+            // No changes - disable apply button and reset validation status
+            applyBtn.prop('disabled', true);
+            updateApplyButtonText();
+            updateValidationStatus('Ready', 'secondary');
+        }
+    });
+    
+    // Validate when user focuses away from the editor
+    yamlTextarea.on('blur', function() {
+        const hasChanges = yamlTextarea.val() !== originalContent;
+        if (hasChanges) {
+            validateYaml();
         }
     });
     
@@ -1092,9 +1140,14 @@ $(document).ready(function() {
     // Initial setup
     updateCharCount();
     
+    // Ensure apply button starts disabled
+    applyBtn.prop('disabled', true);
+    updateApplyButtonText();
+    
     // Auto-validate on load if content exists
     if (yamlTextarea.val().trim()) {
-        setTimeout(validateYaml, 500);
+        // Initialize visual translation for existing content
+        validateYaml();
     }
     
     // Connection search functionality
@@ -1396,20 +1449,10 @@ end: ''`;
         insertYamlAtLevel('root', dateTemplate);
     };
     
-    window.addAccessControl = function() {
-        const accessTemplate = `
-access_level: private
-permissions: 420
-permission_mode: own`;
-        
-        insertYamlAtLevel('root', accessTemplate);
-    };
-    
     window.addCustomFields = function() {
         const customTemplate = `
-custom_fields:
-  field_name: ''
-  another_field: ''`;
+metadata:
+  custom_field: 'value'`;
         
         insertYamlAtLevel('root', customTemplate);
     };
@@ -2024,6 +2067,371 @@ custom_fields:
         
         // Show feedback
         showUpdateFeedback(`Updated connector from "${oldConnector}" to "${newConnector}"`);
+    }
+
+    // Show changes summary
+    function showChangesSummary(newData) {
+        // Only show changes if the YAML content has actually been modified
+        const hasChanges = yamlTextarea.val() !== originalContent;
+        
+        if (!hasChanges) {
+            $('#changes-summary').hide();
+            return;
+        }
+        
+        if (!newData || Object.keys(newData).length === 0) {
+            $('#changes-summary').hide();
+            return;
+        }
+        
+        const changes = [];
+        
+        // Compare basic fields
+        const basicFields = ['name', 'type', 'state', 'description', 'notes', 'access_level'];
+        basicFields.forEach(field => {
+            if (newData[field] !== undefined) {
+                const currentValue = getCurrentSpanValue(field);
+                if (newData[field] !== currentValue) {
+                    changes.push({
+                        field: field,
+                        type: 'update',
+                        oldValue: currentValue,
+                        newValue: newData[field],
+                        category: 'basic'
+                    });
+                }
+            }
+        });
+        
+        // Compare dates
+        if (newData.start_year !== undefined || newData.start_month !== undefined || newData.start_day !== undefined) {
+            const currentStart = getCurrentSpanDate('start');
+            const newStart = formatDateForDisplay(newData.start_year, newData.start_month, newData.start_day);
+            if (currentStart !== newStart) {
+                changes.push({
+                    field: 'start_date',
+                    type: 'update',
+                    oldValue: currentStart,
+                    newValue: newStart,
+                    category: 'dates'
+                });
+            }
+        }
+        
+        if (newData.end_year !== undefined || newData.end_month !== undefined || newData.end_day !== undefined) {
+            const currentEnd = getCurrentSpanDate('end');
+            const newEnd = formatDateForDisplay(newData.end_year, newData.end_month, newData.end_day);
+            if (currentEnd !== newEnd) {
+                changes.push({
+                    field: 'end_date',
+                    type: 'update',
+                    oldValue: currentEnd,
+                    newValue: newEnd,
+                    category: 'dates'
+                });
+            }
+        }
+        
+        // Compare metadata
+        if (newData.metadata && Object.keys(newData.metadata).length > 0) {
+            const currentMetadata = getCurrentSpanValue('metadata') || {};
+            const metadataChanges = compareMetadata(currentMetadata, newData.metadata);
+            changes.push(...metadataChanges);
+        }
+        
+        // Compare connections using YAML comparison
+        if (newData.connections && Object.keys(newData.connections).length > 0) {
+            const connectionChanges = compareConnections(newData.connections);
+            changes.push(...connectionChanges);
+        }
+        
+        // Display changes
+        if (changes.length === 0) {
+            $('#changes-summary').hide();
+            return;
+        }
+        
+        let html = '';
+        const categories = {
+            'basic': { title: 'Basic Information', icon: 'bi-info-circle' },
+            'dates': { title: 'Dates', icon: 'bi-calendar-event' },
+            'metadata': { title: 'Metadata', icon: 'bi-tags' },
+            'connections': { title: 'Connections', icon: 'bi-diagram-3' }
+        };
+        
+        // Group changes by category
+        const groupedChanges = {};
+        changes.forEach(change => {
+            if (!groupedChanges[change.category]) {
+                groupedChanges[change.category] = [];
+            }
+            groupedChanges[change.category].push(change);
+        });
+        
+        Object.keys(groupedChanges).forEach(category => {
+            const categoryInfo = categories[category] || { title: category, icon: 'bi-gear' };
+            html += `
+                <div class="mb-3">
+                    <h6 class="text-muted mb-2">
+                        <i class="${categoryInfo.icon} me-1"></i>${categoryInfo.title}
+                    </h6>
+            `;
+            
+            groupedChanges[category].forEach(change => {
+                html += `
+                    <div class="small mb-1">
+                        <strong>${formatFieldName(change.field)}:</strong>
+                        <span class="text-danger">${formatValue(change.oldValue)}</span>
+                        <i class="bi bi-arrow-right mx-1 text-muted"></i>
+                        <span class="text-success">${formatValue(change.newValue)}</span>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+        });
+        
+        $('#changes-list').html(html);
+        $('#changes-summary').show();
+    }
+    
+    // Helper functions for changes summary
+    function getCurrentSpanValue(field) {
+        // This would need to be populated with actual current span data
+        // For now, we'll return placeholder values
+        const currentSpanData = {
+            name: '{{ $span->name }}',
+            type: '{{ $span->type_id }}',
+            state: '{{ $span->state }}',
+            description: '{{ $span->description ?? "" }}',
+            notes: '{{ $span->notes ?? "" }}',
+            access_level: '{{ $span->access_level }}',
+            metadata: @json($span->metadata ?? [])
+        };
+        
+        return currentSpanData[field] || '';
+    }
+    
+    function getCurrentSpanDate(type) {
+        const span = @json($span);
+        if (type === 'start') {
+            if (span.start_year) {
+                let date = span.start_year.toString();
+                if (span.start_month) {
+                    date += '-' + span.start_month.toString().padStart(2, '0');
+                    if (span.start_day) {
+                        date += '-' + span.start_day.toString().padStart(2, '0');
+                    }
+                }
+                return date;
+            }
+        } else if (type === 'end') {
+            if (span.end_year) {
+                let date = span.end_year.toString();
+                if (span.end_month) {
+                    date += '-' + span.end_month.toString().padStart(2, '0');
+                    if (span.end_day) {
+                        date += '-' + span.end_day.toString().padStart(2, '0');
+                    }
+                }
+                return date;
+            }
+        }
+        return 'Not set';
+    }
+    
+    function formatDateForDisplay(year, month, day) {
+        if (!year) return 'Not set';
+        let date = year.toString();
+        if (month) {
+            date += '-' + month.toString().padStart(2, '0');
+            if (day) {
+                date += '-' + day.toString().padStart(2, '0');
+            }
+        }
+        return date;
+    }
+    
+    function formatFieldName(field) {
+        const fieldNames = {
+            'name': 'Name',
+            'type': 'Type',
+            'state': 'State',
+            'description': 'Description',
+            'notes': 'Notes',
+            'access_level': 'Access Level',
+            'start_date': 'Start Date',
+            'end_date': 'End Date'
+        };
+        
+        // Handle connection field names (e.g., "connections.Residence[0].start_date")
+        if (field.includes('connections.')) {
+            const parts = field.split('.');
+            if (parts.length >= 3) {
+                const connectionType = parts[1]; // e.g., "Residence"
+                const fieldName = parts[2]; // e.g., "start_date"
+                const fieldDisplayName = fieldNames[fieldName] || fieldName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                return `${connectionType} ${fieldDisplayName}`;
+            }
+        }
+        
+        return fieldNames[field] || field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    }
+    
+    function formatValue(value) {
+        if (value === null || value === undefined) return 'Not set';
+        if (typeof value === 'object') return JSON.stringify(value);
+        return value.toString();
+    }
+    
+    function compareMetadata(oldMetadata, newMetadata) {
+        const changes = [];
+        const allKeys = new Set([...Object.keys(oldMetadata), ...Object.keys(newMetadata)]);
+        
+        allKeys.forEach(key => {
+            const oldValue = oldMetadata[key];
+            const newValue = newMetadata[key];
+            if (oldValue !== newValue) {
+                changes.push({
+                    field: `metadata.${key}`,
+                    type: 'update',
+                    oldValue: oldValue,
+                    newValue: newValue,
+                    category: 'metadata'
+                });
+            }
+        });
+        
+        return changes;
+    }
+    
+    function compareConnections(yamlConnections) {
+        // Instead of trying to reconstruct database connections, let's compare YAML content
+        // The current YAML content should represent the current state
+        const currentYamlContent = originalContent;
+        const newYamlContent = yamlTextarea.val();
+        
+        // If the content hasn't changed, no connection changes
+        if (currentYamlContent === newYamlContent) {
+            return [];
+        }
+        
+        // Parse both YAML contents to compare
+        let currentData, newData;
+        
+        try {
+            currentData = jsyaml.load(currentYamlContent);
+            newData = jsyaml.load(newYamlContent);
+            
+            // Debug logging
+            console.log('Current YAML data:', currentData);
+            console.log('New YAML data:', newData);
+        } catch (e) {
+            console.error('Failed to parse YAML for comparison:', e);
+            return [];
+        }
+        
+        const changes = [];
+        
+        // Compare connections if they exist in both
+        const currentConnections = currentData.connections || {};
+        const newConnections = newData.connections || {};
+        
+        // Get all connection types from both
+        const allConnectionTypes = new Set([
+            ...Object.keys(currentConnections),
+            ...Object.keys(newConnections)
+        ]);
+        
+        allConnectionTypes.forEach(connectionType => {
+            const currentList = currentConnections[connectionType] || [];
+            const newList = newConnections[connectionType] || [];
+            
+            // Debug logging for residence connections
+            if (connectionType === 'residence') {
+                console.log('Residence connections comparison:', {
+                    current: currentList,
+                    new: newList
+                });
+            }
+            
+            // Compare each connection in the new list
+            newList.forEach((newConnection, index) => {
+                // Try to find matching connection in current list - use connection_id as primary key
+                const matchingCurrent = currentList.find(current => 
+                    current.connection_id === newConnection.connection_id
+                );
+                
+                if (!matchingCurrent) {
+                    // This is a new connection
+                    changes.push({
+                        field: `connections.${connectionType}[${index}]`,
+                        type: 'add',
+                        oldValue: 'Not present',
+                        newValue: `${newConnection.name} (${newConnection.type})`,
+                        category: 'connections'
+                    });
+                } else {
+                    // Check if there are changes to the existing connection
+                    const connectionChanges = getConnectionFieldChanges(matchingCurrent, newConnection);
+                    if (connectionChanges.length > 0) {
+                        // Add each changed field as a separate change
+                        connectionChanges.forEach(fieldChange => {
+                            changes.push({
+                                field: `connections.${connectionType}[${index}].${fieldChange.field}`,
+                                type: 'update',
+                                oldValue: fieldChange.oldValue,
+                                newValue: fieldChange.newValue,
+                                category: 'connections'
+                            });
+                        });
+                    }
+                }
+            });
+            
+            // Check for removed connections
+            currentList.forEach((currentConnection, index) => {
+                const stillExists = newList.find(newConn => 
+                    newConn.connection_id === currentConnection.connection_id
+                );
+                
+                if (!stillExists) {
+                    changes.push({
+                        field: `connections.${connectionType}[${index}]`,
+                        type: 'remove',
+                        oldValue: `${currentConnection.name} (${currentConnection.type})`,
+                        newValue: 'Removed',
+                        category: 'connections'
+                    });
+                }
+            });
+        });
+        
+        return changes;
+    }
+    
+    function getConnectionFieldChanges(existing, newConnection) {
+        const changes = [];
+        const fieldsToCompare = ['name', 'type', 'start_date', 'end_date'];
+        
+        for (const field of fieldsToCompare) {
+            const existingValue = existing[field];
+            const newValue = newConnection[field];
+            
+            // Debug logging
+            console.log(`Comparing ${field}:`, { existing: existingValue, new: newValue, equal: existingValue === newValue });
+            
+            if (existingValue !== newValue) {
+                changes.push({
+                    field: field,
+                    type: 'update',
+                    oldValue: existingValue,
+                    newValue: newValue
+                });
+            }
+        }
+        
+        return changes;
     }
 });
 </script>
