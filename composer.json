@@ -13,6 +13,7 @@
         "laravel/sanctum": "^3.3",
         "laravel/telescope": "^5.4",
         "laravel/tinker": "^2.8",
+        "openai-php/client": "^0.14.0",
         "spatie/laravel-backup": "^9.2",
         "symfony/yaml": "^6.3",
         "wnx/laravel-backup-restore": "^1.6"

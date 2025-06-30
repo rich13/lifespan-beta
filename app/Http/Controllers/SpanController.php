@@ -924,11 +924,15 @@ class SpanController extends Controller
         $validationResult = $this->yamlService->yamlToSpanData($validated['yaml_content']);
 
         if (!$validationResult['success']) {
-            return response()->json([
-                'success' => false,
-                'message' => 'YAML validation failed',
-                'errors' => $validationResult['errors']
-            ], 422);
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'YAML validation failed',
+                    'errors' => $validationResult['errors']
+                ], 422);
+            } else {
+                return back()->withErrors($validationResult['errors'])->withInput();
+            }
         }
 
         // Create the new span
@@ -936,16 +940,26 @@ class SpanController extends Controller
 
         if ($createResult['success']) {
             $span = $createResult['span'];
-            return response()->json([
-                'success' => true,
-                'message' => $createResult['message'],
-                'redirect' => route('spans.yaml-editor', $span)
-            ]);
+            
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => $createResult['message'],
+                    'redirect' => route('spans.yaml-editor', $span)
+                ]);
+            } else {
+                return redirect()->route('spans.yaml-editor', $span)
+                    ->with('success', $createResult['message']);
+            }
         } else {
-            return response()->json([
-                'success' => false,
-                'message' => $createResult['message']
-            ], 500);
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $createResult['message']
+                ], 500);
+            } else {
+                return back()->withErrors([$createResult['message']])->withInput();
+            }
         }
     }
 }
