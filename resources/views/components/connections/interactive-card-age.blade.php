@@ -25,6 +25,28 @@
         }
     }
     
+    // Determine if this connection is from connectionsAsSubject or connectionsAsObject
+    $isSubjectConnection = $connection->parent_id === $span->id;
+    $isObjectConnection = $connection->child_id === $span->id;
+    
+    // Determine the subject and object spans
+    if ($isSubjectConnection) {
+        // Span is the subject (parent), so show: [Span] [predicate] [Child]
+        $subjectSpan = $span;
+        $objectSpan = $connection->child;
+        $predicate = $connection->type->forward_predicate;
+    } elseif ($isObjectConnection) {
+        // Span is the object (child), so show: [Parent] [predicate] [Span]
+        $subjectSpan = $connection->parent;
+        $objectSpan = $span;
+        $predicate = $connection->type->backward_predicate ?? $connection->type->forward_predicate;
+    } else {
+        // Fallback - shouldn't happen with our filtering
+        $subjectSpan = $span;
+        $objectSpan = $connection->child;
+        $predicate = $connection->type->forward_predicate;
+    }
+    
     // Calculate ages for the main connection
     $startAge = null;
     $endAge = null;
@@ -114,22 +136,28 @@
             @endswitch
         </button>
 
-        <!-- Subject span name (always the span we're viewing) -->
-        <a href="{{ route('spans.show', $span) }}" 
-           class="btn {{ $span->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $span->type_id }}">
-            {{ $span->name }}
-        </a>
+        <!-- Subject span name -->
+        @if($subjectSpan)
+            <a href="{{ route('spans.show', $subjectSpan) }}" 
+               class="btn {{ $subjectSpan->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $subjectSpan->type_id }}">
+                {{ $subjectSpan->name }}
+            </a>
+        @else
+            <button type="button" class="btn btn-placeholder">
+                [Missing Subject]
+            </button>
+        @endif
 
         <!-- Predicate -->
         <button type="button" class="btn btn-{{ $connection->type_id }}">
-            {{ $connection->type->forward_predicate }}
+            {{ $predicate }}
         </button>
 
         <!-- Object span name -->
-        @if($connection->child)
-            <a href="{{ route('spans.show', $connection->child) }}" 
-               class="btn {{ $connection->child->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $connection->child->type_id }}">
-                {{ $connection->child->name }}
+        @if($objectSpan)
+            <a href="{{ route('spans.show', $objectSpan) }}" 
+               class="btn {{ $objectSpan->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $objectSpan->type_id }}">
+                {{ $objectSpan->name }}
             </a>
         @else
             <button type="button" class="btn btn-placeholder">
