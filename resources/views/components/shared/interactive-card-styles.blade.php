@@ -42,5 +42,13 @@
         color: #0a3d44;
         border-color: #a8d8dd;
     }
+    
+    /* Mini tooltip styling */
+    .tooltip-mini .tooltip-inner {
+        background-color: #000;
+        color: #fff;
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
 </style>
 @endpush 

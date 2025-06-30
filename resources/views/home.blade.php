@@ -666,7 +666,7 @@
     <div class="container-fluid">
         <div class="row">
             <!-- Left Column: Personal Info -->
-            <div class="col-md-6">
+            <div class="col-md-4">
                 <div class="mb-4">
                     <h2 class="h5 mb-3">
                         <i class="bi bi-person text-primary me-2"></i>
@@ -742,7 +742,7 @@
                                         Age Comparison
                                     </h3>
                                     <p class="mb-0">
-                                        When your parents were your current age ({{ $age['years'] }} years, {{ $age['months'] }} months, and {{ $age['days'] }} days):
+                                        When your parents were your current age:
                                     </p>
                                     <ul class="list-unstyled mt-2 mb-0">
                                         @foreach($parentComparisons as $comparison)
@@ -767,8 +767,8 @@
                 </div>
             </div>
 
-            <!-- Right Column: Today's Events -->
-            <div class="col-md-6">
+            <!-- Middle Column: Today's Events -->
+            <div class="col-md-4">
                 <div class="mb-4">
                     <h2 class="h5 mb-3">
                         <i class="bi bi-calendar-check text-primary me-2"></i>
@@ -973,6 +973,69 @@
                                 </div>
                             </div>
                         @endif
+                    @endif
+                </div>
+            </div>
+
+            <!-- Right Column: Placeholder Connections -->
+            <div class="col-md-4">
+                <div class="mb-4">
+                    <h2 class="h5 mb-3">
+                        <i class="bi bi-patch-question text-warning me-2"></i>
+                        Placeholder Connections
+                    </h2>
+
+                    @php
+                        // Get placeholder connections that are connected to the current user's personal span
+                        $placeholderConnections = collect();
+                        
+                        if (auth()->user()->personalSpan) {
+                            $personalSpan = auth()->user()->personalSpan;
+                            
+                            // Get connections where the user's personal span is either the parent or child
+                            $placeholderConnections = \App\Models\Connection::where(function($query) use ($personalSpan) {
+                                    $query->where('parent_id', $personalSpan->id)
+                                          ->orWhere('child_id', $personalSpan->id);
+                                })
+                                ->whereHas('connectionSpan', function($query) {
+                                    $query->where('state', 'placeholder');
+                                })
+                                ->with(['connectionSpan', 'parent', 'child', 'type'])
+                                ->orderBy('created_at', 'desc')
+                                ->limit(5)
+                                ->get();
+                        }
+                    @endphp
+
+                    @if($placeholderConnections->isEmpty())
+                        <div class="card">
+                            <div class="card-body">
+                                <p class="text-center text-muted my-5">No placeholder connections found.</p>
+                            </div>
+                        </div>
+                    @else
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="spans-list">
+                                    @foreach($placeholderConnections as $connection)
+                                        
+                                            <div class="flex-grow-1">
+                                                <x-connections.interactive-card :connection="$connection" />
+                                            </div>
+                                        
+                                    @endforeach
+                                </div>
+                                
+                                @if($placeholderConnections->count() >= 5)
+                                    <!-- TODO: Add a link to the placeholder connections page
+                                    <div class="text-center mt-3">
+                                        <a href="#" class="btn btn-sm btn-outline-secondary">
+                                            Work on this...
+                                        </a>
+                                    </div> -->
+                                @endif
+                            </div>
+                        </div>
                     @endif
                 </div>
             </div>

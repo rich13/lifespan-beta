@@ -32,6 +32,7 @@
         <!-- Span name -->
         <a href="{{ route('spans.show', $span) }}" 
            class="btn {{ $span->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $span->type_id }}">
+            <x-icon type="{{ $span->type_id }}" category="span" class="me-1" />
             {{ $span->name }}
         </a>
 

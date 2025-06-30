@@ -24,62 +24,38 @@
             }
         }
     }
+    
+    // Get connection state for tooltip
+    $connectionState = $connection->connectionSpan ? $connection->connectionSpan->state : 'unknown';
+    $stateLabel = ucfirst($connectionState);
 @endphp
 
 <div class="interactive-card-base mb-3">
     <!-- Single continuous button group for the entire sentence -->
     <div class="btn-group btn-group-sm" role="group">
         <!-- Connection type icon button -->
-        <button type="button" class="btn btn-outline-{{ $connection->type_id }} disabled" style="min-width: 40px;">
-            @switch($connection->type_id)
-                @case('education')
-                    <i class="bi bi-mortarboard-fill"></i>
-                    @break
-                @case('employment')
-                @case('work')
-                    <i class="bi bi-briefcase-fill"></i>
-                    @break
-                @case('member_of')
-                @case('membership')
-                    <i class="bi bi-people-fill"></i>
-                    @break
-                @case('residence')
-                    <i class="bi bi-house-fill"></i>
-                    @break
-                @case('family')
-                    <i class="bi bi-heart-fill"></i>
-                    @break
-                @case('friend')
-                    <i class="bi bi-person-heart"></i>
-                    @break
-                @case('relationship')
-                    <i class="bi bi-people"></i>
-                    @break
-                @case('created')
-                    <i class="bi bi-palette-fill"></i>
-                    @break
-                @case('contains')
-                    <i class="bi bi-box-seam"></i>
-                    @break
-                @case('travel')
-                    <i class="bi bi-airplane"></i>
-                    @break
-                @case('participation')
-                    <i class="bi bi-calendar-event"></i>
-                    @break
-                @case('ownership')
-                    <i class="bi bi-key-fill"></i>
-                    @break
-                @case('has_role')
-                    <i class="bi bi-person-badge"></i>
-                    @break
-                @case('at_organisation')
-                    <i class="bi bi-building"></i>
-                    @break
-                @default
-                    <i class="bi bi-link-45deg"></i>
-            @endswitch
-        </button>
+        @if($connection->connectionSpan)
+            <a href="{{ route('spans.show', $connection->connectionSpan) }}" 
+               class="btn btn-outline-{{ $connection->type_id }}" 
+               style="min-width: 40px;"
+               title="View connection details"
+               data-bs-toggle="tooltip" 
+               data-bs-placement="top" 
+               data-bs-custom-class="tooltip-mini"
+               data-bs-title="State: {{ $stateLabel }}">
+                <x-icon type="{{ $connection->type_id }}" category="connection" />
+            </a>
+        @else
+            <button type="button" 
+                    class="btn btn-outline-{{ $connection->type_id }} disabled" 
+                    style="min-width: 40px;"
+                    data-bs-toggle="tooltip" 
+                    data-bs-placement="top" 
+                    data-bs-custom-class="tooltip-mini"
+                    data-bs-title="State: {{ $stateLabel }}">
+                <x-icon type="{{ $connection->type_id }}" category="connection" />
+            </button>
+        @endif
         
         <!-- Subject span name -->
         <a href="{{ route('spans.show', $connection->parent) }}" 
@@ -104,8 +80,8 @@
             </button>
         @endif
         
-        @if($connection->connectionSpan && $connection->connectionSpan->start_year && $connection->connectionSpan->start_year > 0)
-            <!-- Date information -->
+        <!-- Date information - only show for main connection if no nested organisation -->
+        @if(!$nestedOrganisation && $connection->connectionSpan && $connection->connectionSpan->start_year && $connection->connectionSpan->start_year > 0)
             @if($connection->connectionSpan->end_year)
                 <button type="button" class="btn inactive">
                     from

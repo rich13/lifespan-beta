@@ -48,7 +48,6 @@
             <div class="col-md-8">
                 <!-- Main Content -->
                 <x-spans.partials.details :span="$span" />
-                <x-spans.partials.metadata :span="$span" />
                 <x-spans.partials.connections :span="$span" />
             </div>
 

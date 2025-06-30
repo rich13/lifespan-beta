@@ -3,31 +3,7 @@
 <div class="card h-100">
     <div class="card-header d-flex align-items-center gap-2">
         <button type="button" class="btn btn-sm btn-{{ $spanType->type_id }} disabled" style="min-width: 40px;">
-            @switch($spanType->type_id)
-                @case('person')
-                    <i class="bi bi-person-fill"></i>
-                    @break
-                @case('organisation')
-                    <i class="bi bi-building"></i>
-                    @break
-                @case('place')
-                    <i class="bi bi-geo-alt-fill"></i>
-                    @break
-                @case('event')
-                    <i class="bi bi-calendar-event-fill"></i>
-                    @break
-                @case('connection')
-                    <i class="bi bi-link-45deg"></i>
-                    @break
-                @case('band')
-                    <i class="bi bi-cassette"></i>
-                    @break
-                @case('thing')
-                    <i class="bi bi-box"></i>
-                    @break
-                @default
-                    <i class="bi bi-box"></i>
-            @endswitch
+            <x-icon type="{{ $spanType->type_id }}" category="span" />
         </button>
         <h5 class="card-title mb-0">{{ $spanType->name }}</h5>
     </div>
@@ -54,7 +30,7 @@
             @endif
         @else
             <p class="text-muted text-center my-3">
-                <i class="bi bi-inbox"></i>
+                <x-icon type="view" category="action" />
                 No {{ strtolower($spanType->name) }} spans found
             </p>
         @endif

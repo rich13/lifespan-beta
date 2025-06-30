@@ -39,7 +39,6 @@
             $yourAge = \App\Helpers\DateDurationCalculator::calculateDuration($personalStart, $now);
             
             if ($yourAge) {
-                $canCalculateReflection = true;
                 // Create Carbon instances for precise date manipulation
                 $personBirthDate = \Carbon\Carbon::createFromDate(
                     $spanStart->year,
@@ -65,65 +64,116 @@
                     );
                 }
 
-                // Calculate person's age at death if they died
+                // Calculate person's current age
+                $personCurrentAge = \App\Helpers\DateDurationCalculator::calculateDuration(
+                    (object)['year' => $personBirthDate->year, 'month' => $personBirthDate->month, 'day' => $personBirthDate->day],
+                    (object)['year' => $nowCarbon->year, 'month' => $nowCarbon->month, 'day' => $nowCarbon->day]
+                );
+
+                // Determine if person is alive and their current age
+                $personIsAlive = !$spanEndCarbon || $spanEndCarbon->gt($nowCarbon);
                 $personAgeAtDeath = null;
-                if ($spanEndCarbon) {
+                
+                if (!$personIsAlive && $spanEndCarbon) {
                     $personAgeAtDeath = \App\Helpers\DateDurationCalculator::calculateDuration(
                         (object)['year' => $personBirthDate->year, 'month' => $personBirthDate->month, 'day' => $personBirthDate->day],
                         (object)['year' => $spanEndCarbon->year, 'month' => $spanEndCarbon->month, 'day' => $spanEndCarbon->day]
                     );
                 }
 
-                // Determine if person died before reaching viewer's current age
-                $diedBeforeReflection = false;
-                if ($personAgeAtDeath) {
-                    $diedBeforeReflection = $personAgeAtDeath['years'] < $yourAge['years'] || 
-                        ($personAgeAtDeath['years'] == $yourAge['years'] && $personAgeAtDeath['months'] < $yourAge['months']) ||
-                        ($personAgeAtDeath['years'] == $yourAge['years'] && $personAgeAtDeath['months'] == $personAgeAtDeath['months'] && $personAgeAtDeath['days'] < $yourAge['days']);
+                // Determine which reflection to show based on relative ages
+                $personIsOlder = $personBirthDate->lt($viewerBirthDate);
+                $personIsYounger = $personBirthDate->gt($viewerBirthDate);
+                
+                if ($personIsOlder) {
+                    // Person is older - show when they were your current age
+                    $canCalculateReflection = true;
+                    $reflectionDate = $personBirthDate->copy()
+                        ->addYears($yourAge['years'])
+                        ->addMonths($yourAge['months'])
+                        ->addDays($yourAge['days']);
+                    
+                    $reflectionType = 'person_older';
+                    
+                    // Check if person died before reaching viewer's current age
+                    $diedBeforeReflection = false;
+                    if (!$personIsAlive && $personAgeAtDeath) {
+                        $diedBeforeReflection = $personAgeAtDeath['years'] < $yourAge['years'] || 
+                            ($personAgeAtDeath['years'] == $yourAge['years'] && $personAgeAtDeath['months'] < $yourAge['months']) ||
+                            ($personAgeAtDeath['years'] == $yourAge['years'] && $personAgeAtDeath['months'] == $personAgeAtDeath['months'] && $personAgeAtDeath['days'] < $yourAge['days']);
+                    }
+                    
+                    // If they died before reaching your age, calculate when you were their age at death
+                    if ($diedBeforeReflection && $personAgeAtDeath) {
+                        $userAtPersonDeathAge = $viewerBirthDate->copy()
+                            ->addYears($personAgeAtDeath['years'])
+                            ->addMonths($personAgeAtDeath['months'])
+                            ->addDays($personAgeAtDeath['days']);
+                        
+                        $userAtPersonDeathAgeObj = (object)[
+                            'year' => $userAtPersonDeathAge->year,
+                            'month' => $userAtPersonDeathAge->month,
+                            'day' => $userAtPersonDeathAge->day,
+                        ];
+                    }
+                } elseif ($personIsYounger && $personIsAlive) {
+                    // Person is younger and alive - show when you were their current age
+                    $canCalculateReflection = true;
+                    $reflectionDate = $viewerBirthDate->copy()
+                        ->addYears($personCurrentAge['years'])
+                        ->addMonths($personCurrentAge['months'])
+                        ->addDays($personCurrentAge['days']);
+                    
+                    $reflectionType = 'person_younger';
+                } elseif ($personIsYounger && !$personIsAlive) {
+                    // Person is younger but died - show when you were their age at death
+                    $canCalculateReflection = true;
+                    $reflectionDate = $viewerBirthDate->copy()
+                        ->addYears($personAgeAtDeath['years'])
+                        ->addMonths($personAgeAtDeath['months'])
+                        ->addDays($personAgeAtDeath['days']);
+                    
+                    $reflectionType = 'person_younger_dead';
                 }
 
-                // Calculate reflection point using tested method
-                $reflectionDate = $personBirthDate->copy()
-                    ->addYears($yourAge['years'])
-                    ->addMonths($yourAge['months'])
-                    ->addDays($yourAge['days']);
+                if ($canCalculateReflection) {
+                    // Determine various conditions using Carbon's comparison methods
+                    $isReflectionInPast = $reflectionDate->lt($nowCarbon);
+                    $isReflectionBeforeBirth = $reflectionDate->lt($viewerBirthDate);
+                    $isReflectionAfterDeath = $spanEndCarbon && $reflectionDate->gt($spanEndCarbon);
 
-                // Determine various conditions using Carbon's comparison methods
-                $isReflectionInPast = $reflectionDate->lt($nowCarbon);
-                $isReflectionBeforeBirth = $reflectionDate->lt($viewerBirthDate);
-                $isReflectionAfterDeath = $spanEndCarbon && $reflectionDate->gt($spanEndCarbon);
+                    // Convert reflection date to object format for view
+                    $reflectionDateObj = (object)[
+                        'year' => $reflectionDate->year,
+                        'month' => $reflectionDate->month,
+                        'day' => $reflectionDate->day,
+                    ];
 
-                // Convert reflection date to object format for view
-                $reflectionDateObj = (object)[
-                    'year' => $reflectionDate->year,
-                    'month' => $reflectionDate->month,
-                    'day' => $reflectionDate->day,
-                ];
+                    // Calculate durations using DateDurationCalculator
+                    if ($isReflectionBeforeBirth) {
+                        $duration = \App\Helpers\DateDurationCalculator::calculateDuration(
+                            (object)['year' => $reflectionDate->year, 'month' => $reflectionDate->month, 'day' => $reflectionDate->day],
+                            (object)['year' => $viewerBirthDate->year, 'month' => $viewerBirthDate->month, 'day' => $viewerBirthDate->day]
+                        );
+                    } else {
+                        $duration = \App\Helpers\DateDurationCalculator::calculateDuration(
+                            (object)['year' => $viewerBirthDate->year, 'month' => $viewerBirthDate->month, 'day' => $viewerBirthDate->day],
+                            (object)['year' => $reflectionDate->year, 'month' => $reflectionDate->month, 'day' => $reflectionDate->day]
+                        );
+                    }
 
-                // Calculate durations using DateDurationCalculator
-                if ($isReflectionBeforeBirth) {
-                    $duration = \App\Helpers\DateDurationCalculator::calculateDuration(
-                        (object)['year' => $reflectionDate->year, 'month' => $reflectionDate->month, 'day' => $reflectionDate->day],
-                        (object)['year' => $viewerBirthDate->year, 'month' => $viewerBirthDate->month, 'day' => $viewerBirthDate->day]
-                    );
-                } else {
-                    $duration = \App\Helpers\DateDurationCalculator::calculateDuration(
-                        (object)['year' => $viewerBirthDate->year, 'month' => $viewerBirthDate->month, 'day' => $viewerBirthDate->day],
-                        (object)['year' => $reflectionDate->year, 'month' => $reflectionDate->month, 'day' => $reflectionDate->day]
-                    );
+                    // Calculate time after death if applicable
+                    $timeAfterDeath = null;
+                    if ($isReflectionAfterDeath && $spanEndCarbon) {
+                        $timeAfterDeath = \App\Helpers\DateDurationCalculator::calculateDuration(
+                            (object)['year' => $spanEndCarbon->year, 'month' => $spanEndCarbon->month, 'day' => $spanEndCarbon->day],
+                            (object)['year' => $reflectionDate->year, 'month' => $reflectionDate->month, 'day' => $reflectionDate->day]
+                        );
+                    }
+
+                    // Determine if the reflection age is in the past
+                    $isReflectionAgeInPast = $isReflectionInPast && !$isReflectionBeforeBirth;
                 }
-
-                // Calculate time after death if applicable
-                $timeAfterDeath = null;
-                if ($isReflectionAfterDeath && $spanEndCarbon) {
-                    $timeAfterDeath = \App\Helpers\DateDurationCalculator::calculateDuration(
-                        (object)['year' => $spanEndCarbon->year, 'month' => $spanEndCarbon->month, 'day' => $spanEndCarbon->day],
-                        (object)['year' => $reflectionDate->year, 'month' => $reflectionDate->month, 'day' => $reflectionDate->day]
-                    );
-                }
-
-                // Determine if the reflection age is in the past
-                $isReflectionAgeInPast = $isReflectionInPast && !$isReflectionBeforeBirth;
             }
         }
     }
@@ -138,14 +188,27 @@
             </h2>
             
             <p class="mb-3">
-                @if($diedBeforeReflection)
-                    {{ $span->name }} died at {{ $personAgeAtDeath['years'] }} years, {{ $personAgeAtDeath['months'] }} months, and {{ $personAgeAtDeath['days'] }} days old, which was before reaching your current age of {{ $yourAge['years'] }} years, {{ $yourAge['months'] }} months, and {{ $yourAge['days'] }} days.
-                @elseif(!$isReflectionInPast)
-                    When {{ $span->name }} is your current age ({{ $yourAge['years'] }} years, {{ $yourAge['months'] }} months, {{ $yourAge['days'] }} days), it will be 
-                @else
-                    When {{ $span->name }} was your current age ({{ $yourAge['years'] }} years, {{ $yourAge['months'] }} months, {{ $yourAge['days'] }} days), it was 
+                @if($reflectionType === 'person_older')
+                    @if(!$personIsAlive && $personAgeAtDeath && ($personAgeAtDeath['years'] < $yourAge['years'] || 
+                        ($personAgeAtDeath['years'] == $yourAge['years'] && $personAgeAtDeath['months'] < $yourAge['months']) ||
+                        ($personAgeAtDeath['years'] == $yourAge['years'] && $personAgeAtDeath['months'] == $personAgeAtDeath['months'] && $personAgeAtDeath['days'] < $yourAge['days'])))
+                        {{ $span->name }} died at {{ $personAgeAtDeath['years'] }} years, {{ $personAgeAtDeath['months'] }} months, and {{ $personAgeAtDeath['days'] }} days old, which was before reaching your current age.
+                    @elseif(!$isReflectionInPast)
+                        When {{ $span->name }} is your current age, it will be 
+                    @else
+                        When {{ $span->name }} was your current age, it was 
+                    @endif
+                @elseif($reflectionType === 'person_younger')
+                    When you were {{ $span->name }}'s current age, it was 
+                @elseif($reflectionType === 'person_younger_dead')
+                    When you were {{ $span->name }}'s age at death ({{ $personAgeAtDeath['years'] }} years, {{ $personAgeAtDeath['months'] }} months, and {{ $personAgeAtDeath['days'] }} days old), it was 
                 @endif
-                @if(!$diedBeforeReflection)
+                
+                @if($reflectionType === 'person_older' && !$personIsAlive && $personAgeAtDeath && ($personAgeAtDeath['years'] < $yourAge['years'] || 
+                    ($personAgeAtDeath['years'] == $yourAge['years'] && $personAgeAtDeath['months'] < $yourAge['months']) ||
+                    ($personAgeAtDeath['years'] == $yourAge['years'] && $personAgeAtDeath['months'] == $personAgeAtDeath['months'] && $personAgeAtDeath['days'] < $yourAge['days'])))
+                    {{-- Don't show date link when person died before reaching viewer's age --}}
+                @else
                     <a href="{{ route('date.explore', ['date' => $reflectionDateObj->year . '-' . 
                         str_pad($reflectionDateObj->month, 2, '0', STR_PAD_LEFT) . '-' . 
                         str_pad($reflectionDateObj->day, 2, '0', STR_PAD_LEFT)]) }}" 
@@ -156,7 +219,9 @@
             </p>
             
             @if(isset($duration))
-                @if($diedBeforeReflection)
+                @if($reflectionType === 'person_older' && !$personIsAlive && $personAgeAtDeath && ($personAgeAtDeath['years'] < $yourAge['years'] || 
+                    ($personAgeAtDeath['years'] == $yourAge['years'] && $personAgeAtDeath['months'] < $yourAge['months']) ||
+                    ($personAgeAtDeath['years'] == $yourAge['years'] && $personAgeAtDeath['months'] == $personAgeAtDeath['months'] && $personAgeAtDeath['days'] < $yourAge['days'])))
                     {{-- Don't show any additional text when person died before reaching viewer's age --}}
                 @elseif($isReflectionBeforeBirth)
                     @if($isReflectionAfterDeath && isset($timeAfterDeath))
@@ -168,11 +233,80 @@
                             This was {{ $duration['years'] ?? 0 }} years, {{ $duration['months'] ?? 0 }} months, and {{ $duration['days'] ?? 0 }} days before you were born.
                         </p>
                     @endif
-                @else
-                    <p class="text-muted mb-0">
-                        This is when you {{ $isReflectionAgeInPast ? 'were' : 'will be' }} {{ $duration['years'] ?? 0 }} years, {{ $duration['months'] ?? 0 }} months, and {{ $duration['days'] ?? 0 }} days old.
-                    </p>
                 @endif
+            @endif
+
+            {{-- Connection elements --}}
+            @if($reflectionType === 'person_older' && !$personIsAlive && $personAgeAtDeath && ($personAgeAtDeath['years'] < $yourAge['years'] || 
+                ($personAgeAtDeath['years'] == $yourAge['years'] && $personAgeAtDeath['months'] < $yourAge['months']) ||
+                ($personAgeAtDeath['years'] == $yourAge['years'] && $personAgeAtDeath['months'] == $personAgeAtDeath['months'] && $personAgeAtDeath['days'] < $yourAge['days'])))
+                {{-- Show what was happening in user's life when they were the person's age at death --}}
+                @if(isset($userAtPersonDeathAgeObj))
+                    <div class="mt-4">
+                        <p class="text-muted mb-2">
+                            When you were the same age as {{ $span->name }} when they died, it was 
+                            <a href="{{ route('date.explore', ['date' => $userAtPersonDeathAgeObj->year . '-' . 
+                                str_pad($userAtPersonDeathAgeObj->month, 2, '0', STR_PAD_LEFT) . '-' . 
+                                str_pad($userAtPersonDeathAgeObj->day, 2, '0', STR_PAD_LEFT)]) }}" 
+                               class="text-muted text-dotted-underline">
+                                {{ \App\Helpers\DateHelper::formatDate($userAtPersonDeathAgeObj->year, $userAtPersonDeathAgeObj->month, $userAtPersonDeathAgeObj->day) }}
+                            </a>.
+                        </p>
+                        
+                        {{-- Show connections for the user at that age --}}
+                        <x-spans.display.connections-at-date 
+                            :span="$personalSpan" 
+                            :date="$userAtPersonDeathAgeObj" 
+                            title="At this time..." />
+                    </div>
+                @endif
+            @elseif(!$isReflectionBeforeBirth)
+                <div class="mt-4">
+                    @if($reflectionType === 'person_older')
+                        {{-- Show connections for the person at the reflection date --}}
+                        <x-spans.display.connections-at-date 
+                            :span="$span" 
+                            :date="$reflectionDateObj" 
+                            title="At this time..." />
+                        
+                        {{-- Show user's age at that time --}}
+                        @if(isset($duration))
+                            <p class="text-muted mb-2">
+                                This is when you {{ $isReflectionAgeInPast ? 'were' : 'will be' }} {{ $duration['years'] ?? 0 }} years, {{ $duration['months'] ?? 0 }} months, and {{ $duration['days'] ?? 0 }} days old.
+                            </p>
+                        @endif
+                        
+                        {{-- Show connections for the user at the reflection date --}}
+                        <x-spans.display.connections-at-date 
+                            :span="$personalSpan" 
+                            :date="$reflectionDateObj" 
+                            title="At that time..." />
+                    @else
+                        {{-- For younger people, show user's connections first, then person's --}}
+                        {{-- Show connections for the user at the reflection date --}}
+                        <x-spans.display.connections-at-date 
+                            :span="$personalSpan" 
+                            :date="$reflectionDateObj" 
+                            title="At this time..." />
+                        
+                        {{-- Show person's age at that time --}}
+                        @if($reflectionType === 'person_younger')
+                            <p class="text-muted mb-2">
+                                This is when {{ $span->name }} {{ $isReflectionAgeInPast ? 'was' : 'will be' }} {{ $personCurrentAge['years'] ?? 0 }} years, {{ $personCurrentAge['months'] ?? 0 }} months, and {{ $personCurrentAge['days'] ?? 0 }} days old.
+                            </p>
+                        @elseif($reflectionType === 'person_younger_dead')
+                            <p class="text-muted mb-2">
+                                This is when {{ $span->name }} {{ $isReflectionAgeInPast ? 'was' : 'would have been' }} {{ $personAgeAtDeath['years'] ?? 0 }} years, {{ $personAgeAtDeath['months'] ?? 0 }} months, and {{ $personAgeAtDeath['days'] ?? 0 }} days old.
+                            </p>
+                        @endif
+                        
+                        {{-- Show connections for the person at the reflection date --}}
+                        <x-spans.display.connections-at-date 
+                            :span="$span" 
+                            :date="$reflectionDateObj" 
+                            title="At that time..." />
+                    @endif
+                </div>
             @endif
         </div>
     </div>
