@@ -256,8 +256,7 @@
                         {{-- Show connections for the user at that age --}}
                         <x-spans.display.connections-at-date 
                             :span="$personalSpan" 
-                            :date="$userAtPersonDeathAgeObj" 
-                            title="At this time..." />
+                            :date="$userAtPersonDeathAgeObj" />
                     </div>
                 @endif
             @elseif(!$isReflectionBeforeBirth)
@@ -266,8 +265,7 @@
                         {{-- Show connections for the person at the reflection date --}}
                         <x-spans.display.connections-at-date 
                             :span="$span" 
-                            :date="$reflectionDateObj" 
-                            title="At this time..." />
+                            :date="$reflectionDateObj" />
                         
                         {{-- Show user's age at that time --}}
                         @if(isset($duration))
@@ -279,15 +277,13 @@
                         {{-- Show connections for the user at the reflection date --}}
                         <x-spans.display.connections-at-date 
                             :span="$personalSpan" 
-                            :date="$reflectionDateObj" 
-                            title="At that time..." />
+                            :date="$reflectionDateObj" />
                     @else
                         {{-- For younger people, show user's connections first, then person's --}}
                         {{-- Show connections for the user at the reflection date --}}
                         <x-spans.display.connections-at-date 
                             :span="$personalSpan" 
-                            :date="$reflectionDateObj" 
-                            title="At this time..." />
+                            :date="$reflectionDateObj" />
                         
                         {{-- Show person's age at that time --}}
                         @if($reflectionType === 'person_younger')
@@ -303,8 +299,7 @@
                         {{-- Show connections for the person at the reflection date --}}
                         <x-spans.display.connections-at-date 
                             :span="$span" 
-                            :date="$reflectionDateObj" 
-                            title="At that time..." />
+                            :date="$reflectionDateObj" />
                     @endif
                 </div>
             @endif

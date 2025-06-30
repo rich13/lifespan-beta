@@ -1,4 +1,4 @@
-@props(['span', 'date', 'title' => null])
+@props(['span', 'date'])
 
 @php
     // Get connections where this span is the subject (parent) and has temporal information
@@ -12,22 +12,20 @@
                   });
         })
         ->where('child_id', '!=', $span->id) // Exclude self-referential connections
+        ->where('type_id', '!=', 'contains') // Exclude contains connections
         ->with(['connectionSpan', 'child', 'type'])
         ->get()
         ->sortBy(function($connection) {
             return $connection->connectionSpan->start_year;
-        });
+        })
+        ->take(3); // Limit to 3 connections
 @endphp
 
 @if($connections->isNotEmpty())
     <div class="mt-3">
-        @if($title)
-            <h4 class="h6 mb-2">{{ $title }}</h4>
-        @endif
-        
         @foreach($connections as $connection)
             <div class="mb-2">
-                <x-connections.interactive-card-age :connection="$connection" :span="$span" />
+                <x-connections.interactive-card :connection="$connection" />
             </div>
         @endforeach
     </div>
