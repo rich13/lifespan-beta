@@ -38,6 +38,13 @@
     .comparison-input-container {
         position: relative;
     }
+    
+    /* Remove left border radius from input fields in button groups */
+    .btn-group .comparison-input-field {
+        border-top-left-radius: 0;
+        border-bottom-left-radius: 0;
+        border-left: none;
+    }
 </style>
 @endpush
 
