@@ -189,16 +189,19 @@ Route::middleware('web')->group(function () {
         // Timeline route (works with session auth)
         Route::get('/{span}/timeline', [App\Http\Controllers\Api\SpanSearchController::class, 'timeline'])->name('spans.timeline');
         
+        // Types route (public)
+        Route::get('/types', [SpanController::class, 'types'])->name('spans.types');
+        
         // Protected routes
         Route::middleware('auth')->group(function () {
             Route::get('/create', [SpanController::class, 'create'])->name('spans.create');
             Route::post('/', [SpanController::class, 'store'])->name('spans.store');
-                Route::get('/{span}/edit', [SpanController::class, 'edit'])->name('spans.edit');
-    Route::get('/{span}/editor', [SpanController::class, 'yamlEditor'])->name('spans.yaml-editor');
-    Route::post('/{span}/editor/validate', [SpanController::class, 'validateYaml'])->name('spans.yaml-validate');
-    Route::post('/{span}/editor/apply', [SpanController::class, 'applyYaml'])->name('spans.yaml-apply');
-    Route::put('/{span}', [SpanController::class, 'update'])->name('spans.update');
-    Route::delete('/{span}', [SpanController::class, 'destroy'])->name('spans.destroy');
+            Route::get('/{span}/edit', [SpanController::class, 'edit'])->name('spans.edit');
+            Route::get('/{span}/editor', [SpanController::class, 'yamlEditor'])->name('spans.yaml-editor');
+            Route::post('/{span}/editor/validate', [SpanController::class, 'validateYaml'])->name('spans.yaml-validate');
+            Route::post('/{span}/editor/apply', [SpanController::class, 'applyYaml'])->name('spans.yaml-apply');
+            Route::put('/{span}', [SpanController::class, 'update'])->name('spans.update');
+            Route::delete('/{span}', [SpanController::class, 'destroy'])->name('spans.destroy');
             Route::get('/{span}/compare', [SpanController::class, 'compare'])->name('spans.compare');
             
             // API search endpoint for AJAX calls (authenticated)

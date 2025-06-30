@@ -835,4 +835,74 @@ class SpanController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Display a listing of span types with example spans.
+     */
+    public function types(Request $request): View
+    {
+        try {
+            // Get all span types (excluding connection type)
+            $spanTypes = SpanType::where('type_id', '!=', 'connection')
+                ->orderBy('name')
+                ->get();
+
+            // For each span type, get up to 5 example spans
+            foreach ($spanTypes as $spanType) {
+                $query = Span::query()
+                    ->where('type_id', $spanType->type_id)
+                    ->orderByRaw('COALESCE(start_year, 9999)')
+                    ->orderByRaw('COALESCE(start_month, 12)')
+                    ->orderByRaw('COALESCE(start_day, 31)');
+
+                // Apply the same access filtering logic as the main spans index
+                if (!Auth::check()) {
+                    // For unauthenticated users, only show public spans
+                    $query->where('access_level', 'public');
+                } else {
+                    // For authenticated users
+                    $user = Auth::user();
+                    if (!$user->is_admin) {
+                        // Show:
+                        // 1. Public spans
+                        // 2. User's own spans
+                        // 3. Shared spans where user has permission
+                        $query->where(function ($query) use ($user) {
+                            $query->where('access_level', 'public')
+                                ->orWhere('owner_id', $user->id)
+                                ->orWhere(function ($query) use ($user) {
+                                    $query->where('access_level', 'shared')
+                                        ->whereExists(function ($subquery) use ($user) {
+                                            $subquery->select('id')
+                                                ->from('span_permissions')
+                                                ->whereColumn('span_permissions.span_id', 'spans.id')
+                                                ->where('span_permissions.user_id', $user->id);
+                                        });
+                                });
+                        });
+                    }
+                }
+
+                $spanType->exampleSpans = $query->limit(5)->get();
+            }
+
+            return view('spans.types', compact('spanTypes'));
+        } catch (\Exception $e) {
+            // Log the error
+            \Illuminate\Support\Facades\Log::error('Error in spans types', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            // Return error page
+            if (app()->environment('production')) {
+                return response()->view('errors.500', [], 500);
+            } else {
+                return response()->view('errors.500', [
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString()
+                ], 500);
+            }
+        }
+    }
 }
