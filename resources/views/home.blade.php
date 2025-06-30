@@ -668,10 +668,6 @@
             <!-- Left Column: Personal Info -->
             <div class="col-md-4">
                 <div class="mb-4">
-                    <h2 class="h5 mb-3">
-                        <i class="bi bi-person text-primary me-2"></i>
-                        Your Timeline
-                    </h2>
 
                     @if(auth()->user()->personalSpan)
                         @php
@@ -689,71 +685,132 @@
                         @endphp
 
                         <div class="card mb-3">
+                            <div class="card-header">
+                                <h3 class="h6 mb-0">
+                                    <i class="bi bi-graph-up text-primary me-2"></i>
+                                    Your Timeline
+                                </h3>
+                            </div>
                             <div class="card-body">
-                                <h3 class="h6 mb-3">
+                                <x-spans.timeline :span="$personalSpan" />
+                            </div>
+                        </div>
+
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h3 class="h6 mb-0">
                                     <i class="bi bi-person-circle text-primary me-2"></i>
                                     Your Age
                                 </h3>
+                            </div>
+                            <div class="card-body">
                                 <p class="mb-0">
                                     You are {{ $age['years'] }} years, {{ $age['months'] }} months, and {{ $age['days'] }} days old
                                 </p>
                             </div>
                         </div>
 
-                        <div class="card mb-3">
-                            <div class="card-body">
-                                <h3 class="h6 mb-3">
-                                    <i class="bi bi-calendar-event text-primary me-2"></i>
-                                    Your Timeline
-                                </h3>
-                                <x-spans.display.card :span="$personalSpan" />
-                            </div>
-                        </div>
-
                         @php
-                            // Get parents using the parents() method
-                            $parents = $personalSpan->parents()->get();
+                            // Get random person spans that the user can see (excluding the user themselves)
+                            $randomSpans = \App\Models\Span::where('type_id', 'person')
+                                ->where('id', '!=', $personalSpan->id) // Exclude the user
+                                ->where('access_level', 'public') // Only public spans
+                                ->where('state', 'complete') // Only complete spans (includes living and deceased)
+                                ->whereNotNull('start_year') // Only spans with birth dates
+                                ->whereNotNull('start_month')
+                                ->whereNotNull('start_day')
+                                ->where('start_year', '<', $personalSpan->start_year) // Only people older than the user
+                                ->inRandomOrder()
+                                ->limit(10) // Get more candidates to filter from
+                                ->get();
                             
-                            $parentComparisons = [];
-                            foreach ($parents as $parentSpan) {
-                                $parentBirthDate = \Carbon\Carbon::createFromDate(
-                                    $parentSpan->start_year,
-                                    $parentSpan->start_month ?? 1,
-                                    $parentSpan->start_day ?? 1
+                            $randomComparisons = [];
+                            foreach ($randomSpans as $randomSpan) {
+                                $randomBirthDate = \Carbon\Carbon::createFromDate(
+                                    $randomSpan->start_year,
+                                    $randomSpan->start_month ?? 1,
+                                    $randomSpan->start_day ?? 1
                                 );
                                 
-                                // Calculate the date when parent was the user's current age
-                                $parentAgeDate = $parentBirthDate->copy()->addYears($age['years'])
+                                // Calculate the date when this person was the user's current age
+                                $randomAgeDate = $randomBirthDate->copy()->addYears($age['years'])
                                     ->addMonths($age['months'])
                                     ->addDays($age['days']);
                                 
-                                $parentComparisons[] = [
-                                    'span' => $parentSpan,
-                                    'date' => $parentAgeDate
-                                ];
+                                // Check if this person was already dead when they were the user's current age
+                                $wasDeadAtUserAge = false;
+                                if ($randomSpan->end_year && $randomSpan->end_month && $randomSpan->end_day) {
+                                    $deathDate = \Carbon\Carbon::createFromDate(
+                                        $randomSpan->end_year,
+                                        $randomSpan->end_month,
+                                        $randomSpan->end_day
+                                    );
+                                    
+                                    // If they died before reaching the user's current age, exclude them
+                                    if ($deathDate->lt($randomAgeDate)) {
+                                        $wasDeadAtUserAge = true;
+                                    }
+                                }
+                                
+                                // Only include people who were alive when they were the user's current age
+                                if (!$wasDeadAtUserAge) {
+                                    $randomComparisons[] = [
+                                        'span' => $randomSpan,
+                                        'date' => $randomAgeDate
+                                    ];
+                                }
+                                
+                                // Stop once we have 3 valid comparisons
+                                if (count($randomComparisons) >= 3) {
+                                    break;
+                                }
                             }
                         @endphp
 
-                        @if(!empty($parentComparisons))
+                        @if(!empty($randomComparisons))
                             <div class="card mb-3">
-                                <div class="card-body">
-                                    <h3 class="h6 mb-3">
+                                <div class="card-header">
+                                    <h3 class="h6 mb-0">
                                         <i class="bi bi-arrow-left-right text-primary me-2"></i>
-                                        Age Comparison
+                                        At your age...
                                     </h3>
-                                    <p class="mb-0">
-                                        When your parents were your current age:
-                                    </p>
-                                    <ul class="list-unstyled mt-2 mb-0">
-                                        @foreach($parentComparisons as $comparison)
-                                            <li>
-                                                <x-spans.display.micro-card :span="$comparison['span']" /> was this age on 
-                                                <a href="{{ route('date.explore', ['date' => $comparison['date']->format('Y-m-d')]) }}" class="text-muted text-dotted-underline">
-                                                    {{ $comparison['date']->format('j F Y') }}
-                                                </a>
-                                            </li>
-                                        @endforeach
-                                    </ul>
+                                </div>
+                                <div class="card-body">
+                                    
+                                    @foreach($randomComparisons as $comparison)
+                                        <div class="mb-4">
+                                            
+                                            @php
+                                                $comparisonDateObj = (object)[
+                                                    'year' => $comparison['date']->year,
+                                                    'month' => $comparison['date']->month,
+                                                    'day' => $comparison['date']->day,
+                                                ];
+                                                
+                                                // Debug: Check if the date is in the future
+                                                $isFutureDate = $comparison['date']->isFuture();
+                                                $currentYear = now()->year;
+                                            @endphp
+                                            
+                                            @if($isFutureDate)
+                                                <p class="text-muted small mb-2">
+                                                    <i class="bi bi-info-circle me-1"></i>
+                                                    This date is in the future ({{ $comparisonDateObj->year }}), so no historical connections are available yet.
+                                                </p>
+                                            @else
+                                                <h5 class="h6 text-muted mb-2">{{ $comparison['span']->name }}</h5>
+                                                <x-spans.display.statement-card 
+                                                    :span="$comparison['span']" 
+                                                    eventType="custom"
+                                                    :eventDate="$comparison['date']->format('Y-m-d')"
+                                                    customEventText="was your age on" />
+
+                                                <x-spans.display.connections-at-date 
+                                                    :span="$comparison['span']" 
+                                                    :date="$comparisonDateObj" />                                                
+                                            @endif
+                                        </div>
+                                    @endforeach
                                 </div>
                             </div>
                         @endif
@@ -770,11 +827,6 @@
             <!-- Middle Column: Today's Events -->
             <div class="col-md-4">
                 <div class="mb-4">
-                    <h2 class="h5 mb-3">
-                        <i class="bi bi-calendar-check text-primary me-2"></i>
-                        Today's Events
-                    </h2>
-
                     @php
                         $today = \Carbon\Carbon::now();
                         $spansStartingOnDate = \App\Models\Span::where('start_year', $today->year)
@@ -905,74 +957,151 @@
                         </div>
                     @else
                         @if($spansStartingOnDate->isNotEmpty())
-                            <div class="mb-4">
-                                <h3 class="h6 mb-2">
-                                    <i class="bi bi-play-circle text-success me-2"></i>
-                                    Started Today
-                                </h3>
-                                <div class="spans-list">
-                                    @foreach($spansStartingOnDate as $span)
-                                        <x-spans.display.interactive-card :span="$span" />
-                                    @endforeach
+                            <div class="card mb-3">
+                                <div class="card-header">
+                                    <h3 class="h6 mb-0">
+                                        <i class="bi bi-play-circle text-success me-2"></i>
+                                        Started Today
+                                    </h3>
+                                </div>
+                                <div class="card-body">
+                                    <div class="spans-list">
+                                        @foreach($spansStartingOnDate as $span)
+                                            <x-spans.display.interactive-card :span="$span" />
+                                        @endforeach
+                                    </div>
                                 </div>
                             </div>
                         @endif
 
                         @if($spansEndingOnDate->isNotEmpty())
-                            <div class="mb-4">
-                                <h3 class="h6 mb-2">
-                                    <i class="bi bi-stop-circle text-danger me-2"></i>
-                                    Ended Today
-                                </h3>
-                                <div class="spans-list">
-                                    @foreach($spansEndingOnDate as $span)
-                                        <x-spans.display.interactive-card :span="$span" />
-                                    @endforeach
+                            <div class="card mb-3">
+                                <div class="card-header">
+                                    <h3 class="h6 mb-0">
+                                        <i class="bi bi-stop-circle text-danger me-2"></i>
+                                        Ended Today
+                                    </h3>
+                                </div>
+                                <div class="card-body">
+                                    <div class="spans-list">
+                                        @foreach($spansEndingOnDate as $span)
+                                            <x-spans.display.interactive-card :span="$span" />
+                                        @endforeach
+                                    </div>
                                 </div>
                             </div>
                         @endif
+                    @endif
 
-                        @if(!empty($significantDates))
-                            <div class="mb-4">
-                                <h3 class="h6 mb-2">
+                    @if(!empty($significantDates))
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h3 class="h6 mb-0">
                                     <i class="bi bi-calendar-heart text-primary me-2"></i>
                                     Upcoming Anniversaries
                                 </h3>
+                            </div>
+                            <div class="card-body">
                                 <div class="spans-list">
                                     @foreach($significantDates as $event)
-                                        <div class="card mb-3">
-                                            <div class="card-body">
-                                                <div class="d-flex align-items-center">
-                                                    <div class="flex-grow-1">
-                                                        @if($event['type'] === 'birthday')
-                                                            @if($event['days_until'] === 0)
-                                                                <p class="mb-0">
-                                                                    <x-spans.display.micro-card :span="$event['span']" /> turns {{ $event['age'] }} today
-                                                                </p>
-                                                            @else
-                                                                <p class="mb-0">
-                                                                    <x-spans.display.micro-card :span="$event['span']" /> will be {{ $event['age'] }} in {{ $event['days_until'] }} days
-                                                                </p>
-                                                            @endif
+                                        <div class="mb-3">
+                                            <div class="d-flex align-items-center">
+                                                <div class="flex-grow-1">
+                                                    @if($event['type'] === 'birthday')
+                                                        @if($event['days_until'] === 0)
+                                                            <p class="mb-0">
+                                                                <x-spans.display.micro-card :span="$event['span']" /> turns {{ $event['age'] }} today
+                                                            </p>
                                                         @else
-                                                            @if($event['days_until'] === 0)
-                                                                <p class="mb-0">
-                                                                    {{ $event['years'] }} years since <x-spans.display.micro-card :span="$event['span']" />'s death
-                                                                </p>
-                                                            @else
-                                                                <p class="mb-0">
-                                                                    {{ $event['years'] }} years since <x-spans.display.micro-card :span="$event['span']" />'s death in {{ $event['days_until'] }} days
-                                                                </p>
-                                                            @endif
+                                                            <p class="mb-0">
+                                                                <x-spans.display.micro-card :span="$event['span']" /> will be {{ $event['age'] }} in {{ $event['days_until'] }} days
+                                                            </p>
                                                         @endif
-                                                    </div>
+                                                    @else
+                                                        @if($event['days_until'] === 0)
+                                                            <p class="mb-0">
+                                                                {{ $event['years'] }} years since <x-spans.display.micro-card :span="$event['span']" />'s death
+                                                            </p>
+                                                        @else
+                                                            <p class="mb-0">
+                                                                {{ $event['years'] }} years since <x-spans.display.micro-card :span="$event['span']" />'s death in {{ $event['days_until'] }} days
+                                                            </p>
+                                                        @endif
+                                                    @endif
                                                 </div>
                                             </div>
                                         </div>
                                     @endforeach
                                 </div>
                             </div>
-                        @endif
+                        </div>
+                    @endif
+
+                    @php
+                        // Get historical events from this month in any year
+                        $currentMonth = $today->month;
+                        $historicalEvents = \App\Models\Span::where(function($query) use ($currentMonth) {
+                                $query->where('start_month', $currentMonth)
+                                      ->orWhere('end_month', $currentMonth);
+                            })
+                            ->where(function($query) {
+                                $query->where('access_level', 'public')
+                                    ->orWhere('owner_id', auth()->id());
+                            })
+                            ->where('state', 'complete') // Only complete spans
+                            ->whereNotNull('start_year') // Must have a start year
+                            ->whereNotIn('type_id', ['album', 'work', 'collection', 'series']) // Exclude container types
+                            ->with(['type'])
+                            ->inRandomOrder()
+                            ->limit(20) // Select more initially to ensure we get enough after filtering
+                            ->get()
+                            ->map(function($span) use ($currentMonth) {
+                                $eventType = null;
+                                $eventDate = null;
+                                
+                                if ($span->start_month === $currentMonth && $span->start_year) {
+                                    $eventType = 'started';
+                                    // Create full date from start_year, start_month, start_day
+                                    $day = $span->start_day ?? 1; // Default to 1st if no day specified
+                                    $eventDate = sprintf('%04d-%02d-%02d', $span->start_year, $span->start_month, $day);
+                                } elseif ($span->end_month === $currentMonth && $span->end_year) {
+                                    $eventType = 'ended';
+                                    // Create full date from end_year, end_month, end_day
+                                    $day = $span->end_day ?? 1; // Default to 1st if no day specified
+                                    $eventDate = sprintf('%04d-%02d-%02d', $span->end_year, $span->end_month, $day);
+                                }
+                                
+                                return [
+                                    'span' => $span,
+                                    'type' => $eventType,
+                                    'date' => $eventDate
+                                ];
+                            })
+                            ->filter(function($event) {
+                                return $event['type'] !== null;
+                            })
+                            ->take(5); // Take exactly 5 after filtering
+                    @endphp
+
+                    @if($historicalEvents->isNotEmpty())
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h3 class="h6 mb-0">
+                                    <i class="bi bi-clock-history text-info me-2"></i>
+                                    This Month in History
+                                </h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="spans-list">
+                                    @foreach($historicalEvents as $event)
+                                        <x-spans.display.statement-card 
+                                            :span="$event['span']" 
+                                            :eventType="$event['type']" 
+                                            :eventDate="$event['date']" />
+                                    @endforeach
+                                </div>
+                            </div>
+                        </div>
                     @endif
                 </div>
             </div>
@@ -980,11 +1109,6 @@
             <!-- Right Column: Placeholder Connections -->
             <div class="col-md-4">
                 <div class="mb-4">
-                    <h2 class="h5 mb-3">
-                        <i class="bi bi-patch-question text-warning me-2"></i>
-                        Placeholder Connections
-                    </h2>
-
                     @php
                         // Get placeholder connections that are connected to the current user's personal span
                         $placeholderConnections = collect();
@@ -1009,12 +1133,24 @@
 
                     @if($placeholderConnections->isEmpty())
                         <div class="card">
+                            <div class="card-header">
+                                <h3 class="h6 mb-0">
+                                    <i class="bi bi-patch-question text-warning me-2"></i>
+                                    Your Placeholders
+                                </h3>
+                            </div>
                             <div class="card-body">
                                 <p class="text-center text-muted my-5">No placeholder connections found.</p>
                             </div>
                         </div>
                     @else
                         <div class="card">
+                            <div class="card-header">
+                                <h3 class="h6 mb-0">
+                                    <i class="bi bi-patch-question text-warning me-2"></i>
+                                    Placeholder Connections
+                                </h3>
+                            </div>
                             <div class="card-body">
                                 <div class="spans-list">
                                     @foreach($placeholderConnections as $connection)
