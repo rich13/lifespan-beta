@@ -11,7 +11,7 @@ class YamlValidationService
     /**
      * Validate YAML structure against database schema
      */
-    public function validateSchema(array $data): array
+    public function validateSchema(array $data, ?string $currentSlug = null): array
     {
         $errors = [];
         
@@ -56,6 +56,27 @@ class YamlValidationService
             $errors = array_merge($errors, $connectionErrors);
         }
         
+        // After schema validation, enforce start date rules
+        $state = $data['state'] ?? 'complete';
+        
+        if ($state !== 'placeholder') {
+            if (!isset($data['start']) || $data['start'] === null || $data['start'] === '') {
+                $errors[] = "Field 'start' is required unless state is 'placeholder' (current state: '{$state}')";
+            } elseif (!in_array($this->getValueType($data['start']), ['string', 'integer'])) {
+                $errors[] = "Field 'start' must be a string or integer (e.g. '1990' or 1990 or '1990-05-01')";
+            }
+        }
+        
+        // Validate slug uniqueness if provided and different from current slug
+        if (isset($data['slug']) && !empty($data['slug'])) {
+            $newSlug = $data['slug'];
+            // Only validate uniqueness if the slug is actually changing
+            if ($currentSlug === null || $newSlug !== $currentSlug) {
+                $slugErrors = $this->validateSlugUniqueness($newSlug, $data['id'] ?? null);
+                $errors = array_merge($errors, $slugErrors);
+            }
+        }
+        
         return $errors;
     }
     
@@ -67,10 +88,11 @@ class YamlValidationService
         return [
             'id' => ['type' => 'string', 'required' => false],
             'name' => ['type' => 'string', 'required' => true],
+            'slug' => ['type' => 'string', 'required' => false],
             'type' => ['type' => 'string', 'required' => true],
             'state' => ['type' => 'string', 'required' => false],
-            'start' => ['type' => 'string', 'required' => false],
-            'end' => ['type' => 'string|null', 'required' => false],
+            'start' => ['type' => 'string|integer', 'required' => false],
+            'end' => ['type' => 'string|integer|null', 'required' => false],
             'description' => ['type' => 'string|null', 'required' => false],
             'notes' => ['type' => 'string|null', 'required' => false],
             'metadata' => ['type' => 'array', 'required' => false],
@@ -143,8 +165,8 @@ class YamlValidationService
             'id' => ['type' => 'string', 'required' => false],
             'type' => ['type' => 'string', 'required' => true],
             'connection_id' => ['type' => 'string', 'required' => false],
-            'start_date' => ['type' => 'string|integer', 'required' => false],
-            'end_date' => ['type' => 'string|integer', 'required' => false],
+            'start_date' => ['type' => 'string|integer|null', 'required' => false],
+            'end_date' => ['type' => 'string|integer|null', 'required' => false],
             'metadata' => ['type' => 'array', 'required' => false],
             'nested_connections' => ['type' => 'array', 'required' => false],
         ];
@@ -186,12 +208,8 @@ class YamlValidationService
                     if (isset($connectionItemSchema[$field])) {
                         $expectedType = $connectionItemSchema[$field]['type'];
                         $actualType = $this->getValueType($value);
-                        // Accept string or integer for start_date and end_date
-                        if (in_array($field, ['start_date', 'end_date'])) {
-                            if (!in_array($actualType, ['string', 'integer'])) {
-                                $errors[] = "Field '{$field}' in connection {$index} of type '{$connectionType}' should be a string or integer, got '{$actualType}'";
-                            }
-                        } else if (!$this->isTypeCompatible($actualType, $expectedType)) {
+                        
+                        if (!$this->isTypeCompatible($actualType, $expectedType)) {
                             $errors[] = "Field '{$field}' in connection {$index} of type '{$connectionType}' should be of type '{$expectedType}', got '{$actualType}'";
                         }
                     }
@@ -221,8 +239,8 @@ class YamlValidationService
             'target_name' => ['type' => 'string', 'required' => true],
             'target_id' => ['type' => 'string', 'required' => false],
             'target_type' => ['type' => 'string', 'required' => true],
-            'start_date' => ['type' => 'string|integer', 'required' => false],
-            'end_date' => ['type' => 'string|integer', 'required' => false],
+            'start_date' => ['type' => 'string|integer|null', 'required' => false],
+            'end_date' => ['type' => 'string|integer|null', 'required' => false],
         ];
         
         foreach ($nestedConnections as $index => $nestedConnection) {
@@ -250,16 +268,42 @@ class YamlValidationService
                 if (isset($nestedSchema[$field])) {
                     $expectedType = $nestedSchema[$field]['type'];
                     $actualType = $this->getValueType($value);
-                    // Accept string or integer for start_date and end_date
-                    if (in_array($field, ['start_date', 'end_date'])) {
-                        if (!in_array($actualType, ['string', 'integer'])) {
-                            $errors[] = "Field '{$field}' in nested connection {$index} of connection {$connectionIndex} in type '{$connectionType}' should be a string or integer, got '{$actualType}'";
-                        }
-                    } else if (!$this->isTypeCompatible($actualType, $expectedType)) {
+                    
+                    if (!$this->isTypeCompatible($actualType, $expectedType)) {
                         $errors[] = "Field '{$field}' in nested connection {$index} of connection {$connectionIndex} in type '{$connectionType}' should be of type '{$expectedType}', got '{$actualType}'";
                     }
                 }
             }
+        }
+        
+        return $errors;
+    }
+    
+    /**
+     * Validate that a slug is unique across the system
+     */
+    private function validateSlugUniqueness(string $slug, ?string $currentSpanId = null): array
+    {
+        $errors = [];
+        
+        // Check if slug is valid format (alphanumeric, hyphens, underscores only)
+        if (!preg_match('/^[a-zA-Z0-9_-]+$/', $slug)) {
+            $errors[] = "Slug '{$slug}' contains invalid characters. Only letters, numbers, hyphens, and underscores are allowed.";
+            return $errors;
+        }
+        
+        // Check for uniqueness in the database
+        $query = \App\Models\Span::where('slug', $slug);
+        
+        // Exclude the current span if this is an update
+        if ($currentSpanId) {
+            $query->where('id', '!=', $currentSpanId);
+        }
+        
+        $existingSpan = $query->first();
+        
+        if ($existingSpan) {
+            $errors[] = "Slug '{$slug}' is already in use by span '{$existingSpan->name}' (ID: {$existingSpan->id})";
         }
         
         return $errors;

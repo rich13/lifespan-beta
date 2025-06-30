@@ -272,6 +272,41 @@
 @endpush
 
 @section('content')
+<!-- Create New Span Button -->
+<div class="container-fluid mb-3">
+    <div class="row">
+        <div class="col-12">
+            <div class="card border-primary">
+                <div class="card-body p-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-1">
+                                <i class="bi bi-plus-circle me-2"></i>Create New Span
+                            </h6>
+                            <p class="card-text small text-muted mb-0">
+                                Start with a blank YAML template and create a new span from scratch
+                            </p>
+                        </div>
+                        <div class="d-flex gap-2 align-items-center">
+                            <input type="text" class="form-control form-control-sm" id="new-span-name-input" 
+                                   placeholder="Enter name..." style="width: 200px;">
+                            <select class="form-select form-select-sm" id="new-span-type-selector" style="width: auto;">
+                                <option value="">Select type...</option>
+                                @foreach($spanTypes as $spanType)
+                                    <option value="{{ $spanType->type_id }}">{{ ucfirst($spanType->type_id) }}</option>
+                                @endforeach
+                            </select>
+                            <button type="button" id="create-new-span-btn" class="btn btn-primary btn-sm" disabled>
+                                <i class="bi bi-plus-circle me-1"></i>Create New Span
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="container-fluid">
     <div class="row">
         <!-- Left column: YAML Editor -->
@@ -2197,19 +2232,8 @@ metadata:
     
     // Helper functions for changes summary
     function getCurrentSpanValue(field) {
-        // This would need to be populated with actual current span data
-        // For now, we'll return placeholder values
-        const currentSpanData = {
-            name: '{{ $span->name }}',
-            type: '{{ $span->type_id }}',
-            state: '{{ $span->state }}',
-            description: '{{ $span->description ?? "" }}',
-            notes: '{{ $span->notes ?? "" }}',
-            access_level: '{{ $span->access_level }}',
-            metadata: @json($span->metadata ?? [])
-        };
-        
-        return currentSpanData[field] || '';
+        // Use the dynamic baseline that can be updated when creating new templates
+        return currentBaseline[field] || '';
     }
     
     function getCurrentSpanDate(type) {
@@ -2433,6 +2457,157 @@ metadata:
         
         return changes;
     }
+    
+    // Create New Span functionality
+    $(document).ready(function() {
+        const newSpanNameInput = $('#new-span-name-input');
+        const newSpanTypeSelector = $('#new-span-type-selector');
+        const createNewSpanBtn = $('#create-new-span-btn');
+        const yamlTextarea = $('#yaml-content');
+        
+        // Dynamic baseline for comparison - starts with current span data
+        let currentBaseline = {
+            name: '{{ $span->name }}',
+            slug: '{{ $span->slug ?? "" }}',
+            type: '{{ $span->type_id }}',
+            state: '{{ $span->state }}',
+            description: '{{ $span->description ?? "" }}',
+            notes: '{{ $span->notes ?? "" }}',
+            access_level: '{{ $span->access_level }}',
+            metadata: @json($span->metadata ?? [])
+        };
+        
+        // Enable/disable create button based on both name and type selection
+        function updateCreateButton() {
+            const hasName = newSpanNameInput.val().trim() !== '';
+            const hasType = newSpanTypeSelector.val() !== '';
+            createNewSpanBtn.prop('disabled', !hasName || !hasType);
+        }
+        
+        newSpanNameInput.on('input', updateCreateButton);
+        newSpanTypeSelector.on('change', updateCreateButton);
+        
+        // Handle create new span button click
+        createNewSpanBtn.on('click', function() {
+            const selectedType = newSpanTypeSelector.val();
+            const spanName = newSpanNameInput.val().trim();
+            
+            if (!selectedType) {
+                alert('Please select a span type first');
+                return;
+            }
+            
+            if (!spanName) {
+                alert('Please enter a span name first');
+                return;
+            }
+            
+            // Generate basic YAML template with the provided name
+            const yamlTemplate = generateNewSpanTemplate(spanName, selectedType);
+            
+            // Clear the editor and insert the template
+            yamlTextarea.val(yamlTemplate);
+            
+            // Reset the baseline to the new template so future changes are compared against it
+            originalContent = yamlTemplate;
+            
+            // Update the current baseline to match the new template
+            currentBaseline = {
+                name: spanName,
+                slug: '',
+                type: selectedType,
+                state: 'placeholder',
+                description: '',
+                notes: '',
+                access_level: 'private',
+                metadata: {}
+            };
+            
+            // Trigger validation to show the template
+            validateYaml();
+            
+            // Reset the inputs
+            newSpanNameInput.val('');
+            newSpanTypeSelector.val('');
+            createNewSpanBtn.prop('disabled', true);
+            
+            // Show success message
+            showFeedback('New span template created! Fill in the details and apply changes to create the span.', 'success');
+        });
+        
+        // Intercept Apply Changes button to handle new span creation
+        $(document).on('click', '#apply-btn', function(e) {
+            const yaml = yamlTextarea.val();
+            let data;
+            try {
+                data = jsyaml.load(yaml);
+            } catch (err) {
+                showFeedback('Invalid YAML: ' + err.message, 'danger');
+                return;
+            }
+            if (!data.id) {
+                // No id: create new span
+                $.ajax({
+                    url: '/spans/yaml-create',
+                    method: 'POST',
+                    data: {
+                        yaml_content: yaml,
+                        _token: $('meta[name="csrf-token"]').attr('content')
+                    },
+                    success: function(response) {
+                        if (response.success && response.redirect) {
+                            window.location.href = response.redirect;
+                        } else {
+                            showFeedback(response.message || 'Failed to create span', 'danger');
+                        }
+                    },
+                    error: function(xhr) {
+                        let msg = 'Failed to create span';
+                        if (xhr.responseJSON && xhr.responseJSON.errors) {
+                            msg = Object.values(xhr.responseJSON.errors).join('<br>');
+                        } else if (xhr.responseJSON && xhr.responseJSON.message) {
+                            msg = xhr.responseJSON.message;
+                        }
+                        showFeedback(msg, 'danger');
+                    }
+                });
+                e.preventDefault();
+            }
+        });
+        
+        function generateNewSpanTemplate(spanName, spanType) {
+            const template = `name: '${spanName}'
+slug: ''
+type: ${spanType}
+state: placeholder
+description: ''
+notes: ''
+metadata: {}
+sources: []
+access_level: private
+`;
+            return template;
+        }
+        
+        function showFeedback(message, type = 'info') {
+            // Create a temporary feedback element
+            const feedback = $(`
+                <div class="alert alert-${type === 'success' ? 'success' : 'info'} alert-dismissible fade show" role="alert">
+                    <i class="bi bi-${type === 'success' ? 'check-circle' : 'info-circle'} me-2"></i>
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            `);
+            
+            // Insert at the top of the validation results
+            $('#validation-results').prepend(feedback);
+            
+            // Auto-dismiss after 5 seconds
+            setTimeout(() => {
+                feedback.alert('close');
+            }, 5000);
+        }
+    });
 });
 </script>
 @endpush 

@@ -123,6 +123,7 @@ class YamlSpanService
 
         $data = [
             'name' => $span->name,
+            'slug' => $span->slug,
             'type' => $span->type_id,
             'state' => $span->state,
             'description' => $span->description,
@@ -273,7 +274,7 @@ class YamlSpanService
     /**
      * Convert YAML string to span data (validation only, no database writes)
      */
-    public function yamlToSpanData(string $yamlContent): array
+    public function yamlToSpanData(string $yamlContent, ?string $currentSlug = null, ?Span $span = null): array
     {
         try {
             $data = Yaml::parse($yamlContent);
@@ -287,7 +288,7 @@ class YamlSpanService
             
             // Use the new validation service for schema validation
             $validationService = new YamlValidationService();
-            $schemaErrors = $validationService->validateSchema($data);
+            $schemaErrors = $validationService->validateSchema($data, $currentSlug);
             
             if (!empty($schemaErrors)) {
                 return [
@@ -305,9 +306,16 @@ class YamlSpanService
             // Validate connections
             $this->validateConnections($data);
             
+            // Analyze the impacts if we have a span context
+            $impacts = [];
+            if ($span) {
+                $impacts = $this->analyzeChangeImpacts($data, $span);
+            }
+            
             return [
                 'success' => true,
-                'data' => $data
+                'data' => $data,
+                'impacts' => $impacts
             ];
             
         } catch (\Symfony\Component\Yaml\Exception\ParseException $e) {
@@ -625,6 +633,7 @@ class YamlSpanService
             // Update basic span fields
             $span->update([
                 'name' => $validatedData['name'],
+                'slug' => $validatedData['slug'] ?? null,
                 'type_id' => $validatedData['type'],
                 'state' => $validatedData['state'] ?? 'complete',
                 'description' => $validatedData['description'] ?? null,
@@ -810,7 +819,7 @@ class YamlSpanService
                 return [
                     'name' => $nestedConnection['target_name'],
                     'type' => $nestedConnection['target_type'],
-                    'id' => $nestedConnection['target_id']
+                    'id' => $nestedConnection['target_id'] ?? null
                 ];
             }
         }
@@ -848,12 +857,23 @@ class YamlSpanService
             $data['start_year'] = $parsedStart['year'];
             $data['start_month'] = $parsedStart['month'];
             $data['start_day'] = $parsedStart['day'];
+        } else {
+            // Explicitly set to null when no start field is provided
+            $data['start_year'] = null;
+            $data['start_month'] = null;
+            $data['start_day'] = null;
         }
+        
         if (isset($data['end']) && $data['end'] !== null) {
             $parsedEnd = $this->parseDate($data['end']);
             $data['end_year'] = $parsedEnd['year'];
             $data['end_month'] = $parsedEnd['month'];
             $data['end_day'] = $parsedEnd['day'];
+        } else {
+            // Explicitly set to null when no end field is provided
+            $data['end_year'] = null;
+            $data['end_month'] = null;
+            $data['end_day'] = null;
         }
     }
 
@@ -1113,17 +1133,30 @@ class YamlSpanService
                     }
                     
                     // For new connections, we need to find or create the connected span
-                    // If no ID is provided, this is a new span that needs to be created
                     $connectedSpan = null;
                     
                     if (isset($connectionData['id'])) {
-                        // Try to find existing span by ID
+                        // Try to find existing span by ID first
                         $connectedSpan = Span::find($connectionData['id']);
                         if (!$connectedSpan) {
-                            throw new \InvalidArgumentException("Span with ID '{$connectionData['id']}' not found");
+                            // If ID not found, try to find by name and type instead
+                            $connectedSpan = Span::where('name', $connectionData['name'])
+                                ->where('type_id', $connectionData['type'])
+                                ->first();
+                            
+                            if ($connectedSpan) {
+                                Log::info('Found span by name instead of ID', [
+                                    'provided_id' => $connectionData['id'],
+                                    'found_id' => $connectedSpan->id,
+                                    'name' => $connectionData['name'],
+                                    'type' => $connectionData['type']
+                                ]);
+                            } else {
+                                throw new \InvalidArgumentException("Span with ID '{$connectionData['id']}' not found, and no existing span with name '{$connectionData['name']}' and type '{$connectionData['type']}' exists");
+                            }
                         }
                     } else {
-                        // This is a new span - create it
+                        // No ID provided - find or create by name and type
                         $connectedSpan = $connectionImporter->findOrCreateConnectedSpan(
                             $connectionData['name'],
                             $connectionData['type'],
@@ -1198,10 +1231,24 @@ class YamlSpanService
                 if (isset($nestedConnectionData['target_id'])) {
                     $targetSpan = Span::find($nestedConnectionData['target_id']);
                     if (!$targetSpan) {
-                        throw new \InvalidArgumentException("Target span with ID '{$nestedConnectionData['target_id']}' not found");
+                        // If ID not found, try to find by name and type instead
+                        $targetSpan = Span::where('name', $nestedConnectionData['target_name'])
+                            ->where('type_id', $nestedConnectionData['target_type'])
+                            ->first();
+                        
+                        if ($targetSpan) {
+                            Log::info('Found nested target span by name instead of ID', [
+                                'provided_id' => $nestedConnectionData['target_id'],
+                                'found_id' => $targetSpan->id,
+                                'name' => $nestedConnectionData['target_name'],
+                                'type' => $nestedConnectionData['target_type']
+                            ]);
+                        } else {
+                            throw new \InvalidArgumentException("Target span with ID '{$nestedConnectionData['target_id']}' not found, and no existing span with name '{$nestedConnectionData['target_name']}' and type '{$nestedConnectionData['target_type']}' exists");
+                        }
                     }
                 } else {
-                    // Create new target span
+                    // No ID provided - find or create by name and type
                     $targetSpan = $connectionImporter->findOrCreateConnectedSpan(
                         $nestedConnectionData['target_name'],
                         $nestedConnectionData['target_type'],
@@ -1324,29 +1371,44 @@ class YamlSpanService
     /**
      * Analyze potential impacts of YAML changes
      */
-    private function analyzeChangeImpacts(array $data): array
+    private function analyzeChangeImpacts(array $data, Span $originalSpan): array
     {
         $impacts = [];
-        
-        if (!isset($data['id'])) {
-            return $impacts;
-        }
-        
-        // Find the original span
-        $originalSpan = Span::find($data['id']);
-        if (!$originalSpan) {
-            $impacts[] = [
-                'type' => 'warning',
-                'message' => 'This appears to be a new span (ID not found in database)'
-            ];
-            return $impacts;
-        }
         
         // Check for name changes
         if (isset($data['name']) && $data['name'] !== $originalSpan->name) {
             $impacts[] = [
                 'type' => 'info',
                 'message' => "Name will change from '{$originalSpan->name}' to '{$data['name']}'"
+            ];
+        }
+        
+        // Check for date changes with normalized comparison
+        $newStartDate = $data['start'] ?? null;
+        $currentStartDate = $originalSpan->getFormattedStartDateAttribute();
+        if ($this->normalizeDateForComparison($newStartDate) !== $this->normalizeDateForComparison($currentStartDate)) {
+            $impacts[] = [
+                'type' => 'info',
+                'message' => "Start date will change from '{$currentStartDate}' to '{$newStartDate}'"
+            ];
+        }
+        
+        $newEndDate = $data['end'] ?? null;
+        $currentEndDate = $originalSpan->getFormattedEndDateAttribute();
+        if ($this->normalizeDateForComparison($newEndDate) !== $this->normalizeDateForComparison($currentEndDate)) {
+            $impacts[] = [
+                'type' => 'info',
+                'message' => "End date will change from '{$currentEndDate}' to '{$newEndDate}'"
+            ];
+        }
+        
+        // Check for metadata changes
+        $newMetadata = $data['metadata'] ?? [];
+        $currentMetadata = $originalSpan->metadata ?? [];
+        if ($newMetadata !== $currentMetadata) {
+            $impacts[] = [
+                'type' => 'info',
+                'message' => "Metadata will be updated"
             ];
         }
         
@@ -1384,6 +1446,25 @@ class YamlSpanService
                     'type' => 'info',
                     'message' => "Will add {$added} new {$type} connection(s)"
                 ];
+                
+                // Provide detailed information about each new connection
+                $newConnectionsList = array_slice($connections, $currentCount);
+                foreach ($newConnectionsList as $connection) {
+                    $connectionName = $connection['name'] ?? 'unnamed';
+                    $connectionType = $connection['type'] ?? 'unknown';
+                    
+                    // Check if the target span already exists
+                    $targetSpanExists = Span::where('name', $connectionName)
+                        ->where('type_id', $connectionType)
+                        ->exists();
+                    
+                    $spanAction = $targetSpanExists ? 'link to existing' : 'create new';
+                    $impacts[] = [
+                        'type' => 'info',
+                        'message' => "  → '{$connectionName}' ({$connectionType}) - will {$spanAction} span",
+                        'indent' => true
+                    ];
+                }
             } elseif ($newCount < $currentCount) {
                 $removed = $currentCount - $newCount;
                 $impacts[] = [
@@ -1392,8 +1473,31 @@ class YamlSpanService
                 ];
             }
             
-            // Check for nested connections in each connection
+            // Check for changes to existing connections and nested connections
             foreach ($connections as $connection) {
+                $currentConnection = $this->findMatchingCurrentConnection($connection, $currentConnections);
+                
+                if ($currentConnection) {
+                    // This is an existing connection - check for changes
+                    $connectionChanges = $this->detectConnectionChanges($connection, $currentConnection);
+                    if (!empty($connectionChanges)) {
+                        $connectionName = $connection['name'] ?? 'unnamed';
+                        $impacts[] = [
+                            'type' => 'info',
+                            'message' => "Will update '{$connectionName}' ({$type}) connection:"
+                        ];
+                        
+                        foreach ($connectionChanges as $change) {
+                            $impacts[] = [
+                                'type' => 'info',
+                                'message' => "  → {$change}",
+                                'indent' => true
+                            ];
+                        }
+                    }
+                }
+                
+                // Check for nested connections in each connection
                 if (isset($connection['nested_connections']) && is_array($connection['nested_connections'])) {
                     $newNestedConnections = $this->findNewNestedConnections($connection, $currentConnections);
                     
@@ -1413,10 +1517,16 @@ class YamlSpanService
                             $targetType = $nestedConnection['target_type'] ?? 'unknown';
                             $direction = $nestedConnection['direction'] ?? 'outgoing';
                             
+                            // Check if the target span already exists
+                            $targetSpanExists = Span::where('name', $targetName)
+                                ->where('type_id', $targetType)
+                                ->exists();
+                            
+                            $spanAction = $targetSpanExists ? 'link to existing' : 'create new';
                             $directionText = $direction === 'outgoing' ? 'from' : 'to';
                             $impacts[] = [
                                 'type' => 'info',
-                                'message' => "  → {$nestedType} connection {$directionText} '{$targetName}' ({$targetType})",
+                                'message' => "  → {$nestedType} connection {$directionText} '{$targetName}' ({$targetType}) - will {$spanAction} span",
                                 'indent' => true
                             ];
                         }
@@ -1498,6 +1608,65 @@ class YamlSpanService
         }
         
         return null;
+    }
+    
+    /**
+     * Detect changes between new and current connection data
+     */
+    private function detectConnectionChanges(array $newConnection, array $currentConnection): array
+    {
+        $changes = [];
+        
+        // Check for date changes with normalized comparison
+        $newStartDate = $newConnection['start_date'] ?? null;
+        $currentStartDate = $currentConnection['start_date'] ?? null;
+        if ($this->normalizeDateForComparison($newStartDate) !== $this->normalizeDateForComparison($currentStartDate)) {
+            $changes[] = "start_date: '{$currentStartDate}' → '{$newStartDate}'";
+        }
+        
+        $newEndDate = $newConnection['end_date'] ?? null;
+        $currentEndDate = $currentConnection['end_date'] ?? null;
+        if ($this->normalizeDateForComparison($newEndDate) !== $this->normalizeDateForComparison($currentEndDate)) {
+            $changes[] = "end_date: '{$currentEndDate}' → '{$newEndDate}'";
+        }
+        
+        // Check for metadata changes
+        $newMetadata = $newConnection['metadata'] ?? [];
+        $currentMetadata = $currentConnection['metadata'] ?? [];
+        if ($newMetadata !== $currentMetadata) {
+            $changes[] = "metadata updated";
+        }
+        
+        return $changes;
+    }
+    
+    /**
+     * Normalize date for comparison (extract year from various formats)
+     */
+    private function normalizeDateForComparison(?string $date): ?string
+    {
+        // Treat empty string the same as null
+        if ($date === null || $date === '') {
+            return null;
+        }
+        
+        // If it's just a year (4 digits), return as is
+        if (preg_match('/^\d{4}$/', $date)) {
+            return $date;
+        }
+        
+        // If it's a full date, extract the year
+        if (preg_match('/^(\d{4})-\d{2}-\d{2}$/', $date, $matches)) {
+            return $matches[1];
+        }
+        
+        // If it's a year-month format, extract the year
+        if (preg_match('/^(\d{4})-\d{2}$/', $date, $matches)) {
+            return $matches[1];
+        }
+        
+        // For any other format, return as is
+        return $date;
     }
     
     /**
@@ -2387,5 +2556,58 @@ class YamlSpanService
         }
         
         return false;
+    }
+
+    /**
+     * Create a new span from validated YAML data
+     */
+    public function createSpanFromYaml(array $data): array
+    {
+        try {
+            DB::beginTransaction();
+
+            // Create the new span
+            $span = Span::create([
+                'name' => $data['name'],
+                'slug' => $data['slug'] ?? null,
+                'type_id' => $data['type'],
+                'state' => $data['state'] ?? 'placeholder',
+                'description' => $data['description'] ?? null,
+                'notes' => $data['notes'] ?? null,
+                'metadata' => $data['metadata'] ?? [],
+                'sources' => $data['sources'] ?? null,
+                'start_year' => $data['start_year'] ?? null,
+                'start_month' => $data['start_month'] ?? null,
+                'start_day' => $data['start_day'] ?? null,
+                'end_year' => $data['end_year'] ?? null,
+                'end_month' => $data['end_month'] ?? null,
+                'end_day' => $data['end_day'] ?? null,
+                'access_level' => $data['access_level'] ?? 'private',
+                'owner_id' => auth()->id(),
+                'updater_id' => auth()->id(),
+            ]);
+
+            // Handle connections if present
+            if (isset($data['connections'])) {
+                $this->updateConnections($span, $data['connections']);
+            }
+
+            DB::commit();
+
+            return [
+                'success' => true,
+                'span' => $span,
+                'message' => 'New span created successfully from YAML'
+            ];
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Failed to create span from YAML', [
+                'error' => $e->getMessage()
+            ]);
+            return [
+                'success' => false,
+                'message' => 'Failed to create span: ' . $e->getMessage()
+            ];
+        }
     }
 } 

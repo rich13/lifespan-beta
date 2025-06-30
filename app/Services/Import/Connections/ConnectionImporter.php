@@ -32,21 +32,22 @@ class ConnectionImporter
         ?array $dates = null,
         ?array $metadata = null
     ): Span {
-        // First try to find an existing span with this name and type
-        $span = Span::firstOrCreate(
-            [
+        // First try to find an existing span with this name and type (case insensitive)
+        $span = Span::where('name', 'ILIKE', $name)
+            ->where('type_id', $type)
+            ->first();
+            
+        if (!$span) {
+            // Create a new span if none exists
+            $span = Span::create([
                 'name' => $name,
-                'type_id' => $type
-            ],
-            [
-                // If we need to create a new span, it starts as a placeholder
-                // This indicates we know this entity exists but don't know its full temporal extent
+                'type_id' => $type,
                 'owner_id' => $this->user->id,
                 'updater_id' => $this->user->id,
                 'state' => 'placeholder',
                 'metadata' => $metadata
-            ]
-        );
+            ]);
+        }
 
         // Important: We do NOT set the span's temporal information from the connection dates
         // The dates passed to this method represent when the CONNECTION existed

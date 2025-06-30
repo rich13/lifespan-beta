@@ -277,6 +277,9 @@ Route::middleware('web')->group(function () {
             Route::get('/', [SpanController::class, 'index'])->name('spans.index');
             Route::get('/{span}', [SpanController::class, 'show'])->name('spans.show');
         });
+
+        // New POST route for creating a new span from YAML
+        Route::post('/yaml-create', [\App\Http\Controllers\SpanController::class, 'createFromYaml'])->name('spans.yaml-create');
     });
 
     // Protected routes
