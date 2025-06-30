@@ -21,6 +21,29 @@
             $personCategories['musicians'] = 'Musicians';
         }
     }
+    
+    // Get actual subtypes that exist in the database for each span type
+    $existingSubtypes = [];
+    if (!empty($selectedTypes)) {
+        foreach ($selectedTypes as $typeId) {
+            if ($typeId !== 'person') { // Skip person type as it has its own category system
+                $subtypes = \App\Models\Span::where('type_id', $typeId)
+                    ->whereNotNull('metadata->subtype')
+                    ->distinct()
+                    ->pluck(\DB::raw("metadata->>'subtype' as subtype"))
+                    ->map(function($item) {
+                        return is_object($item) ? $item->subtype : $item;
+                    })
+                    ->filter()
+                    ->values()
+                    ->toArray();
+                
+                if (!empty($subtypes)) {
+                    $existingSubtypes[$typeId] = $subtypes;
+                }
+            }
+        }
+    }
 @endphp
 
 <div class="d-flex align-items-center gap-3">
@@ -37,8 +60,7 @@
                     <!-- Main Type Filter -->
                     <input type="checkbox" class="btn-check type-checkbox" 
                            id="filter_{{ $spanType->type_id }}" 
-                           name="types" 
-                           value="{{ $spanType->type_id }}" 
+                           data-type="{{ $spanType->type_id }}" 
                            {{ in_array($spanType->type_id, $selectedTypes) ? 'checked' : '' }} 
                            autocomplete="off">
                     <label class="btn btn-sm {{ in_array($spanType->type_id, $selectedTypes) ? 'btn-' . $spanType->type_id : 'btn-outline-' . $spanType->type_id }} {{ $loop->first ? 'rounded-start' : '' }} {{ $loop->last ? 'rounded-end' : '' }}" 
@@ -46,17 +68,7 @@
                            data-bs-toggle="tooltip" 
                            data-bs-placement="bottom" 
                            title="Filter by {{ $spanType->name }}">
-                        <i class="bi bi-{{
-                            match($spanType->type_id) {
-                                'person' => 'person-fill',
-                                'organisation' => 'building',
-                                'place' => 'geo-alt-fill',
-                                'event' => 'calendar-event-fill',
-                                'band' => 'cassette',
-                                'thing' => 'box',
-                                default => 'box'
-                            }
-                        }}"></i>
+                        <x-icon type="{{ $spanType->type_id }}" category="span" />
                     </label>
 
                     <!-- Dynamic Person Categories -->
@@ -73,38 +85,41 @@
                                    data-bs-toggle="tooltip" 
                                    data-bs-placement="bottom" 
                                    title="Filter by {{ $label }} people">
-                                {{ $label }}
+                                <x-icon type="{{ $category }}" category="subtype" class="me-1" />
                             </label>
                         @endforeach
                     @endif
 
                     <!-- Subtype Filters for other types -->
-                    @if($spanType->type_id !== 'person' && in_array($spanType->type_id, $selectedTypes) && isset($spanType->metadata['schema']['subtype']))
-                        @foreach($spanType->metadata['schema']['subtype']['options'] as $option)
+                    @if($spanType->type_id !== 'person' && in_array($spanType->type_id, $selectedTypes) && isset($existingSubtypes[$spanType->type_id]))
+                        @foreach($existingSubtypes[$spanType->type_id] as $subtype)
                             <input type="checkbox" class="btn-check subtype-checkbox" 
-                                   id="filter_{{ $spanType->type_id }}_{{ $option }}" 
+                                   id="filter_{{ $spanType->type_id }}_{{ $subtype }}" 
                                    name="{{ $spanType->type_id }}_subtype" 
-                                   value="{{ $option }}" 
-                                   {{ in_array($option, request($spanType->type_id . '_subtype') ? explode(',', request($spanType->type_id . '_subtype')) : []) ? 'checked' : '' }} 
+                                   value="{{ $subtype }}" 
+                                   {{ in_array($subtype, request($spanType->type_id . '_subtype') ? explode(',', request($spanType->type_id . '_subtype')) : []) ? 'checked' : '' }} 
                                    autocomplete="off">
-                            <label class="btn btn-sm {{ in_array($option, request($spanType->type_id . '_subtype') ? explode(',', request($spanType->type_id . '_subtype')) : []) ? 'btn-secondary' : 'bg-light text-dark' }}" 
-                                   for="filter_{{ $spanType->type_id }}_{{ $option }}" 
+                            <label class="btn btn-sm {{ in_array($subtype, request($spanType->type_id . '_subtype') ? explode(',', request($spanType->type_id . '_subtype')) : []) ? 'btn-secondary' : 'bg-light text-dark' }}" 
+                                   for="filter_{{ $spanType->type_id }}_{{ $subtype }}" 
                                    data-bs-toggle="tooltip" 
                                    data-bs-placement="bottom" 
-                                   title="Filter by {{ ucfirst($option) }} {{ $spanType->name }}">
-                                {{ ucfirst($option) }}
+                                   title="Filter by {{ ucfirst($subtype) }} {{ $spanType->name }}">
+                                <x-icon type="{{ $subtype }}" category="subtype" class="me-1" />
                             </label>
                         @endforeach
                     @endif
                 @endforeach
             </div>
             
+            <!-- Hidden input for combined types -->
+            <input type="hidden" name="types" id="combined-types" value="{{ implode(',', $selectedTypes) }}">
+            
             @if(!empty($selectedTypes))
                 <a href="{{ $route }}" class="btn btn-sm btn-outline-secondary d-flex align-items-center" 
                    data-bs-toggle="tooltip" 
                    data-bs-placement="bottom" 
                    title="Clear all filters">
-                    <i class="bi bi-x-circle"></i>
+                    <x-icon type="clear" category="action" />
                 </a>
             @endif
         @endif
@@ -121,7 +136,7 @@
                            data-bs-toggle="tooltip" 
                            data-bs-placement="bottom" 
                            title="Show all spans regardless of permission mode">
-                        <i class="bi bi-shield"></i>
+                        <x-icon type="shield" category="action" />
                     </label>
 
                     <input type="radio" class="btn-check filter-radio" name="permission_mode" id="permission_mode_own" value="own" 
@@ -131,7 +146,7 @@
                            data-bs-toggle="tooltip" 
                            data-bs-placement="bottom" 
                            title="Show only spans you own">
-                        <i class="bi bi-shield-lock"></i>
+                        <x-icon type="shield-lock" category="action" />
                     </label>
 
                     <input type="radio" class="btn-check filter-radio" name="permission_mode" id="permission_mode_inherit" value="inherit" 
@@ -141,7 +156,7 @@
                            data-bs-toggle="tooltip" 
                            data-bs-placement="bottom" 
                            title="Show only spans with inherited permissions">
-                        <i class="bi bi-shield-fill-check"></i>
+                        <x-icon type="shield-fill-check" category="action" />
                     </label>
                 @endif
 
@@ -154,7 +169,7 @@
                            data-bs-toggle="tooltip" 
                            data-bs-placement="bottom" 
                            title="Show all spans regardless of visibility">
-                        <i class="bi bi-eye"></i>
+                        <x-icon type="view" category="action" />
                     </label>
 
                     <input type="radio" class="btn-check filter-radio" name="visibility" id="visibility_public" value="public" 
@@ -164,7 +179,7 @@
                            data-bs-toggle="tooltip" 
                            data-bs-placement="bottom" 
                            title="Show only public spans">
-                        <i class="bi bi-globe"></i>
+                        <x-icon type="public" category="status" />
                     </label>
 
                     <input type="radio" class="btn-check filter-radio" name="visibility" id="visibility_private" value="private" 
@@ -174,7 +189,7 @@
                            data-bs-toggle="tooltip" 
                            data-bs-placement="bottom" 
                            title="Show only private spans">
-                        <i class="bi bi-lock"></i>
+                        <x-icon type="private" category="status" />
                     </label>
 
                     <input type="radio" class="btn-check filter-radio" name="visibility" id="visibility_group" value="group" 
@@ -184,7 +199,7 @@
                            data-bs-toggle="tooltip" 
                            data-bs-placement="bottom" 
                            title="Show only group-shared spans">
-                        <i class="bi bi-people"></i>
+                        <x-icon type="shared" category="status" />
                     </label>
                 @endif
 
@@ -197,7 +212,7 @@
                            data-bs-toggle="tooltip" 
                            data-bs-placement="bottom" 
                            title="Show all spans regardless of state">
-                        <i class="bi bi-check-circle"></i>
+                        <x-icon type="all" category="status" />
                     </label>
 
                     <input type="radio" class="btn-check filter-radio" name="state" id="state_placeholder" value="placeholder" 
@@ -207,7 +222,7 @@
                            data-bs-toggle="tooltip" 
                            data-bs-placement="bottom" 
                            title="Show only placeholder spans (incomplete data)">
-                        <i class="bi bi-dash-circle"></i>
+                        <x-icon type="placeholder" category="status" />
                     </label>
 
                     <input type="radio" class="btn-check filter-radio" name="state" id="state_draft" value="draft" 
@@ -217,7 +232,7 @@
                            data-bs-toggle="tooltip" 
                            data-bs-placement="bottom" 
                            title="Show only draft spans (work in progress)">
-                        <i class="bi bi-pencil-circle"></i>
+                        <x-icon type="draft" category="status" />
                     </label>
 
                     <input type="radio" class="btn-check filter-radio" name="state" id="state_complete" value="complete" 
@@ -227,7 +242,7 @@
                            data-bs-toggle="tooltip" 
                            data-bs-placement="bottom" 
                            title="Show only complete spans (finished)">
-                        <i class="bi bi-check-circle-fill"></i>
+                        <x-icon type="complete" category="status" />
                     </label>
                 @endif
             </div>
@@ -236,7 +251,7 @@
         <!-- Search Input -->
         @if($showSearch)
             <div class="d-flex align-items-center position-relative">
-                <i class="bi bi-search position-absolute ms-2 {{ request('search') ? 'text-primary' : 'text-muted' }} z-index-1"></i>
+                <x-icon type="search" category="action" class="position-absolute ms-2 {{ request('search') ? 'text-primary' : 'text-muted' }} z-index-1" />
                 <input type="text" name="search" id="span-search" class="form-control form-control-sm ps-4 {{ request('search') ? 'border-primary shadow-sm' : '' }} search-width" placeholder="Search spans..." value="{{ request('search') }}"
                        data-bs-toggle="tooltip" 
                        data-bs-placement="bottom" 
@@ -246,7 +261,7 @@
                        data-bs-toggle="tooltip" 
                        data-bs-placement="bottom" 
                        title="Clear search">
-                        <i class="bi bi-x"></i>
+                        <x-icon type="clear" category="action" />
                     </a>
                 @endif
             </div>
@@ -267,18 +282,19 @@ document.addEventListener('DOMContentLoaded', function() {
     if (filterForm) {
         // Handle type filter checkboxes
         const typeCheckboxes = filterForm.querySelectorAll('.type-checkbox');
+        const combinedTypesInput = document.getElementById('combined-types');
+        
         typeCheckboxes.forEach(checkbox => {
             checkbox.addEventListener('change', () => {
                 // Get all checked type checkboxes and join their values with commas
                 const checkedTypes = Array.from(typeCheckboxes)
                     .filter(cb => cb.checked)
-                    .map(cb => cb.value)
+                    .map(cb => cb.dataset.type)
                     .join(',');
                 
-                // Update the types input value
-                const typesInput = checkbox.name;
-                if (checkedTypes) {
-                    checkbox.value = checkedTypes;
+                // Update the hidden input value
+                if (combinedTypesInput) {
+                    combinedTypesInput.value = checkedTypes;
                 }
                 
                 filterForm.submit();
@@ -309,9 +325,9 @@ document.addEventListener('DOMContentLoaded', function() {
         subtypeCheckboxes.forEach(checkbox => {
             checkbox.addEventListener('change', () => {
                 // Get all checked subtypes for this type and join with commas
-                const type = checkbox.dataset.type;
+                const type = checkbox.name.replace('_subtype', '');
                 const checkedSubtypes = Array.from(subtypeCheckboxes)
-                    .filter(cb => cb.dataset.type === type && cb.checked)
+                    .filter(cb => cb.name === checkbox.name && cb.checked)
                     .map(cb => cb.value)
                     .join(',');
                 
