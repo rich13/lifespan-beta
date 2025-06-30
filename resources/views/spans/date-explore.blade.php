@@ -18,12 +18,6 @@
 
 @section('content')
 <div class="container-fluid">
-    <div class="alert alert-info alert-sm py-2 mb-3">
-        <small>
-            <i class="bi bi-calendar me-1"></i>
-            Showing spans and connections that started or ended on this date, month, or year
-        </small>
-    </div>
 
     @if($spansStartingOnDate->isEmpty() && $spansEndingOnDate->isEmpty() && 
         $spansStartingInMonth->isEmpty() && $spansEndingInMonth->isEmpty() && 
@@ -37,13 +31,14 @@
             </div>
         </div>
     @else
-        <div class="row">
-            <!-- Left Column: Started -->
+        <!-- Spans Section -->
+        <div class="row mb-4">
+            <!-- Left Column: Spans Started -->
             <div class="col-md-6">
-                <div class="mb-4">
+                @if($spansStartingOnDate->isNotEmpty() || $spansStartingInMonth->isNotEmpty() || $spansStartingInYear->isNotEmpty())
                     <h2 class="h5 mb-3">
                         <i class="bi bi-diagram-3 text-primary me-2"></i>
-                        Spans
+                        Spans Started
                     </h2>
 
                     @if($spansStartingOnDate->isNotEmpty())
@@ -87,64 +82,15 @@
                             </div>
                         </div>
                     @endif
-                </div>
-
-                <div class="mb-4">
-                    <h2 class="h5 mb-3">
-                        <i class="bi bi-link-45deg text-primary me-2"></i>
-                        Connections
-                    </h2>
-
-                    @if($connectionsStartingOnDate->isNotEmpty())
-                        <div class="mb-4">
-                            <h3 class="h6 mb-2">
-                                <i class="bi bi-play-circle text-success me-2"></i>
-                                Started on {{ \Carbon\Carbon::parse($date)->format('j F Y') }}
-                            </h3>
-                            <div class="spans-list">
-                                @foreach($connectionsStartingOnDate as $connection)
-                                    <x-connections.interactive-card :connection="$connection" />
-                                @endforeach
-                            </div>
-                        </div>
-                    @endif
-
-                    @if($connectionsStartingInMonth->isNotEmpty())
-                        <div class="mb-4">
-                            <h3 class="h6 mb-2">
-                                <i class="bi bi-calendar-week text-success me-2"></i>
-                                Started in {{ \Carbon\Carbon::parse($date)->format('F Y') }}
-                            </h3>
-                            <div class="spans-list">
-                                @foreach($connectionsStartingInMonth as $connection)
-                                    <x-connections.interactive-card :connection="$connection" />
-                                @endforeach
-                            </div>
-                        </div>
-                    @endif
-
-                    @if($connectionsStartingInYear->isNotEmpty())
-                        <div class="mb-4">
-                            <h3 class="h6 mb-2">
-                                <i class="bi bi-calendar-week text-success me-2"></i>
-                                Started in {{ \Carbon\Carbon::parse($date)->format('Y') }}
-                            </h3>
-                            <div class="spans-list">
-                                @foreach($connectionsStartingInYear as $connection)
-                                    <x-connections.interactive-card :connection="$connection" />
-                                @endforeach
-                            </div>
-                        </div>
-                    @endif
-                </div>
+                @endif
             </div>
 
-            <!-- Right Column: Ended -->
+            <!-- Right Column: Spans Ended -->
             <div class="col-md-6">
-                <div class="mb-4">
+                @if($spansEndingOnDate->isNotEmpty() || $spansEndingInMonth->isNotEmpty() || $spansEndingInYear->isNotEmpty())
                     <h2 class="h5 mb-3">
                         <i class="bi bi-diagram-3 text-primary me-2"></i>
-                        Spans
+                        Spans Ended
                     </h2>
 
                     @if($spansEndingOnDate->isNotEmpty())
@@ -188,12 +134,70 @@
                             </div>
                         </div>
                     @endif
-                </div>
+                @endif
+            </div>
+        </div>
 
-                <div class="mb-4">
+        <!-- Connections Section -->
+        <div class="row">
+            <!-- Left Column: Connections Started -->
+            <div class="col-md-6">
+                @if($connectionsStartingOnDate->isNotEmpty() || $connectionsStartingInMonth->isNotEmpty() || $connectionsStartingInYear->isNotEmpty())
                     <h2 class="h5 mb-3">
-                        <i class="bi bi-link-45deg text-primary me-2"></i>
-                        Connections
+                        <i class="bi bi-arrow-left-right text-primary me-2"></i>
+                        Connections Started
+                    </h2>
+
+                    @if($connectionsStartingOnDate->isNotEmpty())
+                        <div class="mb-4">
+                            <h3 class="h6 mb-2">
+                                <i class="bi bi-play-circle text-success me-2"></i>
+                                Started on {{ \Carbon\Carbon::parse($date)->format('j F Y') }}
+                            </h3>
+                            <div class="spans-list">
+                                @foreach($connectionsStartingOnDate as $connection)
+                                    <x-connections.interactive-card :connection="$connection" />
+                                @endforeach
+                            </div>
+                        </div>
+                    @endif
+
+                    @if($connectionsStartingInMonth->isNotEmpty())
+                        <div class="mb-4">
+                            <h3 class="h6 mb-2">
+                                <i class="bi bi-calendar-week text-success me-2"></i>
+                                Started in {{ \Carbon\Carbon::parse($date)->format('F Y') }}
+                            </h3>
+                            <div class="spans-list">
+                                @foreach($connectionsStartingInMonth as $connection)
+                                    <x-connections.interactive-card :connection="$connection" />
+                                @endforeach
+                            </div>
+                        </div>
+                    @endif
+
+                    @if($connectionsStartingInYear->isNotEmpty())
+                        <div class="mb-4">
+                            <h3 class="h6 mb-2">
+                                <i class="bi bi-calendar-week text-success me-2"></i>
+                                Started in {{ \Carbon\Carbon::parse($date)->format('Y') }}
+                            </h3>
+                            <div class="spans-list">
+                                @foreach($connectionsStartingInYear as $connection)
+                                    <x-connections.interactive-card :connection="$connection" />
+                                @endforeach
+                            </div>
+                        </div>
+                    @endif
+                @endif
+            </div>
+
+            <!-- Right Column: Connections Ended -->
+            <div class="col-md-6">
+                @if($connectionsEndingOnDate->isNotEmpty() || $connectionsEndingInMonth->isNotEmpty() || $connectionsEndingInYear->isNotEmpty())
+                    <h2 class="h5 mb-3">
+                        <i class="bi bi-arrow-left-right text-primary me-2"></i>
+                        Connections Ended
                     </h2>
 
                     @if($connectionsEndingOnDate->isNotEmpty())
@@ -237,7 +241,7 @@
                             </div>
                         </div>
                     @endif
-                </div>
+                @endif
             </div>
         </div>
     @endif
