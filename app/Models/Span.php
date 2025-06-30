@@ -877,6 +877,11 @@ class Span extends Model
         }
 
         $userId = $user instanceof User ? $user->id : $user;
+        
+        // Admin always has permission
+        if ($user instanceof User && $user->is_admin) {
+            return true;
+        }
 
         if ($userId === $this->owner_id) {
             return true;
