@@ -301,6 +301,10 @@ Route::middleware('web')->group(function () {
         Route::get('/friends/data', [FriendsController::class, 'data'])->name('friends.data');
         Route::post('/api/friends/connections', [FriendsController::class, 'createConnection'])->name('friends.connections.create');
 
+        // AI YAML Generator routes
+        Route::get('/ai-yaml-generator', [\App\Http\Controllers\AiYamlController::class, 'show'])->name('ai-yaml-generator.show');
+        Route::post('/ai-yaml-generator/generate', [\App\Http\Controllers\AiYamlController::class, 'generatePersonYaml'])->name('ai-yaml-generator.generate');
+
         // Admin routes
         Route::middleware('admin')->prefix('admin')->name('admin.')->group(function () {
             // Dashboard
@@ -412,6 +416,16 @@ Route::middleware('web')->group(function () {
                 ->name('visualizer.index');
             Route::get('/visualizer/temporal', [VisualizerController::class, 'temporal'])
                 ->name('visualizer.temporal');
+
+            // Admin Tools
+            Route::get('/tools', [App\Http\Controllers\Admin\ToolsController::class, 'index'])
+                ->name('tools.index');
+            Route::get('/tools/find-similar-spans', [App\Http\Controllers\Admin\ToolsController::class, 'findSimilarSpans'])
+                ->name('tools.find-similar-spans');
+            Route::post('/tools/merge-spans', [App\Http\Controllers\Admin\ToolsController::class, 'mergeSpans'])
+                ->name('tools.merge-spans');
+            Route::get('/tools/span-details', [App\Http\Controllers\Admin\ToolsController::class, 'getSpanDetails'])
+                ->name('tools.span-details');
 
             // Import routes
             Route::get('/import', [ImportController::class, 'index'])

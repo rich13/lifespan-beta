@@ -59,6 +59,15 @@ use Illuminate\Support\Facades\Auth;
     <hr class="sidebar-divider">
     <ul class="nav flex-column">
         <li class="nav-item">
+            <a class="nav-link {{ request()->routeIs('admin.tools.*') ? 'active' : '' }}" href="{{ route('admin.tools.index') }}">
+                <i class="bi bi-tools me-1"></i> <span>Tools</span>
+            </a>
+        </li>
+    </ul>
+
+    <hr class="sidebar-divider">
+    <ul class="nav flex-column">
+        <li class="nav-item">
             <a class="nav-link {{ request()->routeIs('admin.visualizer.index') ? 'active' : '' }}" href="{{ route('admin.visualizer.index') }}">
                 <i class="bi bi-graph-up me-1"></i> <span>Network Explorer</span>
             </a>
