@@ -33,14 +33,9 @@ function initializeTimeline_{{ str_replace('-', '_', $span->id) }}() {
         })
         .then(data => {
             console.log('API response data:', data);
-            if (data.connections && data.connections.length > 0) {
-                console.log('Found connections:', data.connections.length);
-                renderTimeline_{{ str_replace('-', '_', $span->id) }}(data.connections, data.span);
-            } else {
-                console.log('No connections found in data');
-                document.getElementById(`timeline-container-${spanId}`).innerHTML = 
-                    '<div class="text-muted text-center py-4">No timeline data available</div>';
-            }
+            // Always render timeline, even if no connections - will show life span
+            console.log('Rendering timeline with connections:', data.connections ? data.connections.length : 0);
+            renderTimeline_{{ str_replace('-', '_', $span->id) }}(data.connections || [], data.span);
         })
         .catch(error => {
             console.error('Error loading timeline data:', error);
@@ -153,6 +148,7 @@ function renderTimeline_{{ str_replace('-', '_', $span->id) }}(connections, span
     if (span.start_year) {
         const lifeStartYear = span.start_year;
         const lifeEndYear = span.end_year || new Date().getFullYear();
+        const hasConnections = connections.length > 0;
         
         svg.append('rect')
             .attr('class', 'life-span')
@@ -162,11 +158,23 @@ function renderTimeline_{{ str_replace('-', '_', $span->id) }}(connections, span
             .attr('height', swimlaneHeight - 4)
             .attr('fill', connectionColors.life)
             .attr('stroke', 'white')
-            .attr('stroke-width', 2) // Thicker border to make it stand out
+            .attr('stroke-width', hasConnections ? 2 : 3) // Thicker border when no connections
             .attr('rx', 2)
             .attr('ry', 2)
-            .style('opacity', 0.3) // Very transparent so connections show through
-            .style('pointer-events', 'none'); // Don't interfere with connection hover
+            .style('opacity', hasConnections ? 0.3 : 0.7) // More visible when no connections
+            .style('pointer-events', hasConnections ? 'none' : 'auto') // Allow interaction when no connections
+            .on('mouseover', function(event) {
+                if (!hasConnections) {
+                    d3.select(this).style('opacity', 0.9);
+                    showLifeSpanTooltip_{{ str_replace('-', '_', $span->id) }}(event, span);
+                }
+            })
+            .on('mouseout', function() {
+                if (!hasConnections) {
+                    d3.select(this).style('opacity', 0.7);
+                    hideTooltip_{{ str_replace('-', '_', $span->id) }}();
+                }
+            });
     }
 
     // Create timeline bars (all in the same swimlane)
@@ -311,6 +319,27 @@ function renderTimeline_{{ str_replace('-', '_', $span->id) }}(connections, span
         tooltip.transition()
             .duration(500)
             .style('opacity', 0);
+    }
+
+    function showLifeSpanTooltip_{{ str_replace('-', '_', $span->id) }}(event, span) {
+        tooltip.transition()
+            .duration(200)
+            .style('opacity', 1);
+        
+        const lifeStartYear = span.start_year;
+        const lifeEndYear = span.end_year || 'Present';
+        const currentYear = new Date().getFullYear();
+        const age = lifeEndYear === 'Present' ? currentYear - lifeStartYear : lifeEndYear - lifeStartYear;
+        
+        let tooltipContent = `
+            <strong>${span.name}</strong><br/>
+            <strong>Life Span:</strong> ${lifeStartYear} - ${lifeEndYear}<br/>
+            <strong>Age:</strong> ${age} years
+        `;
+        
+        tooltip.html(tooltipContent)
+            .style('left', (event.pageX - 50) + 'px') // Center horizontally
+            .style('top', (event.pageY + 20) + 'px'); // Position below cursor with distance
     }
 }
 

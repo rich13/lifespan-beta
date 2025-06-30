@@ -26,15 +26,14 @@
         <!-- Span name button (main link) -->
         <a href="{{ route('spans.show', $span) }}" 
            class="btn {{ $span->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $span->type_id }} text-start">
-            <strong>{{ $span->name }}</strong>
+            {{ $span->name }}
         </a>
         
         @if($span->start_year || $span->end_year)
             @if($span->type_id === 'person')
                 @if($span->end_year)
                     <!-- Person with death date: [person] [name] lived from [start] to [end] -->
-                    <button type="button" class="btn btn-outline-light text-dark inactive" disabled>lived</button>
-                    <button type="button" class="btn btn-outline-light text-dark inactive" disabled>from</button>
+                    <button type="button" class="btn btn-outline-light text-dark inactive" disabled>lived from</button>
                     <a href="{{ route('date.explore', ['date' => $span->start_date_link]) }}" 
                        class="btn btn-outline-date">
                         {{ $span->human_readable_start_date }}
