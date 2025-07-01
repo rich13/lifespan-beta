@@ -14,22 +14,23 @@
     @auth
         @if(auth()->user()->can('update', $span) || auth()->user()->can('delete', $span))
             @can('update', $span)
-                <a href="{{ route('spans.edit', $span) }}" class="btn btn-sm btn-outline-primary">
-                    <i class="bi bi-pencil me-1"></i> Edit
+                <a href="{{ route('spans.edit', $span) }}" class="btn btn-sm btn-outline-secondary">
+                    <i class="bi bi-pencil me-1"></i> Basic Edit
                 </a>
-                <a href="{{ route('spans.yaml-editor', $span) }}" class="btn btn-sm btn-outline-secondary">
-                    <i class="bi bi-code-square me-1"></i> YAML Editor
+                <a href="{{ route('spans.yaml-editor', $span) }}" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-code-square me-1"></i> Editor
                 </a>
             @endcan
             @can('delete', $span)
+            
+                <form id="delete-span-form" action="{{ route('spans.destroy', $span) }}" method="POST" class="d-none">
+                    @csrf
+                    @method('DELETE')
+                </form>    
                 <a href="#" class="btn btn-sm btn-outline-danger" id="delete-span-btn">
                     <i class="bi bi-trash me-1"></i> Delete
                 </a>
                 
-                <form id="delete-span-form" action="{{ route('spans.destroy', $span) }}" method="POST" class="d-none">
-                    @csrf
-                    @method('DELETE')
-                </form>
             @endcan
         @endif
     @endauth
