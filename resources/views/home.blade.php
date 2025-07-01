@@ -397,7 +397,7 @@
     <div class="row mx-0 hero-section">
         <div class="col-12 text-center">
             <h1 class="display-3 mb-0">Lifespan</h1>
-            <p class="lead">It's about time</p>
+            <p class="lead">It's time</p>
         </div>
     </div>
 
