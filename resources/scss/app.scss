@@ -239,6 +239,10 @@ $lifespan-colors: (
 // Special utility classes for interactive cards
 .interactive-card-base {
   .btn-group {
+    display: flex;
+    flex-wrap: nowrap;
+    width: 100%;
+    max-width: 100%;
     .btn {
       // Ensure consistent spacing and sizing
       font-size: 0.875rem;
@@ -260,6 +264,13 @@ $lifespan-colors: (
       // Force consistent border color for all buttons in group
       border-color: #dee2e6 !important;
       
+      // Prevent text wrapping and ensure responsive behavior
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex-shrink: 0;
+      flex-grow: 0;
+      
       // Inactive button styling (for connectors and predicates)
       &.inactive {
         background-color: #f8f9fa;
@@ -279,6 +290,25 @@ $lifespan-colors: (
         opacity: 0.6;
         cursor: default;
       }
+    }
+    
+    // Responsive behavior for button groups - apply to all screen sizes
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    
+    &::-webkit-scrollbar {
+      display: none;
+    }
+    
+    scroll-behavior: smooth;
+    flex-wrap: nowrap;
+    
+    .btn {
+      flex-shrink: 0;
+      min-width: max-content;
     }
   }
 }
