@@ -23,8 +23,6 @@
 
 @section('scripts')
 @guest
-<!-- Add Bootstrap Icons -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 <style>
     .container-fluid.px-0 {
         overflow-x: hidden; /* Prevent horizontal scrollbar */
@@ -122,7 +120,7 @@
     /* Enhanced hover effect */
     .carousel-card:hover,
     .small-carousel-card:hover {
-        transform: translateY(-10px);
+        transform: scale(0.97);
     }
     
     /* Edge gradients */
@@ -422,7 +420,8 @@
                                 </p>
                             </div>
                             <div class="card-content-bottom">
-                                <p class="card-text"><a href="/spans/roy-batty">Roy Batty</a></p>
+                            <p class="card-text">Roy Batty</p>
+                            <!-- <p class="card-text"><a href="/spans/roy-batty">Roy Batty</a></p> -->
                                 <p class="card-text mb-0">8 January 2016 - 10 November 2019</p>
                             </div>
                         </div>
@@ -444,7 +443,8 @@
                                 </p>
                             </div>
                             <div class="card-content-bottom">
-                                <p class="card-text"><a href="/spans/dr-emmett-brown">Dr. Emmett Brown</a></p>
+                                <!-- <p class="card-text"><a href="/spans/dr-emmett-brown">Dr. Emmett Brown</a></p> -->
+                                <p class="card-text">Dr. Emmett Brown</p>
                                 <p class="card-text mb-0">11 August 1920 - unknown</p>
                             </div>
                         </div>
@@ -466,7 +466,8 @@
                                 </p>
                             </div>
                             <div class="card-content-bottom">
-                                <p class="card-text"><a href="/spans/kurt-vonnegut">Kurt Vonnegut</a></p>
+                                <!-- <p class="card-text"><a href="/spans/kurt-vonnegut">Kurt Vonnegut</a></p> -->
+                                <p class="card-text">Kurt Vonnegut</p>
                                 <p class="card-text mb-0">1922 - 2007</p>
                             </div>
                         </div>
@@ -488,7 +489,8 @@
                                 </p>
                             </div>
                             <div class="card-content-bottom">
-                                <p class="card-text"><a href="/spans/laurie-anderson">Laurie Anderson</a></p>
+                                <!-- <p class="card-text"><a href="/spans/laurie-anderson">Laurie Anderson</a></p> -->
+                                <p class="card-text">Laurie Anderson</p>
                                 <p class="card-text mb-0">1947 - present</p>
                             </div>
                         </div>
@@ -496,7 +498,7 @@
                 </div>
 
                 <!-- Card 5 -->
-                <div class="carousel-card">
+                <!-- <div class="carousel-card">
                     <div class="card h-100 shadow-sm">
                         <div class="card-body">
                             <div class="card-content-top">
@@ -514,10 +516,10 @@
                             </div>
                         </div>
                     </div>
-                </div>
+                </div> -->
 
                 <!-- Card 6 -->
-                <div class="carousel-card">
+                <!-- <div class="carousel-card">
                     <div class="card h-100 shadow-sm">
                         <div class="card-body">
                             <div class="card-content-top">
@@ -535,7 +537,7 @@
                             </div>
                         </div>
                     </div>
-                </div>
+                </div> -->
             </div>
         </div>
     </div>
@@ -652,14 +654,6 @@
         </div>
     </div>
 
-    <!-- Call to Action -->
-    <div class="row mx-0 mt-5 pt-5 text-center">
-        <div class="col-md-12">
-            <p class="lead">
-                <a class="btn btn-primary btn-lg ms-2" href="{{ route('login') }}" role="button">It's time to sign in</a>
-            </p>
-        </div>
-    </div>
 </div>
 
 @else
