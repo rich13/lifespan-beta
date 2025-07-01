@@ -780,6 +780,57 @@ class SpanController extends Controller
     }
 
     /**
+     * Store YAML content in session and redirect to editor
+     */
+    public function yamlEditorNew(Request $request)
+    {
+        \Log::info('yamlEditorNew called', ['request' => $request->all()]);
+        
+        $this->authorize('create', Span::class);
+        
+        $validated = $request->validate([
+            'yaml_content' => 'required|string'
+        ]);
+        
+        \Log::info('yamlEditorNew validation passed', ['content_length' => strlen($validated['yaml_content'])]);
+        
+        // Store YAML content in session
+        session(['yaml_content' => $validated['yaml_content']]);
+        
+        // Return success response for AJAX
+        return response()->json(['success' => true]);
+    }
+
+    /**
+     * Show the YAML editor for a new span with content from session
+     */
+    public function yamlEditorNewFromSession(Request $request)
+    {
+        $this->authorize('create', Span::class);
+        
+        $yamlContent = session('yaml_content');
+        if (!$yamlContent) {
+            return redirect()->route('spans.index')
+                ->with('error', 'No YAML content found in session');
+        }
+        
+        // Clear the session data
+        session()->forget('yaml_content');
+        
+        // Get all connection types and span types for help text
+        $connectionTypes = ConnectionTypeModel::orderBy('type')->get();
+        $spanTypes = SpanType::orderBy('type_id')->get();
+        
+        // Pass null for span to indicate this is a new span
+        return view('spans.yaml-editor', [
+            'span' => null,
+            'yamlContent' => $yamlContent,
+            'connectionTypes' => $connectionTypes,
+            'spanTypes' => $spanTypes
+        ]);
+    }
+
+    /**
      * Validate YAML content without applying changes
      */
     public function validateYaml(Request $request, Span $span)
@@ -791,6 +842,27 @@ class SpanController extends Controller
         ]);
         
         $result = $this->yamlService->yamlToSpanData($validated['yaml_content'], $span->slug, $span);
+        
+        // Add visual translation if validation was successful
+        if ($result['success']) {
+            $result['visual'] = $this->yamlService->translateToVisual($result['data']);
+        }
+        
+        return response()->json($result);
+    }
+
+    /**
+     * Validate YAML content for a new span without applying changes
+     */
+    public function validateYamlNew(Request $request)
+    {
+        $this->authorize('create', Span::class);
+        
+        $validated = $request->validate([
+            'yaml_content' => 'required|string'
+        ]);
+        
+        $result = $this->yamlService->yamlToSpanData($validated['yaml_content']);
         
         // Add visual translation if validation was successful
         if ($result['success']) {
@@ -835,6 +907,46 @@ class SpanController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => $applyResult['message']
+            ], 500);
+        }
+    }
+
+    /**
+     * Apply validated YAML to create a new span
+     */
+    public function applyYamlNew(Request $request)
+    {
+        $this->authorize('create', Span::class);
+        
+        $validated = $request->validate([
+            'yaml_content' => 'required|string'
+        ]);
+        
+        // First validate the YAML
+        $validationResult = $this->yamlService->yamlToSpanData($validated['yaml_content']);
+        
+        if (!$validationResult['success']) {
+            return response()->json([
+                'success' => false,
+                'message' => 'YAML validation failed',
+                'errors' => $validationResult['errors']
+            ], 422);
+        }
+        
+        // Create the new span
+        $createResult = $this->yamlService->createSpanFromYaml($validationResult['data']);
+        
+        if ($createResult['success']) {
+            $span = $createResult['span'];
+            return response()->json([
+                'success' => true,
+                'message' => $createResult['message'],
+                'redirect' => route('spans.yaml-editor', $span)
+            ]);
+        } else {
+            return response()->json([
+                'success' => false,
+                'message' => $createResult['message']
             ], 500);
         }
     }

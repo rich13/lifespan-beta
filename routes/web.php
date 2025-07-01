@@ -170,6 +170,24 @@ Route::get('/debug', function() {
     }
 });
 
+// Error testing route - only available in non-production environments
+Route::get('/error', function(Request $request) {
+    if (app()->environment('production')) {
+        abort(404);
+    }
+    
+    $code = $request->query('code', '404');
+    $validCodes = ['400', '401', '403', '404', '419', '422', '429', '500', '503'];
+    
+    if (!in_array($code, $validCodes)) {
+        // Return 404 for invalid error codes instead of showing a Laravel error
+        abort(404);
+    }
+    
+    // Simulate the error by calling abort with the specified code
+    abort((int) $code);
+})->name('error.test');
+
 Route::middleware('web')->group(function () {
     // Public routes
     Route::get('/', function () {
@@ -203,6 +221,12 @@ Route::middleware('web')->group(function () {
             Route::put('/{span}', [SpanController::class, 'update'])->name('spans.update');
             Route::delete('/{span}', [SpanController::class, 'destroy'])->name('spans.destroy');
             Route::get('/{span}/compare', [SpanController::class, 'compare'])->name('spans.compare');
+            
+            // New route for opening YAML editor with content (for new spans)
+            Route::post('/editor/new', [SpanController::class, 'yamlEditorNew'])->name('spans.yaml-editor-new');
+            Route::get('/editor/new', [SpanController::class, 'yamlEditorNewFromSession'])->name('spans.yaml-editor-new-session');
+            Route::post('/editor/new/validate', [SpanController::class, 'validateYamlNew'])->name('spans.yaml-validate-new');
+            Route::post('/editor/new/apply', [SpanController::class, 'applyYamlNew'])->name('spans.yaml-apply-new');
             
             // API search endpoint for AJAX calls (authenticated)
             Route::get('/api/search', [App\Http\Controllers\Api\SpanSearchController::class, 'search'])->name('spans.api.search');
@@ -301,15 +325,17 @@ Route::middleware('web')->group(function () {
         Route::get('/friends/data', [FriendsController::class, 'data'])->name('friends.data');
         Route::post('/api/friends/connections', [FriendsController::class, 'createConnection'])->name('friends.connections.create');
 
-        // AI YAML Generator routes
-        Route::get('/ai-yaml-generator', [\App\Http\Controllers\AiYamlController::class, 'show'])->name('ai-yaml-generator.show');
-        Route::post('/ai-yaml-generator/generate', [\App\Http\Controllers\AiYamlController::class, 'generatePersonYaml'])->name('ai-yaml-generator.generate');
+
 
         // Admin routes
         Route::middleware('admin')->prefix('admin')->name('admin.')->group(function () {
             // Dashboard
             Route::get('/', [DashboardController::class, 'index'])
                 ->name('dashboard');
+
+            // AI YAML Generator routes
+            Route::get('/ai-yaml-generator', [\App\Http\Controllers\AiYamlController::class, 'show'])->name('ai-yaml-generator.show');
+            Route::post('/ai-yaml-generator/generate', [\App\Http\Controllers\AiYamlController::class, 'generatePersonYaml'])->name('ai-yaml-generator.generate');
 
             // Import Management
             Route::prefix('import')->name('import.')->group(function () {
@@ -426,6 +452,28 @@ Route::middleware('web')->group(function () {
                 ->name('tools.merge-spans');
             Route::get('/tools/span-details', [App\Http\Controllers\Admin\ToolsController::class, 'getSpanDetails'])
                 ->name('tools.span-details');
+
+            // Data Export
+            Route::prefix('data-export')->name('data-export.')->group(function () {
+                Route::get('/', [App\Http\Controllers\Admin\DataExportController::class, 'index'])
+                    ->name('index');
+                Route::get('/export-all', [App\Http\Controllers\Admin\DataExportController::class, 'exportAll'])
+                    ->name('export-all');
+                Route::post('/export-selected', [App\Http\Controllers\Admin\DataExportController::class, 'exportSelected'])
+                    ->name('export-selected');
+                Route::get('/stats', [App\Http\Controllers\Admin\DataExportController::class, 'getStats'])
+                    ->name('get-stats');
+            });
+
+            // Data Import
+            Route::prefix('data-import')->name('data-import.')->group(function () {
+                Route::get('/', [App\Http\Controllers\Admin\DataImportController::class, 'index'])
+                    ->name('index');
+                Route::post('/import', [App\Http\Controllers\Admin\DataImportController::class, 'import'])
+                    ->name('import');
+                Route::post('/preview', [App\Http\Controllers\Admin\DataImportController::class, 'preview'])
+                    ->name('preview');
+            });
 
             // Import routes
             Route::get('/import', [ImportController::class, 'index'])
