@@ -171,7 +171,56 @@
         </div>
     </div>
 
-    <!-- Future Tools Placeholder -->
+    <!-- Data Management Tools -->
+    <div class="row">
+        <div class="col-lg-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-download"></i>
+                        Data Export
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">Export all spans as YAML files for backup, migration, or sharing.</p>
+                    
+                    <div class="d-grid gap-2">
+                        <a href="{{ route('admin.data-export.index') }}" class="btn btn-primary">
+                            <i class="bi bi-download me-2"></i>Export All Data
+                        </a>
+                        <small class="text-muted text-center">
+                            Export individual YAML files or a single bulk file
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-upload"></i>
+                        Data Import
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">Import spans from YAML files or ZIP archives.</p>
+                    
+                    <div class="d-grid gap-2">
+                        <a href="{{ route('admin.data-import.index') }}" class="btn btn-success">
+                            <i class="bi bi-upload me-2"></i>Import Data
+                        </a>
+                        <small class="text-muted text-center">
+                            Import individual files or bulk exports
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Additional Tools Placeholder -->
     <div class="row">
         <div class="col-12">
             <div class="card">
