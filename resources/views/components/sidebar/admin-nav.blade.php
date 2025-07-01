@@ -54,6 +54,16 @@ use Illuminate\Support\Facades\Auth;
                 <i class="bi bi-music-note-list me-1"></i> <span>MusicBrainz Import</span>
             </a>
         </li>
+        <li class="nav-item">
+            <a class="nav-link {{ request()->routeIs('admin.data-export.*') ? 'active' : '' }}" href="{{ route('admin.data-export.index') }}">
+                <i class="bi bi-download me-1"></i> <span>Data Export</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {{ request()->routeIs('admin.data-import.*') ? 'active' : '' }}" href="{{ route('admin.data-import.index') }}">
+                <i class="bi bi-upload me-1"></i> <span>Data Import</span>
+            </a>
+        </li>
     </ul>
 
     <hr class="sidebar-divider">
@@ -61,6 +71,11 @@ use Illuminate\Support\Facades\Auth;
         <li class="nav-item">
             <a class="nav-link {{ request()->routeIs('admin.tools.*') ? 'active' : '' }}" href="{{ route('admin.tools.index') }}">
                 <i class="bi bi-tools me-1"></i> <span>Tools</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {{ request()->routeIs('admin.ai-yaml-generator.*') ? 'active' : '' }}" href="{{ route('admin.ai-yaml-generator.show') }}">
+                <i class="bi bi-robot me-1"></i> <span>AI Generator</span>
             </a>
         </li>
     </ul>

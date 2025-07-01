@@ -42,9 +42,5 @@
             <i class="bi bi-person-heart me-1"></i> <span>Friends</span>
         </a>
     </li>
-    <li class="nav-item">
-        <a class="nav-link {{ request()->routeIs('ai-yaml-generator.*') ? 'active' : '' }}" href="{{ route('ai-yaml-generator.show') }}">
-            <i class="bi bi-robot me-1"></i> <span>AI Generator</span>
-        </a>
-    </li>
+
 </ul> 
