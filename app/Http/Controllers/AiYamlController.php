@@ -13,6 +13,7 @@ class AiYamlController extends Controller
     public function __construct(AiYamlCreatorService $aiService)
     {
         $this->aiService = $aiService;
+        $this->middleware('admin');
     }
 
     /**

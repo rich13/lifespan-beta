@@ -11,9 +11,9 @@
                     <i class="bi bi-robot me-2"></i>
                     AI YAML Generator
                 </h1>
-                <a href="{{ route('spans.index') }}" class="btn btn-outline-secondary">
+                <a href="{{ route('admin.spans.index') }}" class="btn btn-outline-secondary">
                     <i class="bi bi-arrow-left me-1"></i>
-                    Back to Spans
+                    Back to Admin
                 </a>
             </div>
 
@@ -167,7 +167,7 @@
 </div>
 
 <!-- Hidden form for redirecting to YAML editor -->
-<form id="redirectForm" method="POST" action="{{ route('spans.yaml-create') }}" class="d-none">
+<form id="redirectForm" method="POST" action="{{ route('spans.yaml-editor-new') }}" class="d-none">
     @csrf
     <input type="hidden" name="yaml_content" id="redirectYamlContent">
 </form>
@@ -206,7 +206,7 @@ document.addEventListener('DOMContentLoaded', function() {
         showLoading();
         
         try {
-            const response = await fetch('{{ route("ai-yaml-generator.generate") }}', {
+            const response = await fetch('{{ route("admin.ai-yaml-generator.generate") }}', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -253,8 +253,33 @@ document.addEventListener('DOMContentLoaded', function() {
     useInEditorBtn.addEventListener('click', function() {
         const yamlContent = yamlOutput.value;
         if (yamlContent) {
-            redirectYamlContent.value = yamlContent;
-            redirectForm.submit();
+            console.log('Redirecting to YAML editor with content:', yamlContent.substring(0, 100) + '...');
+            
+            // Store YAML content in session and redirect
+            fetch('{{ route("spans.yaml-editor-new") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: new URLSearchParams({
+                    yaml_content: yamlContent
+                })
+            })
+            .then(response => {
+                if (response.ok) {
+                    // Redirect to the session-based route
+                    window.location.href = '{{ route("spans.yaml-editor-new-session") }}';
+                } else {
+                    throw new Error('Failed to store YAML content');
+                }
+            })
+            .catch(error => {
+                console.error('Error storing YAML content:', error);
+                alert('Failed to open YAML editor: ' + error.message);
+            });
+        } else {
+            console.error('No YAML content to redirect with');
         }
     });
 

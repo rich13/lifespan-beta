@@ -172,8 +172,8 @@ class YamlValidationService
         ];
         
         foreach ($connections as $connectionType => $connectionList) {
-            // Validate connection type
-            if (!in_array($connectionType, $validConnectionTypes) && !str_ends_with($connectionType, '_incoming')) {
+            // Validate connection type - incoming connections are no longer supported in YAML
+            if (!in_array($connectionType, $validConnectionTypes) || str_ends_with($connectionType, '_incoming')) {
                 $errors[] = "Unknown connection type '{$connectionType}'. Valid types are: " . implode(', ', $validConnectionTypes);
                 continue;
             }
