@@ -110,6 +110,7 @@ class YamlSpanService
     public function spanToArray(Span $span): array
     {
         // Load all necessary relationships including connection spans for dates
+        // Note: We don't load 'type' relationship to avoid expanding type field to full object
         $span->load([
             'connectionsAsSubject.child.type',
             'connectionsAsObject.parent.type', 
@@ -117,14 +118,13 @@ class YamlSpanService
             'connectionsAsObject.type',
             'connectionsAsSubject.connectionSpan',
             'connectionsAsObject.connectionSpan',
-            'type',
             'owner'
         ]);
 
         $data = [
             'name' => $span->name,
             'slug' => $span->slug,
-            'type' => $span->type_id,
+            'type' => $span->type_id, // Always use type_id, not the loaded relationship
             'state' => $span->state,
             'description' => $span->description,
             'notes' => $span->notes,
@@ -172,7 +172,7 @@ class YamlSpanService
             $connectionData = [
                 'name' => $targetSpan->name,
                 'id' => $targetSpan->id,
-                'type' => $targetSpan->type_id,
+                'type' => $targetSpan->type_id, // Always use type_id, not the loaded relationship
                 'connection_id' => $connection->id,
             ];
             
@@ -285,6 +285,8 @@ class YamlSpanService
                     'errors' => ['YAML must parse to an array']
                 ];
             }
+            
+
             
             // Use the new validation service for schema validation
             $validationService = new YamlValidationService();
@@ -1373,6 +1375,8 @@ class YamlSpanService
      */
     private function analyzeChangeImpacts(array $data, Span $originalSpan): array
     {
+
+        
         $impacts = [];
         
         // Check for name changes

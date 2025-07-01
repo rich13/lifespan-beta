@@ -1,17 +1,26 @@
 @extends('layouts.app')
 
 @section('page_title')
-    YAML Editor - {{ $span->name }}
+    YAML Editor - {{ $span ? $span->name : 'New Span' }}
 @endsection
 
 @section('page_tools')
     <div class="d-flex gap-2">
-        <a href="{{ route('spans.show', $span) }}" class="btn btn-sm btn-outline-secondary">
-            <i class="bi bi-arrow-left me-1"></i>Back to Span
-        </a>
-        <a href="{{ route('spans.edit', $span) }}" class="btn btn-sm btn-outline-primary">
-            <i class="bi bi-pencil me-1"></i>Form Editor
-        </a>
+        @if($span)
+            <a href="{{ route('spans.show', $span) }}" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-arrow-left me-1"></i>Back to Span
+            </a>
+            <a href="{{ route('spans.edit', $span) }}" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-pencil me-1"></i>Form Editor
+            </a>
+        @else
+            <a href="{{ route('spans.index') }}" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-arrow-left me-1"></i>Back to Spans
+            </a>
+            <a href="{{ route('spans.create') }}" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-plus me-1"></i>Create New Span
+            </a>
+        @endif
     </div>
 @endsection
 
@@ -410,11 +419,12 @@
                     
                     <div class="mb-3">
                         <label class="form-label small mb-1">Add Connection:</label>
+                        @if($span)
                         <div class="row g-2">
                             <div class="col-8">
                                 <select class="form-select form-select-sm" id="connection-type-select">
                                     <option value="">Select type...</option>
-                                    @if($span->type_id === 'person')
+                                    @if($span && $span->type_id === 'person')
                                         <option value="parents" data-allowed-types='["person"]'>Parents</option>
                                         <option value="children" data-allowed-types='["person"]'>Children</option>
                                     @endif
@@ -422,20 +432,14 @@
                                         @if($connectionType->type !== 'family')
                                             @php
                                                 // Check if this span type can be the subject (parent) of this connection
-                                                $canBeSubject = $connectionType->isSpanTypeAllowed($span->type_id, 'parent');
+                                                $canBeSubject = $span ? $connectionType->isSpanTypeAllowed($span->type_id, 'parent') : false;
                                                 // Check if this span type can be the object (child) of this connection
-                                                $canBeObject = $connectionType->isSpanTypeAllowed($span->type_id, 'child');
+                                                $canBeObject = $span ? $connectionType->isSpanTypeAllowed($span->type_id, 'child') : false;
                                             @endphp
                                             
                                             @if($canBeSubject)
                                                 <option value="{{ $connectionType->type }}" data-allowed-types='{{ json_encode($connectionType->getAllowedObjectTypes()) }}'>
                                                     {{ ucfirst($connectionType->type) }}
-                                                </option>
-                                            @endif
-                                            
-                                            @if($canBeObject)
-                                                <option value="{{ $connectionType->type }}_incoming" data-allowed-types='{{ json_encode($connectionType->getAllowedSubjectTypes()) }}'>
-                                                    {{ ucfirst($connectionType->type) }} (Incoming)
                                                 </option>
                                             @endif
                                         @endif
@@ -496,6 +500,12 @@
                                 </div>
                             </div>
                         </div>
+                        @else
+                        <div class="alert alert-info py-2 mb-0">
+                            <i class="bi bi-info-circle me-2"></i>
+                            <small>Connection tools will be available after the span is created.</small>
+                        </div>
+                        @endif
                     </div>
                     
                     <div class="mb-3">
@@ -527,6 +537,7 @@
             </div>
             
             <!-- Information Panel -->
+            @if($span)
             <div class="card mb-3">
                 <div class="card-header">
                     <h6 class="card-title mb-0">
@@ -556,6 +567,48 @@
                     </dl>
                 </div>
             </div>
+            
+            <!-- Incoming Connections Panel -->
+            @if($span->connectionsAsObject->count() > 0)
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h6 class="card-title mb-0">
+                        <i class="bi bi-arrow-down-circle me-2"></i>Incoming Connections
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">This span is referenced by other spans:</p>
+                    <p class="small">
+                        @php
+                            $incomingLinks = [];
+                            foreach($span->connectionsAsObject as $connection) {
+                                $sourceSpan = $connection->parent;
+                                $connectionType = $connection->type->type;
+                                $incomingLinks[] = '<a href="' . route('spans.show', $sourceSpan) . '" class="text-decoration-none">' . 
+                                    e($sourceSpan->name) . '</a> <span class="text-muted">(' . e($connectionType) . ')</span>';
+                            }
+                        @endphp
+                        {!! implode(', ', $incomingLinks) !!}
+                    </p>
+                </div>
+            </div>
+            @endif
+            @else
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h6 class="card-title mb-0">
+                        <i class="bi bi-info-circle me-2"></i>New Span Information
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info mb-0">
+                        <i class="bi bi-lightbulb me-2"></i>
+                        <strong>Creating a new span</strong><br>
+                        <small>Fill in the YAML content and validate to create a new span. The span will be created when you apply the changes.</small>
+                    </div>
+                </div>
+            </div>
+            @endif
             
             <!-- YAML Format Help (Collapsible) -->
             <div class="card mb-3">
@@ -605,11 +658,11 @@
                 <div class="card-body">
                     <div class="alert alert-warning d-flex align-items-center py-2 mb-3">
                         <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                        <small>Changes are not saved until you apply them to the database.</small>
+                        <small>{{ $span ? 'Changes are not saved until you apply them to the database.' : 'The span will be created when you apply the YAML to the database.' }}</small>
                     </div>
                     <div class="d-grid">
                         <button type="button" id="apply-btn" class="btn btn-success" disabled>
-                            <i class="bi bi-cloud-upload me-2"></i>Apply Changes to Database
+                            <i class="bi bi-cloud-upload me-2"></i>{{ $span ? 'Apply Changes to Database' : 'Create Span from YAML' }}
                         </button>
                     </div>
                 </div>
@@ -652,15 +705,26 @@ $(document).ready(function() {
     
     // Update apply button text based on state
     function updateApplyButtonText() {
+        const isNewSpan = {{ $span ? 'false' : 'true' }};
         const hasChanges = yamlTextarea.val() !== originalContent;
         const isValid = lastValidationResult && lastValidationResult.success;
         
-        if (!hasChanges) {
-            applyBtn.html('<i class="bi bi-cloud-upload me-2"></i>No Changes to Apply');
-        } else if (!isValid) {
-            applyBtn.html('<i class="bi bi-cloud-upload me-2"></i>Validate YAML First');
+        if (isNewSpan) {
+            // For new spans, the button should be enabled if YAML is valid
+            if (!isValid) {
+                applyBtn.html('<i class="bi bi-cloud-upload me-2"></i>Validate YAML First');
+            } else {
+                applyBtn.html('<i class="bi bi-cloud-upload me-2"></i>Create Span from YAML');
+            }
         } else {
-            applyBtn.html('<i class="bi bi-cloud-upload me-2"></i>Apply Changes to Database');
+            // For existing spans, check for changes
+            if (!hasChanges) {
+                applyBtn.html('<i class="bi bi-cloud-upload me-2"></i>No Changes to Apply');
+            } else if (!isValid) {
+                applyBtn.html('<i class="bi bi-cloud-upload me-2"></i>Validate YAML First');
+            } else {
+                applyBtn.html('<i class="bi bi-cloud-upload me-2"></i>Apply Changes to Database');
+            }
         }
     }
     
@@ -674,15 +738,16 @@ $(document).ready(function() {
                     <i class="bi bi-check-circle-fill me-2"></i>
                     <strong>Valid YAML</strong>
                     <div class="mt-2 small">
-                        Ready to apply changes to the database.
+                        {{ $span ? 'Ready to apply changes to the database.' : 'Ready to create span from YAML.' }}
                     </div>
                 </div>
             `;
             yamlTextarea.removeClass('is-invalid').addClass('is-valid');
             
-            // Only enable apply button if there are changes
+            // Only enable apply button if there are changes (for existing spans) or if it's a new span
+            const isNewSpan = {{ $span ? 'false' : 'true' }};
             const hasChanges = yamlTextarea.val() !== originalContent;
-            applyBtn.prop('disabled', !hasChanges);
+            applyBtn.prop('disabled', !isNewSpan && !hasChanges);
             updateApplyButtonText();
             
             updateValidationStatus('Valid', 'success');
@@ -1016,7 +1081,7 @@ $(document).ready(function() {
         updateValidationStatus('Validating...', 'warning');
         
         $.ajax({
-            url: '{{ route("spans.yaml-validate", $span) }}',
+            url: '{{ $span ? route("spans.yaml-validate", $span) : route("spans.yaml-validate-new") }}',
             method: 'POST',
             data: {
                 yaml_content: content,
@@ -1053,7 +1118,7 @@ $(document).ready(function() {
         applyBtn.html('<span class="spinner-border spinner-border-sm me-1"></span>Applying...');
         
         $.ajax({
-            url: '{{ route("spans.yaml-apply", $span) }}',
+            url: '{{ $span ? route("spans.yaml-apply", $span) : route("spans.yaml-apply-new") }}',
             method: 'POST',
             data: {
                 yaml_content: content,
@@ -1062,10 +1127,11 @@ $(document).ready(function() {
             success: function(result) {
                 if (result.success) {
                     // Show success message
+                    const successTitle = '{{ $span ? "Changes Applied Successfully" : "Span Created Successfully" }}';
                     validationResults.html(`
                         <div class="text-success">
                             <i class="bi bi-check-circle-fill me-2"></i>
-                            <strong>Changes Applied Successfully</strong>
+                            <strong>${successTitle}</strong>
                             <div class="mt-2 small">
                                 ${result.message}
                             </div>
@@ -2106,82 +2172,174 @@ metadata:
 
     // Show changes summary
     function showChangesSummary(newData) {
-        // Only show changes if the YAML content has actually been modified
-        const hasChanges = yamlTextarea.val() !== originalContent;
+        // For new spans, always show the summary since everything is a "change"
+        const isNewSpan = {{ $span ? 'false' : 'true' }};
         
-        if (!hasChanges) {
-            $('#changes-summary').hide();
-            return;
-        }
+        console.log('showChangesSummary called:', { isNewSpan, newData });
         
         if (!newData || Object.keys(newData).length === 0) {
+            console.log('No newData, hiding changes summary');
             $('#changes-summary').hide();
             return;
         }
         
         const changes = [];
         
-        // Compare basic fields
-        const basicFields = ['name', 'type', 'state', 'description', 'notes', 'access_level'];
-        basicFields.forEach(field => {
-            if (newData[field] !== undefined) {
-                const currentValue = getCurrentSpanValue(field);
-                if (newData[field] !== currentValue) {
+        if (isNewSpan) {
+            console.log('Processing new span changes');
+            // For new spans, treat all fields as new additions
+            const basicFields = ['name', 'type', 'state', 'description', 'notes', 'access_level'];
+            basicFields.forEach(field => {
+                if (newData[field] !== undefined && newData[field] !== '') {
                     changes.push({
                         field: field,
-                        type: 'update',
-                        oldValue: currentValue,
+                        type: 'add',
+                        oldValue: 'Not set',
                         newValue: newData[field],
                         category: 'basic'
                     });
                 }
+            });
+            
+            // Add dates if present
+            if (newData.start_year !== undefined || newData.start_month !== undefined || newData.start_day !== undefined) {
+                const startDate = formatDateForDisplay(newData.start_year, newData.start_month, newData.start_day);
+                if (startDate !== 'Not set') {
+                    changes.push({
+                        field: 'start_date',
+                        type: 'add',
+                        oldValue: 'Not set',
+                        newValue: startDate,
+                        category: 'dates'
+                    });
+                }
             }
-        });
-        
-        // Compare dates
-        if (newData.start_year !== undefined || newData.start_month !== undefined || newData.start_day !== undefined) {
-            const currentStart = getCurrentSpanDate('start');
-            const newStart = formatDateForDisplay(newData.start_year, newData.start_month, newData.start_day);
-            if (currentStart !== newStart) {
-                changes.push({
-                    field: 'start_date',
-                    type: 'update',
-                    oldValue: currentStart,
-                    newValue: newStart,
-                    category: 'dates'
+            
+            if (newData.end_year !== undefined || newData.end_month !== undefined || newData.end_day !== undefined) {
+                const endDate = formatDateForDisplay(newData.end_year, newData.end_month, newData.end_day);
+                if (endDate !== 'Not set') {
+                    changes.push({
+                        field: 'end_date',
+                        type: 'add',
+                        oldValue: 'Not set',
+                        newValue: endDate,
+                        category: 'dates'
+                    });
+                }
+            }
+            
+            // Add metadata if present
+            if (newData.metadata && Object.keys(newData.metadata).length > 0) {
+                Object.entries(newData.metadata).forEach(([key, value]) => {
+                    changes.push({
+                        field: `metadata.${key}`,
+                        type: 'add',
+                        oldValue: 'Not set',
+                        newValue: value,
+                        category: 'metadata'
+                    });
                 });
             }
-        }
-        
-        if (newData.end_year !== undefined || newData.end_month !== undefined || newData.end_day !== undefined) {
-            const currentEnd = getCurrentSpanDate('end');
-            const newEnd = formatDateForDisplay(newData.end_year, newData.end_month, newData.end_day);
-            if (currentEnd !== newEnd) {
-                changes.push({
-                    field: 'end_date',
-                    type: 'update',
-                    oldValue: currentEnd,
-                    newValue: newEnd,
-                    category: 'dates'
+            
+            // Add connections if present
+            if (newData.connections && Object.keys(newData.connections).length > 0) {
+                Object.entries(newData.connections).forEach(([connectionType, connections]) => {
+                    connections.forEach((connection, index) => {
+                        changes.push({
+                            field: `connections.${connectionType}[${index}]`,
+                            type: 'add',
+                            oldValue: 'Not present',
+                            newValue: `${connection.name} (${connection.type})`,
+                            category: 'connections'
+                        });
+                    });
                 });
+            }
+        } else {
+            console.log('Processing existing span changes');
+            // For existing spans, use the original comparison logic
+            // Only show changes if the YAML content has actually been modified
+            const hasChanges = yamlTextarea.val() !== originalContent;
+            console.log('Content comparison:', { 
+                currentContent: yamlTextarea.val().substring(0, 100) + '...', 
+                originalContent: originalContent.substring(0, 100) + '...',
+                hasChanges 
+            });
+            
+            if (!hasChanges) {
+                console.log('No content changes detected, hiding changes summary');
+                $('#changes-summary').hide();
+                return;
+            }
+            
+            // Compare basic fields
+            const basicFields = ['name', 'type', 'state', 'description', 'notes', 'access_level'];
+            basicFields.forEach(field => {
+                if (newData[field] !== undefined) {
+                    const currentValue = getCurrentSpanValue(field);
+                    console.log(`Comparing ${field}:`, { currentValue, newValue: newData[field], equal: currentValue === newData[field] });
+                    if (newData[field] !== currentValue) {
+                        changes.push({
+                            field: field,
+                            type: 'update',
+                            oldValue: currentValue,
+                            newValue: newData[field],
+                            category: 'basic'
+                        });
+                    }
+                }
+            });
+            
+            // Compare dates
+            if (newData.start_year !== undefined || newData.start_month !== undefined || newData.start_day !== undefined) {
+                const currentStart = getCurrentSpanDate('start');
+                const newStart = formatDateForDisplay(newData.start_year, newData.start_month, newData.start_day);
+                console.log('Comparing start dates:', { currentStart, newStart, equal: currentStart === newStart });
+                if (currentStart !== newStart) {
+                    changes.push({
+                        field: 'start_date',
+                        type: 'update',
+                        oldValue: currentStart,
+                        newValue: newStart,
+                        category: 'dates'
+                    });
+                }
+            }
+            
+            if (newData.end_year !== undefined || newData.end_month !== undefined || newData.end_day !== undefined) {
+                const currentEnd = getCurrentSpanDate('end');
+                const newEnd = formatDateForDisplay(newData.end_year, newData.end_month, newData.end_day);
+                console.log('Comparing end dates:', { currentEnd, newEnd, equal: currentEnd === newEnd });
+                if (currentEnd !== newEnd) {
+                    changes.push({
+                        field: 'end_date',
+                        type: 'update',
+                        oldValue: currentEnd,
+                        newValue: newEnd,
+                        category: 'dates'
+                    });
+                }
+            }
+            
+            // Compare metadata
+            if (newData.metadata && Object.keys(newData.metadata).length > 0) {
+                const currentMetadata = getCurrentSpanValue('metadata') || {};
+                const metadataChanges = compareMetadata(currentMetadata, newData.metadata);
+                changes.push(...metadataChanges);
+            }
+            
+            // Compare connections using YAML comparison
+            if (newData.connections && Object.keys(newData.connections).length > 0) {
+                const connectionChanges = compareConnections(newData.connections);
+                changes.push(...connectionChanges);
             }
         }
         
-        // Compare metadata
-        if (newData.metadata && Object.keys(newData.metadata).length > 0) {
-            const currentMetadata = getCurrentSpanValue('metadata') || {};
-            const metadataChanges = compareMetadata(currentMetadata, newData.metadata);
-            changes.push(...metadataChanges);
-        }
-        
-        // Compare connections using YAML comparison
-        if (newData.connections && Object.keys(newData.connections).length > 0) {
-            const connectionChanges = compareConnections(newData.connections);
-            changes.push(...connectionChanges);
-        }
+        console.log('Total changes found:', changes.length, changes);
         
         // Display changes
         if (changes.length === 0) {
+            console.log('No changes to display, hiding changes summary');
             $('#changes-summary').hide();
             return;
         }
@@ -2213,12 +2371,20 @@ metadata:
             `;
             
             groupedChanges[category].forEach(change => {
+                const changeIcon = change.type === 'add' ? 'bi-plus-circle text-success' : 
+                                 change.type === 'remove' ? 'bi-dash-circle text-danger' : 
+                                 'bi-arrow-right text-primary';
+                
                 html += `
                     <div class="small mb-1">
+                        <i class="${changeIcon} me-1"></i>
                         <strong>${formatFieldName(change.field)}:</strong>
-                        <span class="text-danger">${formatValue(change.oldValue)}</span>
-                        <i class="bi bi-arrow-right mx-1 text-muted"></i>
-                        <span class="text-success">${formatValue(change.newValue)}</span>
+                        ${change.type === 'add' ? 
+                            `<span class="text-success">${formatValue(change.newValue)}</span>` :
+                            change.type === 'remove' ? 
+                            `<span class="text-danger">${formatValue(change.oldValue)}</span> <i class="bi bi-arrow-right mx-1 text-muted"></i> <span class="text-muted">Removed</span>` :
+                            `<span class="text-danger">${formatValue(change.oldValue)}</span> <i class="bi bi-arrow-right mx-1 text-muted"></i> <span class="text-success">${formatValue(change.newValue)}</span>`
+                        }
                     </div>
                 `;
             });
@@ -2228,12 +2394,21 @@ metadata:
         
         $('#changes-list').html(html);
         $('#changes-summary').show();
+        console.log('Changes summary displayed');
     }
     
     // Helper functions for changes summary
     function getCurrentSpanValue(field) {
-        // Use the dynamic baseline that can be updated when creating new templates
-        return currentBaseline[field] || '';
+        const isNewSpan = {{ $span ? 'false' : 'true' }};
+        
+        if (isNewSpan) {
+            // Use the dynamic baseline that can be updated when creating new templates
+            return currentBaseline[field] || '';
+        } else {
+            // For existing spans, get the value from the span data
+            const span = @json($span);
+            return span[field] || '';
+        }
     }
     
     function getCurrentSpanDate(type) {
@@ -2466,7 +2641,7 @@ metadata:
         const yamlTextarea = $('#yaml-content');
         
         // Dynamic baseline for comparison - starts with current span data
-        let currentBaseline = {
+        let currentBaseline = @if($span) {
             name: '{{ $span->name }}',
             slug: '{{ $span->slug ?? "" }}',
             type: '{{ $span->type_id }}',
@@ -2475,7 +2650,16 @@ metadata:
             notes: '{{ $span->notes ?? "" }}',
             access_level: '{{ $span->access_level }}',
             metadata: @json($span->metadata ?? [])
-        };
+        } @else {
+            name: '',
+            slug: '',
+            type: '',
+            state: 'placeholder',
+            description: '',
+            notes: '',
+            access_level: 'private',
+            metadata: {}
+        } @endif;
         
         // Enable/disable create button based on both name and type selection
         function updateCreateButton() {
