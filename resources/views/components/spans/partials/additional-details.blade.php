@@ -14,7 +14,15 @@
             @if(!empty($span->metadata))
                 @foreach($span->metadata as $key => $value)
                     <dt class="col-sm-3">{{ ucfirst(str_replace('_', ' ', $key)) }}</dt>
-                    <dd class="col-sm-9">{{ is_array($value) ? implode(', ', $value) : $value }}</dd>
+                    <dd class="col-sm-9">
+                        @if($key === 'subtype')
+                            <a href="{{ route('spans.types.subtypes.show', ['type' => $span->type_id, 'subtype' => $value]) }}" class="text-decoration-none">
+                                {{ ucfirst($value) }}
+                            </a>
+                        @else
+                            {{ is_array($value) ? implode(', ', $value) : $value }}
+                        @endif
+                    </dd>
                 @endforeach
             @endif
 

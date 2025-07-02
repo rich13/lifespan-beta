@@ -39,6 +39,16 @@
             {{ $span->name }}
         </a>
 
+        @if($span->type_id === 'thing' && $span->getCreator())
+            <!-- Creator for things -->
+            <button type="button" class="btn btn-outline-light text-dark inactive" disabled>by</button>
+            <a href="{{ route('spans.show', $span->getCreator()) }}" 
+               class="btn btn-{{ $span->getCreator()->type_id }}">
+                <x-icon type="{{ $span->getCreator()->type_id }}" category="span" class="me-1" />
+                {{ $span->getCreator()->name }}
+            </a>
+        @endif
+
         @if($span->start_year)
             <!-- Action word based on span type -->
             <button type="button" class="btn inactive">
@@ -55,13 +65,36 @@
                     @case('band')
                         was formed
                         @break
+                    @case('thing')
+                        @if(isset($span->metadata['subtype']))
+                            @switch($span->metadata['subtype'])
+                                @case('album')
+                                @case('track')
+                                @case('film')
+                                @case('game')
+                                @case('software')
+                                    was released
+                                    @break
+                                @case('book')
+                                    was published
+                                    @break
+                                @case('tv_show')
+                                    premiered
+                                    @break
+                                @default
+                                    was created
+                            @endswitch
+                        @else
+                            was created
+                        @endif
+                        @break
                     @default
                         started
                 @endswitch
             </button>
 
             <!-- Start date -->
-            <a href="{{ route('date.explore', ['date' => $span->start_year . '-01-01']) }}" 
+            <a href="{{ route('date.explore', ['date' => $span->start_date_link]) }}" 
                class="btn btn-outline-date">
                 {{ $span->human_readable_start_date }}
             </a>
@@ -93,7 +126,7 @@
                 </button>
 
                 <!-- End date -->
-                <a href="{{ route('date.explore', ['date' => $span->end_year . '-01-01']) }}" 
+                <a href="{{ route('date.explore', ['date' => $span->end_date_link]) }}" 
                    class="btn btn-outline-date">
                     {{ $span->human_readable_end_date }}
                 </a>

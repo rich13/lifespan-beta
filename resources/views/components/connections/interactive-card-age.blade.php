@@ -179,7 +179,7 @@
             </button>
 
             <!-- Start age -->
-            <a href="{{ route('date.explore', ['date' => $connection->connectionSpan->start_year . '-01-01']) }}" 
+            <a href="{{ route('date.explore', ['date' => $connection->connectionSpan->start_date_link]) }}" 
                class="btn btn-outline-age">
                 {{ $connection->connectionSpan->start_year - $span->start_year }} years old
             </a>
@@ -191,7 +191,7 @@
                 </button>
 
                 <!-- End age -->
-                <a href="{{ route('date.explore', ['date' => $connection->connectionSpan->end_year . '-01-01']) }}" 
+                <a href="{{ route('date.explore', ['date' => $connection->connectionSpan->end_date_link]) }}" 
                    class="btn btn-outline-age">
                     {{ $connection->connectionSpan->end_year - $span->start_year }} years old
                 </a>

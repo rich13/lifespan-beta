@@ -37,6 +37,16 @@
                class="btn {{ $span->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $span->type_id }} text-start">
                 {{ $span->name }}
             </a>
+
+            @if($span->type_id === 'thing' && $span->getCreator())
+                <!-- Creator for things -->
+                <button type="button" class="btn btn-outline-light text-dark inactive" disabled>by</button>
+                <a href="{{ route('spans.show', $span->getCreator()) }}" 
+                   class="btn btn-{{ $span->getCreator()->type_id }}">
+                    <x-icon type="{{ $span->getCreator()->type_id }}" category="span" class="me-1" />
+                    {{ $span->getCreator()->name }}
+                </a>
+            @endif
             
             @if($span->start_year || $span->end_year)
                 @if($span->type_id === 'person')
@@ -75,7 +85,33 @@
                         </a>
                     @else
                         <!-- Other span ongoing: [span] [name] starting [start] -->
-                        <button type="button" class="btn btn-outline-light text-dark inactive" disabled>started</button>
+                        <button type="button" class="btn btn-outline-light text-dark inactive" disabled>
+                            @if($span->type_id === 'thing')
+                                @if(isset($span->metadata['subtype']))
+                                    @switch($span->metadata['subtype'])
+                                        @case('album')
+                                        @case('track')
+                                        @case('film')
+                                        @case('game')
+                                        @case('software')
+                                            was released
+                                            @break
+                                        @case('book')
+                                            was published
+                                            @break
+                                        @case('tv_show')
+                                            premiered
+                                            @break
+                                        @default
+                                            was created
+                                    @endswitch
+                                @else
+                                    was created
+                                @endif
+                            @else
+                                started
+                            @endif
+                        </button>
                         <a href="{{ route('date.explore', ['date' => $span->start_date_link]) }}" 
                            class="btn btn-outline-date">
                             {{ $span->human_readable_start_date }}

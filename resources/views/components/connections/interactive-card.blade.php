@@ -85,12 +85,20 @@
         
         <!-- Date information - only show for main connection if no nested organisation -->
         @if(!$nestedOrganisation && $connection->connectionSpan && $connection->connectionSpan->start_year && $connection->connectionSpan->start_year > 0)
+            @php
+                // Determine the appropriate preposition based on connection type
+                $datePreposition = 'from';
+                if (in_array($connection->type_id, ['created', 'died', 'born', 'started', 'ended', 'released', 'published'])) {
+                    $datePreposition = 'on';
+                }
+            @endphp
+            
             @if($connection->connectionSpan->end_year)
                 <button type="button" class="btn inactive">
-                    from
+                    {{ $datePreposition }}
                 </button>
                 <!-- Start date -->
-                <a href="{{ route('date.explore', ['date' => $connection->connectionSpan->start_year . '-01-01']) }}" 
+                <a href="{{ route('date.explore', ['date' => $connection->connectionSpan->start_date_link]) }}" 
                    class="btn btn-outline-date">
                     {{ $connection->connectionSpan->human_readable_start_date }}
                 </a>
@@ -98,16 +106,16 @@
                     to
                 </button>
                 <!-- End date -->
-                <a href="{{ route('date.explore', ['date' => $connection->connectionSpan->end_year . '-01-01']) }}" 
+                <a href="{{ route('date.explore', ['date' => $connection->connectionSpan->end_date_link]) }}" 
                    class="btn btn-outline-date">
                     {{ $connection->connectionSpan->human_readable_end_date }}
                 </a>
             @else
                 <button type="button" class="btn inactive">
-                    from
+                    {{ $datePreposition }}
                 </button>
                 <!-- Start date -->
-                <a href="{{ route('date.explore', ['date' => $connection->connectionSpan->start_year . '-01-01']) }}" 
+                <a href="{{ route('date.explore', ['date' => $connection->connectionSpan->start_date_link]) }}" 
                    class="btn btn-outline-date">
                     {{ $connection->connectionSpan->human_readable_start_date }}
                 </a>
@@ -133,7 +141,7 @@
                         from
                     </button>
                     <!-- Nested start date -->
-                    <a href="{{ route('date.explore', ['date' => $nestedDates->start_year . '-01-01']) }}" 
+                    <a href="{{ route('date.explore', ['date' => $nestedDates->start_date_link]) }}" 
                        class="btn btn-outline-date">
                         {{ $nestedDates->human_readable_start_date }}
                     </a>
@@ -141,7 +149,7 @@
                         to
                     </button>
                     <!-- Nested end date -->
-                    <a href="{{ route('date.explore', ['date' => $nestedDates->end_year . '-01-01']) }}" 
+                    <a href="{{ route('date.explore', ['date' => $nestedDates->end_date_link]) }}" 
                        class="btn btn-outline-date">
                         {{ $nestedDates->human_readable_end_date }}
                     </a>
@@ -150,7 +158,7 @@
                         from
                     </button>
                     <!-- Nested start date -->
-                    <a href="{{ route('date.explore', ['date' => $nestedDates->start_year . '-01-01']) }}" 
+                    <a href="{{ route('date.explore', ['date' => $nestedDates->start_date_link]) }}" 
                        class="btn btn-outline-date">
                         {{ $nestedDates->human_readable_start_date }}
                     </a>

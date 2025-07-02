@@ -128,7 +128,7 @@
     if ($eventDate) {
         // Convert Y-m-d format to human readable
         $dateObj = \Carbon\Carbon::parse($eventDate);
-        $dateDisplay = $dateObj->format('j F Y');
+        $dateDisplay = $dateObj->format('j F, Y');
         $dateLink = $eventDate;
     } elseif ($eventYear) {
         $dateDisplay = $eventYear;
@@ -159,6 +159,16 @@
            class="btn {{ $span->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $span->type_id }} text-start">
             {{ $span->name }}
         </a>
+
+        @if($span->type_id === 'thing' && $span->getCreator())
+            <!-- Creator for things -->
+            <button type="button" class="btn btn-outline-light text-dark inactive" disabled>by</button>
+            <a href="{{ route('spans.show', $span->getCreator()) }}" 
+               class="btn btn-{{ $span->getCreator()->type_id }}">
+                <x-icon type="{{ $span->getCreator()->type_id }}" category="span" class="me-1" />
+                {{ $span->getCreator()->name }}
+            </a>
+        @endif
         
         <!-- Event text -->
         <button type="button" class="btn btn-outline-light text-dark inactive" disabled>{{ $eventText }}</button>
