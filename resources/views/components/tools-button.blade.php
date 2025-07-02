@@ -15,7 +15,7 @@
     
     if ($model) {
         if ($model instanceof \App\Models\Span) {
-            $isEditable = auth()->check() && auth()->user()->can('update', $model);
+            $isEditable = auth()->check() && $model->isEditableBy(auth()->user());
             $isViewable = true; // Spans are always viewable
         } elseif ($model instanceof \App\Models\Connection) {
             $isEditable = auth()->check() && $model->isEditableBy(auth()->user());
