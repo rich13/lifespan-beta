@@ -1,6 +1,9 @@
 @props(['connection'])
 
-<div class="card mb-3 connection-card">
+<div class="card mb-3 connection-card position-relative">
+    <!-- Tools Button -->
+    <x-tools-button :model="$connection" />
+    
     <div class="card-body">
         <div class="d-flex justify-content-between align-items-start">
             <div class="flex-grow-1">

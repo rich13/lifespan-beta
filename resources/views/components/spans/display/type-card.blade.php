@@ -16,7 +16,22 @@
         @if($spanType->exampleSpans && $spanType->exampleSpans->count() > 0)
             <div class="spans-list">
                 @foreach($spanType->exampleSpans as $span)
-                    <x-spans.display.interactive-card :span="$span" />
+                    <div class="position-relative">
+                        <x-spans.display.interactive-card :span="$span" />
+                        @if($span->state === 'placeholder')
+                            <div class="position-absolute top-0 end-0 mt-1 me-1">
+                                <span class="badge bg-danger" style="font-size: 0.6rem;" title="Placeholder span">
+                                    <i class="bi bi-circle"></i>
+                                </span>
+                            </div>
+                        @elseif($span->state === 'draft')
+                            <div class="position-absolute top-0 end-0 mt-1 me-1">
+                                <span class="badge bg-warning text-dark" style="font-size: 0.6rem;" title="Draft span">
+                                    <i class="bi bi-pencil"></i>
+                                </span>
+                            </div>
+                        @endif
+                    </div>
                 @endforeach
             </div>
             

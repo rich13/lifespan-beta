@@ -48,7 +48,14 @@
         <div class="row">
             <div class="col-md-8">
                 <!-- Main Content -->
-                <x-spans.partials.details :span="$span" />
+                <div class="row">
+                    <div class="col-md-6">
+                        <x-spans.partials.details :span="$span" />
+                    </div>
+                    <div class="col-md-6">
+                        <x-spans.partials.additional-details :span="$span" />
+                    </div>
+                </div>
                 <x-spans.partials.connections :span="$span" />
             </div>
 

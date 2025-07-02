@@ -22,13 +22,6 @@
                     <x-spans.partials.age :span="$span" />
                 </div>         
             </dd>
-
-            @if($span->description)
-                <dt class="col-sm-3">Description</dt>
-                <dd class="col-sm-9">
-                    <x-spans.partials.description :span="$span" />
-                </dd>
-            @endif
         </dl>
     </div>
 </div> 

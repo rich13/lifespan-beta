@@ -198,7 +198,6 @@ document.addEventListener('DOMContentLoaded', function() {
         .attr('width', width + margin.left + margin.right)
         .attr('height', height + margin.top + margin.bottom)
         .attr('fill', 'transparent')
-        .style('cursor', 'grab');
 
     // Create a single container for both content and axis
     const container = svg.append('g')
@@ -269,16 +268,16 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
     // Add dragging styles
-    const style = document.createElement('style');
-    style.textContent = `
-        .dragging {
-            cursor: grabbing !important;
-        }
-        .background.dragging {
-            cursor: grabbing;
-        }
-    `;
-    document.head.appendChild(style);
+    // const style = document.createElement('style');
+    // style.textContent = `
+    //     .dragging {
+    //         cursor: grabbing !important;
+    //     }
+    //     .background.dragging {
+    //         cursor: grabbing;
+    //     }
+    // `;
+    // document.head.appendChild(style);
 
     // Add background rectangles
     spans.append('rect')

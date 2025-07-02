@@ -291,6 +291,9 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
         <!-- Modals -->
         @stack('modals')
         
+        <!-- Global Access Level Modal -->
+        <x-modals.access-level-modal />
+        
         <!-- Sidebar Toggle Script -->
         @auth
         <script>

@@ -17,17 +17,34 @@
     .node {
         cursor: pointer;
         transition: all 0.3s ease;
-        stroke-width: 2px;
+        stroke-width: 1px; /* Thinner borders like Bootstrap buttons */
     }
 
     .node:hover {
-        stroke-width: 4px;
+        stroke-width: 2px;
         filter: brightness(1.1);
+        transform: scale(1.02);
     }
 
     .node.selected {
-        stroke-width: 4px;
+        stroke-width: 2px;
         stroke: #000;
+        filter: brightness(1.15);
+        transform: scale(1.05);
+        box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25); /* Bootstrap focus ring */
+    }
+
+    .node.active {
+        stroke-width: 2px;
+        stroke: #000;
+        filter: brightness(1.1);
+    }
+
+    .node.inactive {
+        stroke-width: 7px; /* Thicker white border for inactive nodes */
+        stroke: #fff;
+        filter: brightness(0.7); /* Dim the node to show it's inactive */
+        opacity: 0.6;
     }
 
     .link {
@@ -69,8 +86,9 @@
         text-anchor: middle;
         dominant-baseline: middle;
         pointer-events: none;
-        fill: #495057;
+        fill: #fff;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); /* Better text readability */
     }
 
     /* Family tree specific styles */
@@ -850,27 +868,22 @@ function updateNodeVisibility() {
     console.log('Visible nodes:', visibleNodes.length, 'Visible links:', visibleLinks.length);
     console.log('Hidden types:', Array.from(hiddenNodeTypes));
     
-    // Update node visibility - only fade nodes that are changing state
+    // Update node visibility - show all nodes but mark hidden ones as inactive
     nodeElements.each(function(d) {
         const node = d3.select(this);
-        const isCurrentlyVisible = node.style('display') !== 'none';
         const shouldBeVisible = !hiddenNodeTypes.has(d.type);
         
-        if (isCurrentlyVisible && !shouldBeVisible) {
-            // Fade out nodes that are being hidden
-            node.transition().duration(300)
-                .style('opacity', 0)
-                .on('end', function() {
-                    d3.select(this).style('display', 'none');
-                });
-        } else if (!isCurrentlyVisible && shouldBeVisible) {
-            // Fade in nodes that are being shown
+        if (shouldBeVisible) {
+            // Show active nodes
             node.style('display', 'block')
-                .style('opacity', 0)
-                .transition().duration(300)
-                .style('opacity', 1);
+                .style('opacity', 1)
+                .classed('inactive', false);
+        } else {
+            // Show inactive nodes with thicker white border
+            node.style('display', 'block')
+                .style('opacity', 1)
+                .classed('inactive', true);
         }
-        // Nodes that aren't changing state remain unchanged
     });
     
     // Update link visibility - only fade links that are changing state
@@ -1277,8 +1290,9 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('Hovered element found:', hoveredElement.size());
             hoveredElement.select("rect")
                 .style("stroke", "#000")
-                .style("stroke-width", "4px")
-                .style("filter", "brightness(1.2)");
+                .style("stroke-width", "2px")
+                .style("filter", "brightness(1.2)")
+                .classed("selected", true);
             
             // Highlight parent nodes
             parents.forEach(parent => {
@@ -1287,8 +1301,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log('Parent element found:', parentElement.size());
                 parentElement.select("rect")
                     .style("stroke", "#000")
-                    .style("stroke-width", "4px")
-                    .style("filter", "brightness(1.2)");
+                    .style("stroke-width", "2px")
+                    .style("filter", "brightness(1.2)")
+                    .classed("active", true);
             });
             
             // Highlight child nodes
@@ -1298,8 +1313,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log('Child element found:', childElement.size());
                 childElement.select("rect")
                     .style("stroke", "#000")
-                    .style("stroke-width", "4px")
-                    .style("filter", "brightness(1.2)");
+                    .style("stroke-width", "2px")
+                    .style("filter", "brightness(1.2)")
+                    .classed("active", true);
             });
             
             // Highlight connecting edges (both parent and child connections)
@@ -1333,7 +1349,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     return (d.source.id === linkSourceId && d.target.id === linkTargetId) ||
                            (d.source.id === linkTargetId && d.target.id === linkSourceId);
                 });
-                return isConnecting ? "4px" : "2px";
+                return isConnecting ? "3px" : "2px";
             })
             .style("stroke-opacity", d => {
                 const isConnecting = connectingLinks.some(connectingLink => {
@@ -1351,8 +1367,11 @@ document.addEventListener('DOMContentLoaded', function() {
         function clearHighlights() {
             node.select("rect")
                 .style("stroke", "#fff")
-                .style("stroke-width", "2px")
-                .style("filter", "none");
+                .style("stroke-width", "1px")
+                .style("filter", "none")
+                .style("stroke-opacity", "0.8")
+                .classed("selected", false)
+                .classed("active", false);
             
             link.style("stroke", "#999")
                 .style("stroke-width", "2px")
@@ -1385,7 +1404,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 .on("end", dragended))
             .on("click", function(event, d) {
                 // Remove selection from all nodes
-                node.select("rect").classed("selected", false);
+                node.select("rect").classed("selected", false).classed("active", false);
                 // Add selection to clicked node
                 d3.select(this).select("rect").classed("selected", true);
                 
@@ -1412,12 +1431,12 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Add rounded rectangles for the nodes
         node.append("rect")
-            .attr("rx", 8) // Rounded corners
-            .attr("ry", 8)
+            .attr("rx", 6) // Slightly less rounded corners for Bootstrap-like appearance
+            .attr("ry", 6)
             .attr("width", d => Math.max(80, d.name.length * 8)) // Dynamic width based on name length
-            .attr("height", 30)
+            .attr("height", 28) // Slightly smaller height for more compact look
             .attr("x", d => -Math.max(80, d.name.length * 8) / 2) // Center the rectangle
-            .attr("y", -15)
+            .attr("y", -14)
             .style("fill", d => {
                 switch(d.type) {
                     case 'current-user': return "#3B82F6"; // Blue for current user
@@ -1437,7 +1456,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             })
             .style("stroke", "#fff")
-            .style("stroke-width", "2px");
+            .style("stroke-width", "1px") // Thinner borders like Bootstrap buttons
+            .style("stroke-opacity", "0.8"); // Slightly transparent borders
         
         // Add labels for the nodes with gender icons
         node.append("text")
@@ -1448,9 +1468,10 @@ document.addEventListener('DOMContentLoaded', function() {
             .attr("text-anchor", "middle")
             .attr("dy", "0.35em")
             .style("font-size", "11px")
-            .style("font-weight", "bold")
+            .style("font-weight", "600") // Slightly bolder for better readability
             .style("fill", "#fff")
-            .style("pointer-events", "none");
+            .style("pointer-events", "none")
+            .style("text-shadow", "0 1px 2px rgba(0, 0, 0, 0.3)"); // Better text readability
         
         console.log('Node styling applied');
         
