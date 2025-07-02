@@ -12,20 +12,23 @@ return new class extends Migration
      */
     public function up(): void
     {
-        DB::table('connection_types')->insert([
-            'type' => 'contains',
-            'forward_predicate' => 'contains',
-            'forward_description' => 'Contains',
-            'inverse_predicate' => 'contained in',
-            'inverse_description' => 'Contained in',
-            'constraint_type' => 'non_overlapping',
-            'allowed_span_types' => json_encode([
-                'parent' => ['thing'],
-                'child' => ['thing']
-            ]),
-            'created_at' => now(),
-            'updated_at' => now()
-        ]);
+        // Check if the connection type already exists
+        if (!DB::table('connection_types')->where('type', 'contains')->exists()) {
+            DB::table('connection_types')->insert([
+                'type' => 'contains',
+                'forward_predicate' => 'contains',
+                'forward_description' => 'Contains',
+                'inverse_predicate' => 'contained in',
+                'inverse_description' => 'Contained in',
+                'constraint_type' => 'non_overlapping',
+                'allowed_span_types' => json_encode([
+                    'parent' => ['thing'],
+                    'child' => ['thing']
+                ]),
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
+        }
     }
 
     /**

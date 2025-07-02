@@ -47,7 +47,7 @@ docker exec -it "$CONTAINER_NAME" bash -c "cd /var/www && \
     export DB_CONNECTION=pgsql && \
     export DB_DATABASE=$TEST_DATABASE && \
     php artisan migrate:fresh --env=testing && \
-    ./vendor/bin/phpunit --testdox --colors=always $PHPUNIT_ARGS"
+    php -d memory_limit=1024M ./vendor/bin/phpunit --testdox --colors=always $PHPUNIT_ARGS"
 
 TEST_EXIT_CODE=$?
 
