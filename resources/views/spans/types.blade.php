@@ -1,7 +1,19 @@
 @extends('layouts.app')
 
 @section('page_title')
-    Span Types
+    <x-breadcrumb :items="[
+        [
+            'text' => 'Spans',
+            'url' => route('spans.index'),
+            'icon' => 'view',
+            'icon_category' => 'action'
+        ],
+        [
+            'text' => 'Types',
+            'icon' => 'view',
+            'icon_category' => 'action'
+        ]
+    ]" />
 @endsection
 
 @section('page_filters')
@@ -23,24 +35,6 @@
                 <i class="bi bi-plus-circle me-1"></i>New Span
             </a>
         @endauth
-        
-        <div class="btn-group" role="group">
-            <a href="{{ route('spans.types') }}" 
-               class="btn btn-sm {{ !$showPlaceholders && !$showDrafts ? 'btn-secondary' : 'btn-outline-secondary' }}"
-               title="Show only complete spans">
-                <i class="bi bi-check-circle me-1"></i>Complete
-            </a>
-            <a href="{{ route('spans.types', ['show_drafts' => 1]) }}" 
-               class="btn btn-sm {{ $showDrafts && !$showPlaceholders ? 'btn-secondary' : 'btn-outline-secondary' }}"
-               title="Include draft spans">
-                <i class="bi bi-pencil me-1"></i> Drafts
-            </a>
-            <a href="{{ route('spans.types', ['show_placeholders' => 1]) }}" 
-               class="btn btn-sm {{ $showPlaceholders ? 'btn-secondary' : 'btn-outline-secondary' }}"
-               title="Include placeholder spans">
-                <i class="bi bi-circle me-1"></i> Placeholders
-            </a>
-        </div>
     </div>
 @endsection
 

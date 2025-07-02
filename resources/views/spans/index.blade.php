@@ -1,7 +1,13 @@
 @extends('layouts.app')
 
 @section('page_title')
-    Spans
+    <x-breadcrumb :items="[
+        [
+            'text' => 'Spans',
+            'icon' => 'view',
+            'icon_category' => 'action'
+        ]
+    ]" />
 @endsection
 
 @section('page_filters')

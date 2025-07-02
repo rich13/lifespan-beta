@@ -236,7 +236,7 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
                 <!-- Sidebar and Main Content -->
                 <div class="row sidebar-row">
                     <!-- Sidebar -->
-                    <div id="sidebar" class="bg-secondary border-end d-none d-md-block p-0 sidebar{{ $sidebarCollapsed ? ' collapsed' : '' }}">
+                    <div id="sidebar" class="bg-dark border-end d-none d-md-block p-0 sidebar{{ $sidebarCollapsed ? ' collapsed' : '' }}">
                         <div class="sticky-top" style="top: 0; height: 100vh; overflow-y: auto;">
                             <x-sidebar.main-nav />
                             <x-sidebar.admin-nav />

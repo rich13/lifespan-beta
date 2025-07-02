@@ -7,7 +7,19 @@
 --}}
 
 @section('page_title')
-    {{ $span->getDisplayTitle() }}
+    <x-breadcrumb :items="[
+        [
+            'text' => 'Spans',
+            'url' => route('spans.index'),
+            'icon' => 'view',
+            'icon_category' => 'action'
+        ],
+        [
+            'text' => $span->getDisplayTitle(),
+            'icon' => $span->type_id,
+            'icon_category' => 'span'
+        ]
+    ]" />
 @endsection
 
 @section('page_tools')
