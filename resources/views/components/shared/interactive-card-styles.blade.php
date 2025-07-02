@@ -13,6 +13,7 @@
     .interactive-card-base:hover {
         border-color: #adb5bd;
         box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+        cursor: default;
     }
     
     /* Inactive connector button styling */
@@ -164,6 +165,35 @@
         display: flex;
         align-items: center;
         justify-content: center;
+    }
+
+    /* Tools button hover behavior */
+    .tools-button {
+        opacity: 0;
+        transition: opacity 0.2s ease-in-out;
+    }
+
+    .interactive-card-base:hover .tools-button {
+        opacity: 1;
+    }
+    
+    /* Tools expansion behavior */
+    .tools-button .tools-expanded {
+        visibility: hidden !important;
+        position: absolute !important;
+        transition: none; /* Remove transition for immediate response */
+    }
+    
+    /* CSS fallback for showing tools on hover */
+    .tools-button:hover .tools-expanded {
+        visibility: visible !important;
+        position: relative !important;
+    }
+    
+    /* Ensure the toggle button stays visible */
+    .tools-button .tools-toggle {
+        visibility: visible !important;
+        position: relative !important;
     }
 </style>
 @endpush 

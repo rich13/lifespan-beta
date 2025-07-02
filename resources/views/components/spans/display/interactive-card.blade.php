@@ -9,6 +9,9 @@
 @endphp
 
 <div class="interactive-card-base mb-3 position-relative" style="min-height: 40px;">
+    <!-- Tools Button -->
+    <x-tools-button :model="$span" />
+    
     <!-- Timeline background that fills the entire container -->
     <div class="position-absolute w-100 h-100" style="top: 0; left: 0; z-index: 1;">
         <x-spans.display.card-timeline :span="$span" />

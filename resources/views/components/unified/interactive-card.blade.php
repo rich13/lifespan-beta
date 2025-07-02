@@ -37,7 +37,10 @@
 @if($span)
     {{-- SPAN MODE --}}
     
-    <div class="interactive-card-base mb-3">
+    <div class="interactive-card-base mb-3 position-relative">
+        <!-- Tools Button -->
+        <x-tools-button :model="$span" />
+        
         <!-- Single continuous button group for the entire sentence -->
         <div class="btn-group btn-group-sm" role="group">
             <!-- Span type icon button -->
@@ -119,7 +122,10 @@
 @elseif($connection)
     {{-- CONNECTION MODE --}}
     
-    <div class="interactive-card-base mb-3">
+    <div class="interactive-card-base mb-3 position-relative">
+        <!-- Tools Button -->
+        <x-tools-button :model="$connection" />
+        
         <!-- Single continuous button group for the entire sentence -->
         <div class="btn-group btn-group-sm" role="group">
             <!-- Connection type icon button -->
