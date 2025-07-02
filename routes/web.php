@@ -194,9 +194,9 @@ Route::middleware('web')->group(function () {
         return view('home');
     })->name('home');
 
-    // Date exploration route
+    // Date exploration route - supports YYYY, YYYY-MM, and YYYY-MM-DD formats
     Route::get('/date/{date}', [SpanController::class, 'exploreDate'])
-        ->where('date', '[0-9]{4}-[0-9]{2}-[0-9]{2}')
+        ->where('date', '[0-9]{4}(-[0-9]{2}(-[0-9]{2})?)?')
         ->name('date.explore');
 
     // Span routes
@@ -208,7 +208,10 @@ Route::middleware('web')->group(function () {
         Route::get('/{span}/timeline', [App\Http\Controllers\Api\SpanSearchController::class, 'timeline'])->name('spans.timeline');
         
         // Types route (public)
-        Route::get('/types', [SpanController::class, 'types'])->name('spans.types');
+            Route::get('/types', [SpanController::class, 'types'])->name('spans.types');
+    Route::get('/types/{type}', [SpanController::class, 'showType'])->name('spans.types.show');
+    Route::get('/types/{type}/subtypes', [SpanController::class, 'showSubtypes'])->name('spans.types.subtypes');
+    Route::get('/types/{type}/subtypes/{subtype}', [SpanController::class, 'showTypeSubtype'])->name('spans.types.subtypes.show');
         
         // Protected routes
         Route::middleware('auth')->group(function () {

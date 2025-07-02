@@ -523,42 +523,47 @@ class SpanController extends Controller
         // Parse the date string into components
         $dateParts = explode('-', $date);
         $year = (int) $dateParts[0];
-        $month = (int) $dateParts[1];
-        $day = (int) $dateParts[2];
+        $month = isset($dateParts[1]) ? (int) $dateParts[1] : null;
+        $day = isset($dateParts[2]) ? (int) $dateParts[2] : null;
+        
+        // Determine the precision level
+        $precision = 'year';
+        if ($day !== null) {
+            $precision = 'day';
+        } elseif ($month !== null) {
+            $precision = 'month';
+        }
 
         // Build the base query for spans that start or end on this date
         $query = Span::query()
-            ->where(function ($query) use ($year, $month, $day) {
-                // Spans that start on this date
-                $query->where(function ($q) use ($year, $month, $day) {
-                    $q->where('start_year', $year)
-                      ->where('start_month', $month)
-                      ->where('start_day', $day);
-                })
-                // Spans that end on this date
-                ->orWhere(function ($q) use ($year, $month, $day) {
-                    $q->where('end_year', $year)
-                      ->where('end_month', $month)
-                      ->where('end_day', $day);
-                })
-                // Spans that start in this month
-                ->orWhere(function ($q) use ($year, $month) {
-                    $q->where('start_year', $year)
-                      ->where('start_month', $month);
-                })
-                // Spans that end in this month
-                ->orWhere(function ($q) use ($year, $month) {
-                    $q->where('end_year', $year)
-                      ->where('end_month', $month);
-                })
-                // Spans that start in this year
-                ->orWhere(function ($q) use ($year) {
-                    $q->where('start_year', $year);
-                })
-                // Spans that end in this year
-                ->orWhere(function ($q) use ($year) {
-                    $q->where('end_year', $year);
-                });
+            ->where(function ($query) use ($year, $month, $day, $precision) {
+                if ($precision === 'day') {
+                    // For day precision, show spans that start or end on this exact date
+                    $query->where(function ($q) use ($year, $month, $day) {
+                        $q->where('start_year', $year)
+                          ->where('start_month', $month)
+                          ->where('start_day', $day);
+                    })
+                    ->orWhere(function ($q) use ($year, $month, $day) {
+                        $q->where('end_year', $year)
+                          ->where('end_month', $month)
+                          ->where('end_day', $day);
+                    });
+                } elseif ($precision === 'month') {
+                    // For month precision, show spans that start or end in this month
+                    $query->where(function ($q) use ($year, $month) {
+                        $q->where('start_year', $year)
+                          ->where('start_month', $month);
+                    })
+                    ->orWhere(function ($q) use ($year, $month) {
+                        $q->where('end_year', $year)
+                          ->where('end_month', $month);
+                    });
+                } else {
+                    // For year precision, show spans that start or end in this year
+                    $query->where('start_year', $year)
+                          ->orWhere('end_year', $year);
+                }
             });
 
         // For unauthenticated users, only show public spans
@@ -588,48 +593,63 @@ class SpanController extends Controller
             }
         }
 
-        // Get all spans and separate them into different lists
+        // Get all spans and separate them into different lists based on precision
         $allSpans = $query->get();
         
-        // Spans that start on this exact date
-        $spansStartingOnDate = $allSpans->filter(function ($span) use ($year, $month, $day) {
-            return $span->start_year == $year && 
-                   $span->start_month == $month && 
-                   $span->start_day == $day;
-        });
+        if ($precision === 'day') {
+            // For day precision, separate by start/end on exact date
+            $spansStartingOnDate = $allSpans->filter(function ($span) use ($year, $month, $day) {
+                return $span->start_year == $year && 
+                       $span->start_month == $month && 
+                       $span->start_day == $day;
+            });
 
-        // Spans that end on this exact date
-        $spansEndingOnDate = $allSpans->filter(function ($span) use ($year, $month, $day) {
-            return $span->end_year == $year && 
-                   $span->end_month == $month && 
-                   $span->end_day == $day;
-        });
+            $spansEndingOnDate = $allSpans->filter(function ($span) use ($year, $month, $day) {
+                return $span->end_year == $year && 
+                       $span->end_month == $month && 
+                       $span->end_day == $day;
+            });
 
-        // Spans that start in this month (but not on this day)
-        $spansStartingInMonth = $allSpans->filter(function ($span) use ($year, $month, $day) {
-            return $span->start_year == $year && 
-                   $span->start_month == $month && 
-                   $span->start_day != $day;
-        });
+            // Initialize empty collections for other precision levels
+            $spansStartingInMonth = collect();
+            $spansEndingInMonth = collect();
+            $spansStartingInYear = collect();
+            $spansEndingInYear = collect();
+            
+        } elseif ($precision === 'month') {
+            // For month precision, separate by start/end in month
+            $spansStartingInMonth = $allSpans->filter(function ($span) use ($year, $month) {
+                return $span->start_year == $year && 
+                       $span->start_month == $month;
+            });
 
-        // Spans that end in this month (but not on this day)
-        $spansEndingInMonth = $allSpans->filter(function ($span) use ($year, $month, $day) {
-            return $span->end_year == $year && 
-                   $span->end_month == $month && 
-                   $span->end_day != $day;
-        });
+            $spansEndingInMonth = $allSpans->filter(function ($span) use ($year, $month) {
+                return $span->end_year == $year && 
+                       $span->end_month == $month;
+            });
 
-        // Spans that start in this year (but not in this month)
-        $spansStartingInYear = $allSpans->filter(function ($span) use ($year, $month) {
-            return $span->start_year == $year && 
-                   $span->start_month != $month;
-        });
+            // Initialize empty collections for other precision levels
+            $spansStartingOnDate = collect();
+            $spansEndingOnDate = collect();
+            $spansStartingInYear = collect();
+            $spansEndingInYear = collect();
+            
+        } else {
+            // For year precision, separate by start/end in year
+            $spansStartingInYear = $allSpans->filter(function ($span) use ($year) {
+                return $span->start_year == $year;
+            });
 
-        // Spans that end in this year (but not in this month)
-        $spansEndingInYear = $allSpans->filter(function ($span) use ($year, $month) {
-            return $span->end_year == $year && 
-                   $span->end_month != $month;
-        });
+            $spansEndingInYear = $allSpans->filter(function ($span) use ($year) {
+                return $span->end_year == $year;
+            });
+
+            // Initialize empty collections for other precision levels
+            $spansStartingOnDate = collect();
+            $spansEndingOnDate = collect();
+            $spansStartingInMonth = collect();
+            $spansEndingInMonth = collect();
+        }
 
         // Separate connections from regular spans
         $connectionSpansStartingOnDate = $spansStartingOnDate->filter(fn($span) => $span->type_id === 'connection');
@@ -677,6 +697,20 @@ class SpanController extends Controller
                    !$connectionsEndingInMonth->contains('id', $connection->id);
         });
 
+        // Limit each collection to 5 random items
+        $spansStartingOnDate = $spansStartingOnDate->shuffle()->take(5);
+        $spansEndingOnDate = $spansEndingOnDate->shuffle()->take(5);
+        $spansStartingInMonth = $spansStartingInMonth->shuffle()->take(5);
+        $spansEndingInMonth = $spansEndingInMonth->shuffle()->take(5);
+        $spansStartingInYear = $spansStartingInYear->shuffle()->take(5);
+        $spansEndingInYear = $spansEndingInYear->shuffle()->take(5);
+        $connectionsStartingOnDate = $connectionsStartingOnDate->shuffle()->take(5);
+        $connectionsEndingOnDate = $connectionsEndingOnDate->shuffle()->take(5);
+        $connectionsStartingInMonth = $connectionsStartingInMonth->shuffle()->take(5);
+        $connectionsEndingInMonth = $connectionsEndingInMonth->shuffle()->take(5);
+        $connectionsStartingInYear = $connectionsStartingInYear->shuffle()->take(5);
+        $connectionsEndingInYear = $connectionsEndingInYear->shuffle()->take(5);
+
         return view('spans.date-explore', compact(
             'spansStartingOnDate',
             'spansEndingOnDate',
@@ -690,7 +724,11 @@ class SpanController extends Controller
             'connectionsEndingInMonth',
             'connectionsStartingInYear',
             'connectionsEndingInYear',
-            'date'
+            'date',
+            'precision',
+            'year',
+            'month',
+            'day'
         ));
     }
 
@@ -962,10 +1000,6 @@ class SpanController extends Controller
                 ->orderBy('name')
                 ->get();
 
-            // Check if user wants to show placeholders and drafts
-            $showPlaceholders = $request->boolean('show_placeholders', false);
-            $showDrafts = $request->boolean('show_drafts', false);
-
             // For each span type, get up to 5 example spans
             foreach ($spanTypes as $spanType) {
                 $query = Span::query()
@@ -974,20 +1008,8 @@ class SpanController extends Controller
                     ->orderByRaw('COALESCE(start_month, 12)')
                     ->orderByRaw('COALESCE(start_day, 31)');
 
-                // Filter by state based on user preferences
-                if (!$showPlaceholders && !$showDrafts) {
-                    // Default: only show complete spans
-                    $query->where('state', 'complete');
-                } elseif ($showPlaceholders && !$showDrafts) {
-                    // Show complete and placeholder spans
-                    $query->whereIn('state', ['complete', 'placeholder']);
-                } elseif ($showDrafts && !$showPlaceholders) {
-                    // Show complete and draft spans
-                    $query->whereIn('state', ['complete', 'draft']);
-                } elseif ($showPlaceholders && $showDrafts) {
-                    // Show all states (complete, draft, placeholder)
-                    $query->whereIn('state', ['complete', 'draft', 'placeholder']);
-                }
+                // Show all states by default
+                $query->whereIn('state', ['complete', 'draft', 'placeholder']);
 
                 // Apply the same access filtering logic as the main spans index
                 if (!Auth::check()) {
@@ -1020,7 +1042,7 @@ class SpanController extends Controller
                 $spanType->exampleSpans = $query->limit(5)->get();
             }
 
-            return view('spans.types', compact('spanTypes', 'showPlaceholders', 'showDrafts'));
+            return view('spans.types', compact('spanTypes'));
         } catch (\Exception $e) {
             // Log the error
             \Illuminate\Support\Facades\Log::error('Error in spans types', [
@@ -1029,6 +1051,271 @@ class SpanController extends Controller
             ]);
             
             // Return error page
+            if (app()->environment('production')) {
+                return response()->view('errors.500', [], 500);
+            } else {
+                return response()->view('errors.500', [
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString()
+                ], 500);
+            }
+        }
+    }
+
+    /**
+     * Display a specific span type with all spans of that type.
+     */
+    public function showType(Request $request, string $type): View
+    {
+        try {
+            // Find the span type
+            $spanType = SpanType::where('type_id', $type)->first();
+            
+            if (!$spanType) {
+                abort(404, 'Span type not found');
+            }
+
+            // Build the query for spans of this type
+            $query = Span::query()
+                ->where('type_id', $type)
+                ->orderByRaw('COALESCE(start_year, 9999)')
+                ->orderByRaw('COALESCE(start_month, 12)')
+                ->orderByRaw('COALESCE(start_day, 31)');
+
+            // Show all states by default
+            $query->whereIn('state', ['complete', 'draft', 'placeholder']);
+
+            // Apply the same access filtering logic as the main spans index
+            if (!Auth::check()) {
+                // For unauthenticated users, only show public spans
+                $query->where('access_level', 'public');
+            } else {
+                // For authenticated users
+                $user = Auth::user();
+                if (!$user->is_admin) {
+                    // Show:
+                    // 1. Public spans
+                    // 2. User's own spans
+                    // 3. Shared spans where user has permission
+                    $query->where(function ($query) use ($user) {
+                        $query->where('access_level', 'public')
+                            ->orWhere('owner_id', $user->id)
+                            ->orWhere(function ($query) use ($user) {
+                                $query->where('access_level', 'shared')
+                                    ->whereExists(function ($subquery) use ($user) {
+                                        $subquery->select('id')
+                                            ->from('span_permissions')
+                                            ->whereColumn('span_permissions.span_id', 'spans.id')
+                                            ->where('span_permissions.user_id', $user->id);
+                                    });
+                            });
+                    });
+                }
+            }
+
+            // Handle search within this type
+            if ($request->has('search')) {
+                $searchTerms = preg_split('/\s+/', trim($request->search));
+                $query->where(function($q) use ($searchTerms) {
+                    foreach ($searchTerms as $term) {
+                        $q->where(function($subq) use ($term) {
+                            $subq->where('name', 'ilike', "%{$term}%")
+                                 ->orWhere('description', 'ilike', "%{$term}%");
+                        });
+                    }
+                });
+            }
+
+            $spans = $query->paginate(20);
+
+            return view('spans.type-show', compact('spanType', 'spans'));
+        } catch (\Exception $e) {
+            // Log the error
+            \Illuminate\Support\Facades\Log::error('Error in span type show', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            // Return error page
+            if (app()->environment('production')) {
+                return response()->view('errors.500', [], 500);
+            } else {
+                return response()->view('errors.500', [
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString()
+                ], 500);
+            }
+        }
+    }
+
+    /**
+     * Display all subtypes for a specific span type.
+     */
+    public function showSubtypes(Request $request, string $type): View|Response
+    {
+        try {
+            // Find the span type
+            $spanType = SpanType::where('type_id', $type)->first();
+            
+            if (!$spanType) {
+                abort(404, 'Span type not found');
+            }
+
+            // Get all spans of this type to extract unique subtypes
+            $query = Span::query()
+                ->where('type_id', $type)
+                ->whereNotNull('metadata->subtype')
+                ->where('metadata->subtype', '!=', '');
+
+            // Apply access filtering
+            if (!Auth::check()) {
+                $query->where('access_level', 'public');
+            } else {
+                $user = Auth::user();
+                if (!$user->is_admin) {
+                    $query->where(function ($query) use ($user) {
+                        $query->where('access_level', 'public')
+                            ->orWhere('owner_id', $user->id)
+                            ->orWhere(function ($query) use ($user) {
+                                $query->where('access_level', 'shared')
+                                    ->whereExists(function ($subquery) use ($user) {
+                                        $subquery->select('id')
+                                            ->from('span_permissions')
+                                            ->whereColumn('span_permissions.span_id', 'spans.id')
+                                            ->where('span_permissions.user_id', $user->id);
+                                    });
+                            });
+                    });
+                }
+            }
+
+            // Get unique subtypes with counts
+            $subtypes = $query->selectRaw('metadata->>\'subtype\' as subtype, COUNT(*) as count')
+                ->groupBy('metadata->subtype')
+                ->orderBy('subtype')
+                ->get();
+
+            // For each subtype, get up to 3 example spans
+            foreach ($subtypes as $subtype) {
+                $exampleQuery = Span::query()
+                    ->where('type_id', $type)
+                    ->where('metadata->subtype', $subtype->subtype)
+                    ->whereIn('state', ['complete', 'draft', 'placeholder'])
+                    ->orderByRaw('COALESCE(start_year, 9999)')
+                    ->orderByRaw('COALESCE(start_month, 12)')
+                    ->orderByRaw('COALESCE(start_day, 31)');
+
+                // Apply same access filtering
+                if (!Auth::check()) {
+                    $exampleQuery->where('access_level', 'public');
+                } else {
+                    $user = Auth::user();
+                    if (!$user->is_admin) {
+                        $exampleQuery->where(function ($query) use ($user) {
+                            $query->where('access_level', 'public')
+                                ->orWhere('owner_id', $user->id)
+                                ->orWhere(function ($query) use ($user) {
+                                    $query->where('access_level', 'shared')
+                                        ->whereExists(function ($subquery) use ($user) {
+                                            $subquery->select('id')
+                                                ->from('span_permissions')
+                                                ->whereColumn('span_permissions.span_id', 'spans.id')
+                                                ->where('span_permissions.user_id', $user->id);
+                                        });
+                                });
+                        });
+                    }
+                }
+
+                $subtype->exampleSpans = $exampleQuery->limit(3)->get();
+            }
+
+            return view('spans.type-subtypes', compact('spanType', 'subtypes'));
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Error in span type subtypes', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            if (app()->environment('production')) {
+                return response()->view('errors.500', [], 500);
+            } else {
+                return response()->view('errors.500', [
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString()
+                ], 500);
+            }
+        }
+    }
+
+    /**
+     * Display all spans of a specific type and subtype.
+     */
+    public function showTypeSubtype(Request $request, string $type, string $subtype): View|Response
+    {
+        try {
+            // Find the span type
+            $spanType = SpanType::where('type_id', $type)->first();
+            
+            if (!$spanType) {
+                abort(404, 'Span type not found');
+            }
+
+            // Build the query for spans of this type and subtype
+            $query = Span::query()
+                ->where('type_id', $type)
+                ->where('metadata->subtype', $subtype)
+                ->orderByRaw('COALESCE(start_year, 9999)')
+                ->orderByRaw('COALESCE(start_month, 12)')
+                ->orderByRaw('COALESCE(start_day, 31)');
+
+            // Show all states by default
+            $query->whereIn('state', ['complete', 'draft', 'placeholder']);
+
+            // Apply access filtering
+            if (!Auth::check()) {
+                $query->where('access_level', 'public');
+            } else {
+                $user = Auth::user();
+                if (!$user->is_admin) {
+                    $query->where(function ($query) use ($user) {
+                        $query->where('access_level', 'public')
+                            ->orWhere('owner_id', $user->id)
+                            ->orWhere(function ($query) use ($user) {
+                                $query->where('access_level', 'shared')
+                                    ->whereExists(function ($subquery) use ($user) {
+                                        $subquery->select('id')
+                                            ->from('span_permissions')
+                                            ->whereColumn('span_permissions.span_id', 'spans.id')
+                                            ->where('span_permissions.user_id', $user->id);
+                                    });
+                            });
+                    });
+                }
+            }
+
+            // Handle search within this type/subtype
+            if ($request->has('search')) {
+                $searchTerms = preg_split('/\s+/', trim($request->search));
+                $query->where(function($q) use ($searchTerms) {
+                    foreach ($searchTerms as $term) {
+                        $q->where(function($subq) use ($term) {
+                            $subq->where('name', 'ilike', "%{$term}%")
+                                 ->orWhere('description', 'ilike', "%{$term}%");
+                        });
+                    }
+                });
+            }
+
+            $spans = $query->paginate(20);
+
+            return view('spans.type-subtype-show', compact('spanType', 'subtype', 'spans'));
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Error in span type subtype show', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
             if (app()->environment('production')) {
                 return response()->view('errors.500', [], 500);
             } else {

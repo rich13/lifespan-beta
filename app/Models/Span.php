@@ -597,11 +597,11 @@ class Span extends Model
             // Full date: YYYY-MM-DD
             return sprintf('%04d-%02d-%02d', $this->start_year, $this->start_month, $this->start_day);
         } elseif ($this->start_month) {
-            // Month and year: YYYY-MM-01
-            return sprintf('%04d-%02d-01', $this->start_year, $this->start_month);
+            // Month and year: YYYY-MM
+            return sprintf('%04d-%02d', $this->start_year, $this->start_month);
         } else {
-            // Year only: YYYY-01-01
-            return sprintf('%04d-01-01', $this->start_year);
+            // Year only: YYYY
+            return (string)$this->start_year;
         }
     }
 
@@ -618,11 +618,11 @@ class Span extends Model
             // Full date: YYYY-MM-DD
             return sprintf('%04d-%02d-%02d', $this->end_year, $this->end_month, $this->end_day);
         } elseif ($this->end_month) {
-            // Month and year: YYYY-MM-01
-            return sprintf('%04d-%02d-01', $this->end_year, $this->end_month);
+            // Month and year: YYYY-MM
+            return sprintf('%04d-%02d', $this->end_year, $this->end_month);
         } else {
-            // Year only: YYYY-01-01
-            return sprintf('%04d-01-01', $this->end_year);
+            // Year only: YYYY
+            return (string)$this->end_year;
         }
     }
 
@@ -759,6 +759,24 @@ class Span extends Model
                     ->select('spans.*', 'connections.parent_id as pivot_parent_id', 'connections.child_id as pivot_child_id')
                     ->where('connections.type_id', 'relationship')
             );
+    }
+
+    /**
+     * Get the creator of this thing (if it's a thing with a 'created' connection)
+     */
+    public function getCreator(): ?Span
+    {
+        if ($this->type_id !== 'thing') {
+            return null;
+        }
+
+        // Look for a 'created' connection where this thing is the object (child)
+        $createdConnection = $this->connectionsAsObject()
+            ->where('type_id', 'created')
+            ->with('subject')
+            ->first();
+
+        return $createdConnection?->subject;
     }
 
     /**
