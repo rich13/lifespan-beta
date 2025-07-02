@@ -962,6 +962,10 @@ class SpanController extends Controller
                 ->orderBy('name')
                 ->get();
 
+            // Check if user wants to show placeholders and drafts
+            $showPlaceholders = $request->boolean('show_placeholders', false);
+            $showDrafts = $request->boolean('show_drafts', false);
+
             // For each span type, get up to 5 example spans
             foreach ($spanTypes as $spanType) {
                 $query = Span::query()
@@ -969,6 +973,21 @@ class SpanController extends Controller
                     ->orderByRaw('COALESCE(start_year, 9999)')
                     ->orderByRaw('COALESCE(start_month, 12)')
                     ->orderByRaw('COALESCE(start_day, 31)');
+
+                // Filter by state based on user preferences
+                if (!$showPlaceholders && !$showDrafts) {
+                    // Default: only show complete spans
+                    $query->where('state', 'complete');
+                } elseif ($showPlaceholders && !$showDrafts) {
+                    // Show complete and placeholder spans
+                    $query->whereIn('state', ['complete', 'placeholder']);
+                } elseif ($showDrafts && !$showPlaceholders) {
+                    // Show complete and draft spans
+                    $query->whereIn('state', ['complete', 'draft']);
+                } elseif ($showPlaceholders && $showDrafts) {
+                    // Show all states (complete, draft, placeholder)
+                    $query->whereIn('state', ['complete', 'draft', 'placeholder']);
+                }
 
                 // Apply the same access filtering logic as the main spans index
                 if (!Auth::check()) {
@@ -1001,7 +1020,7 @@ class SpanController extends Controller
                 $spanType->exampleSpans = $query->limit(5)->get();
             }
 
-            return view('spans.types', compact('spanTypes'));
+            return view('spans.types', compact('spanTypes', 'showPlaceholders', 'showDrafts'));
         } catch (\Exception $e) {
             // Log the error
             \Illuminate\Support\Facades\Log::error('Error in spans types', [

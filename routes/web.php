@@ -400,6 +400,21 @@ Route::middleware('web')->group(function () {
                 ->name('span-access.make-public');
             Route::post('/span-access/make-public-bulk', [SpanAccessManagerController::class, 'makePublicBulk'])
                 ->name('span-access.make-public-bulk');
+            
+            // Access level update API
+            Route::put('/spans/{span}/access-level', function (Request $request, $span) {
+                $request->validate([
+                    'access_level' => 'required|in:public,private,shared'
+                ]);
+                
+                $span->update(['access_level' => $request->access_level]);
+                
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Access level updated successfully',
+                    'access_level' => $span->access_level
+                ]);
+            })->name('spans.access-level.update');
 
             // User Management
             Route::get('/users', [UserController::class, 'index'])
