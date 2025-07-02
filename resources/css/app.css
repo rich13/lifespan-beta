@@ -24,3 +24,21 @@
 .text-dotted-underline:hover {
     border-bottom-style: solid;
 }
+
+/* Modal centering styles */
+.modal {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-dialog {
+    margin: 0;
+    max-width: 90vw;
+    max-height: 90vh;
+}
+
+.modal-content {
+    max-height: 90vh;
+    overflow-y: auto;
+}
