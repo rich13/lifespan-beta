@@ -173,13 +173,13 @@ style.textContent = `
         scroll-behavior: smooth;
     }
     
-    /* Auto-scroll hover effect */
+    /* Auto-scroll hover effect - removed cursor changes to prevent hand cursor */
     .interactive-card-base:hover .btn-group {
-        cursor: grab;
+        /* cursor: grab; - removed to prevent hand cursor */
     }
     
     .interactive-card-base:hover .btn-group:active {
-        cursor: grabbing;
+        /* cursor: grabbing; - removed to prevent hand cursor */
     }
     
     /* Subtle transition for hover state */

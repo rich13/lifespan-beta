@@ -3,6 +3,10 @@ import 'bootstrap';
 import './dropdown-debug';
 import './debug';
 import './routes';
+import './tools-button-functions';
+
+// Import timeline manager
+import './timeline/timeline-manager';
 
 // Import page-specific scripts
 import './spans/show';

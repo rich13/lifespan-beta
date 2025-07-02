@@ -4,8 +4,8 @@ $(document).ready(function() {
     const searchInput = $('#home-search');
     const searchContainer = $('.home-search-container');
     
-    console.log('Search input found:', searchInput.length);
-    console.log('Search container found:', searchContainer.length);
+    console.log('Search input found: -', searchInput.length);
+    console.log('Search container found: -', searchContainer.length);
     
     let searchTimeout;
     let selectedIndex = -1;
@@ -13,7 +13,7 @@ $(document).ready(function() {
 
     // Get CSRF token from meta tag
     const csrfToken = $('meta[name="csrf-token"]').attr('content');
-    console.log('CSRF token:', csrfToken);
+    console.log('CSRF token: -', csrfToken);
 
     // Create dropdown container
     const dropdown = $('<div class="dropdown-menu w-100 mt-1" id="search-dropdown"></div>');

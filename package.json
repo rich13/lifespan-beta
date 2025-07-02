@@ -21,6 +21,14 @@
         "vite": "^5.0.0"
     },
     "dependencies": {
+        "@tiptap/core": "^2.23.1",
+        "@tiptap/extension-link": "^2.23.1",
+        "@tiptap/extension-mention": "^2.23.1",
+        "@tiptap/extension-placeholder": "^2.23.1",
+        "@tiptap/extension-text-align": "^2.23.1",
+        "@tiptap/extension-underline": "^2.23.1",
+        "@tiptap/pm": "^2.23.1",
+        "@tiptap/starter-kit": "^2.23.1",
         "bootstrap-icons": "^1.11.3"
     }
 }
