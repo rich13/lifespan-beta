@@ -837,6 +837,14 @@ class Span extends Model
             'permission_type' => $permission
         ]);
 
+        // If granting edit permission, also grant view permission (edit implies view)
+        if ($permission === 'edit') {
+            $this->permissions()->firstOrCreate([
+                'user_id' => $userId,
+                'permission_type' => 'view'
+            ]);
+        }
+
         if ($this->access_level === 'private') {
             $this->access_level = 'shared';
             $this->save();
@@ -872,10 +880,6 @@ class Span extends Model
      */
     public function hasPermission(string|User $user, string $permission): bool
     {
-        if ($this->isPublic()) {
-            return true;
-        }
-
         $userId = $user instanceof User ? $user->id : $user;
         
         // Admin always has permission
@@ -883,14 +887,25 @@ class Span extends Model
             return true;
         }
 
+        // Owner always has permission
         if ($userId === $this->owner_id) {
             return true;
         }
 
-        return $this->permissions()
-            ->where('user_id', $userId)
-            ->where('permission_type', $permission)
-            ->exists();
+        // For public spans, only view permission is granted to everyone
+        if ($this->isPublic() && $permission === 'view') {
+            return true;
+        }
+
+        // For shared spans, check specific permissions
+        if ($this->access_level === 'shared') {
+            return $this->permissions()
+                ->where('user_id', $userId)
+                ->where('permission_type', $permission)
+                ->exists();
+        }
+
+        return false;
     }
 
     /**
