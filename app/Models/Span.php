@@ -894,6 +894,29 @@ class Span extends Model
     }
 
     /**
+     * Check if a user can edit this span
+     */
+    public function isEditableBy(?User $user = null): bool
+    {
+        if (!$user) {
+            return false;
+        }
+
+        // Admin can edit anything
+        if ($user->is_admin) {
+            return true;
+        }
+
+        // Owner can edit their own spans
+        if ($user->id === $this->owner_id) {
+            return true;
+        }
+
+        // Check if user has edit permission
+        return $this->hasPermission($user, 'edit');
+    }
+
+    /**
      * Get the route key for the model.
      */
     public function getRouteKeyName(): string
