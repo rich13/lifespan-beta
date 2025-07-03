@@ -111,6 +111,19 @@ class SpanController extends Controller
 
     public function destroy(Span $span)
     {
+        // Clean up any personal_span_id references before deleting the span
+        $usersWithPersonalSpan = \App\Models\User::where('personal_span_id', $span->id)->get();
+        if ($usersWithPersonalSpan->count() > 0) {
+            \Illuminate\Support\Facades\Log::info('Cleaning up personal_span_id references before admin span deletion', [
+                'span_id' => $span->id,
+                'span_name' => $span->name,
+                'affected_users' => $usersWithPersonalSpan->pluck('id')->toArray()
+            ]);
+            
+            \App\Models\User::where('personal_span_id', $span->id)
+                ->update(['personal_span_id' => null]);
+        }
+        
         $span->delete();
         return redirect()->route('admin.spans.index')
             ->with('status', 'Span deleted successfully');

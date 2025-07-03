@@ -511,8 +511,52 @@ class SpanController extends Controller
     public function destroy(Span $span)
     {
         $this->authorize('delete', $span);
-        $span->delete();
-        return redirect()->route('spans.index');
+        
+        try {
+            $spanName = $span->name;
+            
+            // Clean up any personal_span_id references before deleting the span
+            $usersWithPersonalSpan = \App\Models\User::where('personal_span_id', $span->id)->get();
+            if ($usersWithPersonalSpan->count() > 0) {
+                Log::info('Cleaning up personal_span_id references before span deletion', [
+                    'span_id' => $span->id,
+                    'span_name' => $span->name,
+                    'affected_users' => $usersWithPersonalSpan->pluck('id')->toArray()
+                ]);
+                
+                \App\Models\User::where('personal_span_id', $span->id)
+                    ->update(['personal_span_id' => null]);
+            }
+            
+            $span->delete();
+            
+            // If this is an AJAX request, return JSON
+            if (request()->expectsJson() || request()->wantsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => "Span '{$spanName}' deleted successfully"
+                ]);
+            }
+            
+            return redirect()->route('spans.index')
+                ->with('status', "Span '{$spanName}' deleted successfully");
+                
+        } catch (\Exception $e) {
+            Log::error('Error deleting span', [
+                'span_id' => $span->id,
+                'span_name' => $span->name,
+                'error' => $e->getMessage()
+            ]);
+            
+            if (request()->expectsJson() || request()->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to delete span: ' . $e->getMessage()
+                ], 500);
+            }
+            
+            return back()->withErrors(['error' => 'Failed to delete span: ' . $e->getMessage()]);
+        }
     }
 
     /**
