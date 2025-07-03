@@ -17,7 +17,7 @@ class ConnectionTypeTest extends TestCase
         parent::setUp();
 
         $this->type = ConnectionType::factory()->create([
-            'type' => 'test_employment_type',
+            'type' => 'test_employment_type_' . uniqid(),
             'forward_predicate' => 'worked at',
             'inverse_predicate' => 'employed',
             'allowed_span_types' => [
