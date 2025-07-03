@@ -239,16 +239,28 @@ Route::middleware('web')->group(function () {
                 $validated = $request->validate([
                     'name' => 'required|string|max:255',
                     'type_id' => 'required|string|exists:span_types,type_id',
-                    'access_level' => 'required|in:public,private,shared'
+                    'access_level' => 'required|in:public,private,shared',
+                    'state' => 'nullable|in:draft,placeholder,complete',
+                    'start_year' => 'nullable|integer|min:1000|max:2100',
+                    'start_month' => 'nullable|integer|min:1|max:12',
+                    'start_day' => 'nullable|integer|min:1|max:31'
                 ]);
                 
-                $span = \App\Models\Span::create([
+                $spanData = [
                     'name' => $validated['name'],
                     'type_id' => $validated['type_id'],
                     'owner_id' => auth()->id(),
                     'updater_id' => auth()->id(),
-                    'access_level' => $validated['access_level']
-                ]);
+                    'access_level' => $validated['access_level'],
+                    'state' => $validated['state'] ?? 'placeholder'  // Default to placeholder for API calls
+                ];
+                
+                // Add date fields if provided
+                if (isset($validated['start_year'])) $spanData['start_year'] = $validated['start_year'];
+                if (isset($validated['start_month'])) $spanData['start_month'] = $validated['start_month'];
+                if (isset($validated['start_day'])) $spanData['start_day'] = $validated['start_day'];
+                
+                $span = \App\Models\Span::create($spanData);
                 
                 return response()->json([
                     'success' => true,
@@ -261,27 +273,39 @@ Route::middleware('web')->group(function () {
                     'parent_id' => 'required|uuid|exists:spans,id',
                     'child_id' => 'required|uuid|exists:spans,id',
                     'type_id' => 'required|string|exists:connection_types,type',
-                    'age' => 'nullable|integer|min:0'
+                    'age' => 'nullable|integer|min:0',
+                    'start_year' => 'nullable|integer|min:1000|max:2100',
+                    'start_month' => 'nullable|integer|min:1|max:12',
+                    'start_day' => 'nullable|integer|min:1|max:31'
                 ]);
                 
                 // Get the parent span to calculate the connection date
                 $parentSpan = \App\Models\Span::find($validated['parent_id']);
                 $connectionYear = null;
                 
-                if ($parentSpan && $parentSpan->start_year && isset($validated['age'])) {
+                // Use provided date if available, otherwise calculate from age
+                if (isset($validated['start_year'])) {
+                    $connectionYear = $validated['start_year'];
+                } elseif ($parentSpan && $parentSpan->start_year && isset($validated['age'])) {
                     $connectionYear = $parentSpan->start_year + $validated['age'];
                 }
                 
-                // Create a placeholder connection span with calculated temporal information
-                $connectionSpan = \App\Models\Span::create([
+                // Create a placeholder connection span with temporal information
+                $connectionSpanData = [
                     'name' => "Connection between spans",
                     'type_id' => 'connection',
-                    'start_year' => $connectionYear,
                     'owner_id' => auth()->id(),
                     'updater_id' => auth()->id(),
                     'access_level' => 'private',
                     'state' => 'placeholder'  // Still marked as placeholder for editing
-                ]);
+                ];
+                
+                // Add date fields if provided
+                if ($connectionYear) $connectionSpanData['start_year'] = $connectionYear;
+                if (isset($validated['start_month'])) $connectionSpanData['start_month'] = $validated['start_month'];
+                if (isset($validated['start_day'])) $connectionSpanData['start_day'] = $validated['start_day'];
+                
+                $connectionSpan = \App\Models\Span::create($connectionSpanData);
                 
                 // Create the connection
                 $connection = \App\Models\Connection::create([
@@ -311,6 +335,8 @@ Route::middleware('web')->group(function () {
 
     // Protected routes
     Route::middleware('auth')->group(function () {
+        // Connection Management (for regular users) - must be before wildcard routes
+        Route::delete('/connections/{connection}', [\App\Http\Controllers\ConnectionController::class, 'destroy'])->name('connections.destroy');
         // Profile routes
         Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
         Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
