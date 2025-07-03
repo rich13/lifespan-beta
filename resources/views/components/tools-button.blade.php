@@ -122,6 +122,34 @@
                 </button>
             @endif
             
+            @if($model instanceof \App\Models\Span && auth()->check() && (auth()->user()->is_admin || $model->owner_id === auth()->id()))
+                <button type="button" 
+                        class="btn btn-danger tools-expanded" 
+                        title="Delete Span"
+                        data-bs-toggle="tooltip" 
+                        data-bs-placement="top"
+                        data-model-id="{{ $model->id }}"
+                        data-model-name="{{ $model->name }}"
+                        onclick="confirmDeleteSpan(this)"
+                        style="visibility: hidden; position: absolute;">
+                    <i class="bi bi-trash"></i>
+                </button>
+            @endif
+            
+            @if($model instanceof \App\Models\Connection && auth()->check() && (auth()->user()->is_admin || ($model->connectionSpan && $model->connectionSpan->owner_id === auth()->id())))
+                <button type="button" 
+                        class="btn btn-danger tools-expanded" 
+                        title="Delete Connection"
+                        data-bs-toggle="tooltip" 
+                        data-bs-placement="top"
+                        data-model-id="{{ $model->id }}"
+                        data-model-name="{{ $model->connectionSpan ? $model->connectionSpan->name : 'Connection' }}"
+                        onclick="confirmDeleteConnection(this)"
+                        style="visibility: hidden; position: absolute;">
+                    <i class="bi bi-trash"></i>
+                </button>
+            @endif
+            
             <!-- Main ellipsis button (always visible) -->
             <button type="button" 
                     class="btn btn-outline-primary btn-sm tools-toggle" 

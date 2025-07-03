@@ -81,6 +81,152 @@ window.openAccessLevelModal = function(button) {
     modal.show();
 }
 
+// Confirm and delete span
+window.confirmDeleteSpan = function(button) {
+    const modelId = button.getAttribute('data-model-id');
+    const modelName = button.getAttribute('data-model-name');
+    
+    console.log('Delete span clicked:', { modelId, modelName });
+    
+    // Show confirmation dialog
+    const confirmed = confirm(`Are you sure you want to delete the span "${modelName}"?\n\nThis action cannot be undone and will also delete all associated connections.`);
+    
+    if (!confirmed) {
+        return;
+    }
+    
+    // Show loading state
+    const icon = button.querySelector('i');
+    const originalIcon = icon.className;
+    icon.className = 'bi bi-hourglass-split';
+    button.disabled = true;
+    
+    // Send delete request
+    fetch(`/spans/${modelId}`, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        }
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        console.log('Span deleted successfully:', data);
+        
+        // Show success feedback
+        button.style.backgroundColor = '#28a745';
+        icon.className = 'bi bi-check';
+        
+        // Remove the span from the DOM after a short delay
+        setTimeout(() => {
+            const spanElement = button.closest('.interactive-card-base, .card, .span-item');
+            if (spanElement) {
+                spanElement.style.opacity = '0';
+                spanElement.style.transform = 'scale(0.8)';
+                spanElement.style.transition = 'all 0.3s ease';
+                
+                setTimeout(() => {
+                    spanElement.remove();
+                }, 300);
+            } else {
+                // Fallback: reload the page
+                location.reload();
+            }
+        }, 1000);
+        
+        // Show success message
+        alert(`Span "${modelName}" deleted successfully!`);
+    })
+    .catch(error => {
+        console.error('Error deleting span:', error);
+        
+        // Reset button state
+        icon.className = originalIcon;
+        button.disabled = false;
+        
+        // Show error message
+        alert('Failed to delete span. Please try again or contact an administrator.');
+    });
+}
+
+// Confirm and delete connection
+window.confirmDeleteConnection = function(button) {
+    const modelId = button.getAttribute('data-model-id');
+    const modelName = button.getAttribute('data-model-name');
+    
+    console.log('Delete connection clicked:', { modelId, modelName });
+    
+    // Show confirmation dialog
+    const confirmed = confirm(`Are you sure you want to delete the connection "${modelName}"?\n\nThis action cannot be undone.`);
+    
+    if (!confirmed) {
+        return;
+    }
+    
+    // Show loading state
+    const icon = button.querySelector('i');
+    const originalIcon = icon.className;
+    icon.className = 'bi bi-hourglass-split';
+    button.disabled = true;
+    
+    // Send delete request
+    fetch(`/connections/${modelId}`, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        }
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        console.log('Connection deleted successfully:', data);
+        
+        // Show success feedback
+        button.style.backgroundColor = '#28a745';
+        icon.className = 'bi bi-check';
+        
+        // Remove the connection from the DOM after a short delay
+        setTimeout(() => {
+            const connectionElement = button.closest('.interactive-card-base, .card, .connection-item');
+            if (connectionElement) {
+                connectionElement.style.opacity = '0';
+                connectionElement.style.transform = 'scale(0.8)';
+                connectionElement.style.transition = 'all 0.3s ease';
+                
+                setTimeout(() => {
+                    connectionElement.remove();
+                }, 300);
+            } else {
+                // Fallback: reload the page
+                location.reload();
+            }
+        }, 1000);
+        
+        // Show success message
+        alert(`Connection "${modelName}" deleted successfully!`);
+    })
+    .catch(error => {
+        console.error('Error deleting connection:', error);
+        
+        // Reset button state
+        icon.className = originalIcon;
+        button.disabled = false;
+        
+        // Show error message
+        alert('Failed to delete connection. Please try again or contact an administrator.');
+    });
+}
+
 // Update access level via modal
 window.updateAccessLevel = function(newLevel) {
     const button = window.currentAccessLevelButton;
