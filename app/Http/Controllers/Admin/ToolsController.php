@@ -29,7 +29,10 @@ class ToolsController extends Controller
             $similarSpans = $this->findSimilarSpansForView($request->search);
         }
 
-        return view('admin.tools.index', compact('similarSpans', 'stats'));
+        $wikipediaCachedDays = $this->countWikipediaCachedDays();
+        $wikipediaTotalDays = 366; // Always count leap years for completeness
+
+        return view('admin.tools.index', compact('similarSpans', 'stats', 'wikipediaCachedDays', 'wikipediaTotalDays'));
     }
 
     /**
@@ -405,5 +408,243 @@ class ToolsController extends Controller
                 'error' => 'Failed to make things public: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Prewarm the Wikipedia On This Day cache for every day in the year
+     */
+    public function prewarmWikipediaCache(Request $request)
+    {
+        $this->middleware(['auth', 'admin']);
+        
+        // Check if this is an AJAX request for progress updates
+        if ($request->ajax() && $request->has('action') && $request->action === 'progress') {
+            return $this->getPrewarmProgress();
+        }
+        
+        // Check if this is an AJAX request to start the prewarm
+        if ($request->ajax() && $request->has('action') && $request->action === 'start') {
+            return $this->startPrewarmOperation();
+        }
+        
+        // Check if this is an AJAX request to process a single day
+        if ($request->ajax() && $request->has('action') && $request->action === 'process-day') {
+            return $this->processSingleDay($request);
+        }
+        
+        // Show the progress page
+        return view('admin.tools.prewarm-wikipedia-cache');
+    }
+    
+    /**
+     * Start the prewarm operation
+     */
+    private function startPrewarmOperation()
+    {
+        // Initialize the prewarm session
+        $allDates = $this->generateAllValidDates();
+        
+        session(['wikipedia_prewarm_results' => [
+            'total_days' => count($allDates),
+            'success_days' => 0,
+            'errors' => [],
+            'progress' => [],
+            'pending_dates' => $allDates,
+            'processed_dates' => [],
+            'current_date' => null,
+            'is_complete' => false,
+            'is_running' => true
+        ]]);
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Prewarm operation initialized',
+            'total_days' => count($allDates)
+        ]);
+    }
+    
+    /**
+     * Process a single day
+     */
+    private function processSingleDay(Request $request)
+    {
+        $results = session('wikipedia_prewarm_results');
+        
+        if (!$results || !$results['is_running']) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No active prewarm operation'
+            ]);
+        }
+        
+        // Get the next pending date
+        if (empty($results['pending_dates'])) {
+            // All dates processed
+            $results['is_complete'] = true;
+            $results['is_running'] = false;
+            session(['wikipedia_prewarm_results' => $results]);
+            
+            return response()->json([
+                'success' => true,
+                'is_complete' => true,
+                'summary' => [
+                    'total_days' => $results['total_days'],
+                    'success_days' => $results['success_days'],
+                    'errors' => $results['errors'],
+                    'progress' => $results['progress']
+                ]
+            ]);
+        }
+        
+        // Get next date to process
+        $nextDate = array_shift($results['pending_dates']);
+        $month = $nextDate['month'];
+        $day = $nextDate['day'];
+        $dateKey = $nextDate['key'];
+        $dateLabel = $nextDate['label'];
+        
+        // Update current date
+        $results['current_date'] = $dateKey;
+        session(['wikipedia_prewarm_results' => $results]);
+        
+        // Process this specific date
+        $service = new \App\Services\WikipediaOnThisDayService();
+        $rawData = null;
+        $totalEvents = $totalBirths = $totalDeaths = 0;
+        try {
+            // Fetch the raw Wikipedia data (from cache or API)
+            $cacheKey = "wikipedia_onthisday_raw_{$month}_{$day}";
+            $rawData = \Cache::get($cacheKey);
+            if (!$rawData) {
+                // If not in cache, fetch and cache it
+                $service->getOnThisDay($month, $day); // This will cache the raw data
+                $rawData = \Cache::get($cacheKey);
+            }
+            $totalEvents = isset($rawData['events']) && is_array($rawData['events']) ? count($rawData['events']) : 0;
+            $totalBirths = isset($rawData['births']) && is_array($rawData['births']) ? count($rawData['births']) : 0;
+            $totalDeaths = isset($rawData['deaths']) && is_array($rawData['deaths']) ? count($rawData['deaths']) : 0;
+        } catch (\Throwable $e) {
+            // If something goes wrong, just leave totals as 0
+        }
+        try {
+            $data = $service->getOnThisDay($month, $day);
+            $hasData = !empty($data['events']) || !empty($data['births']) || !empty($data['deaths']);
+            
+            if ($hasData) {
+                $results['success_days']++;
+                $status = 'success';
+                $message = 'Cached successfully';
+            } else {
+                $status = 'warning';
+                $message = 'No data available';
+            }
+            
+            $progressItem = [
+                'date' => $dateKey,
+                'label' => $dateLabel,
+                'status' => $status,
+                'message' => $message,
+                'events_count' => $totalEvents,
+                'births_count' => $totalBirths,
+                'deaths_count' => $totalDeaths
+            ];
+            
+        } catch (\Throwable $e) {
+            $results['errors'][] = "{$month}-{$day}: " . $e->getMessage();
+            $progressItem = [
+                'date' => $dateKey,
+                'label' => $dateLabel,
+                'status' => 'error',
+                'message' => $e->getMessage(),
+                'events_count' => $totalEvents,
+                'births_count' => $totalBirths,
+                'deaths_count' => $totalDeaths
+            ];
+        }
+        
+        // Add to progress and processed dates
+        $results['progress'][] = $progressItem;
+        $results['processed_dates'][] = $dateKey;
+        
+        // Update session
+        session(['wikipedia_prewarm_results' => $results]);
+        
+        return response()->json([
+            'success' => true,
+            'current_date' => $dateKey,
+            'current_label' => $dateLabel,
+            'progress_item' => $progressItem,
+            'summary' => [
+                'total_days' => $results['total_days'],
+                'success_days' => $results['success_days'],
+                'errors' => $results['errors'],
+                'remaining_days' => count($results['pending_dates'])
+            ]
+        ]);
+    }
+    
+    /**
+     * Generate all valid dates for the year
+     */
+    private function generateAllValidDates()
+    {
+        $dates = [];
+        
+        for ($month = 1; $month <= 12; $month++) {
+            for ($day = 1; $day <= 31; $day++) {
+                // Skip invalid dates
+                if (!checkdate($month, $day, 2024)) continue;
+                
+                $dateKey = sprintf('%02d-%02d', $month, $day);
+                $dateLabel = date('F j', mktime(0, 0, 0, $month, $day, 2024));
+                
+                $dates[] = [
+                    'month' => $month,
+                    'day' => $day,
+                    'key' => $dateKey,
+                    'label' => $dateLabel
+                ];
+            }
+        }
+        
+        return $dates;
+    }
+    
+    /**
+     * Get prewarm progress (for AJAX calls)
+     */
+    private function getPrewarmProgress()
+    {
+        $results = session('wikipedia_prewarm_results');
+        
+        if (!$results) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No prewarm operation found'
+            ]);
+        }
+        
+        return response()->json([
+            'success' => true,
+            'summary' => $results
+        ]);
+    }
+
+    /**
+     * Count the number of cached Wikipedia On This Day days
+     */
+    private function countWikipediaCachedDays(): int
+    {
+        $count = 0;
+        for ($month = 1; $month <= 12; $month++) {
+            for ($day = 1; $day <= 31; $day++) {
+                if (!checkdate($month, $day, 2024)) continue;
+                $cacheKey = "wikipedia_onthisday_raw_{$month}_{$day}";
+                if (\Cache::has($cacheKey)) {
+                    $count++;
+                }
+            }
+        }
+        return $count;
     }
 } 
