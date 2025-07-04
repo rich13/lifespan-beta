@@ -18,11 +18,22 @@
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    initializeTimeline_{{ str_replace('-', '_', $span->id) }}();
+    // Add a small delay to ensure DOM is fully ready
+    setTimeout(() => {
+        initializeTimeline_{{ str_replace('-', '_', $span->id) }}();
+    }, 100);
 });
 
 function initializeTimeline_{{ str_replace('-', '_', $span->id) }}() {
     const spanId = '{{ $span->id }}';
+    const container = document.getElementById(`timeline-container-${spanId}`);
+    
+    // Check if container exists
+    if (!container) {
+        console.error('Timeline container not found:', `timeline-container-${spanId}`);
+        return;
+    }
+    
     console.log('Initializing timeline for span:', spanId);
     
     // Fetch timeline data
@@ -39,14 +50,22 @@ function initializeTimeline_{{ str_replace('-', '_', $span->id) }}() {
         })
         .catch(error => {
             console.error('Error loading timeline data:', error);
-            document.getElementById(`timeline-container-${spanId}`).innerHTML = 
-                '<div class="text-danger text-center py-4">Error loading timeline data</div>';
+            if (container) {
+                container.innerHTML = '<div class="text-danger text-center py-4">Error loading timeline data</div>';
+            }
         });
 }
 
 function renderTimeline_{{ str_replace('-', '_', $span->id) }}(connections, span) {
     const spanId = '{{ $span->id }}';
     const container = document.getElementById(`timeline-container-${spanId}`);
+    
+    // Check if container exists
+    if (!container) {
+        console.error('Timeline container not found during render:', `timeline-container-${spanId}`);
+        return;
+    }
+    
     const width = container.clientWidth;
     const height = 120;
     const margin = { top: 20, right: 20, bottom: 30, left: 20 };

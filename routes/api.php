@@ -28,6 +28,10 @@ Route::middleware('auth:sanctum')->group(function () {
 // Span search API
 Route::get('/spans/search', [SpanSearchController::class, 'search']);
 
+// Timeline APIs
+Route::get('/spans/{span}/timeline', [SpanSearchController::class, 'timeline']);
+Route::get('/spans/{span}/timeline-object-connections', [SpanSearchController::class, 'timelineObjectConnections']);
+
 // Residence timeline API
 Route::get('/spans/{span}/residence-timeline', [SpanSearchController::class, 'residenceTimeline']);
 

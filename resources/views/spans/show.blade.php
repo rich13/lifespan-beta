@@ -46,17 +46,44 @@
                 
             @endcan
         @endif
+        
+        <!-- Tools Button -->
+        <x-tools-button :model="$span" />
     @endauth
 @endsection
 
 @section('content')
     <div data-span-id="{{ $span->id }}" class="container-fluid">
-        <!-- Timeline Card -->
+        <!-- Timeline Cards -->
+        @php
+            $showOriginalTimeline = false;
+            $showCombinedTimeline = true;
+            $showGroupTimeline = false;
+        @endphp
+        
+        @if($showOriginalTimeline)
         <div class="row mb-4">
             <div class="col-12">
                 <x-spans.timeline :span="$span" />
             </div>
         </div>
+        @endif
+        
+        @if($showCombinedTimeline)
+        <div class="row mb-4">
+            <div class="col-12">
+                <x-spans.timeline-combined-group :span="$span" />
+            </div>
+        </div>
+        @endif
+        
+        @if($showGroupTimeline)
+        <div class="row mb-4">
+            <div class="col-12">
+                <x-spans.timeline-object-group :span="$span" />
+            </div>
+        </div>
+        @endif
 
         <div class="row">
             <div class="col-md-8">
@@ -90,6 +117,7 @@
 @endsection
 
 @push('scripts')
+<script src="{{ asset('js/tools-button-functions.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     // Delete span confirmation
