@@ -1,6 +1,6 @@
 @props(['span'])
 
-<div class="card mb-4">
+<div class="card mb-4 me-3">
     <div class="card-body">
         <h2 class="card-title h5 mb-3">Sources</h2>
         <x-forms.array-input

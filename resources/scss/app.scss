@@ -112,6 +112,10 @@ $lifespan-colors: (
     'bg': #be185d,      // Pink - friendship
     'text': #ffffff     // White text on pink
   ),
+  'located': (
+    'bg': #8b5cf6,      // Violet - location/placement
+    'text': #ffffff     // White text on violet
+  ),
   
   // States
   'placeholder': (
@@ -415,7 +419,7 @@ main {
 .card-grid {
     display: grid;
     gap: 1rem;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    grid-template-columns: repeat(2, 1fr);
 }
 
 // Responsive adjustments
@@ -486,6 +490,25 @@ main {
 
 .bg-object {
     background-color: $object !important;
+}
+
+// Fallback badge color for any undefined badge classes
+.badge:not([class*="bg-"]) {
+    background-color: #6c757d !important; // Bootstrap secondary color
+    color: #ffffff !important;
+}
+
+// Fallback badge color for any undefined badge classes
+.badge.bg-undefined {
+    background-color: #6c757d !important; // Bootstrap secondary color
+    color: #ffffff !important;
+}
+
+// Fallback for badges with undefined bg- classes
+// This will only apply if no specific background color is defined
+.badge[class*="bg-"] {
+    background-color: #6c757d; // Bootstrap secondary color as fallback
+    color: #ffffff;
 }
 
 .btn-placeholder {

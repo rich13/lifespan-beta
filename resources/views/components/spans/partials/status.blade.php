@@ -20,8 +20,6 @@
     }
 </style>
 
-<div class="card mb-4">
-    <div class="card-body">
         <div class="btn-group btn-group-sm" role="group">
             <!-- Visibility -->
             @if($span->isPublic())
@@ -104,8 +102,7 @@
                 {{ ucfirst($span->state) }}
             </button>
         </div>
-    </div>
-</div>
+    
 
 @push('scripts')
 <script>

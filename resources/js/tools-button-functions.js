@@ -81,6 +81,358 @@ window.openAccessLevelModal = function(button) {
     modal.show();
 }
 
+// Load sets data for the modal
+function loadSetsData(modelId, modelClass) {
+    fetch(`/sets/modal-data?model_id=${modelId}&model_class=${encodeURIComponent(modelClass)}`, {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        }
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        console.log('Sets data loaded:', data);
+        updateSetsModalContent(data, modelId, modelClass);
+    })
+    .catch(error => {
+        console.error('Error loading sets data:', error);
+        const modalContent = document.getElementById('setsModalContent');
+        modalContent.innerHTML = `
+            <div class="alert alert-danger">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                Failed to load sets. Please try again.
+            </div>
+        `;
+    });
+}
+
+// Update the sets modal content with the loaded data
+function updateSetsModalContent(data, modelId, modelClass) {
+    const modalContent = document.getElementById('setsModalContent');
+    
+    let content = '';
+    
+    // Show item summary
+    if (data.itemSummary) {
+        if (data.itemSummary.type === 'span') {
+            content += `
+                <div class="alert alert-info mb-3">
+                    <i class="bi bi-person me-2"></i>
+                    <strong>Add "${data.itemSummary.name}" to...</strong>
+                    <div class="text-muted small">${data.itemSummary.type_name}</div>
+                </div>
+            `;
+        } else if (data.itemSummary.type === 'connection') {
+            content += `
+                <div class="alert alert-info mb-3">
+                    <i class="bi bi-arrow-left-right me-2"></i>
+                    <strong>Connection: ${data.itemSummary.subject} → ${data.itemSummary.object}</strong>
+                    <div class="text-muted small">${data.itemSummary.type_name}</div>
+                </div>
+            `;
+        }
+    }
+    
+    // Show add options for connections
+    if (data.addOptions && data.addOptions.length > 1) {
+        content += `
+            <div class="mb-3">
+                <label class="form-label fw-bold">Choose what to add:</label>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="addOption" id="addOption_${data.addOptions[0].id}" value="${data.addOptions[0].id}" checked>
+                    <label class="form-check-label" for="addOption_${data.addOptions[0].id}">
+                        <i class="bi bi-arrow-left-right me-1"></i>
+                        ${data.addOptions[0].label} (Connection)
+                    </label>
+                </div>
+        `;
+        
+        for (let i = 1; i < data.addOptions.length; i++) {
+            const option = data.addOptions[i];
+            const icon = option.type === 'subject' ? 'bi-person' : 'bi-person';
+            content += `
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="addOption" id="addOption_${option.id}" value="${option.id}">
+                    <label class="form-check-label" for="addOption_${option.id}">
+                        <i class="bi ${icon} me-1"></i>
+                        ${option.label} (${option.type === 'subject' ? 'Subject' : 'Object'})
+                    </label>
+                </div>
+            `;
+        }
+        
+        content += `</div>`;
+    }
+    
+    // Show sets
+    if (data.sets && data.sets.length > 0) {
+        content += `<div class="mb-3"><label class="form-label fw-bold">Select a set:</label></div>`;
+        
+        data.sets.forEach(set => {
+            // For connections, we'll determine membership based on the selected option
+            // For spans, use the current memberships directly
+            let isInSet = false;
+            if (data.addOptions && data.addOptions.length > 1) {
+                // For connections, we'll update this dynamically based on selection
+                const selectedOption = document.querySelector('input[name="addOption"]:checked');
+                if (selectedOption && data.membershipDetails && data.membershipDetails[selectedOption.value]) {
+                    isInSet = data.membershipDetails[selectedOption.value].includes(set.id);
+                }
+            } else {
+                // For spans, use the current memberships
+                isInSet = data.currentMemberships && data.currentMemberships.includes(set.id);
+            }
+            
+            const buttonClass = isInSet ? 'btn-outline-success' : 'btn-outline-primary';
+            const buttonText = isInSet ? 'Remove from Set' : 'Add to Set';
+            const buttonIcon = isInSet ? 'bi-archive-fill' : 'bi-archive';
+            
+            content += `
+                <div class="card mb-2">
+                    <div class="card-body d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-1">${set.name}</h6>
+                            <p class="card-text text-muted small mb-0">${set.description || 'No description'}</p>
+                        </div>
+                        <button type="button" 
+                                class="btn ${buttonClass} btn-sm toggle-set-membership-btn"
+                                data-set-id="${set.id}"
+                                data-model-id="${modelId}"
+                                data-model-class="${modelClass}"
+                                data-is-member="${isInSet}">
+                            <i class="bi ${buttonIcon} me-1"></i>
+                            ${buttonText}
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+    } else {
+        content += `
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle me-2"></i>
+                You don't have any sets yet. 
+                <a href="/sets" class="alert-link">Create your first set</a> to start organizing items.
+            </div>
+        `;
+    }
+    
+    modalContent.innerHTML = content;
+    
+    // Add event listeners for radio button changes if we have multiple options
+    if (data.addOptions && data.addOptions.length > 1 && data.membershipDetails) {
+        const radioButtons = modalContent.querySelectorAll('input[name="addOption"]');
+        radioButtons.forEach(radio => {
+            radio.addEventListener('change', function() {
+                updateSetButtonStates(data.membershipDetails, this.value);
+            });
+        });
+    }
+}
+
+// Update set button states based on the selected option
+function updateSetButtonStates(membershipDetails, selectedOptionValue) {
+    const buttons = document.querySelectorAll('.toggle-set-membership-btn');
+    const selectedMemberships = membershipDetails[selectedOptionValue] || [];
+    
+    buttons.forEach(button => {
+        const setId = button.getAttribute('data-set-id');
+        const isInSet = selectedMemberships.includes(parseInt(setId));
+        
+        const buttonClass = isInSet ? 'btn-outline-success' : 'btn-outline-primary';
+        const buttonText = isInSet ? 'Remove from Set' : 'Add to Set';
+        const buttonIcon = isInSet ? 'bi-archive-fill' : 'bi-archive';
+        
+        button.className = `btn ${buttonClass} btn-sm toggle-set-membership-btn`;
+        button.innerHTML = `
+            <i class="bi ${buttonIcon} me-1"></i>
+            ${buttonText}
+        `;
+        button.setAttribute('data-is-member', isInSet);
+    });
+}
+
+// Delegated event listener for set membership buttons
+$(document).on('click', '.toggle-set-membership-btn', function(event) {
+    const button = event.currentTarget;
+    const setId = button.getAttribute('data-set-id');
+    const modelId = button.getAttribute('data-model-id');
+    const modelClass = button.getAttribute('data-model-class');
+    const isCurrentlyMember = button.getAttribute('data-is-member') === 'true';
+    window.toggleSetMembership(setId, modelId, modelClass, isCurrentlyMember, event);
+});
+
+// Toggle set membership (now only uses data attributes)
+window.toggleSetMembership = function(setId, modelId, modelClass, isCurrentlyMember, event) {
+    const button = event ? event.target.closest('button') : null;
+    if (!button) {
+        console.error('Button element not found');
+        return;
+    }
+    const originalText = button.innerHTML;
+    
+    // Get the selected option if it's a connection
+    let selectedOption = null;
+    const addOptionInputs = document.querySelectorAll('input[name="addOption"]');
+    if (addOptionInputs.length > 0) {
+        const selectedInput = document.querySelector('input[name="addOption"]:checked');
+        if (selectedInput) {
+            selectedOption = selectedInput.value;
+        }
+    }
+    
+    // Show loading state
+    button.disabled = true;
+    button.innerHTML = `
+        <div class="spinner-border spinner-border-sm me-1" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        ${isCurrentlyMember ? 'Removing...' : 'Adding...'}
+    `;
+    
+    const action = isCurrentlyMember ? 'remove' : 'add';
+    
+    const requestBody = {
+        action: action,
+        model_id: String(modelId),
+        model_class: modelClass
+    };
+    
+    // If we have a selected option, use that instead
+    if (selectedOption) {
+        const optionParts = selectedOption.split('_');
+        if (optionParts.length >= 2) {
+            requestBody.model_id = optionParts[1];
+            requestBody.model_class = 'App\\Models\\Span';
+        }
+    }
+    
+    fetch(`/sets/${setId}/items`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        },
+        body: JSON.stringify(requestBody)
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        console.log('Set membership updated:', data);
+        
+        // Update button state
+        const newIsMember = !isCurrentlyMember;
+        const buttonClass = newIsMember ? 'btn-outline-success' : 'btn-outline-primary';
+        const buttonText = newIsMember ? 'Remove from Set' : 'Add to Set';
+        const buttonIcon = newIsMember ? 'bi-archive-fill' : 'bi-archive';
+        
+        button.className = `btn ${buttonClass} btn-sm`;
+        button.innerHTML = `
+            <i class="bi ${buttonIcon} me-1"></i>
+            ${buttonText}
+        `;
+        button.setAttribute('data-is-member', newIsMember);
+        button.disabled = false;
+        
+        // Show success feedback
+        const successMessage = newIsMember ? 'Added to set successfully!' : 'Removed from set successfully!';
+        showToast(successMessage, 'success');
+    })
+    .catch(error => {
+        console.error('Error updating set membership:', error);
+        
+        // Reset button state
+        button.innerHTML = originalText;
+        button.disabled = false;
+        
+        // Show error message
+        showToast('Failed to update set membership. Please try again.', 'error');
+    });
+}
+
+// Simple toast notification function
+function showToast(message, type = 'info') {
+    // Create toast element
+    const toast = document.createElement('div');
+    toast.className = `toast align-items-center text-white bg-${type === 'success' ? 'success' : type === 'error' ? 'danger' : 'info'} border-0`;
+    toast.setAttribute('role', 'alert');
+    toast.setAttribute('aria-live', 'assertive');
+    toast.setAttribute('aria-atomic', 'true');
+    
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">
+                ${message}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+    `;
+    
+    // Add to page
+    const toastContainer = document.getElementById('toast-container') || createToastContainer();
+    toastContainer.appendChild(toast);
+    
+    // Show toast
+    const bsToast = new bootstrap.Toast(toast);
+    bsToast.show();
+    
+    // Remove after it's hidden
+    toast.addEventListener('hidden.bs.toast', () => {
+        toast.remove();
+    });
+}
+
+// Create toast container if it doesn't exist
+function createToastContainer() {
+    const container = document.createElement('div');
+    container.id = 'toast-container';
+    container.className = 'toast-container position-fixed top-0 end-0 p-3';
+    container.style.zIndex = '9999';
+    document.body.appendChild(container);
+    return container;
+}
+
+// Open sets modal
+window.openSetsModal = function(button) {
+    const modelId = button.getAttribute('data-model-id');
+    const modelClass = button.getAttribute('data-model-class');
+    
+    console.log('Opening sets modal:', { modelId, modelClass });
+    
+    // Store the button reference for use in the modal
+    window.currentSetsButton = button;
+    
+    // Show loading state
+    const modalContent = document.getElementById('setsModalContent');
+    modalContent.innerHTML = `
+        <div class="text-center">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2 text-muted">Loading sets...</p>
+        </div>
+    `;
+    
+    // Show the modal
+    const modal = new bootstrap.Modal(document.getElementById('setsModal'));
+    modal.show();
+    
+    // Load sets data
+    loadSetsData(modelId, modelClass);
+}
+
 // Confirm and delete span
 window.confirmDeleteSpan = function(button) {
     const modelId = button.getAttribute('data-model-id');

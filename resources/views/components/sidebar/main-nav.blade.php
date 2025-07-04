@@ -38,8 +38,8 @@
         </a>
     </li>
     <li class="nav-item">
-        <a class="nav-link {{ request()->routeIs('friends.*') ? 'active' : '' }}" href="{{ route('friends.index') }}">
-            <i class="bi bi-person-heart me-1"></i> <span>Friends</span>
+        <a class="nav-link {{ request()->routeIs('sets.*') ? 'active' : '' }}" href="{{ route('sets.index') }}">
+            <i class="bi bi-archive me-1"></i> <span>Sets</span>
         </a>
     </li>
 

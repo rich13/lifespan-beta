@@ -23,14 +23,15 @@
 @endsection
 
 @section('page_tools')
+
     @auth
         @if(auth()->user()->can('update', $span) || auth()->user()->can('delete', $span))
             @can('update', $span)
-                <a href="{{ route('spans.edit', $span) }}" class="btn btn-sm btn-outline-secondary">
-                    <i class="bi bi-pencil me-1"></i> Basic Edit
-                </a>
-                <a href="{{ route('spans.yaml-editor', $span) }}" class="btn btn-sm btn-outline-primary">
-                    <i class="bi bi-code-square me-1"></i> Editor
+                <a href="{{ route('spans.yaml-editor', $span) }}" class="btn btn-sm btn-outline-primary" 
+                   id="edit-span-btn" 
+                   data-bs-toggle="tooltip" data-bs-placement="bottom" 
+                   title="Edit span (⌘E)">
+                    <i class="bi bi-code-square me-1"></i> Edit
                 </a>
             @endcan
             @can('delete', $span)
@@ -40,7 +41,7 @@
                     @method('DELETE')
                 </form>    
                 <a href="#" class="btn btn-sm btn-outline-danger" id="delete-span-btn">
-                    <i class="bi bi-trash me-1"></i> Delete
+                    <i class="bi bi-trash me-1"></i>
                 </a>
                 
             @endcan
@@ -49,7 +50,7 @@
 @endsection
 
 @section('content')
-    <div data-span-id="{{ $span->id }}" class="container-fluid py-4">
+    <div data-span-id="{{ $span->id }}" class="container-fluid">
         <!-- Timeline Card -->
         <div class="row mb-4">
             <div class="col-12">
@@ -61,11 +62,8 @@
             <div class="col-md-8">
                 <!-- Main Content -->
                 <div class="row">
-                    <div class="col-md-6">
+                    <div class="col-md-12">
                         <x-spans.partials.details :span="$span" />
-                    </div>
-                    <div class="col-md-6">
-                        <x-spans.partials.additional-details :span="$span" />
                     </div>
                 </div>
                 <x-spans.partials.connections :span="$span" />
@@ -73,15 +71,19 @@
 
             <div class="col-md-4">
                 <!-- Sidebar Content -->
-                <x-spans.partials.status :span="$span" />
                 @auth
-                    <x-spans.display.compare-card :span="$span" />
+                    @if($span->type_id === 'person')
+                        <x-spans.display.compare-card :span="$span" />
+                    @endif
                     <x-spans.display.reflect-card :span="$span" />
                 @endauth
                 @if($span->type_id === 'person')
                     <x-spans.partials.family-relationships :span="$span" />
+                    <x-spans.partials.desert-island-discs-card :span="$span" :desertIslandDiscsSet="$desertIslandDiscsSet" />
                 @endif
                 <x-spans.partials.sources :span="$span" />
+                <x-spans.partials.status :span="$span" />
+
             </div>
         </div>
     </div>
@@ -100,6 +102,26 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+    
+    // Edit span keyboard shortcut (Cmd+E or Ctrl+E)
+    document.addEventListener('keydown', function(e) {
+        // Check for Cmd+E (Mac) or Ctrl+E (Windows/Linux)
+        if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
+            e.preventDefault(); // Prevent any potential conflicts
+            
+            // Check if edit button exists and user has permission
+            const editSpanBtn = document.getElementById('edit-span-btn');
+            if (editSpanBtn) {
+                editSpanBtn.click();
+            }
+        }
+    });
+    
+    // Initialize Bootstrap tooltips
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
 });
 </script>
 @endpush 

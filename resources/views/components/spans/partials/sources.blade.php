@@ -1,7 +1,7 @@
 @props(['span'])
 
 @if(!empty($span->sources))
-<div class="card">
+<div class="card mb-4">
     <div class="card-body">
         <h2 class="card-title h5 mb-3">Sources</h2>
         <div class="d-flex flex-wrap gap-3">

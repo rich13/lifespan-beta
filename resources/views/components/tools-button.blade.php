@@ -88,13 +88,15 @@
             @endif
             
             <button type="button" 
-                    class="btn btn-warning tools-expanded" 
-                    title="Star"
+                    class="btn btn-dark tools-expanded" 
+                    title="Add to Set"
                     data-bs-toggle="tooltip" 
                     data-bs-placement="top"
-                    onclick="toggleStar(this, '{{ $model->id ?? '' }}', '{{ get_class($model) }}')"
+                    data-model-id="{{ $model->id ?? '' }}"
+                    data-model-class="{{ get_class($model) }}"
+                    onclick="openSetsModal(this)"
                     style="visibility: hidden; position: absolute;">
-                <i class="bi bi-star"></i>
+                <i class="bi bi-archive"></i>
             </button>
             
             <button type="button" 
@@ -129,7 +131,7 @@
                         data-bs-toggle="tooltip" 
                         data-bs-placement="top"
                         data-model-id="{{ $model->id }}"
-                        data-model-name="{{ $model->name }}"
+                        data-model-name="{{ addslashes($model->name) }}"
                         onclick="confirmDeleteSpan(this)"
                         style="visibility: hidden; position: absolute;">
                     <i class="bi bi-trash"></i>
@@ -143,7 +145,7 @@
                         data-bs-toggle="tooltip" 
                         data-bs-placement="top"
                         data-model-id="{{ $model->id }}"
-                        data-model-name="{{ $model->connectionSpan ? $model->connectionSpan->name : 'Connection' }}"
+                        data-model-name="{{ addslashes($model->connectionSpan ? $model->connectionSpan->name : 'Connection') }}"
                         onclick="confirmDeleteConnection(this)"
                         style="visibility: hidden; position: absolute;">
                     <i class="bi bi-trash"></i>

@@ -130,8 +130,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const stateSelect = document.getElementById('state');
     const startYearInput = document.getElementById('start_year');
     
-    // Span types that don't require start dates
-    const timelessSpanTypes = ['place', 'role'];
+    // Get timeless span types from the server
+    const timelessSpanTypes = @json(\App\Models\SpanType::getTimelessTypes());
     
     function updateStartYearRequirement() {
         const selectedType = typeSelect.value;

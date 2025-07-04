@@ -47,6 +47,6 @@
         @endif
     @else
         <i class="bi bi-question-circle"></i>
-        No duration information available
+        Nothing (yet)
     @endif
 </div> 

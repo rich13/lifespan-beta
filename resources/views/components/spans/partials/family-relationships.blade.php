@@ -18,7 +18,7 @@ $hasFamily = $ancestors->isNotEmpty() || $descendants->isNotEmpty() ||
 @endphp
 
 @if($hasFamily)
-    <div class="card-grid">
+    <div class="card-grid mb-4">
         {{-- Generation +2: Grandparents --}}
         @php $grandparents = $ancestors->filter(function($item) { return $item['generation'] === 2; }); @endphp
         @if($grandparents->isNotEmpty())

@@ -29,13 +29,7 @@
 @endsection
 
 @section('page_tools')
-    <div class="d-flex gap-2 align-items-center">
-        @auth
-            <a href="{{ route('spans.create') }}" class="btn btn-sm btn-primary">
-                <i class="bi bi-plus-circle me-1"></i>New Span
-            </a>
-        @endauth
-    </div>
+    <!-- Page-specific tools can be added here -->
 @endsection
 
 @section('content')
