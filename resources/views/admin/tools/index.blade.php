@@ -20,6 +20,129 @@
         </div>
     @endif
 
+    <!-- Row 1: Core Tools -->
+    <div class="row">
+        <!-- Statistics -->
+        <div class="col-lg-3 col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-graph-up"></i>
+                        System Stats
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="text-center">
+                        <div class="mb-3">
+                            <h4 class="text-primary mb-1">{{ $stats['total_spans'] ?? 0 }}</h4>
+                            <small class="text-muted">Total Spans</small>
+                        </div>
+                        <div class="mb-3">
+                            <h4 class="text-success mb-1">{{ $stats['total_users'] ?? 0 }}</h4>
+                            <small class="text-muted">Total Users</small>
+                        </div>
+                        <div class="mb-3">
+                            <h4 class="text-info mb-1">{{ $stats['total_connections'] ?? 0 }}</h4>
+                            <small class="text-muted">Total Connections</small>
+                        </div>
+                        <div>
+                            <h4 class="text-warning mb-1">{{ $stats['orphaned_spans'] ?? 0 }}</h4>
+                            <small class="text-muted">Orphaned Spans</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Management -->
+        <div class="col-lg-3 col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-database"></i>
+                        Data Management
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">Import and export spans as YAML files.</p>
+                    
+                    <div class="d-grid gap-2">
+                        <a href="{{ route('admin.data-export.index') }}" class="btn btn-primary btn-sm">
+                            <i class="bi bi-download me-1"></i>Export Data
+                        </a>
+                        <a href="{{ route('admin.data-import.index') }}" class="btn btn-success btn-sm">
+                            <i class="bi bi-upload me-1"></i>Import Data
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Desert Island Discs Creator -->
+        <div class="col-lg-3 col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-music-note-beamed"></i>
+                        Desert Island Discs
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">Create public Desert Island Discs sets for person spans.</p>
+                    
+                    <form action="{{ route('admin.tools.create-desert-island-discs') }}" method="POST">
+                        @csrf
+                        <div class="mb-2">
+                            <input type="text" class="form-control form-control-sm" name="person_search" 
+                                   placeholder="Search for a person..." value="{{ request('person_search') }}" required>
+                        </div>
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-info btn-sm">
+                                <i class="bi bi-search me-1"></i>Find Person
+                            </button>
+                        </div>
+                    </form>
+
+                    @if(session('desert_island_discs_created'))
+                        <div class="alert alert-success alert-sm mt-2 mb-0">
+                            <i class="bi bi-check-circle"></i>
+                            {{ session('desert_island_discs_created') }}
+                        </div>
+                    @endif
+                    
+                    @if($errors->has('general'))
+                        <div class="alert alert-danger alert-sm mt-2 mb-0">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            {{ $errors->first('general') }}
+                        </div>
+                    @endif
+                </div>
+            </div>
+        </div>
+
+        <!-- Make Things Public -->
+        <div class="col-lg-3 col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-globe"></i>
+                        Make Things Public
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">Make all thing spans (books, albums, tracks) public by default.</p>
+                    
+                    <div class="d-grid">
+                        <a href="{{ route('admin.tools.make-things-public') }}" class="btn btn-warning btn-sm">
+                            <i class="bi bi-globe me-1"></i>Open Tool
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Row 2: Span Management Tools -->
     <div class="row">
         <!-- Span Merge Tool -->
         <div class="col-lg-6 mb-4">
@@ -130,93 +253,78 @@
             </div>
         </div>
 
-        <!-- Statistics -->
+        <!-- Desert Island Discs Results -->
         <div class="col-lg-6 mb-4">
-            <div class="card h-100">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">
-                        <i class="bi bi-graph-up"></i>
-                        System Statistics
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <div class="row text-center">
-                        <div class="col-6 mb-3">
-                            <div class="border rounded p-3">
-                                <h4 class="text-primary mb-1">{{ $stats['total_spans'] ?? 0 }}</h4>
-                                <small class="text-muted">Total Spans</small>
+            @if(isset($people) && $people->count() > 0)
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">
+                            <i class="bi bi-people"></i>
+                            People Found ({{ $people->count() }})
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <form action="{{ route('admin.tools.create-desert-island-discs') }}" method="POST">
+                            @csrf
+                            <div class="mb-3">
+                                <label for="person_id" class="form-label">Select a person to create Desert Island Discs set for:</label>
+                                <select name="person_id" id="person_id" class="form-select" required>
+                                    <option value="">Choose a person...</option>
+                                    @foreach($people as $person)
+                                        <option value="{{ $person->id }}">
+                                            {{ $person->name }} 
+                                            @if($person->start_year)
+                                                ({{ $person->start_year }}{{ $person->end_year ? '-' . $person->end_year : '' }})
+                                            @endif
+                                        </option>
+                                    @endforeach
+                                </select>
                             </div>
-                        </div>
-                        <div class="col-6 mb-3">
-                            <div class="border rounded p-3">
-                                <h4 class="text-success mb-1">{{ $stats['total_users'] ?? 0 }}</h4>
-                                <small class="text-muted">Total Users</small>
-                            </div>
-                        </div>
-                        <div class="col-6 mb-3">
-                            <div class="border rounded p-3">
-                                <h4 class="text-info mb-1">{{ $stats['total_connections'] ?? 0 }}</h4>
-                                <small class="text-muted">Total Connections</small>
-                            </div>
-                        </div>
-                        <div class="col-6 mb-3">
-                            <div class="border rounded p-3">
-                                <h4 class="text-warning mb-1">{{ $stats['orphaned_spans'] ?? 0 }}</h4>
-                                <small class="text-muted">Orphaned Spans</small>
-                            </div>
+                            <button type="submit" class="btn btn-success">
+                                <i class="bi bi-plus-circle"></i>
+                                Create Desert Island Discs Set
+                            </button>
+                        </form>
+                        
+                        <hr>
+                        <div class="list-group list-group-flush">
+                            @foreach($people as $person)
+                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>{{ $person->name }}</strong>
+                                        @if($person->start_year)
+                                            <br><small class="text-muted">
+                                                {{ $person->start_year }}{{ $person->end_year ? '-' . $person->end_year : '' }}
+                                            </small>
+                                        @endif
+                                    </div>
+                                    <div>
+                                        <a href="{{ route('admin.spans.show', $person) }}" 
+                                           class="btn btn-sm btn-outline-primary">
+                                            View
+                                        </a>
+                                    </div>
+                                </div>
+                            @endforeach
                         </div>
                     </div>
                 </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Data Management Tools -->
-    <div class="row">
-        <div class="col-lg-6 mb-4">
-            <div class="card h-100">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">
-                        <i class="bi bi-download"></i>
-                        Data Export
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <p class="text-muted">Export all spans as YAML files for backup, migration, or sharing.</p>
-                    
-                    <div class="d-grid gap-2">
-                        <a href="{{ route('admin.data-export.index') }}" class="btn btn-primary">
-                            <i class="bi bi-download me-2"></i>Export All Data
-                        </a>
-                        <small class="text-muted text-center">
-                            Export individual YAML files or a single bulk file
-                        </small>
+            @elseif(request('person_search'))
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">
+                            <i class="bi bi-search"></i>
+                            Search Results
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i>
+                            No people found for "{{ request('person_search') }}". Try a different search term.
+                        </div>
                     </div>
                 </div>
-            </div>
-        </div>
-
-        <div class="col-lg-6 mb-4">
-            <div class="card h-100">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">
-                        <i class="bi bi-upload"></i>
-                        Data Import
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <p class="text-muted">Import spans from YAML files or ZIP archives.</p>
-                    
-                    <div class="d-grid gap-2">
-                        <a href="{{ route('admin.data-import.index') }}" class="btn btn-success">
-                            <i class="bi bi-upload me-2"></i>Import Data
-                        </a>
-                        <small class="text-muted text-center">
-                            Import individual files or bulk exports
-                        </small>
-                    </div>
-                </div>
-            </div>
+            @endif
         </div>
     </div>
 

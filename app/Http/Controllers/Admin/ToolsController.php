@@ -190,6 +190,75 @@ class ToolsController extends Controller
     }
 
     /**
+     * Create Desert Island Discs set for a person
+     */
+    public function createDesertIslandDiscs(Request $request)
+    {
+        $stats = [
+            'total_spans' => Span::count(),
+            'total_users' => \App\Models\User::count(),
+            'total_connections' => Connection::count(),
+            'orphaned_spans' => 0, // TODO: Implement orphaned spans detection
+        ];
+
+        try {
+            // Handle search for people
+            if ($request->has('person_search') && !empty($request->person_search)) {
+                $people = Span::where('type_id', 'person')
+                    ->where('name', 'ILIKE', '%' . $request->person_search . '%')
+                    ->orderBy('name')
+                    ->limit(20)
+                    ->get();
+
+                return view('admin.tools.index', compact('people', 'stats'));
+            }
+
+            // Handle creating the set
+            if ($request->has('person_id')) {
+                $request->validate([
+                    'person_id' => 'required|exists:spans,id'
+                ]);
+
+                $person = Span::findOrFail($request->person_id);
+                
+                // Check if person is actually a person type
+                if ($person->type_id !== 'person') {
+                    return back()->withErrors(['person_id' => 'Selected span is not a person.']);
+                }
+
+                // Check if person already has a Desert Island Discs set
+                $existingSet = Span::getPublicDesertIslandDiscsSet($person);
+                if ($existingSet) {
+                    return back()->with('desert_island_discs_created', "{$person->name} already has a Desert Island Discs set!");
+                }
+
+                // Create the Desert Island Discs set using the existing method
+                $set = Span::getOrCreatePublicDesertIslandDiscsSet($person);
+
+                Log::info('Desert Island Discs set created', [
+                    'person_id' => $person->id,
+                    'person_name' => $person->name,
+                    'set_id' => $set->id,
+                    'created_by' => auth()->id(),
+                ]);
+
+                return back()->with('desert_island_discs_created', "Desert Island Discs set created successfully for {$person->name}!");
+            }
+
+            return back()->withErrors(['person_search' => 'Please search for a person first.']);
+
+        } catch (\Exception $e) {
+            Log::error('Failed to create Desert Island Discs set', [
+                'error' => $e->getMessage(),
+                'request_data' => $request->all(),
+                'user_id' => auth()->id(),
+            ]);
+
+            return back()->withErrors(['general' => 'Failed to create Desert Island Discs set: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
      * Get span details for merging
      */
     public function getSpanDetails(Request $request)
@@ -210,5 +279,131 @@ class ToolsController extends Controller
                 'updated_at' => $span->updated_at->format('Y-m-d H:i:s'),
             ]
         ]);
+    }
+
+    /**
+     * Show the Make Things Public tool interface
+     */
+    public function showMakeThingsPublic(Request $request)
+    {
+        $stats = [
+            'total_spans' => Span::count(),
+            'total_users' => \App\Models\User::count(),
+            'total_connections' => Connection::count(),
+            'orphaned_spans' => 0,
+        ];
+
+        // Get current statistics for things
+        $things = Span::where('type_id', 'thing')->get();
+        $bySubtype = $things->groupBy(function ($thing) {
+            return $thing->metadata['subtype'] ?? 'none';
+        });
+
+        $thingStats = [];
+        foreach ($bySubtype as $subtype => $subtypeThings) {
+            $public = $subtypeThings->where('access_level', 'public')->count();
+            $private = $subtypeThings->where('access_level', 'private')->count();
+            $thingStats[$subtype] = [
+                'total' => $subtypeThings->count(),
+                'public' => $public,
+                'private' => $private
+            ];
+        }
+
+        return view('admin.tools.make-things-public', compact('stats', 'thingStats'));
+    }
+
+    /**
+     * Execute the Make Things Public operation
+     */
+    public function executeMakeThingsPublic(Request $request)
+    {
+        try {
+            $request->validate([
+                'subtype' => 'nullable|string|in:book,album,track',
+                'owner_email' => 'nullable|email|exists:users,email',
+                'dry_run' => 'boolean'
+            ]);
+
+            $subtype = $request->get('subtype');
+            $ownerEmail = $request->get('owner_email');
+            $isDryRun = $request->boolean('dry_run', true); // Default to dry run for safety
+
+            // Build the query
+            $query = Span::where('type_id', 'thing')
+                ->where('access_level', 'private');
+
+            if ($subtype) {
+                $query->whereJsonContains('metadata->subtype', $subtype);
+            }
+
+            if ($ownerEmail) {
+                $user = \App\Models\User::where('email', $ownerEmail)->first();
+                $query->where('owner_id', $user->id);
+            }
+
+            $privateThings = $query->get();
+
+            if ($privateThings->isEmpty()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'No private thing spans found to make public.',
+                    'changes' => []
+                ]);
+            }
+
+            // Group by subtype for reporting
+            $bySubtype = $privateThings->groupBy(function ($thing) {
+                return $thing->metadata['subtype'] ?? 'none';
+            });
+
+            $changes = [];
+            foreach ($bySubtype as $subtype => $things) {
+                $changes[$subtype] = $things->count();
+            }
+
+            if ($isDryRun) {
+                return response()->json([
+                    'success' => true,
+                    'message' => "Found {$privateThings->count()} private thing spans to make public.",
+                    'changes' => $changes,
+                    'dry_run' => true
+                ]);
+            }
+
+            // Make the changes
+            $updatedCount = 0;
+            foreach ($privateThings as $thing) {
+                $thing->access_level = 'public';
+                $thing->save();
+                $updatedCount++;
+            }
+
+            Log::info('Things made public', [
+                'updated_count' => $updatedCount,
+                'subtype_filter' => $subtype,
+                'owner_filter' => $ownerEmail,
+                'updated_by' => auth()->id(),
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => "Successfully made {$updatedCount} thing spans public!",
+                'changes' => $changes,
+                'dry_run' => false
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Failed to make things public', [
+                'error' => $e->getMessage(),
+                'request_data' => $request->all(),
+                'user_id' => auth()->id(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to make things public: ' . $e->getMessage()
+            ], 500);
+        }
     }
 } 

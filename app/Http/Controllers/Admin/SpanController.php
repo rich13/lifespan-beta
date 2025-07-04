@@ -25,7 +25,7 @@ class SpanController extends Controller
             ->where('type_id', '!=', 'connection');
 
         // Apply type filters
-        if (request('types')) {
+        if (request()->filled('types')) {
             $types = explode(',', request('types'));
             $query->whereIn('type_id', $types);
 
