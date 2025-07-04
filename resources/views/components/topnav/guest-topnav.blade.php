@@ -13,6 +13,9 @@
         <!-- Spacer -->
         <div class="flex-grow-1"></div>
         
+        <!-- Global Search -->
+        <x-topnav.global-search />
+        
         <!-- Guest Actions -->
         <div class="px-3 d-flex align-items-center">
             <div class="d-flex gap-2">

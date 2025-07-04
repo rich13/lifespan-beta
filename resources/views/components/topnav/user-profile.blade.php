@@ -5,6 +5,20 @@ use Illuminate\Support\Facades\Session;
 <!-- DEBUG: User Profile Component Loaded -->
 <!-- User Profile Section -->
 <div class="px-3 d-flex align-items-center">
+    <!-- Global Search -->
+    <x-topnav.global-search />
+    
+    <!-- New Span Button -->
+    @auth
+        <div class="me-3" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Create a new span (⌘K)">
+            <button type="button" class="btn btn-sm btn-primary" 
+                    data-bs-toggle="modal" data-bs-target="#newSpanModal" 
+                    id="new-span-btn">
+                <i class="bi bi-plus-circle me-1"></i>New
+            </button>
+        </div>
+    @endauth
+    
     <!-- Custom User Dropdown -->
     <div class="position-relative" id="customUserDropdown">
         <button class="btn btn-sm btn-secondary" type="button" id="customUserDropdownToggle">
@@ -25,7 +39,7 @@ use Illuminate\Support\Facades\Session;
                 
                 <!-- Menu Items -->
                 <a href="{{ route('profile.edit') }}" class="d-block p-2 text-decoration-none text-dark rounded hover-bg-light">
-                    <i class="bi bi-person me-2"></i>Your Profile
+                    <i class="bi bi-person me-2"></i>Your Account
                 </a>
                 
                 @if(Auth::user()->is_admin)
@@ -62,4 +76,30 @@ use Illuminate\Support\Facades\Session;
             </div>
         </div>
     </div>
-</div> 
+</div>
+
+
+
+<script>
+$(document).ready(function() {
+    // Global keyboard shortcut for New Span (Cmd+K or Ctrl+K)
+    $(document).on('keydown', function(e) {
+        // Check for Cmd+K (Mac) or Ctrl+K (Windows/Linux)
+        if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+            e.preventDefault(); // Prevent any potential conflicts
+            
+            // Check if user is authenticated and button exists
+            const newSpanBtn = document.getElementById('new-span-btn');
+            if (newSpanBtn) {
+                newSpanBtn.click();
+            }
+        }
+    });
+    
+    // Initialize Bootstrap tooltips
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+</script> 
