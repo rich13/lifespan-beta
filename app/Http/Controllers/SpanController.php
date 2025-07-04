@@ -19,6 +19,7 @@ use App\Services\YamlSpanService;
 use InvalidArgumentException;
 use App\Models\Connection;
 use App\Models\ConnectionType as ConnectionTypeModel;
+use App\Services\WikipediaOnThisDayService;
 
 /**
  * Handle span viewing and management
@@ -806,6 +807,9 @@ class SpanController extends Controller
         $connectionsStartingInYear = $connectionsStartingInYear->shuffle()->take(5);
         $connectionsEndingInYear = $connectionsEndingInYear->shuffle()->take(5);
 
+        // Wikipedia data is now loaded asynchronously via AJAX
+        $wikipediaData = [];
+
         return view('spans.date-explore', compact(
             'spansStartingOnDate',
             'spansEndingOnDate',
@@ -819,6 +823,7 @@ class SpanController extends Controller
             'connectionsEndingInMonth',
             'connectionsStartingInYear',
             'connectionsEndingInYear',
+            'wikipediaData',
             'date',
             'precision',
             'year',

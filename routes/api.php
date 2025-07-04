@@ -30,3 +30,14 @@ Route::get('/spans/search', [SpanSearchController::class, 'search']);
 
 // Residence timeline API
 Route::get('/spans/{span}/residence-timeline', [SpanSearchController::class, 'residenceTimeline']);
+
+// Wikipedia On This Day API
+Route::get('/wikipedia/on-this-day/{month}/{day}', function ($month, $day) {
+    $service = new \App\Services\WikipediaOnThisDayService();
+    $data = $service->getOnThisDay((int)$month, (int)$day);
+    
+    return response()->json([
+        'success' => true,
+        'data' => $data
+    ]);
+});
