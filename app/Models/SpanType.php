@@ -358,4 +358,22 @@ class SpanType extends Model
 
         return checkdate($date['month'], $date['day'], $date['year']);
     }
+
+    /**
+     * Check if this span type is timeless (doesn't require dates)
+     */
+    public function isTimeless(): bool
+    {
+        return $this->metadata['timeless'] ?? false;
+    }
+
+    /**
+     * Get all timeless span types
+     */
+    public static function getTimelessTypes(): array
+    {
+        return static::where('metadata->timeless', true)
+            ->pluck('type_id')
+            ->toArray();
+    }
 } 

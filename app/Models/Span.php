@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -16,6 +17,9 @@ use App\Models\Traits\HasSpanCapabilities;
 use App\Models\Traits\HasFamilyCapabilities;
 use App\Models\Traits\HasGeospatialCapabilities;
 use App\Models\Traits\HasBandCapabilities;
+use App\Models\User;
+use App\Models\Connection;
+use App\Services\SetFilterService;
 
 /**
  * Represents a span of time or an entity that exists in time.
@@ -89,7 +93,10 @@ class Span extends Model
         'end_precision',
         'sources',
         'permissions_value',
-        'permission_mode'
+        'permission_mode',
+        'filter_type',
+        'filter_criteria',
+        'is_predefined',
     ];
 
     /**
@@ -134,6 +141,13 @@ class Span extends Model
             }
         });
 
+        // Set things as public by default
+        static::creating(function ($span) {
+            if ($span->type_id === 'thing' && !isset($span->access_level)) {
+                $span->access_level = 'public';
+            }
+        });
+
         // Validate metadata for all capabilities
         static::saving(function ($span) {
             foreach ($span->getCapabilities() as $capability) {
@@ -152,10 +166,14 @@ class Span extends Model
 
         // Validate required fields
         static::saving(function ($span) {
-            // Some span types (like place, role) represent concepts that exist independently of time
-            $timelessSpanTypes = ['place', 'role'];
+            // Check if this span type is marked as timeless in its metadata
+            $spanType = $span->type;
+            $isTimeless = $spanType && ($spanType->metadata['timeless'] ?? false);
             
-            if (!$span->start_year && $span->state !== 'placeholder' && !in_array($span->type_id, $timelessSpanTypes)) {
+            // Also check if this individual span is marked as timeless
+            $isTimeless = $isTimeless || ($span->metadata['timeless'] ?? false);
+            
+            if (!$span->start_year && $span->state !== 'placeholder' && !$isTimeless) {
                 throw new \InvalidArgumentException(sprintf(
                     'Start year is required for %s span "%s". Expected format: YYYY-MM-DD, YYYY-MM, or YYYY',
                     $span->type_id ?? 'unknown type',
@@ -168,6 +186,16 @@ class Span extends Model
         static::saving(function ($span) {
             if (!$span->slug && $span->name) {
                 $baseSlug = Str::slug($span->name);
+                
+                // For sets, include the owner's name to ensure uniqueness
+                if ($span->type_id === 'set' && $span->owner_id) {
+                    $owner = User::find($span->owner_id);
+                    if ($owner) {
+                        $ownerSlug = Str::slug($owner->name ?? 'user');
+                        $baseSlug = $ownerSlug . '-' . $baseSlug;
+                    }
+                }
+                
                 $slug = $baseSlug;
                 $counter = 1;
 
@@ -207,8 +235,6 @@ class Span extends Model
                 $span->end_month,
                 $span->end_day
             );
-
-
 
             // Validate date consistency
             if (!$span->hasValidDateCombination('start')) {
@@ -296,7 +322,18 @@ class Span extends Model
 
         static::creating(function ($span) {
             if (empty($span->slug)) {
-                $span->slug = Str::slug($span->name);
+                $baseSlug = Str::slug($span->name);
+                
+                // For sets, include the owner's name to ensure uniqueness
+                if ($span->type_id === 'set' && $span->owner_id) {
+                    $owner = User::find($span->owner_id);
+                    if ($owner) {
+                        $ownerSlug = Str::slug($owner->name ?? 'user');
+                        $baseSlug = $ownerSlug . '-' . $baseSlug;
+                    }
+                }
+                
+                $span->slug = $baseSlug;
                 
                 // Ensure unique slug
                 $count = 2;
@@ -314,6 +351,16 @@ class Span extends Model
                 // Only update slug if it was empty or matched the old name's slug
                 if (empty($span->slug) || $span->slug === $oldSlug) {
                     $baseSlug = Str::slug($span->name);
+                    
+                    // For sets, include the owner's name to ensure uniqueness
+                    if ($span->type_id === 'set' && $span->owner_id) {
+                        $owner = User::find($span->owner_id);
+                        if ($owner) {
+                            $ownerSlug = Str::slug($owner->name ?? 'user');
+                            $baseSlug = $ownerSlug . '-' . $baseSlug;
+                        }
+                    }
+                    
                     $slug = $baseSlug;
                     $counter = 1;
                     while (static::where('slug', $slug)->where('id', '!=', $span->id)->exists()) {
@@ -395,10 +442,15 @@ class Span extends Model
 
         // Allow null dates for placeholder state, end dates, or timeless span types
         if ($year === null) {
-            $timelessSpanTypes = ['place', 'role'];
+            $spanType = $this->type;
+            $isTimeless = $spanType && ($spanType->metadata['timeless'] ?? false);
+            
+            // Also check if this individual span is marked as timeless
+            $isTimeless = $isTimeless || ($this->metadata['timeless'] ?? false);
+            
             return $this->state === 'placeholder' || 
                    $prefix === 'end' || 
-                   in_array($this->type_id, $timelessSpanTypes);
+                   $isTimeless;
         }
 
         // Validate year range
@@ -1095,5 +1147,429 @@ class Span extends Model
         $result['messages'][] = "Successfully transitioned from {$oldType->name} to {$newType->name}";
         
         return $result;
+    }
+
+    /**
+     * Check if this span is a set
+     */
+    public function isSet(): bool
+    {
+        return $this->type_id === 'set';
+    }
+
+    /**
+     * Get all sets that contain this span
+     */
+    public function getContainingSets()
+    {
+        return $this->connectionsAsObject()
+            ->whereHas('type', function ($query) {
+                $query->where('type', 'contains');
+            })
+            ->whereHas('parent', function ($query) {
+                $query->where('type_id', 'set');
+            })
+            ->with('parent')
+            ->get()
+            ->pluck('parent');
+    }
+
+    /**
+     * Check if this span is contained in a specific set
+     */
+    public function isInSet(Span $set): bool
+    {
+        if (!$set->isSet()) {
+            return false;
+        }
+
+        return $this->connectionsAsObject()
+            ->where('parent_id', $set->id)
+            ->whereHas('type', function ($query) {
+                $query->where('type', 'contains');
+            })
+            ->exists();
+    }
+
+    /**
+     * Get all items contained in this set
+     */
+    public function getSetContents()
+    {
+        if (!$this->isSet()) {
+            return collect();
+        }
+
+        // If this is a smart set (has filter_type), use the filter system
+        if ($this->filter_type && $this->filter_type !== 'in_set') {
+            $user = auth()->user();
+            if (!$user && $this->owner_id) {
+                // If no authenticated user but we have an owner_id, try to get the user
+                $user = \App\Models\User::find($this->owner_id);
+            }
+            
+            if (!$user) {
+                return collect(); // Can't filter without a user
+            }
+            
+            return SetFilterService::applyFilter(
+                $this->filter_type,
+                $this->filter_criteria ?? [],
+                $user
+            );
+        }
+
+        // Traditional set - use the existing connection-based approach
+        return $this->connectionsAsSubject()
+            ->whereHas('type', function ($query) {
+                $query->where('type', 'contains');
+            })
+            ->with('child')
+            ->get()
+            ->map(function ($connection) {
+                // Add pivot data to the child span
+                $child = $connection->child;
+                $child->pivot = (object) [
+                    'created_at' => $connection->created_at,
+                    'updated_at' => $connection->updated_at
+                ];
+                return $child;
+            });
+    }
+
+    /**
+     * Add an item to this set
+     */
+    public function addToSet(Span $item): bool
+    {
+        if (!$this->isSet()) {
+            return false;
+        }
+
+        // Check if already in set
+        if ($this->containsItem($item)) {
+            return false;
+        }
+
+        // Create the connection
+        $connection = new Connection([
+            'parent_id' => $this->id,
+            'child_id' => $item->id,
+            'type_id' => 'contains',
+            'connection_span_id' => Span::create([
+                'name' => "{$this->name} contains {$item->name}",
+                'type_id' => 'connection',
+                'owner_id' => auth()->id(),
+                'updater_id' => auth()->id(),
+                'state' => 'complete',
+                'metadata' => ['timeless' => true] // Connection spans for sets are timeless
+            ])->id
+        ]);
+
+        return $connection->save();
+    }
+
+    /**
+     * Remove an item from this set
+     */
+    public function removeFromSet(Span $item): bool
+    {
+        if (!$this->isSet()) {
+            return false;
+        }
+
+        $connection = $this->connectionsAsSubject()
+            ->where('child_id', $item->id)
+            ->whereHas('type', function ($query) {
+                $query->where('type', 'contains');
+            })
+            ->first();
+
+        if ($connection) {
+            // Delete the connection span
+            if ($connection->connectionSpan) {
+                $connection->connectionSpan->delete();
+            }
+            return $connection->delete();
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if this set contains a specific item
+     */
+    public function containsItem(Span $item): bool
+    {
+        if (!$this->isSet()) {
+            return false;
+        }
+
+        return $this->connectionsAsSubject()
+            ->where('child_id', $item->id)
+            ->whereHas('type', function ($query) {
+                $query->where('type', 'contains');
+            })
+            ->exists();
+    }
+
+    /**
+     * Scope to exclude sets from queries
+     */
+    public function scopeExcludeSets($query)
+    {
+        return $query->where('type_id', '!=', 'set');
+    }
+
+    /**
+     * Scope to only include sets
+     */
+    public function scopeOnlySets($query)
+    {
+        return $query->where('type_id', 'set');
+    }
+
+    /**
+     * Get or create the user's default "Starred" set
+     */
+    public static function getOrCreateStarredSet(User $user): Span
+    {
+        return static::getOrCreateDefaultSet($user, 'Starred', 'starred', 'Your starred items', 'bi-star-fill');
+    }
+
+    /**
+     * Get or create the user's default "Desert Island Discs" set
+     */
+    public static function getOrCreateDesertIslandDiscsSet(User $user): Span
+    {
+        return static::getOrCreateDefaultSet($user, 'Desert Island Discs', 'desert-island-discs', 'Your desert island discs', 'bi-music-note-beamed');
+    }
+
+    /**
+     * Get an existing public "Desert Island Discs" set for a person span
+     */
+    public static function getPublicDesertIslandDiscsSet(Span $person): ?Span
+    {
+        if ($person->type_id !== 'person') {
+            throw new \InvalidArgumentException('Can only get Desert Island Discs sets for person spans');
+        }
+
+        // Check if this person already has a public Desert Island Discs set via created connection
+        $existingConnection = $person->connectionsAsSubject()
+            ->where('type_id', 'created')
+            ->whereHas('child', function($q) {
+                $q->where('type_id', 'set')
+                  ->whereJsonContains('metadata->subtype', 'desertislanddiscs')
+                  ->where('access_level', 'public');
+            })
+            ->first();
+
+        return $existingConnection ? $existingConnection->child : null;
+    }
+
+    /**
+     * Get or create a public "Desert Island Discs" set for a person span
+     */
+    public static function getOrCreatePublicDesertIslandDiscsSet(Span $person): Span
+    {
+        if ($person->type_id !== 'person') {
+            throw new \InvalidArgumentException('Can only create Desert Island Discs sets for person spans');
+        }
+
+        // Check if this person already has a public Desert Island Discs set via created connection
+        $existingConnection = $person->connectionsAsSubject()
+            ->where('type_id', 'created')
+            ->whereHas('child', function($q) {
+                $q->where('type_id', 'set')
+                  ->whereJsonContains('metadata->subtype', 'desertislanddiscs')
+                  ->where('access_level', 'public');
+            })
+            ->first();
+
+        if ($existingConnection) {
+            return $existingConnection->child;
+        }
+
+        // Get or create system user to own the set
+        $systemUser = User::where('email', 'system@lifespan.app')->first();
+        if (!$systemUser) {
+            $systemUser = User::create([
+                'email' => 'system@lifespan.app',
+                'password' => Hash::make(Str::random(32)),
+                'is_admin' => true,
+                'email_verified_at' => now(),
+            ]);
+        }
+
+        // Create a new public set owned by system user
+        $slug = Str::slug($person->name) . '-desert-island-discs';
+        $counter = 1;
+        
+        // Ensure unique slug
+        while (static::where('slug', $slug)->exists()) {
+            $slug = Str::slug($person->name) . '-desert-island-discs-' . ++$counter;
+        }
+
+        $set = static::create([
+            'name' => 'Desert Island Discs',
+            'slug' => $slug,
+            'type_id' => 'set',
+            'description' => "{$person->name}'s desert island discs",
+            'metadata' => [
+                'is_public_desert_island_discs' => true,
+                'icon' => 'bi-music-note-beamed',
+                'subtype' => 'desertislanddiscs'
+            ],
+            'owner_id' => $systemUser->id,
+            'updater_id' => $systemUser->id,
+            'access_level' => 'public',
+            'state' => 'complete'
+        ]);
+
+        // Create the "created" connection between person and set
+        $connectionSpan = static::create([
+            'name' => "{$person->name} created Desert Island Discs set",
+            'type_id' => 'connection',
+            'owner_id' => $systemUser->id,
+            'updater_id' => $systemUser->id,
+            'state' => 'complete',
+            'metadata' => ['timeless' => true] // Connection spans for sets are timeless
+        ]);
+
+        Connection::create([
+            'parent_id' => $person->id,
+            'child_id' => $set->id,
+            'type_id' => 'created',
+            'connection_span_id' => $connectionSpan->id,
+            'metadata' => [
+                'set_type' => 'desert_island_discs'
+            ]
+        ]);
+
+        return $set;
+    }
+
+    /**
+     * Get or create a default set for a user
+     */
+    public static function getOrCreateDefaultSet(User $user, string $name, string $baseSlug, string $description, string $icon): Span
+    {
+        // First try to find by slug
+        $set = static::where('owner_id', $user->id)
+            ->where('type_id', 'set')
+            ->where('slug', $user->name . '-' . $baseSlug)
+            ->first();
+
+        if ($set) {
+            return $set;
+        }
+
+        // If not found by slug, try by name
+        $set = static::where('owner_id', $user->id)
+            ->where('type_id', 'set')
+            ->where('name', $name)
+            ->first();
+
+        if ($set) {
+            return $set;
+        }
+
+        // If still not found, create a new one with a unique slug
+        $ownerSlug = Str::slug($user->name ?? 'user');
+        $slug = $ownerSlug . '-' . $baseSlug;
+        $counter = 1;
+
+        while (static::where('slug', $slug)->exists()) {
+            $slug = $ownerSlug . '-' . $baseSlug . '-' . ++$counter;
+        }
+
+        try {
+            $set = static::create([
+                'name' => $name,
+                'slug' => $slug,
+                'type_id' => 'set',
+                'is_personal_span' => true,
+                'state' => 'complete',
+                'description' => $description,
+                'metadata' => [
+                    'is_default' => true,
+                    'icon' => $icon,
+                    'subtype' => $baseSlug === 'starred' ? 'starred' : ($baseSlug === 'desert-island-discs' ? 'desertislanddiscs' : null)
+                ],
+                'owner_id' => $user->id,
+                'updater_id' => $user->id,
+                'access_level' => 'private'
+            ]);
+        } catch (\Exception $e) {
+            // If creation fails due to race condition, try to find it again
+            $set = static::where('owner_id', $user->id)
+                ->where('type_id', 'set')
+                ->where('name', $name)
+                ->first();
+                
+            if (!$set) {
+                throw $e;
+            }
+        }
+
+        return $set;
+    }
+
+    /**
+     * Get all default sets for a user (both traditional and smart sets)
+     */
+    public static function getDefaultSets(User $user): \Illuminate\Support\Collection
+    {
+        $sets = collect();
+        
+        // Ensure traditional default sets exist (Starred, Desert Island Discs)
+        $starredSet = static::getOrCreateStarredSet($user);
+        $desertIslandSet = static::getOrCreateDesertIslandDiscsSet($user);
+        
+        // Get traditional default sets (Starred, Desert Island Discs)
+        $traditionalSets = static::where('owner_id', $user->id)
+            ->where('type_id', 'set')
+            ->whereJsonContains('metadata->is_default', true)
+            ->get();
+        
+        $sets = $sets->merge($traditionalSets);
+        
+        // Get predefined smart sets
+        $predefinedSets = static::getPredefinedSets($user);
+        $sets = $sets->merge($predefinedSets);
+        
+        return $sets;
+    }
+
+    /**
+     * Get predefined smart sets for a user
+     */
+    public static function getPredefinedSets(User $user): \Illuminate\Support\Collection
+    {
+        $predefinedConfigs = SetFilterService::getPredefinedSets();
+        $sets = collect();
+        
+        foreach ($predefinedConfigs as $key => $config) {
+            // Create a virtual set object for predefined sets
+            $set = new static([
+                'id' => 'smart-' . $key,
+                'name' => $config['name'],
+                'description' => $config['description'],
+                'type_id' => 'set',
+                'filter_type' => $config['filter_type'],
+                'filter_criteria' => $config['criteria'],
+                'is_predefined' => true,
+                'metadata' => [
+                    'icon' => $config['icon'],
+                    'is_smart_set' => true
+                ],
+                'owner_id' => $user->id,
+                'slug' => $key // Use the key as the slug for smart sets
+            ]);
+            
+            $sets->push($set);
+        }
+        
+        return $sets;
     }
 } 
