@@ -1456,12 +1456,16 @@ $(document).ready(function() {
     };
     
     function addConnectionWithSpan(spanId, spanName, spanType) {
-        // Don't include empty date fields to avoid validation issues
+        // For connection spans, add connection_type as a root field instead of in metadata
+        const connectionTypeField = spanType === 'connection' ? 
+            `    connection_type: '${currentConnectionType}'` : 
+            '';
+        
         const connectionTemplate = `
 ${currentConnectionType}:
   - name: '${spanName}'
     id: '${spanId}'
-    type: ${spanType}
+    type: ${spanType}${connectionTypeField ? '\n' + connectionTypeField : ''}
     metadata: {}`;
         
         insertYamlSection('connections', connectionTemplate);
@@ -1472,12 +1476,16 @@ ${currentConnectionType}:
         // Generate a new UUID for the span
         const newUuid = generateUUID();
         
-        // For new spans, don't include empty date fields to avoid validation issues
+        // For connection spans, add connection_type as a root field instead of in metadata
+        const connectionTypeField = spanType === 'connection' ? 
+            `    connection_type: '${currentConnectionType}'` : 
+            '';
+        
         const connectionTemplate = `
 ${currentConnectionType}:
   - name: '${spanName}'
     id: '${newUuid}'
-    type: ${spanType}
+    type: ${spanType}${connectionTypeField ? '\n' + connectionTypeField : ''}
     metadata: {}`;
         
         insertYamlSection('connections', connectionTemplate);

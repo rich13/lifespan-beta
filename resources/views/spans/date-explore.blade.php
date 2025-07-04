@@ -371,43 +371,64 @@
                             @endphp
                             
                             <!-- Day headers -->
-                            <div class="row g-1 mb-1">
+                            <div class="d-flex mb-1">
                                 @foreach(['S', 'M', 'T', 'W', 'T', 'F', 'S'] as $dayName)
-                                    <div class="col text-center">
+                                    <div class="flex-fill text-center">
                                         <small class="text-muted fw-bold">{{ $dayName }}</small>
                                     </div>
                                 @endforeach
                             </div>
                             
                             <!-- Calendar grid -->
-                            @php $currentDate = $startOfCalendar->copy(); @endphp
-                            @while($currentDate <= $endOfCalendar)
-                                <div class="row g-1 mb-1">
-                                    @for($i = 0; $i < 7; $i++)
-                                        @if($currentDate <= $endOfCalendar)
-                                            @php
-                                                $isCurrentMonth = $currentDate->month === $month;
-                                                $isCurrentDay = $precision === 'day' && $currentDate->day === $day;
-                                                $dayUrl = route('date.explore', ['date' => $currentDate->format('Y-m-d')]);
-                                            @endphp
-                                            <div class="col text-center">
-                                                @if($isCurrentMonth)
-                                                    @if($isCurrentDay)
-                                                        <span class="btn btn-primary btn-sm disabled p-1" style="min-width: 25px; font-size: 0.7rem;">{{ $currentDate->day }}</span>
-                                                    @else
-                                                        <a href="{{ $dayUrl }}" class="btn btn-sm btn-outline-secondary p-1" style="min-width: 25px; font-size: 0.7rem;">
-                                                            {{ $currentDate->day }}
-                                                        </a>
-                                                    @endif
+                            @php 
+                                $currentDate = $startOfCalendar->copy();
+                                $weeks = [];
+                                $currentWeek = [];
+                                
+                                while($currentDate <= $endOfCalendar) {
+                                    $currentWeek[] = $currentDate->copy();
+                                    $currentDate->addDay();
+                                    
+                                    if(count($currentWeek) === 7) {
+                                        $weeks[] = $currentWeek;
+                                        $currentWeek = [];
+                                    }
+                                }
+                                
+                                // Add any remaining days to complete the last week
+                                if(!empty($currentWeek)) {
+                                    while(count($currentWeek) < 7) {
+                                        $currentWeek[] = $currentDate->copy();
+                                        $currentDate->addDay();
+                                    }
+                                    $weeks[] = $currentWeek;
+                                }
+                            @endphp
+                            
+                            @foreach($weeks as $week)
+                                <div class="d-flex mb-1">
+                                    @foreach($week as $currentDate)
+                                        @php
+                                            $isCurrentMonth = $currentDate->month === $month;
+                                            $isCurrentDay = $precision === 'day' && $currentDate->day === $day;
+                                            $dayUrl = route('date.explore', ['date' => $currentDate->format('Y-m-d')]);
+                                        @endphp
+                                        <div class="flex-fill text-center d-flex align-items-center justify-content-center" style="height: 32px;">
+                                            @if($isCurrentMonth)
+                                                @if($isCurrentDay)
+                                                    <span class="btn btn-primary btn-sm disabled p-1 d-flex align-items-center justify-content-center" style="width: 28px; height: 28px; font-size: 0.7rem; min-width: 28px; max-width: 28px;">{{ $currentDate->day }}</span>
                                                 @else
-                                                    <span class="text-muted" style="font-size: 0.7rem;">{{ $currentDate->day }}</span>
+                                                    <a href="{{ $dayUrl }}" class="btn btn-sm btn-outline-secondary p-1 d-flex align-items-center justify-content-center" style="width: 28px; height: 28px; font-size: 0.7rem; min-width: 28px; max-width: 28px;">
+                                                        {{ $currentDate->day }}
+                                                    </a>
                                                 @endif
-                                            </div>
-                                            @php $currentDate->addDay(); @endphp
-                                        @endif
-                                    @endfor
+                                            @else
+                                                <span class="text-muted d-flex align-items-center justify-content-center" style="width: 28px; height: 28px; font-size: 0.7rem; min-width: 28px; max-width: 28px;">{{ $currentDate->day }}</span>
+                                            @endif
+                                        </div>
+                                    @endforeach
                                 </div>
-                            @endwhile
+                            @endforeach
                         </div>
                     @else
                         <!-- Year view: Show current month calendar -->
@@ -422,55 +443,97 @@
                             @endphp
                             
                             <!-- Day headers -->
-                            <div class="row g-1 mb-1">
+                            <div class="d-flex mb-1">
                                 @foreach(['S', 'M', 'T', 'W', 'T', 'F', 'S'] as $dayName)
-                                    <div class="col text-center">
+                                    <div class="flex-fill text-center">
                                         <small class="text-muted fw-bold">{{ $dayName }}</small>
                                     </div>
                                 @endforeach
                             </div>
                             
                             <!-- Calendar grid -->
-                            @php $currentDate = $startOfCalendar->copy(); @endphp
-                            @while($currentDate <= $endOfCalendar)
-                                <div class="row g-1 mb-1">
-                                    @for($i = 0; $i < 7; $i++)
-                                        @if($currentDate <= $endOfCalendar)
-                                            @php
-                                                $isCurrentMonth = $currentDate->month === $currentMonth;
-                                                $dayUrl = route('date.explore', ['date' => $currentDate->format('Y-m-d')]);
-                                            @endphp
-                                            <div class="col text-center">
-                                                @if($isCurrentMonth)
-                                                    <a href="{{ $dayUrl }}" class="btn btn-sm btn-outline-secondary p-1" style="min-width: 25px; font-size: 0.7rem;">
-                                                        {{ $currentDate->day }}
-                                                    </a>
-                                                @else
-                                                    <span class="text-muted" style="font-size: 0.7rem;">{{ $currentDate->day }}</span>
-                                                @endif
-                                            </div>
-                                            @php $currentDate->addDay(); @endphp
-                                        @endif
-                                    @endfor
+                            @php 
+                                $currentDate = $startOfCalendar->copy();
+                                $weeks = [];
+                                $currentWeek = [];
+                                
+                                while($currentDate <= $endOfCalendar) {
+                                    $currentWeek[] = $currentDate->copy();
+                                    $currentDate->addDay();
+                                    
+                                    if(count($currentWeek) === 7) {
+                                        $weeks[] = $currentWeek;
+                                        $currentWeek = [];
+                                    }
+                                }
+                                
+                                // Add any remaining days to complete the last week
+                                if(!empty($currentWeek)) {
+                                    while(count($currentWeek) < 7) {
+                                        $currentWeek[] = $currentDate->copy();
+                                        $currentDate->addDay();
+                                    }
+                                    $weeks[] = $currentWeek;
+                                }
+                            @endphp
+                            
+                            @foreach($weeks as $week)
+                                <div class="d-flex mb-1">
+                                    @foreach($week as $currentDate)
+                                        @php
+                                            $isCurrentMonth = $currentDate->month === $currentMonth;
+                                            $dayUrl = route('date.explore', ['date' => $currentDate->format('Y-m-d')]);
+                                        @endphp
+                                        <div class="flex-fill text-center d-flex align-items-center justify-content-center" style="height: 32px;">
+                                            @if($isCurrentMonth)
+                                                <a href="{{ $dayUrl }}" class="btn btn-sm btn-outline-secondary p-1 d-flex align-items-center justify-content-center" style="width: 28px; height: 28px; font-size: 0.7rem; min-width: 28px; max-width: 28px;">
+                                                    {{ $currentDate->day }}
+                                                </a>
+                                            @else
+                                                <span class="text-muted d-flex align-items-center justify-content-center" style="width: 28px; height: 28px; font-size: 0.7rem; min-width: 28px; max-width: 28px;">{{ $currentDate->day }}</span>
+                                            @endif
+                                        </div>
+                                    @endforeach
                                 </div>
-                            @endwhile
+                            @endforeach
                         </div>
                     @endif
                 </div>
             </div>
 
-            <!-- Placeholder for future content -->
-            <div class="card mt-3">
-                <div class="card-header">
-                    <h6 class="card-title mb-0">
-                        <i class="bi bi-plus-circle me-2"></i>
-                        More
-                    </h6>
+            <!-- Wikipedia On This Day -->
+            @if($precision === 'day')
+                <div class="card mt-3" id="wikipedia-card">
+                    <div class="card-header">
+                        <h6 class="card-title mb-0">
+                            <i class="bi bi-wikipedia me-2"></i>
+                            On This Day: {{ \Carbon\Carbon::createFromDate($year, $month, $day)->format('F j') }}
+                        </h6>
+                    </div>
+                    <div class="card-body" id="wikipedia-content">
+                        <!-- Loading spinner -->
+                        <div class="text-center py-3">
+                            <div class="spinner-border spinner-border-sm text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="text-muted small mt-2 mb-0">Loading historical data...</p>
+                        </div>
+                    </div>
                 </div>
-                <div class="card-body">
-                    <p class="text-muted small mb-0">etc.</p>
+            @else
+                <!-- Placeholder for future content -->
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h6 class="card-title mb-0">
+                            <i class="bi bi-plus-circle me-2"></i>
+                            More
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted small mb-0">etc.</p>
+                    </div>
                 </div>
-            </div>
+            @endif
         </div>
     </div>
 
@@ -487,7 +550,104 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+    
+    // Load Wikipedia content via AJAX
+    loadWikipediaContent();
 });
+
+function loadWikipediaContent() {
+    const wikipediaContent = document.getElementById('wikipedia-content');
+    if (!wikipediaContent) return;
+    
+    const month = {{ $month }};
+    const day = {{ $day }};
+    
+    fetch(`/api/wikipedia/on-this-day/${month}/${day}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.data) {
+                renderWikipediaContent(data.data);
+            } else {
+                showWikipediaError();
+            }
+        })
+        .catch(error => {
+            console.error('Error loading Wikipedia data:', error);
+            showWikipediaError();
+        });
+}
+
+function renderWikipediaContent(data) {
+    const wikipediaContent = document.getElementById('wikipedia-content');
+    if (!wikipediaContent) return;
+    
+    let html = '';
+    
+    if (data.events && data.events.length > 0 || data.births && data.births.length > 0 || data.deaths && data.deaths.length > 0) {
+        // Events
+        if (data.events && data.events.length > 0) {
+            html += '<div class="mb-3">';
+            html += '<h6 class="text-primary mb-2"><i class="bi bi-calendar-event me-1"></i>Events</h6>';
+            data.events.forEach(event => {
+                html += '<div class="mb-2">';
+                html += `<p class="small text-muted mb-1"><strong>${event.year || 'Unknown'}</strong></p>`;
+                html += `<p class="small mb-0">${event.text || ''}</p>`;
+                html += '</div>';
+            });
+            html += '</div>';
+        }
+        
+        // Births
+        if (data.births && data.births.length > 0) {
+            html += '<div class="mb-3">';
+            html += '<h6 class="text-success mb-2"><i class="bi bi-person-plus me-1"></i>Births</h6>';
+            data.births.forEach(birth => {
+                html += '<div class="mb-2">';
+                html += `<p class="small text-muted mb-1"><strong>${birth.year || 'Unknown'}</strong></p>`;
+                html += `<p class="small mb-0">${birth.text || ''}</p>`;
+                html += '</div>';
+            });
+            html += '</div>';
+        }
+        
+        // Deaths
+        if (data.deaths && data.deaths.length > 0) {
+            html += '<div class="mb-3">';
+            html += '<h6 class="text-danger mb-2"><i class="bi bi-person-x me-1"></i>Deaths</h6>';
+            data.deaths.forEach(death => {
+                html += '<div class="mb-2">';
+                html += `<p class="small text-muted mb-1"><strong>${death.year || 'Unknown'}</strong></p>`;
+                html += `<p class="small mb-0">${death.text || ''}</p>`;
+                html += '</div>';
+            });
+            html += '</div>';
+        }
+        
+        // Footer
+        html += '<div class="mt-3 pt-2 border-top">';
+        html += '<small class="text-muted">';
+        html += '<i class="bi bi-info-circle me-1"></i>';
+        html += `Data from <a href="https://en.wikipedia.org/wiki/Wikipedia:On_this_day/{{ \Carbon\Carbon::createFromDate($year, $month, $day)->format('F_j') }}" target="_blank" class="text-decoration-none">Wikipedia On This Day</a>`;
+        html += '</small>';
+        html += '</div>';
+    } else {
+        html = '<p class="text-muted small mb-0">No historical data available for this date.</p>';
+    }
+    
+    wikipediaContent.innerHTML = html;
+}
+
+function showWikipediaError() {
+    const wikipediaContent = document.getElementById('wikipedia-content');
+    if (!wikipediaContent) return;
+    
+    wikipediaContent.innerHTML = `
+        <div class="text-center py-3">
+            <i class="bi bi-exclamation-triangle text-warning fs-4"></i>
+            <p class="text-muted small mt-2 mb-0">Unable to load historical data</p>
+        </div>
+    `;
+}
 
 function changeYear(year) {
     // Validate year input
