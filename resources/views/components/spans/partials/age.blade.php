@@ -37,16 +37,13 @@
     @endphp
 
     @if ($hasStart)
-        <i class="bi bi-clock"></i>
         @if ($hasEnd)
-            {{ \App\Helpers\DateHelper::formatDuration($duration) }}
-            <span class="text-muted">·</span>
-            Ended {{ \App\Helpers\DateHelper::formatDuration($timeSinceEnd) }} ago
+            This span lasted <strong>{{ \App\Helpers\DateHelper::formatDuration($duration) }}</strong>
+            and ended <strong>{{ \App\Helpers\DateHelper::formatDuration($timeSinceEnd) }}</strong> ago
         @else
-            {{ \App\Helpers\DateHelper::formatDuration($duration) }} and counting...
+            <strong>{{ \App\Helpers\DateHelper::formatDuration($duration) }}</strong> and counting...
         @endif
     @else
-        <i class="bi bi-question-circle"></i>
-        Nothing (yet)
+        No dates means no age
     @endif
 </div> 

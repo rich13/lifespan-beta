@@ -22,18 +22,18 @@
                 // The span person was born after you
                 // Check if you were still alive when they were born
                 if (!$personalEndYear || $personalEndYear >= $spanStartYear) {
-                    $comparisons[] = "You were {$yearDiff} years old when {$span->name} was born";
+                    $comparisons[] = "You were {$yearDiff} years old when {$span->name} was born.";
                 }
             } elseif ($yearDiff < 0) {
                 // You were born after the span person
                 $yearDiff = abs($yearDiff);
                 // Check if they were still alive when you were born
                 if (!$spanEndYear || $spanEndYear >= $personalStartYear) {
-                    $comparisons[] = "{$span->name} was {$yearDiff} years old when you were born";
+                    $comparisons[] = "{$span->name} was {$yearDiff} years old when you were born.";
                 } else {
                     // They had already passed away
                     $yearsSinceDeath = $personalStartYear - $spanEndYear;
-                    $comparisons[] = "{$span->name} had passed away {$yearsSinceDeath} years before you were born";
+                    $comparisons[] = "{$span->name} died {$yearsSinceDeath} years before you were born.";
                 }
             }
         }
@@ -49,12 +49,23 @@
             if ($overlapEnd >= $overlapStart) {
                 $overlapYears = $overlapEnd - $overlapStart;
                 if ($overlapYears > 0) {
+                    // Calculate user's current age
+                    $currentYear = date('Y');
+                    $userCurrentAge = $personalEndYear ? ($personalEndYear - $personalStartYear) : ($currentYear - $personalStartYear);
+                    
+                    // Calculate the other person's current age
+                    $otherPersonAge = $spanEndYear ? ($spanEndYear - $spanStartYear) : ($currentYear - $spanStartYear);
+                    
+                    // Only show overlap message if it's not the same as either person's current age
                     if (!$personalEndYear && !$spanEndYear) {
-                        $comparisons[] = "Your lives have overlapped for {$overlapYears} years so far";
+                        // Both still alive - only show if overlap is less than both people's current ages
+                        if ($overlapYears < $userCurrentAge && $overlapYears < $otherPersonAge) {
+                            $comparisons[] = "Your lives have overlapped for {$overlapYears} years so far.";
+                        }
                     } elseif (!$personalEndYear || !$spanEndYear) {
-                        $comparisons[] = "Your lives overlapped for {$overlapYears} years";
+                        $comparisons[] = "Your lives overlapped for {$overlapYears} years.";
                     } else {
-                        $comparisons[] = "Your lives overlapped for {$overlapYears} years";
+                        $comparisons[] = "Your lives overlapped for {$overlapYears} years.";
                     }
                 }
             }
@@ -65,14 +76,14 @@
             if ($spanEndYear >= $personalStartYear) {
                 $ageAtDeath = $spanEndYear - $personalStartYear;
                 if ($ageAtDeath > 0) {
-                    $comparisons[] = "You were {$ageAtDeath} years old when {$span->name} died";
+                    $comparisons[] = "You were {$ageAtDeath} years old when {$span->name} died.";
                 }
             }
         } elseif ($spanStartYear && $personalEndYear) {
             if ($personalEndYear >= $spanStartYear) {
                 $ageAtDeath = $personalEndYear - $spanStartYear;
                 if ($ageAtDeath > 0) {
-                    $comparisons[] = "{$span->name} was {$ageAtDeath} years old when you died";
+                    $comparisons[] = "{$span->name} was {$ageAtDeath} years old when you died.";
                 }
             }
         }
@@ -84,9 +95,9 @@
             $lifespanDiff = abs($personalLifespan - $spanLifespan);
             
             if ($personalLifespan > $spanLifespan) {
-                $comparisons[] = "You lived {$lifespanDiff} years longer";
+                $comparisons[] = "You lived {$lifespanDiff} years longer.";
             } elseif ($spanLifespan > $personalLifespan) {
-                $comparisons[] = "{$span->name} lived {$lifespanDiff} years longer";
+                $comparisons[] = "{$span->name} lived {$lifespanDiff} years longer.";
             }
         }
     }
