@@ -1,9 +1,5 @@
 <section>
-    <h2 class="card-title h5">Profile Information</h2>
-    <p class="text-muted small mb-4">
-        Update your account's profile information and email address.
-    </p>
-
+    
     <form id="send-verification" method="post" action="{{ route('verification.send') }}">
         @csrf
     </form>

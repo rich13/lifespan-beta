@@ -1,9 +1,5 @@
 <section>
-    <h2 class="card-title h5">Update Password</h2>
-    <p class="text-muted small mb-4">
-        Ensure your account is using a long, random password to stay secure.
-    </p>
-
+    
     <form method="post" action="{{ route('profile.password.update') }}">
         @csrf
         @method('put')

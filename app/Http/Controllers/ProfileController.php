@@ -21,8 +21,68 @@ class ProfileController extends Controller
      */
     public function edit(Request $request): View
     {
+        $user = $request->user();
+        
+        // Load user relationships
+        $user->load(['personalSpan', 'createdSpans', 'updatedSpans']);
+        
+        // Get user statistics
+        $stats = [
+            'total_spans_created' => $user->createdSpans()->count(),
+            'total_spans_updated' => $user->updatedSpans()->count(),
+            'public_spans' => $user->createdSpans()->where('access_level', 'public')->count(),
+            'private_spans' => $user->createdSpans()->where('access_level', 'private')->count(),
+            'shared_spans' => $user->createdSpans()->where('access_level', 'shared')->count(),
+        ];
+        
+        // Get recent activity
+        $recentSpans = $user->createdSpans()
+            ->with('type')
+            ->orderBy('updated_at', 'desc')
+            ->limit(5)
+            ->get();
+            
+        // Get connection statistics if user has a personal span
+        $connectionStats = [];
+        if ($user->personalSpan) {
+            $personalSpan = $user->personalSpan;
+            
+            $connectionStats = [
+                'total_connections' => $personalSpan->connectionsAsSubject()->count() + $personalSpan->connectionsAsObject()->count(),
+                'connections_as_subject' => $personalSpan->connectionsAsSubject()->count(),
+                'connections_as_object' => $personalSpan->connectionsAsObject()->count(),
+                'temporal_connections' => $personalSpan->connectionsAsSubject()
+                    ->whereNotNull('connection_span_id')
+                    ->whereHas('connectionSpan', function($query) {
+                        $query->whereNotNull('start_year');
+                    })
+                    ->count(),
+            ];
+            
+            // Get recent connections
+            $recentConnections = $personalSpan->connectionsAsSubject()
+                ->with(['child', 'type', 'connectionSpan'])
+                ->orderBy('created_at', 'desc')
+                ->limit(3)
+                ->get();
+        } else {
+            $recentConnections = collect();
+        }
+        
+        // Get account statistics
+        $accountStats = [
+            'member_since' => $user->created_at->diffForHumans(),
+            'last_active' => $user->updated_at->diffForHumans(),
+            'email_verified' => $user->email_verified_at ? $user->email_verified_at->diffForHumans() : 'Not verified',
+        ];
+        
         return view('profile.edit', [
-            'user' => $request->user(),
+            'user' => $user,
+            'stats' => $stats,
+            'connectionStats' => $connectionStats,
+            'accountStats' => $accountStats,
+            'recentSpans' => $recentSpans,
+            'recentConnections' => $recentConnections,
         ]);
     }
 
