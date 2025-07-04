@@ -45,12 +45,12 @@
                                 <td><code>{{ $type->type }}</code></td>
                                 <td>
                                     <span class="badge bg-person text-white">subject</span>
-                                    <span class="badge bg-{{ $type->type }}">{{ $type->forward_predicate }}</span>
+                                    <span class="badge bg-{{ $type->type }} text-white">{{ $type->forward_predicate }}</span>
                                     <span class="badge bg-place text-white">object</span>
                                 </td>
                                 <td>
                                     <span class="badge bg-place text-white">object</span>
-                                    <span class="badge bg-{{ $type->type }}">{{ $type->inverse_predicate }}</span>
+                                    <span class="badge bg-{{ $type->type }} text-white">{{ $type->inverse_predicate }}</span>
                                     <span class="badge bg-person text-white">subject</span>
                                 </td>
                                 <td>

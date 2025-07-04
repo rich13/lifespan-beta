@@ -54,6 +54,22 @@
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
                         </div>
+
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" 
+                                       id="timeless" name="metadata[timeless]" 
+                                       value="1" 
+                                       {{ old('metadata.timeless') ? 'checked' : '' }}>
+                                <label class="form-check-label" for="timeless">
+                                    <strong>Timeless Span Type</strong>
+                                </label>
+                                <div class="form-text">
+                                    Check this if spans of this type don't require dates to be marked as complete. 
+                                    Examples: places, roles, concepts that exist independently of time.
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
