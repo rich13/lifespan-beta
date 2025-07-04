@@ -475,19 +475,21 @@ Route::middleware('web')->group(function () {
             Route::delete('/users/invitation-codes', [UserController::class, 'deleteAllInvitationCodes'])
                 ->name('users.delete-all-invitation-codes');
 
-            // Connection Management
-            Route::get('/connections', [ConnectionController::class, 'index'])
-                ->name('connections.index');
-            Route::post('/connections', [ConnectionController::class, 'store'])
-                ->name('connections.store');
-            Route::get('/connections/{connection}', [ConnectionController::class, 'show'])
-                ->name('connections.show');
-            Route::get('/connections/{connection}/edit', [ConnectionController::class, 'edit'])
-                ->name('connections.edit');
-            Route::put('/connections/{connection}', [ConnectionController::class, 'update'])
-                ->name('connections.update');
-            Route::delete('/connections/{connection}', [ConnectionController::class, 'destroy'])
-                ->name('connections.destroy');
+            // Admin Connection Management (with different prefix to avoid conflicts)
+            Route::prefix('admin-connections')->name('connections.')->group(function () {
+                Route::get('/', [ConnectionController::class, 'index'])
+                    ->name('index');
+                Route::post('/', [ConnectionController::class, 'store'])
+                    ->name('store');
+                Route::get('/{connection}', [ConnectionController::class, 'show'])
+                    ->name('show');
+                Route::get('/{connection}/edit', [ConnectionController::class, 'edit'])
+                    ->name('edit');
+                Route::put('/{connection}', [ConnectionController::class, 'update'])
+                    ->name('update');
+                Route::delete('/{connection}', [ConnectionController::class, 'destroy'])
+                    ->name('destroy');
+            });
 
             // Development routes (only in local environment)
             if (app()->environment('local')) {
@@ -516,6 +518,9 @@ Route::middleware('web')->group(function () {
                 ->name('tools.make-things-public');
             Route::post('/tools/execute-make-things-public', [App\Http\Controllers\Admin\ToolsController::class, 'executeMakeThingsPublic'])
                 ->name('tools.execute-make-things-public');
+            // New route for prewarming Wikipedia cache
+            Route::match(['GET', 'POST'], '/tools/prewarm-wikipedia-cache', [App\Http\Controllers\Admin\ToolsController::class, 'prewarmWikipediaCache'])
+                ->name('tools.prewarm-wikipedia-cache');
 
             // Data Export
             Route::prefix('data-export')->name('data-export.')->group(function () {

@@ -328,10 +328,41 @@
         </div>
     </div>
 
-    <!-- Additional Tools Placeholder -->
+    <!-- Row 3: Cache Management Tools -->
     <div class="row">
-        <div class="col-12">
-            <div class="card">
+        <!-- Wikipedia Cache Prewarm -->
+        <div class="col-lg-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-lightning-charge"></i>
+                        Wikipedia Cache Prewarm
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">Pre-populate the Wikipedia "On This Day" cache for all 366 days of the year to improve performance.</p>
+                    
+                    <div class="d-grid">
+                        <a href="{{ route('admin.tools.prewarm-wikipedia-cache') }}" class="btn btn-warning">
+                            <i class="bi bi-lightning-charge me-1"></i>
+                            Start Prewarm Operation
+                        </a>
+                    </div>
+                    
+                    <div class="mt-3">
+                        <small class="text-muted">
+                            <i class="bi bi-info-circle me-1"></i>
+                            This will cache data for all valid dates (Jan 1 - Dec 31, including Feb 29).<br>
+                            <strong>Currently cached:</strong> {{ $wikipediaCachedDays ?? 0 }}/{{ $wikipediaTotalDays ?? 366 }} days
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Additional Tools Placeholder -->
+        <div class="col-lg-6 mb-4">
+            <div class="card h-100">
                 <div class="card-header">
                     <h5 class="card-title mb-0">
                         <i class="bi bi-tools"></i>
