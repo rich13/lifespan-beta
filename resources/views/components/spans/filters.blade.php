@@ -250,24 +250,110 @@
 
         <!-- Search Input -->
         @if($showSearch)
-            <div class="d-flex align-items-center position-relative">
-                <x-icon type="search" category="action" class="position-absolute ms-2 {{ request('search') ? 'text-primary' : 'text-muted' }} z-index-1" />
-                <input type="text" name="search" id="span-search" class="form-control form-control-sm ps-4 {{ request('search') ? 'border-primary shadow-sm' : '' }} search-width" placeholder="Search spans..." value="{{ request('search') }}"
-                       data-bs-toggle="tooltip" 
-                       data-bs-placement="bottom" 
-                       title="Search span names and descriptions">
-                @if(request('search'))
-                    <a href="#" id="clear-search" class="position-absolute end-0 me-2 text-primary" 
-                       data-bs-toggle="tooltip" 
-                       data-bs-placement="bottom" 
-                       title="Clear search">
-                        <x-icon type="clear" category="action" />
-                    </a>
-                @endif
+            <div class="filter-search-container position-relative" style="width: 120px;">
+                <div class="d-flex align-items-center position-relative">
+                    <i class="bi bi-filter position-absolute ms-2 {{ request('search') ? 'text-primary' : 'text-muted' }} z-index-1" style="top: 50%; transform: translateY(-50%); font-size: 0.875rem;"></i>
+                    <input type="text" name="search" id="span-search" class="form-control form-control-sm ps-4 {{ request('search') ? 'border-primary shadow-sm' : '' }}" placeholder="Filter..." value="{{ request('search') }}"
+                           data-bs-toggle="tooltip" 
+                           data-bs-placement="bottom" 
+                           title="Search span names and descriptions (Press / to focus)">
+                    @if(request('search'))
+                        <a href="#" id="clear-search" class="position-absolute end-0 me-2 text-primary" 
+                           data-bs-toggle="tooltip" 
+                           data-bs-placement="bottom" 
+                           title="Clear search">
+                            <x-icon type="clear" category="action" />
+                        </a>
+                    @endif
+                    <div class="filter-shortcut-hint">/</div>
+                </div>
             </div>
         @endif
     </form>
 </div>
+
+<style>
+    /* Filter search container styling */
+    .filter-search-container {
+        position: relative;
+        min-width: 120px;
+        max-width: 300px;
+        transition: width 0.3s ease;
+    }
+    
+    .filter-search-container:focus-within {
+        width: 250px !important;
+    }
+    
+    #span-search {
+        width: 100%;
+        min-width: 120px;
+        transition: all 0.3s ease;
+        /* Match button group dimensions */
+        font-size: 0.875rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.375rem;
+        height: calc(1.5em + 0.5rem + 2px);
+        line-height: 1.5;
+    }
+    
+    #span-search:focus {
+        box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+        border-color: #0d6efd;
+    }
+    
+    /* Keyboard shortcut hint */
+    .filter-shortcut-hint {
+        position: absolute;
+        right: 6px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 0.75rem;
+        color: #6c757d;
+        background: rgba(255, 255, 255, 0.9);
+        padding: 1px 4px;
+        border-radius: 2px;
+        border: 1px solid #dee2e6;
+        opacity: 0.7;
+        transition: opacity 0.3s ease;
+        pointer-events: none;
+    }
+    
+    .filter-search-container:focus-within .filter-shortcut-hint {
+        opacity: 0;
+    }
+    
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+        .filter-search-container {
+            min-width: 100px;
+            max-width: 200px;
+        }
+        
+        .filter-search-container:focus-within {
+            width: 180px !important;
+        }
+        
+        #span-search {
+            min-width: 100px;
+        }
+    }
+    
+    @media (max-width: 576px) {
+        .filter-search-container {
+            min-width: 80px;
+            max-width: 150px;
+        }
+        
+        .filter-search-container:focus-within {
+            width: 140px !important;
+        }
+        
+        #span-search {
+            min-width: 80px;
+        }
+    }
+</style>
 
 @push('scripts')
 <script>
@@ -368,6 +454,21 @@ document.addEventListener('DOMContentLoaded', function() {
                     filterForm.submit();
                 });
             }
+            
+            // Keyboard shortcut for filter search (forward slash)
+            document.addEventListener('keydown', function(e) {
+                // Only trigger if not already typing in an input field
+                if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+                    return;
+                }
+                
+                // Check for forward slash key
+                if (e.key === '/') {
+                    e.preventDefault();
+                    searchInput.focus();
+                    searchInput.select(); // Select any existing text
+                }
+            });
         }
     }
 });

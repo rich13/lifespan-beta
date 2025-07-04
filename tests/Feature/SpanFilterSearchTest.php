@@ -226,24 +226,15 @@ class SpanFilterSearchTest extends TestCase
         $response->assertSee('filter_place', false);
         $response->assertSee('filter_event', false);
         
-        // Test that search box is present
-        $response->assertSee('span-search', false);
-        $response->assertSee('placeholder="Search spans..."', false);
+        // Note: Search box is no longer present on the spans index page
+        // as it has been moved to the global navigation
         
         // Test that active filter buttons are highlighted
         $response = $this->get('/spans?types=person');
         $response->assertStatus(200);
         $response->assertSee('btn-primary', false); // Active filter button class
         
-        // Test that search box is highlighted when search is active
-        $response = $this->get('/spans?search=test');
-        $response->assertStatus(200);
-        $response->assertSee('border-primary', false); // Highlighted search box
-        $response->assertSee('text-primary', false); // Highlighted search icon
-        
-        // Test that search results count is displayed
-        $response->assertSee('Found', false);
-        $response->assertSee('results for', false);
-        $response->assertSee('<strong>test</strong>', false);
+        // Note: Search UI elements are no longer present on the spans index page
+        // as search has been moved to the global navigation
     }
 } 

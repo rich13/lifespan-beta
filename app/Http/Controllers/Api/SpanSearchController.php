@@ -17,12 +17,18 @@ class SpanSearchController extends Controller
         $query = $request->get('q');
         $type = $request->get('type');
         $excludeConnected = $request->get('exclude_connected', false);
+        $excludeSets = $request->get('exclude_sets', false);
         $user = Auth::user();
 
         $results = collect();
 
         // Start with spans the user can see, excluding connections
         $spans = Span::query()->whereNot('type_id', 'connection');
+        
+        // Exclude sets if requested
+        if ($excludeSets) {
+            $spans->whereNot('type_id', 'set');
+        }
         
         if ($user) {
             // Authenticated user - can see public, owned, and shared spans
@@ -70,6 +76,12 @@ class SpanSearchController extends Controller
             $spans->whereIn('type_id', $typeArray);
         }
 
+        // Add subtype restriction if specified
+        $subtype = $request->get('subtype');
+        if ($subtype) {
+            $spans->whereJsonContains('metadata->subtype', $subtype);
+        }
+
         // Search by name
         if ($query) {
             $spans->where('name', 'ilike', "%{$query}%");
@@ -103,14 +115,21 @@ class SpanSearchController extends Controller
                 });
                 
                 if (!$hasExactMatch) {
-                    $results->push([
+                    $placeholderData = [
                         'id' => null,
                         'name' => $query,
                         'type_id' => $placeholderType,
                         'type_name' => ucfirst($placeholderType),
                         'state' => 'placeholder',
                         'is_placeholder' => true
-                    ]);
+                    ];
+                    
+                    // Add subtype metadata if specified
+                    if ($subtype) {
+                        $placeholderData['metadata'] = ['subtype' => $subtype];
+                    }
+                    
+                    $results->push($placeholderData);
                 }
             }
         }
@@ -135,6 +154,12 @@ class SpanSearchController extends Controller
         $span = new Span($validated);
         $span->owner_id = Auth::id();
         $span->updater_id = Auth::id();
+        
+        // Ensure metadata is an array
+        if (!isset($span->metadata) || !is_array($span->metadata)) {
+            $span->metadata = [];
+        }
+        
         $span->save();
 
         return response()->json([

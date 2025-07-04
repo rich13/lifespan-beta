@@ -65,7 +65,7 @@ class SpanController extends Controller
             }
 
             // Handle type filtering
-            if ($request->has('types')) {
+            if ($request->filled('types')) {
                 $types = is_array($request->types) ? $request->types : explode(',', $request->types);
                 $query->whereIn('type_id', $types);
 
@@ -125,30 +125,46 @@ class SpanController extends Controller
                 });
             }
 
-            // For unauthenticated users, only show public spans
-            if (!Auth::check()) {
-                $query->where('access_level', 'public');
+            // Apply visibility filter if specified
+            if ($request->filled('visibility')) {
+                switch ($request->visibility) {
+                    case 'public':
+                        $query->where('access_level', 'public');
+                        break;
+                    case 'private':
+                        $query->where('access_level', 'private');
+                        break;
+                    case 'group':
+                        $query->where('access_level', 'shared');
+                        break;
+                }
             } else {
-                // For authenticated users
-                $user = Auth::user();
-                if (!$user->is_admin) {
-                    // Show:
-                    // 1. Public spans
-                    // 2. User's own spans
-                    // 3. Shared spans where user has permission
-                    $query->where(function ($query) use ($user) {
-                        $query->where('access_level', 'public')
-                            ->orWhere('owner_id', $user->id)
-                            ->orWhere(function ($query) use ($user) {
-                                $query->where('access_level', 'shared')
-                                    ->whereExists(function ($subquery) use ($user) {
-                                        $subquery->select('id')
-                                            ->from('span_permissions')
-                                            ->whereColumn('span_permissions.span_id', 'spans.id')
-                                            ->where('span_permissions.user_id', $user->id);
-                                    });
-                            });
-                    });
+                // Default access filtering when no visibility filter is applied
+                // For unauthenticated users, only show public spans
+                if (!Auth::check()) {
+                    $query->where('access_level', 'public');
+                } else {
+                    // For authenticated users
+                    $user = Auth::user();
+                    if (!$user->is_admin) {
+                        // Show:
+                        // 1. Public spans
+                        // 2. User's own spans
+                        // 3. Shared spans where user has permission
+                        $query->where(function ($query) use ($user) {
+                            $query->where('access_level', 'public')
+                                ->orWhere('owner_id', $user->id)
+                                ->orWhere(function ($query) use ($user) {
+                                    $query->where('access_level', 'shared')
+                                        ->whereExists(function ($subquery) use ($user) {
+                                            $subquery->select('id')
+                                                ->from('span_permissions')
+                                                ->whereColumn('span_permissions.span_id', 'spans.id')
+                                                ->where('span_permissions.user_id', $user->id);
+                                        });
+                                });
+                        });
+                    }
                 }
             }
 
@@ -201,15 +217,30 @@ class SpanController extends Controller
     public function store(Request $request)
     {
         $this->authorize('create', Span::class);
+        
+
+        
         // Get validation rules with special handling for timeless span types
-        $timelessSpanTypes = ['place', 'role'];
         $typeId = $request->input('type_id');
         $state = $request->input('state', 'draft');
         
+        // Debug: Log what we received
+        \Illuminate\Support\Facades\Log::info('Span store validation debug', [
+            'received_state' => $request->input('state'),
+            'defaulted_state' => $state,
+            'all_inputs' => $request->all()
+        ]);
+        
+        // Check if this span type is marked as timeless
+        $spanType = SpanType::find($typeId);
+        $isTimeless = $spanType && ($spanType->metadata['timeless'] ?? false);
+        
         $startYearRule = 'nullable|integer';
-        if (!in_array($typeId, $timelessSpanTypes) && $state !== 'placeholder') {
+        if (!$isTimeless && $state !== 'placeholder') {
             $startYearRule = 'required|integer';
         }
+        
+
 
         $validated = $request->validate([
             'id' => 'nullable|uuid|unique:spans,id',  // Allow UUID to be provided
@@ -239,7 +270,10 @@ class SpanController extends Controller
 
         // If this is a programmatic call (e.g. from ImportService), return JSON response
         if ($request->expectsJson() || $request->wantsJson()) {
-            return response()->json($span);
+            return response()->json([
+                'span_id' => $span->id,
+                'span' => $span
+            ]);
         }
 
         // Otherwise return the redirect for web requests
@@ -280,7 +314,21 @@ class SpanController extends Controller
                 return redirect()->route('login');
             }
 
-            return view('spans.show', compact('span'));
+            // Check if this is a person and they have a Desert Island Discs set
+            $desertIslandDiscsSet = null;
+            if ($span->type_id === 'person') {
+                try {
+                    $desertIslandDiscsSet = Span::getPublicDesertIslandDiscsSet($span);
+                } catch (\Exception $e) {
+                    // Log the error but don't fail the page
+                    Log::warning('Failed to get Desert Island Discs set for person', [
+                        'person_id' => $span->id,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+
+            return view('spans.show', compact('span', 'desertIslandDiscsSet'));
         } catch (\Exception $e) {
             // Log the error
             \Illuminate\Support\Facades\Log::error('Error in spans show', [
@@ -368,12 +416,15 @@ class SpanController extends Controller
             ]);
             
             // Get validation rules with special handling for timeless span types
-            $timelessSpanTypes = ['place', 'role'];
             $typeId = $request->input('type_id', $span->type_id);
             $state = $request->input('state', $span->state);
             
+            // Check if this span type is marked as timeless
+            $spanType = SpanType::find($typeId);
+            $isTimeless = $spanType && ($spanType->metadata['timeless'] ?? false);
+            
             $startYearRule = 'nullable|integer';
-            if (!in_array($typeId, $timelessSpanTypes) && $state !== 'placeholder') {
+            if (!$isTimeless && $state !== 'placeholder') {
                 $startYearRule = 'required|integer';
             }
 
