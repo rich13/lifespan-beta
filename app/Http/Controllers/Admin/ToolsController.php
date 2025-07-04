@@ -422,9 +422,15 @@ class ToolsController extends Controller
             return $this->getPrewarmProgress();
         }
         
+        // Check if this is an AJAX request to check current status
+        if ($request->ajax() && $request->has('action') && $request->action === 'check-status') {
+            return $this->getPrewarmStatus();
+        }
+        
         // Check if this is an AJAX request to start the prewarm
         if ($request->ajax() && $request->has('action') && $request->action === 'start') {
-            return $this->startPrewarmOperation();
+            $mode = $request->get('mode', 'prewarm'); // Default to prewarm if not specified
+            return $this->startPrewarmOperation($mode);
         }
         
         // Check if this is an AJAX request to process a single day
@@ -439,28 +445,58 @@ class ToolsController extends Controller
     /**
      * Start the prewarm operation
      */
-    private function startPrewarmOperation()
+    private function startPrewarmOperation($mode = 'prewarm')
     {
-        // Initialize the prewarm session
         $allDates = $this->generateAllValidDates();
+        $existingResults = session('wikipedia_prewarm_results');
         
-        session(['wikipedia_prewarm_results' => [
-            'total_days' => count($allDates),
-            'success_days' => 0,
-            'errors' => [],
-            'progress' => [],
-            'pending_dates' => $allDates,
-            'processed_dates' => [],
-            'current_date' => null,
-            'is_complete' => false,
-            'is_running' => true
-        ]]);
-        
-        return response()->json([
-            'success' => true,
-            'message' => 'Prewarm operation initialized',
-            'total_days' => count($allDates)
-        ]);
+        if ($mode === 'refresh' || !$existingResults) {
+            // Refresh mode or no existing session - start from scratch
+            session(['wikipedia_prewarm_results' => [
+                'total_days' => count($allDates),
+                'success_days' => 0,
+                'errors' => [],
+                'progress' => [],
+                'pending_dates' => $allDates,
+                'processed_dates' => [],
+                'current_date' => null,
+                'is_complete' => false,
+                'is_running' => true
+            ]]);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Refresh operation initialized - starting from scratch',
+                'total_days' => count($allDates)
+            ]);
+        } else {
+            // Prewarm mode with existing session - continue from where we left off
+            $processedDates = $existingResults['processed_dates'] ?? [];
+            $pendingDates = array_filter($allDates, function($date) use ($processedDates) {
+                return !in_array($date['key'], $processedDates);
+            });
+            
+            // Reset the session with remaining dates
+            session(['wikipedia_prewarm_results' => [
+                'total_days' => count($allDates),
+                'success_days' => $existingResults['success_days'] ?? 0,
+                'errors' => $existingResults['errors'] ?? [],
+                'progress' => $existingResults['progress'] ?? [],
+                'pending_dates' => array_values($pendingDates), // Re-index array
+                'processed_dates' => $processedDates,
+                'current_date' => null,
+                'is_complete' => false,
+                'is_running' => true
+            ]]);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Prewarm operation continued - ' . count($pendingDates) . ' days remaining',
+                'total_days' => count($allDates),
+                'remaining_days' => count($pendingDates),
+                'already_processed' => count($processedDates)
+            ]);
+        }
     }
     
     /**
@@ -627,6 +663,36 @@ class ToolsController extends Controller
         return response()->json([
             'success' => true,
             'summary' => $results
+        ]);
+    }
+    
+    /**
+     * Get prewarm status (for initial page load)
+     */
+    private function getPrewarmStatus()
+    {
+        $results = session('wikipedia_prewarm_results');
+        
+        if (!$results) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No prewarm operation found'
+            ]);
+        }
+        
+        $processedDays = count($results['processed_dates'] ?? []);
+        $remainingDays = count($results['pending_dates'] ?? []);
+        $totalDays = $results['total_days'] ?? 366;
+        
+        return response()->json([
+            'success' => true,
+            'total_days' => $totalDays,
+            'processed_days' => $processedDays,
+            'remaining_days' => $remainingDays,
+            'success_days' => $results['success_days'] ?? 0,
+            'errors' => $results['errors'] ?? [],
+            'is_complete' => $results['is_complete'] ?? false,
+            'is_running' => $results['is_running'] ?? false
         ]);
     }
 

@@ -37,10 +37,21 @@
                         <strong>Note:</strong> This operation may take several minutes as it needs to fetch data for each day of the year.
                     </div>
                     
-                    <button id="startPrewarm" class="btn btn-warning btn-lg">
-                        <i class="bi bi-lightning-charge me-1"></i>
-                        Start Prewarm Operation
-                    </button>
+                    <div id="currentStatusInfo" class="alert alert-secondary">
+                        <i class="bi bi-info-circle me-1"></i>
+                        <strong>Current Status:</strong> <span id="statusText">Checking for existing progress...</span>
+                    </div>
+                    
+                    <div class="d-flex gap-3">
+                        <button id="startPrewarm" class="btn btn-warning btn-lg">
+                            <i class="bi bi-lightning-charge me-1"></i>
+                            Continue Prewarm
+                        </button>
+                        <button id="startRefresh" class="btn btn-danger btn-lg">
+                            <i class="bi bi-arrow-clockwise me-1"></i>
+                            Refresh (Start Over)
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -155,6 +166,49 @@ $(document).ready(function() {
     let startTime = null;
     let processedCount = 0;
     
+    // Check current status on page load
+    checkCurrentStatus();
+    
+    function checkCurrentStatus() {
+        $.ajax({
+            url: '{{ route("admin.tools.prewarm-wikipedia-cache") }}',
+            method: 'POST',
+            data: {
+                action: 'check-status',
+                _token: $('meta[name="csrf-token"]').attr('content')
+            },
+            success: function(response) {
+                if (response.success) {
+                    updateStatusDisplay(response);
+                } else {
+                    $('#statusText').text('No existing progress found');
+                }
+            },
+            error: function() {
+                $('#statusText').text('Unable to check status');
+            }
+        });
+    }
+    
+    function updateStatusDisplay(response) {
+        const totalDays = response.total_days || 366;
+        const processedDays = response.processed_days || 0;
+        const remainingDays = response.remaining_days || totalDays;
+        const successDays = response.success_days || 0;
+        const errorCount = response.errors ? response.errors.length : 0;
+        
+        if (processedDays === 0) {
+            $('#statusText').text('No progress yet - ready to start');
+        } else if (remainingDays === 0) {
+            $('#statusText').text(`Complete! ${successDays} days cached successfully, ${errorCount} errors`);
+            $('#currentStatusInfo').removeClass('alert-secondary').addClass('alert-success');
+        } else {
+            const progressPercent = Math.round((processedDays / totalDays) * 100);
+            $('#statusText').text(`${processedDays}/${totalDays} days processed (${progressPercent}%) - ${remainingDays} days remaining`);
+            $('#currentStatusInfo').removeClass('alert-secondary').addClass('alert-warning');
+        }
+    }
+    
     $('#startPrewarm').on('click', function() {
         if (isRunning) return;
         
@@ -181,6 +235,7 @@ $(document).ready(function() {
             method: 'POST',
             data: {
                 action: 'start',
+                mode: 'prewarm',
                 _token: $('meta[name="csrf-token"]').attr('content')
             },
             success: function(response) {
@@ -206,6 +261,63 @@ $(document).ready(function() {
             },
             error: function(xhr) {
                 showError('Failed to start prewarm operation. Please try again.');
+                resetButton();
+            }
+        });
+    });
+    
+    $('#startRefresh').on('click', function() {
+        if (isRunning) return;
+        
+        isRunning = true;
+        const $button = $(this);
+        const $progressSection = $('#progressSection');
+        const $resultsSection = $('#resultsSection');
+        
+        // Show progress section and hide results
+        $progressSection.show();
+        $resultsSection.hide();
+        
+        // Update button state
+        $button.prop('disabled', true).html('<i class="bi bi-hourglass-split me-1"></i>Running...');
+        
+        // Update status
+        $('#currentStatus').removeClass('alert-info alert-success alert-danger')
+            .addClass('alert-info')
+            .html('<i class="bi bi-hourglass-split me-1"></i>Initializing refresh operation...');
+        
+        // Start the refresh operation
+        $.ajax({
+            url: '{{ route("admin.tools.prewarm-wikipedia-cache") }}',
+            method: 'POST',
+            data: {
+                action: 'start',
+                mode: 'refresh',
+                _token: $('meta[name="csrf-token"]').attr('content')
+            },
+            success: function(response) {
+                if (response.success) {
+                    // Initialize progress display
+                    $('#totalDays').text(response.total_days);
+                    $('#successDays').text('0');
+                    $('#errorDays').text('0');
+                    $('#progressPercent').text('0%');
+                    $('#progressBar').css('width', '0%').text('0%');
+                    
+                    // Initialize processing tracking
+                    startTime = new Date();
+                    processedCount = 0;
+                    $('#processingInfo').show();
+                    
+                    // Start processing days one by one
+                    startProcessingDays();
+                } else {
+                    showError('Failed to start refresh operation: ' + (response.message || 'Unknown error'));
+                    resetButton();
+                }
+            },
+            error: function(xhr) {
+                showError('Failed to start refresh operation. Please try again.');
                 resetButton();
             }
         });
@@ -367,7 +479,8 @@ $(document).ready(function() {
     
     function resetButton() {
         isRunning = false;
-        $('#startPrewarm').prop('disabled', false).html('<i class="bi bi-lightning-charge me-1"></i>Start Prewarm Operation');
+        $('#startPrewarm').prop('disabled', false).html('<i class="bi bi-lightning-charge me-1"></i>Continue Prewarm');
+        $('#startRefresh').prop('disabled', false).html('<i class="bi bi-arrow-clockwise me-1"></i>Refresh (Start Over)');
     }
     
     function showError(message) {
