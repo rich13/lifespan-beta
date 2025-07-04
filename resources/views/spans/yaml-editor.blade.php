@@ -1,17 +1,14 @@
 @extends('layouts.app')
 
 @section('page_title')
-    YAML Editor - {{ $span ? $span->name : 'New Span' }}
+    Editing: <a href="{{ route('spans.show', $span) }}" class="text-primary text-decoration-none">{{ $span ? $span->name : 'New Span' }}</a>
 @endsection
 
 @section('page_tools')
     <div class="d-flex gap-2">
         @if($span)
-            <a href="{{ route('spans.show', $span) }}" class="btn btn-sm btn-outline-secondary">
-                <i class="bi bi-arrow-left me-1"></i>Back to Span
-            </a>
-            <a href="{{ route('spans.edit', $span) }}" class="btn btn-sm btn-outline-primary">
-                <i class="bi bi-pencil me-1"></i>Form Editor
+            <a href="{{ route('spans.edit', $span) }}" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-pencil me-1"></i>Basic Editor
             </a>
         @else
             <a href="{{ route('spans.index') }}" class="btn btn-sm btn-outline-secondary">
@@ -282,7 +279,7 @@
 
 @section('content')
 <!-- Create New Span Button -->
-<div class="container-fluid mb-3">
+<!-- <div class="container-fluid mb-3">
     <div class="row">
         <div class="col-12">
             <div class="card border-primary">
@@ -314,7 +311,7 @@
             </div>
         </div>
     </div>
-</div>
+</div> -->
 
 <div class="container-fluid">
     <div class="row">
@@ -325,8 +322,11 @@
                     <h5 class="card-title mb-0">
                         <i class="bi bi-code-square me-2"></i>YAML Editor
                     </h5>
-                    <div class="d-flex gap-2">
+                    <div class="d-flex gap-2 align-items-center">
                         <span id="validation-status" class="badge bg-secondary">Ready</span>
+                        <button type="button" id="validate-btn" class="btn btn-sm btn-outline-primary" style="display: none;">
+                            <i class="bi bi-check-square me-1"></i>Validate
+                        </button>
                         <span id="char-count" class="text-muted small">0 characters</span>
                     </div>
                 </div>
@@ -347,16 +347,9 @@
                 <!-- Combined Analysis Card -->
                 <div class="card mb-2">
                     <div class="card-header">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <h6 class="card-title mb-0">
-                                <i class="bi bi-check-circle me-2"></i>Validation & Impact
-                            </h6>
-                            <div class="d-flex gap-2">
-                                <button type="button" id="validate-btn" class="btn btn-sm btn-outline-primary">
-                                    <i class="bi bi-check-square me-1"></i>Validate
-                                </button>
-                            </div>
-                        </div>
+                        <h6 class="card-title mb-0">
+                            <i class="bi bi-check-circle me-2"></i>What happened?
+                        </h6>
                     </div>
                     <div class="card-body p-3">
                         <div id="validation-results">
@@ -403,20 +396,30 @@
         <!-- Right column: Tools & Information -->
         <div class="col-lg-3">
             
+            <!-- Warning Card -->
+            <div class="card mb-3 border-danger">
+                <div class="card-header bg-danger text-white">
+                    <h6 class="card-title mb-0">
+                        <i class="bi bi-exclamation-triangle me-2"></i>Made you look!
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-0 py-2">
+                        <p>This is an <strong>experimental feature</strong>.</p>
+                        <p>Things may break a bit. Or a lot.</p>
+                        <p>Be gentle.</p>
+                    </div>
+                </div>
+            </div>
+            
             <!-- YAML Tools -->
             <div class="card mb-3">
                 <div class="card-header">
                     <h6 class="card-title mb-0">
-                        <i class="bi bi-tools me-2"></i>YAML Tools
+                        <i class="bi bi-tools me-2"></i> Tools
                     </h6>
                 </div>
-                <div class="card-body">
-                    <div class="mb-3">
-                        <a href="{{ asset('docs/yaml-schema.yaml') }}" target="_blank" class="btn btn-outline-info btn-sm w-100 mb-3">
-                            <i class="bi bi-file-text me-1"></i>View YAML Schema
-                        </a>
-                    </div>
-                    
+                <div class="card-body">                   
                     <div class="mb-3">
                         <label class="form-label small mb-1">Add Connection:</label>
                         @if($span)
@@ -536,40 +539,8 @@
                 </div>
             </div>
             
-            <!-- Information Panel -->
-            @if($span)
-            <div class="card mb-3">
-                <div class="card-header">
-                    <h6 class="card-title mb-0">
-                        <i class="bi bi-info-circle me-2"></i>Information
-                    </h6>
-                </div>
-                <div class="card-body">
-                    <dl class="row small">
-                        <dt class="col-5">Span ID:</dt>
-                        <dd class="col-7"><code>{{ $span->id }}</code></dd>
-                        
-                        <dt class="col-5">Current Type:</dt>
-                        <dd class="col-7">{{ $span->type_id }}</dd>
-                        
-                        <dt class="col-5">State:</dt>
-                        <dd class="col-7">
-                            <span class="badge bg-{{ $span->state === 'complete' ? 'success' : ($span->state === 'placeholder' ? 'warning' : 'secondary') }}">
-                                {{ ucfirst($span->state) }}
-                            </span>
-                        </dd>
-                        
-                        <dt class="col-5">Connections:</dt>
-                        <dd class="col-7">{{ $span->connectionsAsSubject->count() + $span->connectionsAsObject->count() }}</dd>
-                        
-                        <dt class="col-5">Access Level:</dt>
-                        <dd class="col-7">{{ ucfirst($span->access_level) }}</dd>
-                    </dl>
-                </div>
-            </div>
-            
             <!-- Incoming Connections Panel -->
-            @if($span->connectionsAsObject->count() > 0)
+            @if($span && $span->connectionsAsObject->count() > 0)
             <div class="card mb-3">
                 <div class="card-header">
                     <h6 class="card-title mb-0">
@@ -593,77 +564,28 @@
                 </div>
             </div>
             @endif
-            @else
-            <div class="card mb-3">
-                <div class="card-header">
-                    <h6 class="card-title mb-0">
-                        <i class="bi bi-info-circle me-2"></i>New Span Information
-                    </h6>
-                </div>
-                <div class="card-body">
-                    <div class="alert alert-info mb-0">
-                        <i class="bi bi-lightbulb me-2"></i>
-                        <strong>Creating a new span</strong><br>
-                        <small>Fill in the YAML content and validate to create a new span. The span will be created when you apply the changes.</small>
-                    </div>
-                </div>
-            </div>
-            @endif
-            
-            <!-- YAML Format Help (Collapsible) -->
-            <div class="card mb-3">
-                <div class="card-header">
-                    <h6 class="mb-0">
-                        <button class="btn btn-link p-0 text-decoration-none w-100 text-start" type="button" data-bs-toggle="collapse" data-bs-target="#help-content" aria-expanded="false" aria-controls="help-content">
-                            <i class="bi bi-question-circle me-2"></i>YAML Format Help
-                            <i class="bi bi-chevron-down float-end mt-1"></i>
-                        </button>
-                    </h6>
-                </div>
-                <div class="collapse" id="help-content">
-                    <div class="card-body small text-muted">
-                        <h6>Required Fields:</h6>
-                        <ul class="mb-3">
-                            <li><code>name</code> - The span name</li>
-                            <li><code>type</code> - The span type ({{ $spanTypes->pluck('type_id')->implode(', ') }})</li>
-                        </ul>
-                        
-                        <h6>Date Format:</h6>
-                        <ul class="mb-3">
-                            <li><code>2023</code> - Year only</li>
-                            <li><code>2023-06</code> - Year and month</li>
-                            <li><code>2023-06-15</code> - Full date</li>
-                        </ul>
-                        
-                        <h6>Connection Example:</h6>
-                        <pre class="small bg-light p-2 rounded mb-0">employment:
-  - name: 'Company Name'
-    id: ''  # Leave empty for new
-    type: organisation
-    start_date: '2020-01'
-    end_date: '2023-12'
-    metadata:
-      role: 'Developer'</pre>
-                    </div>
-                </div>
-            </div>
             
             <!-- Apply Changes Section -->
             <div class="card">
                 <div class="card-header">
                     <h6 class="card-title mb-0">
-                        <i class="bi bi-cloud-upload me-2"></i>Apply Changes
+                        <i class="bi bi-cloud-upload me-2"></i>Now what?
                     </h6>
                 </div>
                 <div class="card-body">
                     <div class="alert alert-warning d-flex align-items-center py-2 mb-3">
                         <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                        <small>{{ $span ? 'Changes are not saved until you apply them to the database.' : 'The span will be created when you apply the YAML to the database.' }}</small>
+                        <small>{{ $span ? 'Changes are not saved yet.' : 'The span will be created when you apply the YAML to the database.' }}</small>
                     </div>
-                    <div class="d-grid">
+                    <div class="d-grid gap-2">
                         <button type="button" id="apply-btn" class="btn btn-success" disabled>
-                            <i class="bi bi-cloud-upload me-2"></i>{{ $span ? 'Apply Changes to Database' : 'Create Span from YAML' }}
+                            <i class="bi bi-cloud-upload me-2"></i>{{ $span ? 'Save Changes' : 'Create Span from YAML' }}
                         </button>
+                        @if($span)
+                        <button type="button" id="discard-btn" class="btn btn-outline-danger" style="display: none;">
+                            <i class="bi bi-arrow-clockwise me-2"></i>Discard Changes
+                        </button>
+                        @endif
                     </div>
                 </div>
             </div>
@@ -682,12 +604,14 @@ $(document).ready(function() {
     const yamlTextarea = $('#yaml-content');
     const validateBtn = $('#validate-btn');
     const applyBtn = $('#apply-btn');
+    const discardBtn = $('#discard-btn');
     const validationStatus = $('#validation-status');
     const validationResults = $('#validation-results');
     const charCount = $('#char-count');
     
     let lastValidationResult = null;
     let originalContent = yamlTextarea.val();
+    let validationTimeout = null;
     
     // Update character count
     function updateCharCount() {
@@ -701,6 +625,12 @@ $(document).ready(function() {
             .removeClass('bg-secondary bg-success bg-danger bg-warning')
             .addClass(`bg-${variant}`)
             .text(status);
+        
+        // Show the status badge when validation is complete
+        if (status !== 'Modified') {
+            $('#validation-status').show();
+            validateBtn.hide();
+        }
     }
     
     // Update apply button text based on state
@@ -719,11 +649,11 @@ $(document).ready(function() {
         } else {
             // For existing spans, check for changes
             if (!hasChanges) {
-                applyBtn.html('<i class="bi bi-cloud-upload me-2"></i>No Changes to Apply');
+                applyBtn.html('<i class="bi bi-cloud-upload me-2"></i>No Changes to Save');
             } else if (!isValid) {
                 applyBtn.html('<i class="bi bi-cloud-upload me-2"></i>Validate YAML First');
             } else {
-                applyBtn.html('<i class="bi bi-cloud-upload me-2"></i>Apply Changes to Database');
+                applyBtn.html('<i class="bi bi-cloud-upload me-2"></i>Save Changes');
             }
         }
     }
@@ -738,7 +668,7 @@ $(document).ready(function() {
                     <i class="bi bi-check-circle-fill me-2"></i>
                     <strong>Valid YAML</strong>
                     <div class="mt-2 small">
-                        {{ $span ? 'Ready to apply changes to the database.' : 'Ready to create span from YAML.' }}
+                        {{ $span ? 'Keep going. Nothing broken yet.' : 'Ready to create span from YAML.' }}
                     </div>
                 </div>
             `;
@@ -784,6 +714,40 @@ $(document).ready(function() {
         
         validationResults.html(html);
         lastValidationResult = result;
+    }
+    
+    // Clear validation errors when user starts editing
+    function clearValidationErrors() {
+        // Only clear if we currently have validation errors
+        if (lastValidationResult && !lastValidationResult.success) {
+            validationResults.html(`
+                <div class="text-muted">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Make changes to see validation results
+                </div>
+            `);
+            yamlTextarea.removeClass('is-invalid');
+            updateValidationStatus('Modified', 'warning');
+        }
+    }
+    
+    // Show validation spinner
+    function showValidationSpinner() {
+        const html = `
+            <div class="text-primary">
+                <div class="d-flex align-items-center">
+                    <div class="spinner-border spinner-border-sm me-2" role="status">
+                        <span class="visually-hidden">Validating...</span>
+                    </div>
+                    <strong>Validating YAML...</strong>
+                </div>
+                <div class="mt-2 small text-muted">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Please wait while we check your YAML content
+                </div>
+            </div>
+        `;
+        validationResults.html(html);
     }
 
     // Show visual translation
@@ -1079,6 +1043,7 @@ $(document).ready(function() {
         }
         
         updateValidationStatus('Validating...', 'warning');
+        showValidationSpinner();
         
         $.ajax({
             url: '{{ $span ? route("spans.yaml-validate", $span) : route("spans.yaml-validate-new") }}',
@@ -1089,6 +1054,8 @@ $(document).ready(function() {
             },
             success: function(result) {
                 showValidationResults(result);
+                // Reset change detection after validation completes
+                resetChangeDetection();
             },
             error: function(xhr) {
                 let errorMsg = 'Validation failed';
@@ -1100,6 +1067,8 @@ $(document).ready(function() {
                     success: false,
                     errors: [errorMsg]
                 });
+                // Reset change detection after validation completes (even on error)
+                resetChangeDetection();
             }
         });
     }
@@ -1178,16 +1147,28 @@ $(document).ready(function() {
         });
     }
     
-    // Auto-validate on content change (debounced)
-    yamlTextarea.on('input', function() {
-        updateCharCount();
-        
+    // Function to check for changes and update UI accordingly
+    function checkForChanges() {
         const hasChanges = yamlTextarea.val() !== originalContent;
+        const isNewSpan = {{ $span ? 'false' : 'true' }};
+        const isValid = lastValidationResult && lastValidationResult.success;
+        
         if (hasChanges) {
             yamlTextarea.removeClass('is-valid is-invalid');
             updateValidationStatus('Modified', 'warning');
-            applyBtn.prop('disabled', true);
+            
+            // Enable apply button if YAML is valid (for new spans) or if there are changes (for existing spans)
+            applyBtn.prop('disabled', !isValid || (!isNewSpan && !hasChanges));
             updateApplyButtonText();
+            
+            // Show validate button and hide status badge
+            validateBtn.show();
+            $('#validation-status').hide();
+            
+            // Show discard button for existing spans
+            if (!isNewSpan) {
+                discardBtn.show();
+            }
             
             // Hide analysis sections while editing
             $('#changes-summary').hide();
@@ -1197,11 +1178,118 @@ $(document).ready(function() {
             applyBtn.prop('disabled', true);
             updateApplyButtonText();
             updateValidationStatus('Ready', 'secondary');
+            
+            // Hide validate button and show status badge
+            validateBtn.hide();
+            $('#validation-status').show();
+            
+            // Hide discard button
+            discardBtn.hide();
         }
+    }
+    
+    // Function to reset change detection after validation
+    function resetChangeDetection() {
+        // Clear any pending validation timeout
+        if (validationTimeout) {
+            clearTimeout(validationTimeout);
+            validationTimeout = null;
+        }
+        
+        // Update the UI to reflect that validation is complete
+        const isNewSpan = {{ $span ? 'false' : 'true' }};
+        
+        if (!isNewSpan) {
+            // For existing spans, show the validation status and hide the validate button
+            $('#validation-status').show();
+            validateBtn.hide();
+        }
+        
+        // Update apply button state based on validation result and changes
+        if (lastValidationResult && lastValidationResult.success) {
+            const hasChanges = yamlTextarea.val() !== originalContent;
+            // For new spans, enable apply button since validation succeeded
+            // For existing spans, enable apply button only if there are changes
+            applyBtn.prop('disabled', !isNewSpan && !hasChanges);
+            updateApplyButtonText();
+        }
+    }
+    
+    // Function to discard changes and reset to original content
+    function discardChanges() {
+        if (confirm('Are you sure you want to discard all changes? This will reset the editor to the database saved version.')) {
+            // Clear any pending validation timeout
+            if (validationTimeout) {
+                clearTimeout(validationTimeout);
+                validationTimeout = null;
+            }
+            
+            yamlTextarea.val(originalContent);
+            yamlTextarea.removeClass('is-valid is-invalid');
+            updateValidationStatus('Ready', 'secondary');
+            applyBtn.prop('disabled', true);
+            updateApplyButtonText();
+            discardBtn.hide();
+            
+            // Show status badge and hide validate button
+            $('#validation-status').show();
+            validateBtn.hide();
+            
+            // Clear validation results
+            validationResults.html(`
+                <div class="text-muted">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Make changes to see validation results
+                </div>
+            `);
+            
+            // Reset visual translation
+            $('#visual-translation').html(`
+                <div class="text-muted">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Visual translation will appear here when YAML is valid
+                </div>
+            `);
+            
+            // Hide analysis sections
+            $('#changes-summary').hide();
+            $('#impact-results').hide();
+            
+            updateCharCount();
+        }
+    }
+    
+    // Auto-validate on content change (debounced)
+    yamlTextarea.on('input', function() {
+        updateCharCount();
+        
+        // Clear validation errors when user starts editing
+        clearValidationErrors();
+        
+        checkForChanges();
+        
+        // Clear existing timeout
+        if (validationTimeout) {
+            clearTimeout(validationTimeout);
+        }
+        
+        // Set new timeout for auto-validation after 2 seconds of inactivity
+        validationTimeout = setTimeout(function() {
+            const hasChanges = yamlTextarea.val() !== originalContent;
+            if (hasChanges) {
+                validateYaml();
+            }
+        }, 2000);
     });
     
     // Validate when user focuses away from the editor
     yamlTextarea.on('blur', function() {
+        // Clear the auto-validation timeout since user is actively editing
+        if (validationTimeout) {
+            clearTimeout(validationTimeout);
+            validationTimeout = null;
+        }
+        
         const hasChanges = yamlTextarea.val() !== originalContent;
         if (hasChanges) {
             validateYaml();
@@ -1213,6 +1301,9 @@ $(document).ready(function() {
     
     // Apply changes
     applyBtn.on('click', applyChanges);
+    
+    // Discard changes
+    discardBtn.on('click', discardChanges);
     
     // Warn about unsaved changes
     $(window).on('beforeunload', function() {
@@ -2188,9 +2279,9 @@ metadata:
         if (isNewSpan) {
             console.log('Processing new span changes');
             // For new spans, treat all fields as new additions
-            const basicFields = ['name', 'type', 'state', 'description', 'notes', 'access_level'];
+            const basicFields = ['name', 'slug', 'type', 'state', 'description', 'notes', 'access_level', 'sources'];
             basicFields.forEach(field => {
-                if (newData[field] !== undefined && newData[field] !== '') {
+                if (newData[field] !== undefined && newData[field] !== '' && newData[field] !== null) {
                     changes.push({
                         field: field,
                         type: 'add',
@@ -2273,11 +2364,18 @@ metadata:
             }
             
             // Compare basic fields
-            const basicFields = ['name', 'type', 'state', 'description', 'notes', 'access_level'];
+            const basicFields = ['name', 'slug', 'type', 'state', 'description', 'notes', 'access_level', 'sources'];
             basicFields.forEach(field => {
                 if (newData[field] !== undefined) {
                     const currentValue = getCurrentSpanValue(field);
                     console.log(`Comparing ${field}:`, { currentValue, newValue: newData[field], equal: currentValue === newData[field] });
+                    
+                    // Skip if both values are null/empty (no change)
+                    if (currentValue === null && newData[field] === null) return;
+                    if (currentValue === '' && newData[field] === '') return;
+                    if (currentValue === null && newData[field] === '') return;
+                    if (currentValue === '' && newData[field] === null) return;
+                    
                     if (newData[field] !== currentValue) {
                         changes.push({
                             field: field,
@@ -2295,7 +2393,11 @@ metadata:
                 const currentStart = getCurrentSpanDate('start');
                 const newStart = formatDateForDisplay(newData.start_year, newData.start_month, newData.start_day);
                 console.log('Comparing start dates:', { currentStart, newStart, equal: currentStart === newStart });
-                if (currentStart !== newStart) {
+                
+                // Skip if both dates are "Not set" (no change)
+                if (currentStart === 'Not set' && newStart === 'Not set') {
+                    // Do nothing - no change
+                } else if (currentStart !== newStart) {
                     changes.push({
                         field: 'start_date',
                         type: 'update',
@@ -2310,7 +2412,11 @@ metadata:
                 const currentEnd = getCurrentSpanDate('end');
                 const newEnd = formatDateForDisplay(newData.end_year, newData.end_month, newData.end_day);
                 console.log('Comparing end dates:', { currentEnd, newEnd, equal: currentEnd === newEnd });
-                if (currentEnd !== newEnd) {
+                
+                // Skip if both dates are "Not set" (no change)
+                if (currentEnd === 'Not set' && newEnd === 'Not set') {
+                    // Do nothing - no change
+                } else if (currentEnd !== newEnd) {
                     changes.push({
                         field: 'end_date',
                         type: 'update',
@@ -2454,11 +2560,13 @@ metadata:
     function formatFieldName(field) {
         const fieldNames = {
             'name': 'Name',
+            'slug': 'Slug',
             'type': 'Type',
             'state': 'State',
             'description': 'Description',
             'notes': 'Notes',
             'access_level': 'Access Level',
+            'sources': 'Sources',
             'start_date': 'Start Date',
             'end_date': 'End Date'
         };
@@ -2649,6 +2757,7 @@ metadata:
             description: '{{ $span->description ?? "" }}',
             notes: '{{ $span->notes ?? "" }}',
             access_level: '{{ $span->access_level }}',
+            sources: @json($span->sources ?? []),
             metadata: @json($span->metadata ?? [])
         } @else {
             name: '',
@@ -2658,6 +2767,7 @@ metadata:
             description: '',
             notes: '',
             access_level: 'private',
+            sources: [],
             metadata: {}
         } @endif;
         
@@ -2704,6 +2814,7 @@ metadata:
                 description: '',
                 notes: '',
                 access_level: 'private',
+                sources: [],
                 metadata: {}
             };
             
