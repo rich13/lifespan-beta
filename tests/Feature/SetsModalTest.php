@@ -26,7 +26,8 @@ class SetsModalTest extends TestCase
         $this->testSpan = Span::factory()->create([
             'name' => 'Test Span',
             'owner_id' => $this->user->id,
-            'updater_id' => $this->user->id
+            'updater_id' => $this->user->id,
+            'access_level' => 'private'
         ]);
 
         // Create a test set
@@ -45,10 +46,7 @@ class SetsModalTest extends TestCase
     {
         $this->actingAs($this->user);
 
-        $response = $this->get('/sets/modal-data', [
-            'model_id' => $this->testSpan->id,
-            'model_class' => 'App\Models\Span'
-        ]);
+        $response = $this->get('/sets/modal-data?model_id=' . $this->testSpan->id . '&model_class=App\Models\Span');
 
         $response->assertStatus(200);
         $response->assertJsonStructure([
@@ -71,10 +69,7 @@ class SetsModalTest extends TestCase
     /** @test */
     public function sets_modal_data_endpoint_requires_authentication()
     {
-        $response = $this->get('/sets/modal-data', [
-            'model_id' => $this->testSpan->id,
-            'model_class' => 'App\Models\Span'
-        ]);
+        $response = $this->get('/sets/modal-data?model_id=' . $this->testSpan->id . '&model_class=App\Models\Span');
 
         $response->assertStatus(302); // Redirect to login
     }
@@ -85,10 +80,7 @@ class SetsModalTest extends TestCase
         $otherUser = User::factory()->create();
         $this->actingAs($otherUser);
 
-        $response = $this->get('/sets/modal-data', [
-            'model_id' => $this->testSpan->id,
-            'model_class' => 'App\Models\Span'
-        ]);
+        $response = $this->get('/sets/modal-data?model_id=' . $this->testSpan->id . '&model_class=App\Models\Span');
 
         $response->assertStatus(403);
     }

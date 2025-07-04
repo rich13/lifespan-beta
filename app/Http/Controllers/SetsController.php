@@ -234,31 +234,49 @@ class SetsController extends Controller
      */
     public function getModalData(Request $request)
     {
+        // Debug logging at the very start
+        \Log::info('getModalData method called', [
+            'method' => $request->method(),
+            'url' => $request->url(),
+            'all_params' => $request->all(),
+            'query_params' => $request->query(),
+            'user' => Auth::user() ? Auth::user()->id : 'not authenticated'
+        ]);
+
         $user = Auth::user();
+        
+        // Check if user is authenticated
+        if (!$user) {
+            return redirect()->route('login');
+        }
+        
         $modelId = $request->get('model_id');
         $modelClass = $request->get('model_class');
 
+        // Debug logging
+        \Log::info('getModalData called', [
+            'model_id' => $modelId,
+            'model_class' => $modelClass,
+            'user_id' => $user ? $user->id : null,
+            'request_all' => $request->all()
+        ]);
+
         // Get the model instance
         $model = null;
-        if ($modelClass === 'App\Models\Span') {
+        if ($modelClass === 'App\\Models\\Span' || $modelClass === 'App\Models\Span') {
             $model = Span::find($modelId);
-        } elseif ($modelClass === 'App\Models\Connection') {
+            \Log::info('Span lookup result', [
+                'model_id' => $modelId,
+                'found' => $model ? true : false,
+                'model' => $model ? $model->toArray() : null
+            ]);
+        } elseif ($modelClass === 'App\\Models\\Connection' || $modelClass === 'App\Models\Connection') {
             $model = Connection::find($modelId);
         }
 
-        if (!$model) {
-            abort(404);
-        }
-
-        // Check access based on model type
-        if ($model instanceof Span) {
-            if (!$model->hasPermission($user, 'view')) {
-                abort(403);
-            }
-        } elseif ($model instanceof Connection) {
-            if (!$model->isAccessibleBy($user)) {
-                abort(403);
-            }
+        // Permission check
+        if (!$model || ($model instanceof Span && !$model->hasPermission($user, 'view')) || ($model instanceof Connection && !$model->isAccessibleBy($user))) {
+            return response()->json(['error' => 'Forbidden'], 403);
         }
 
         // Get user's sets (exclude smart sets since they can't be toggled)
@@ -409,13 +427,21 @@ class SetsController extends Controller
 
         // Get the model instance
         $model = null;
-        if ($modelClass === 'App\Models\Span') {
+        if ($modelClass === 'App\\Models\\Span' || $modelClass === 'App\Models\Span') {
             $model = Span::find($modelId);
-        } elseif ($modelClass === 'App\Models\Connection') {
+        } elseif ($modelClass === 'App\\Models\\Connection' || $modelClass === 'App\Models\Connection') {
             $model = Connection::find($modelId);
         }
 
-        if (!$model || !$model->hasPermission(Auth::user(), 'view')) {
+        \Log::info('toggleItem permission check', [
+            'model_id' => $modelId,
+            'model_class' => $modelClass,
+            'user_id' => Auth::user() ? Auth::user()->id : null,
+            'model_found' => $model ? true : false,
+            'has_permission' => $model ? $model->hasPermission(Auth::user(), 'edit') : null
+        ]);
+
+        if (!$model || !$model->hasPermission(Auth::user(), 'edit')) {
             abort(403);
         }
 

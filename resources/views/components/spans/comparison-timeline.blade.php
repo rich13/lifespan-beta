@@ -29,7 +29,15 @@
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    initializeComparisonTimeline_{{ str_replace('-', '_', $span1->id) }}_{{ str_replace('-', '_', $span2->id) }}();
+    try {
+        initializeComparisonTimeline_{{ str_replace('-', '_', $span1->id) }}_{{ str_replace('-', '_', $span2->id) }}();
+    } catch (error) {
+        console.error('Error initializing comparison timeline:', error);
+        const container = document.getElementById(`comparison-timeline-container-{{ $span1->id }}-{{ $span2->id }}`);
+        if (container) {
+            container.innerHTML = '<div class="text-danger text-center py-4">Error loading timeline data</div>';
+        }
+    }
 });
 
 function initializeComparisonTimeline_{{ str_replace('-', '_', $span1->id) }}_{{ str_replace('-', '_', $span2->id) }}() {
@@ -95,6 +103,7 @@ function setupModeToggle_{{ str_replace('-', '_', $span1->id) }}_{{ str_replace(
 }
 
 function renderComparisonTimeline_{{ str_replace('-', '_', $span1->id) }}_{{ str_replace('-', '_', $span2->id) }}(data1, data2, mode = 'absolute') {
+    try {
     const span1Id = '{{ $span1->id }}';
     const span2Id = '{{ $span2->id }}';
     
@@ -298,8 +307,13 @@ function renderComparisonTimeline_{{ str_replace('-', '_', $span1->id) }}_{{ str
             return startYear && endYear && endYear >= startYear;
         });
 
+        // Separate created connections from other connections
+        const createdConnections1 = validConnections1.filter(c => c.type_id === 'created');
+        const otherConnections1 = validConnections1.filter(c => c.type_id !== 'created');
+
+        // Handle regular timeline bars
         const timelineBars1 = svg.selectAll('.timeline-bar-1')
-            .data(validConnections1, d => d.id || d.start_year + '-' + d.type_id + '-' + d.target_name);
+            .data(otherConnections1, d => d.id || d.start_year + '-' + d.type_id + '-' + d.target_name);
 
         // Remove old bars
         timelineBars1.exit().remove();
@@ -342,9 +356,92 @@ function renderComparisonTimeline_{{ str_replace('-', '_', $span1->id) }}_{{ str
                 const width = xScale(endYear) - xScale(startYear);
                 return Math.max(0, width); // Ensure width is never negative
             });
+
+        // Handle created connections as moments
+        const timelineMoments1 = svg.selectAll('.timeline-moment-1')
+            .data(createdConnections1, d => d.id || d.start_year + '-' + d.type_id + '-' + d.target_name);
+
+        // Remove old moments
+        timelineMoments1.exit().remove();
+
+        // Add new moments - create groups for each moment
+        const newMoments1 = timelineMoments1.enter()
+            .append('g')
+            .attr('class', 'timeline-moment-1')
+            .each(function(d, i) {
+                const connection = d;
+                const x = mode === 'absolute' ? xScale(connection.start_year) : xScale(connection.start_year - data1.span.start_year);
+                const y1 = swimlane1Y;
+                const y2 = swimlane1Y + swimlaneHeight;
+                const circleY = (y1 + y2) / 2;
+                const circleRadius = 3;
+                
+                // Draw vertical line
+                d3.select(this).append('line')
+                    .attr('class', 'timeline-moment-line-1')
+                    .attr('x1', x)
+                    .attr('x2', x)
+                    .attr('y1', y1)
+                    .attr('y2', y2)
+                    .attr('stroke', getConnectionColor(connection.type_id))
+                    .attr('stroke-width', 2)
+                    .style('opacity', 0.8)
+                    .on('mouseover', function(event) {
+                        const overlappingConnections = findOverlappingConnections_{{ str_replace('-', '_', $span1->id) }}_{{ str_replace('-', '_', $span2->id) }}(connection, data1.connections, 1);
+                        d3.select(this).style('opacity', 0.9);
+                        showTooltip_{{ str_replace('-', '_', $span1->id) }}_{{ str_replace('-', '_', $span2->id) }}(event, overlappingConnections, 1, mode, data1.span.start_year);
+                    })
+                    .on('mouseout', function() {
+                        d3.select(this).style('opacity', 0.8);
+                        hideTooltip_{{ str_replace('-', '_', $span1->id) }}_{{ str_replace('-', '_', $span2->id) }}();
+                    });
+                
+                // Draw circle
+                d3.select(this).append('circle')
+                    .attr('class', 'timeline-moment-circle-1')
+                    .attr('cx', x)
+                    .attr('cy', circleY)
+                    .attr('r', circleRadius)
+                    .attr('fill', getConnectionColor(connection.type_id))
+                    .attr('stroke', 'white')
+                    .attr('stroke-width', 1)
+                    .style('opacity', 0.9)
+                    .on('mouseover', function(event) {
+                        const overlappingConnections = findOverlappingConnections_{{ str_replace('-', '_', $span1->id) }}_{{ str_replace('-', '_', $span2->id) }}(connection, data1.connections, 1);
+                        d3.select(this).style('opacity', 1);
+                        showTooltip_{{ str_replace('-', '_', $span1->id) }}_{{ str_replace('-', '_', $span2->id) }}(event, overlappingConnections, 1, mode, data1.span.start_year);
+                    })
+                    .on('mouseout', function() {
+                        d3.select(this).style('opacity', 0.9);
+                        hideTooltip_{{ str_replace('-', '_', $span1->id) }}_{{ str_replace('-', '_', $span2->id) }}();
+                    });
+            });
+
+        // Update existing moments with animation
+        const allMoments1 = timelineMoments1.merge(newMoments1);
+        allMoments1.transition()
+            .duration(750)
+            .select('.timeline-moment-line-1')
+            .attr('x1', d => {
+                const startYear = mode === 'absolute' ? d.start_year : d.start_year - data1.span.start_year;
+                return xScale(startYear);
+            })
+            .attr('x2', d => {
+                const startYear = mode === 'absolute' ? d.start_year : d.start_year - data1.span.start_year;
+                return xScale(startYear);
+            });
+
+        // Update circles
+        allMoments1.transition()
+            .duration(750)
+            .select('.timeline-moment-circle-1')
+            .attr('cx', d => {
+                const startYear = mode === 'absolute' ? d.start_year : d.start_year - data1.span.start_year;
+                return xScale(startYear);
+            });
     } else {
-        // Remove all bars if no connections
-        svg.selectAll('.timeline-bar-1').remove();
+        // Remove all bars and moments if no connections
+        svg.selectAll('.timeline-bar-1, .timeline-moment-1').remove();
     }
 
     // Update or create timeline bars for span 2 with animation
@@ -358,8 +455,13 @@ function renderComparisonTimeline_{{ str_replace('-', '_', $span1->id) }}_{{ str
             return startYear && endYear && endYear >= startYear;
         });
 
+        // Separate created connections from other connections
+        const createdConnections2 = validConnections2.filter(c => c.type_id === 'created');
+        const otherConnections2 = validConnections2.filter(c => c.type_id !== 'created');
+
+        // Handle regular timeline bars
         const timelineBars2 = svg.selectAll('.timeline-bar-2')
-            .data(validConnections2, d => d.id || d.start_year + '-' + d.type_id + '-' + d.target_name);
+            .data(otherConnections2, d => d.id || d.start_year + '-' + d.type_id + '-' + d.target_name);
 
         // Remove old bars
         timelineBars2.exit().remove();
@@ -402,9 +504,92 @@ function renderComparisonTimeline_{{ str_replace('-', '_', $span1->id) }}_{{ str
                 const width = xScale(endYear) - xScale(startYear);
                 return Math.max(0, width); // Ensure width is never negative
             });
+
+        // Handle created connections as moments
+        const timelineMoments2 = svg.selectAll('.timeline-moment-2')
+            .data(createdConnections2, d => d.id || d.start_year + '-' + d.type_id + '-' + d.target_name);
+
+        // Remove old moments
+        timelineMoments2.exit().remove();
+
+        // Add new moments - create groups for each moment
+        const newMoments2 = timelineMoments2.enter()
+            .append('g')
+            .attr('class', 'timeline-moment-2')
+            .each(function(d, i) {
+                const connection = d;
+                const x = mode === 'absolute' ? xScale(connection.start_year) : xScale(connection.start_year - data2.span.start_year);
+                const y1 = swimlane2Y;
+                const y2 = swimlane2Y + swimlaneHeight;
+                const circleY = (y1 + y2) / 2;
+                const circleRadius = 3;
+                
+                // Draw vertical line
+                d3.select(this).append('line')
+                    .attr('class', 'timeline-moment-line-2')
+                    .attr('x1', x)
+                    .attr('x2', x)
+                    .attr('y1', y1)
+                    .attr('y2', y2)
+                    .attr('stroke', getConnectionColor(connection.type_id))
+                    .attr('stroke-width', 2)
+                    .style('opacity', 0.8)
+                    .on('mouseover', function(event) {
+                        const overlappingConnections = findOverlappingConnections_{{ str_replace('-', '_', $span1->id) }}_{{ str_replace('-', '_', $span2->id) }}(connection, data2.connections, 2);
+                        d3.select(this).style('opacity', 0.9);
+                        showTooltip_{{ str_replace('-', '_', $span1->id) }}_{{ str_replace('-', '_', $span2->id) }}(event, overlappingConnections, 2, mode, data2.span.start_year);
+                    })
+                    .on('mouseout', function() {
+                        d3.select(this).style('opacity', 0.8);
+                        hideTooltip_{{ str_replace('-', '_', $span1->id) }}_{{ str_replace('-', '_', $span2->id) }}();
+                    });
+                
+                // Draw circle
+                d3.select(this).append('circle')
+                    .attr('class', 'timeline-moment-circle-2')
+                    .attr('cx', x)
+                    .attr('cy', circleY)
+                    .attr('r', circleRadius)
+                    .attr('fill', getConnectionColor(connection.type_id))
+                    .attr('stroke', 'white')
+                    .attr('stroke-width', 1)
+                    .style('opacity', 0.9)
+                    .on('mouseover', function(event) {
+                        const overlappingConnections = findOverlappingConnections_{{ str_replace('-', '_', $span1->id) }}_{{ str_replace('-', '_', $span2->id) }}(connection, data2.connections, 2);
+                        d3.select(this).style('opacity', 1);
+                        showTooltip_{{ str_replace('-', '_', $span1->id) }}_{{ str_replace('-', '_', $span2->id) }}(event, overlappingConnections, 2, mode, data2.span.start_year);
+                    })
+                    .on('mouseout', function() {
+                        d3.select(this).style('opacity', 0.9);
+                        hideTooltip_{{ str_replace('-', '_', $span1->id) }}_{{ str_replace('-', '_', $span2->id) }}();
+                    });
+            });
+
+        // Update existing moments with animation
+        const allMoments2 = timelineMoments2.merge(newMoments2);
+        allMoments2.transition()
+            .duration(750)
+            .select('.timeline-moment-line-2')
+            .attr('x1', d => {
+                const startYear = mode === 'absolute' ? d.start_year : d.start_year - data2.span.start_year;
+                return xScale(startYear);
+            })
+            .attr('x2', d => {
+                const startYear = mode === 'absolute' ? d.start_year : d.start_year - data2.span.start_year;
+                return xScale(startYear);
+            });
+
+        // Update circles
+        allMoments2.transition()
+            .duration(750)
+            .select('.timeline-moment-circle-2')
+            .attr('cx', d => {
+                const startYear = mode === 'absolute' ? d.start_year : d.start_year - data2.span.start_year;
+                return xScale(startYear);
+            });
     } else {
-        // Remove all bars if no connections
-        svg.selectAll('.timeline-bar-2').remove();
+        // Remove all bars and moments if no connections
+        svg.selectAll('.timeline-bar-2, .timeline-moment-2').remove();
     }
 
     // Add post-life overlays BEFORE interactive backgrounds (just for visual effect)
@@ -796,6 +981,13 @@ function renderComparisonTimeline_{{ str_replace('-', '_', $span1->id) }}_{{ str
             .on('mouseout', function() {
                 hideTooltip_{{ str_replace('-', '_', $span1->id) }}_{{ str_replace('-', '_', $span2->id) }}();
             });
+    }
+    } catch (error) {
+        console.error('Error rendering comparison timeline:', error);
+        const container = document.getElementById(`comparison-timeline-container-{{ $span1->id }}-{{ $span2->id }}`);
+        if (container) {
+            container.innerHTML = '<div class="text-danger text-center py-4">Error rendering timeline</div>';
+        }
     }
 }
 

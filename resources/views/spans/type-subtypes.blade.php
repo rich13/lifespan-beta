@@ -82,10 +82,10 @@
                             </h5>
                         </div>
                         <div class="card-body">
-                            @if($subtype->exampleSpans->count() > 0)
+                            @if(isset($subtypeExamples[$subtype->subtype]) && $subtypeExamples[$subtype->subtype]->count() > 0)
                                 <div class="mb-3">
                                     <h6 class="text-muted mb-2">Examples:</h6>
-                                    @foreach($subtype->exampleSpans as $span)
+                                    @foreach($subtypeExamples[$subtype->subtype] as $span)
                                         <div class="mb-2">
                                             <x-spans.display.interactive-card :span="$span" />
                                         </div>

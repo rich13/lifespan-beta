@@ -181,30 +181,87 @@ function renderTimeline_{{ str_replace('-', '_', $span->id) }}(connections, span
     svg.selectAll('.timeline-bar')
         .data(connections)
         .enter()
-        .append('rect')
-        .attr('class', 'timeline-bar')
-        .attr('x', d => xScale(d.start_year))
-        .attr('y', swimlaneY + 2) // Small margin from swimlane edge
-        .attr('width', d => {
-            const endYear = d.end_year || new Date().getFullYear();
-            return xScale(endYear) - xScale(d.start_year);
-        })
-        .attr('height', swimlaneHeight - 4) // Leave small margin
-        .attr('fill', d => getConnectionColor(d.type_id))
-        .attr('stroke', 'white') // White border
-        .attr('stroke-width', 1) // 1px border width
-        .attr('rx', 2)
-        .attr('ry', 2)
-        .style('opacity', 0.6) // More transparent default opacity
-        .on('mouseover', function(event, d) {
-            // Find all overlapping connections
-            const overlappingConnections = findOverlappingConnections_{{ str_replace('-', '_', $span->id) }}(d, connections);
-            d3.select(this).style('opacity', 0.9); // Less transparent on hover
-            showTooltip_{{ str_replace('-', '_', $span->id) }}(event, overlappingConnections);
-        })
-        .on('mouseout', function() {
-            d3.select(this).style('opacity', 0.6); // Back to default transparency
-            hideTooltip_{{ str_replace('-', '_', $span->id) }}();
+        .each(function(d, i) {
+            const connection = d;
+            const connectionType = connection.type_id;
+            
+            if (connectionType === 'created') {
+                // For "created" connections, draw a vertical line with a circle
+                const x = xScale(connection.start_year);
+                const y1 = swimlaneY;
+                const y2 = swimlaneY + swimlaneHeight;
+                const circleY = (y1 + y2) / 2; // Center the circle vertically
+                const circleRadius = 3;
+                
+                // Draw vertical line
+                svg.append('line')
+                    .attr('class', 'timeline-moment')
+                    .attr('x1', x)
+                    .attr('x2', x)
+                    .attr('y1', y1)
+                    .attr('y2', y2)
+                    .attr('stroke', getConnectionColor(connectionType))
+                    .attr('stroke-width', 2)
+                    .style('opacity', 0.8)
+                    .on('mouseover', function(event) {
+                        // Find all overlapping connections
+                        const overlappingConnections = findOverlappingConnections_{{ str_replace('-', '_', $span->id) }}(connection, connections);
+                        d3.select(this).style('opacity', 0.9); // Less transparent on hover
+                        showTooltip_{{ str_replace('-', '_', $span->id) }}(event, overlappingConnections);
+                    })
+                    .on('mouseout', function() {
+                        d3.select(this).style('opacity', 0.8); // Back to default transparency
+                        hideTooltip_{{ str_replace('-', '_', $span->id) }}();
+                    });
+                
+                // Draw circle in the middle
+                svg.append('circle')
+                    .attr('class', 'timeline-moment-circle')
+                    .attr('cx', x)
+                    .attr('cy', circleY)
+                    .attr('r', circleRadius)
+                    .attr('fill', getConnectionColor(connectionType))
+                    .attr('stroke', 'white')
+                    .attr('stroke-width', 1)
+                    .style('opacity', 0.9)
+                    .on('mouseover', function(event) {
+                        // Find all overlapping connections
+                        const overlappingConnections = findOverlappingConnections_{{ str_replace('-', '_', $span->id) }}(connection, connections);
+                        d3.select(this).style('opacity', 1); // Fully opaque on hover
+                        showTooltip_{{ str_replace('-', '_', $span->id) }}(event, overlappingConnections);
+                    })
+                    .on('mouseout', function() {
+                        d3.select(this).style('opacity', 0.9); // Back to default transparency
+                        hideTooltip_{{ str_replace('-', '_', $span->id) }}();
+                    });
+            } else {
+                // For other connection types, draw horizontal bars as before
+                const endYear = connection.end_year || new Date().getFullYear();
+                const width = xScale(endYear) - xScale(connection.start_year);
+                
+                svg.append('rect')
+                    .attr('class', 'timeline-bar')
+                    .attr('x', xScale(connection.start_year))
+                    .attr('y', swimlaneY + 2) // Small margin from swimlane edge
+                    .attr('width', width)
+                    .attr('height', swimlaneHeight - 4) // Leave small margin
+                    .attr('fill', getConnectionColor(connectionType))
+                    .attr('stroke', 'white') // White border
+                    .attr('stroke-width', 1) // 1px border width
+                    .attr('rx', 2)
+                    .attr('ry', 2)
+                    .style('opacity', 0.6) // More transparent default opacity
+                    .on('mouseover', function(event) {
+                        // Find all overlapping connections
+                        const overlappingConnections = findOverlappingConnections_{{ str_replace('-', '_', $span->id) }}(connection, connections);
+                        d3.select(this).style('opacity', 0.9); // Less transparent on hover
+                        showTooltip_{{ str_replace('-', '_', $span->id) }}(event, overlappingConnections);
+                    })
+                    .on('mouseout', function() {
+                        d3.select(this).style('opacity', 0.6); // Back to default transparency
+                        hideTooltip_{{ str_replace('-', '_', $span->id) }}();
+                    });
+            }
         });
 
     // Add interactive background for year-based tooltips

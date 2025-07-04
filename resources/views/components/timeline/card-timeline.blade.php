@@ -163,21 +163,58 @@ function renderCardTimeline_{{ str_replace('-', '_', $span->id) }}_{{ $container
     svg.selectAll('.connection-timeline')
         .data(connections)
         .enter()
-        .append('rect')
-        .attr('class', 'connection-timeline')
-        .attr('x', d => xScale(d.start_year))
-        .attr('y', margin.top + 2)
-        .attr('width', d => {
-            const endYear = d.end_year || new Date().getFullYear();
-            return Math.max(1, xScale(endYear) - xScale(d.start_year)); // Minimum 1px width
-        })
-        .attr('height', height - margin.top - margin.bottom - 4)
-        .attr('fill', d => getConnectionColor(d.type_id))
-        .attr('stroke', 'white')
-        .attr('stroke-width', 0.5)
-        .attr('rx', 1)
-        .attr('ry', 1)
-        .style('opacity', 0.6);
+        .each(function(d, i) {
+            const connection = d;
+            const connectionType = connection.type_id;
+            
+            if (connectionType === 'created') {
+                // For "created" connections, draw a vertical line with a circle
+                const x = xScale(connection.start_year);
+                const y1 = margin.top;
+                const y2 = height - margin.bottom;
+                const circleY = (y1 + y2) / 2; // Center the circle vertically
+                const circleRadius = 3;
+                
+                // Draw vertical line
+                svg.append('line')
+                    .attr('class', 'connection-timeline-moment')
+                    .attr('x1', x)
+                    .attr('x2', x)
+                    .attr('y1', y1)
+                    .attr('y2', y2)
+                    .attr('stroke', getConnectionColor(connectionType))
+                    .attr('stroke-width', 2)
+                    .style('opacity', 0.8);
+                
+                // Draw circle in the middle
+                svg.append('circle')
+                    .attr('class', 'connection-timeline-moment-circle')
+                    .attr('cx', x)
+                    .attr('cy', circleY)
+                    .attr('r', circleRadius)
+                    .attr('fill', getConnectionColor(connectionType))
+                    .attr('stroke', 'white')
+                    .attr('stroke-width', 1)
+                    .style('opacity', 0.9);
+            } else {
+                // For other connection types, draw horizontal bars as before
+                const endYear = connection.end_year || new Date().getFullYear();
+                const width = Math.max(1, xScale(endYear) - xScale(connection.start_year)); // Minimum 1px width
+                
+                svg.append('rect')
+                    .attr('class', 'connection-timeline')
+                    .attr('x', xScale(connection.start_year))
+                    .attr('y', margin.top + 2)
+                    .attr('width', width)
+                    .attr('height', height - margin.top - margin.bottom - 4)
+                    .attr('fill', getConnectionColor(connectionType))
+                    .attr('stroke', 'white')
+                    .attr('stroke-width', 0.5)
+                    .attr('rx', 1)
+                    .attr('ry', 1)
+                    .style('opacity', 0.6);
+            }
+        });
 
     // Draw current year indicator (matching global timescale)
     const currentYear = new Date().getFullYear();

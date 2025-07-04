@@ -336,6 +336,7 @@ Route::middleware('web')->group(function () {
     // Sets routes with access control
     Route::middleware('sets.access')->group(function () {
         Route::get('/sets', [\App\Http\Controllers\SetsController::class, 'index'])->name('sets.index');
+        Route::get('/sets/modal-data', [\App\Http\Controllers\SetsController::class, 'getModalData'])->name('sets.modal-data');
         Route::get('/sets/{set}', [\App\Http\Controllers\SetsController::class, 'show'])->name('sets.show');
         Route::get('/api/sets/containing/{item}', [\App\Http\Controllers\SetsController::class, 'getContainingSets'])->name('sets.containing');
         Route::get('/api/sets/{set}/membership/{item}', [\App\Http\Controllers\SetsController::class, 'checkMembership'])->name('sets.membership');
@@ -364,7 +365,6 @@ Route::middleware('web')->group(function () {
 
         // Sets routes (authenticated only)
         Route::post('/sets', [\App\Http\Controllers\SetsController::class, 'store'])->name('sets.store');
-        Route::get('/sets/modal-data', [\App\Http\Controllers\SetsController::class, 'getModalData'])->name('sets.modal-data');
         Route::post('/sets/{set}/add-item', [\App\Http\Controllers\SetsController::class, 'addItem'])->name('sets.add-item');
         Route::delete('/sets/{set}/remove-item', [\App\Http\Controllers\SetsController::class, 'removeItem'])->name('sets.remove-item');
         // Sets modal routes

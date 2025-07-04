@@ -1095,6 +1095,9 @@ class SpanController extends Controller
                 ->orderBy('name')
                 ->get();
 
+            // Collect example spans for each type
+            $exampleSpans = [];
+
             // For each span type, get up to 5 example spans
             foreach ($spanTypes as $spanType) {
                 $query = Span::query()
@@ -1134,10 +1137,10 @@ class SpanController extends Controller
                     }
                 }
 
-                $spanType->exampleSpans = $query->limit(5)->get();
+                $exampleSpans[$spanType->type_id] = $query->limit(5)->get();
             }
 
-            return view('spans.types', compact('spanTypes'));
+            return view('spans.types', compact('spanTypes', 'exampleSpans'));
         } catch (\Exception $e) {
             // Log the error
             \Illuminate\Support\Facades\Log::error('Error in spans types', [
@@ -1290,6 +1293,9 @@ class SpanController extends Controller
                 ->orderBy('subtype')
                 ->get();
 
+            // Collect example spans for each subtype
+            $subtypeExamples = [];
+
             // For each subtype, get up to 3 example spans
             foreach ($subtypes as $subtype) {
                 $exampleQuery = Span::query()
@@ -1322,10 +1328,10 @@ class SpanController extends Controller
                     }
                 }
 
-                $subtype->exampleSpans = $exampleQuery->limit(3)->get();
+                $subtypeExamples[$subtype->subtype] = $exampleQuery->limit(3)->get();
             }
 
-            return view('spans.type-subtypes', compact('spanType', 'subtypes'));
+            return view('spans.type-subtypes', compact('spanType', 'subtypes', 'subtypeExamples'));
         } catch (\Exception $e) {
             \Illuminate\Support\Facades\Log::error('Error in span type subtypes', [
                 'message' => $e->getMessage(),

@@ -37,7 +37,7 @@
     <div class="row">
         @foreach($spanTypes as $spanType)
             <div class="col-md-6 col-lg-4 mb-4">
-                <x-spans.display.type-card :spanType="$spanType" />
+                <x-spans.display.type-card :spanType="$spanType" :exampleSpans="$exampleSpans[$spanType->type_id] ?? collect()" />
             </div>
         @endforeach
     </div>

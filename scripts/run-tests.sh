@@ -23,10 +23,38 @@ if ! docker ps | grep -q "$CONTAINER_NAME"; then
     exit 1
 fi
 
-# Pass all script arguments to PHPUnit
-PHPUNIT_ARGS="$*"
-if [ -n "$PHPUNIT_ARGS" ]; then
-    log_message "Running tests with arguments: $PHPUNIT_ARGS"
+# Process arguments and convert common options to PHPUnit equivalents
+PHPUNIT_ARGS=()
+for arg in "$@"; do
+    case "$arg" in
+        --verbose)
+            # Convert --verbose to PHPUnit's --debug option
+            PHPUNIT_ARGS+=("--debug")
+            ;;
+        --help|-h)
+            # Show help for the script
+            echo "Usage: $0 [options]"
+            echo ""
+            echo "Options:"
+            echo "  --verbose          Enable verbose output (converts to --debug)"
+            echo "  --filter=<pattern> Filter which tests to run"
+            echo "  --group=<name>     Only run tests from the specified group(s)"
+            echo "  --stop-on-failure  Stop after first failure"
+            echo "  --help, -h         Show this help message"
+            echo ""
+            echo "All other arguments are passed directly to PHPUnit."
+            echo "Run 'docker exec -it lifespan-test bash -c \"cd /var/www && php ./vendor/bin/phpunit --help\"' for full PHPUnit options."
+            exit 0
+            ;;
+        *)
+            # Pass all other arguments through unchanged
+            PHPUNIT_ARGS+=("$arg")
+            ;;
+    esac
+done
+
+if [ ${#PHPUNIT_ARGS[@]} -gt 0 ]; then
+    log_message "Running tests with arguments: ${PHPUNIT_ARGS[*]}"
 else
     log_message "Running all tests"
 fi
@@ -39,6 +67,7 @@ log_message "Starting test run with ID: $TEST_RUN_ID"
 log_message "Using test database: $TEST_DATABASE"
 
 # Run the tests with database isolation
+# Pass arguments as separate parameters to preserve them properly
 docker exec -it "$CONTAINER_NAME" bash -c "cd /var/www && \
     XDEBUG_MODE=coverage \
     php artisan config:clear && \
@@ -47,7 +76,7 @@ docker exec -it "$CONTAINER_NAME" bash -c "cd /var/www && \
     export DB_CONNECTION=pgsql && \
     export DB_DATABASE=$TEST_DATABASE && \
     php artisan migrate:fresh --env=testing && \
-    php -d memory_limit=1024M ./vendor/bin/phpunit --testdox --colors=always $PHPUNIT_ARGS"
+    php -d memory_limit=1024M ./vendor/bin/phpunit --testdox --colors=always ${PHPUNIT_ARGS[*]}"
 
 TEST_EXIT_CODE=$?
 

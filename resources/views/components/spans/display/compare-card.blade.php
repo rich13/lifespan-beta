@@ -297,22 +297,61 @@ function renderMiniComparisonTimeline_{{ str_replace('-', '_', $span->id) }}(dat
         svg.selectAll('.mini-timeline-bar-1')
             .data(data1.connections)
             .enter()
-            .append('rect')
-            .attr('class', 'mini-timeline-bar-1')
-            .attr('x', d => xScale(d.start_year))
-            .attr('y', swimlane1Y + 2)
-            .attr('width', d => {
-                const endYear = d.end_year || new Date().getFullYear();
-                return xScale(endYear) - xScale(d.start_year);
-            })
-            .attr('height', swimlaneHeight - 4)
-            .attr('fill', d => getConnectionColor(d.type_id))
-            .attr('stroke', 'white')
-            .attr('stroke-width', 0.5)
-            .attr('rx', 1)
-            .attr('ry', 1)
-            .style('opacity', 0.6)
-            .style('pointer-events', 'none');
+            .each(function(d, i) {
+                const connection = d;
+                const connectionType = connection.type_id;
+                
+                if (connectionType === 'created') {
+                    // For "created" connections, draw a vertical line with a circle
+                    const x = xScale(connection.start_year);
+                    const y1 = swimlane1Y;
+                    const y2 = swimlane1Y + swimlaneHeight;
+                    const circleY = (y1 + y2) / 2; // Center the circle vertically
+                    const circleRadius = 2;
+                    
+                    // Draw vertical line
+                    svg.append('line')
+                        .attr('class', 'mini-timeline-moment-1')
+                        .attr('x1', x)
+                        .attr('x2', x)
+                        .attr('y1', y1)
+                        .attr('y2', y2)
+                        .attr('stroke', getConnectionColor(connectionType))
+                        .attr('stroke-width', 1.5)
+                        .style('opacity', 0.8)
+                        .style('pointer-events', 'none');
+                    
+                    // Draw circle in the middle
+                    svg.append('circle')
+                        .attr('class', 'mini-timeline-moment-circle-1')
+                        .attr('cx', x)
+                        .attr('cy', circleY)
+                        .attr('r', circleRadius)
+                        .attr('fill', getConnectionColor(connectionType))
+                        .attr('stroke', 'white')
+                        .attr('stroke-width', 0.5)
+                        .style('opacity', 0.9)
+                        .style('pointer-events', 'none');
+                } else {
+                    // For other connection types, draw horizontal bars as before
+                    const endYear = connection.end_year || new Date().getFullYear();
+                    const width = xScale(endYear) - xScale(connection.start_year);
+                    
+                    svg.append('rect')
+                        .attr('class', 'mini-timeline-bar-1')
+                        .attr('x', xScale(connection.start_year))
+                        .attr('y', swimlane1Y + 2)
+                        .attr('width', width)
+                        .attr('height', swimlaneHeight - 4)
+                        .attr('fill', getConnectionColor(connectionType))
+                        .attr('stroke', 'white')
+                        .attr('stroke-width', 0.5)
+                        .attr('rx', 1)
+                        .attr('ry', 1)
+                        .style('opacity', 0.6)
+                        .style('pointer-events', 'none');
+                }
+            });
     }
 
     // Create timeline bars for span 2 (the user)
@@ -320,22 +359,61 @@ function renderMiniComparisonTimeline_{{ str_replace('-', '_', $span->id) }}(dat
         svg.selectAll('.mini-timeline-bar-2')
             .data(data2.connections)
             .enter()
-            .append('rect')
-            .attr('class', 'mini-timeline-bar-2')
-            .attr('x', d => xScale(d.start_year))
-            .attr('y', swimlane2Y + 2)
-            .attr('width', d => {
-                const endYear = d.end_year || new Date().getFullYear();
-                return xScale(endYear) - xScale(d.start_year);
-            })
-            .attr('height', swimlaneHeight - 4)
-            .attr('fill', d => getConnectionColor(d.type_id))
-            .attr('stroke', 'white')
-            .attr('stroke-width', 0.5)
-            .attr('rx', 1)
-            .attr('ry', 1)
-            .style('opacity', 0.6)
-            .style('pointer-events', 'none');
+            .each(function(d, i) {
+                const connection = d;
+                const connectionType = connection.type_id;
+                
+                if (connectionType === 'created') {
+                    // For "created" connections, draw a vertical line with a circle
+                    const x = xScale(connection.start_year);
+                    const y1 = swimlane2Y;
+                    const y2 = swimlane2Y + swimlaneHeight;
+                    const circleY = (y1 + y2) / 2; // Center the circle vertically
+                    const circleRadius = 2;
+                    
+                    // Draw vertical line
+                    svg.append('line')
+                        .attr('class', 'mini-timeline-moment-2')
+                        .attr('x1', x)
+                        .attr('x2', x)
+                        .attr('y1', y1)
+                        .attr('y2', y2)
+                        .attr('stroke', getConnectionColor(connectionType))
+                        .attr('stroke-width', 1.5)
+                        .style('opacity', 0.8)
+                        .style('pointer-events', 'none');
+                    
+                    // Draw circle in the middle
+                    svg.append('circle')
+                        .attr('class', 'mini-timeline-moment-circle-2')
+                        .attr('cx', x)
+                        .attr('cy', circleY)
+                        .attr('r', circleRadius)
+                        .attr('fill', getConnectionColor(connectionType))
+                        .attr('stroke', 'white')
+                        .attr('stroke-width', 0.5)
+                        .style('opacity', 0.9)
+                        .style('pointer-events', 'none');
+                } else {
+                    // For other connection types, draw horizontal bars as before
+                    const endYear = connection.end_year || new Date().getFullYear();
+                    const width = xScale(endYear) - xScale(connection.start_year);
+                    
+                    svg.append('rect')
+                        .attr('class', 'mini-timeline-bar-2')
+                        .attr('x', xScale(connection.start_year))
+                        .attr('y', swimlane2Y + 2)
+                        .attr('width', width)
+                        .attr('height', swimlaneHeight - 4)
+                        .attr('fill', getConnectionColor(connectionType))
+                        .attr('stroke', 'white')
+                        .attr('stroke-width', 0.5)
+                        .attr('rx', 1)
+                        .attr('ry', 1)
+                        .style('opacity', 0.6)
+                        .style('pointer-events', 'none');
+                }
+            });
     }
 }
 

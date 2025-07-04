@@ -1,4 +1,4 @@
-@props(['spanType'])
+@props(['spanType', 'exampleSpans'])
 
 <div class="card h-100">
     <div class="card-header d-flex align-items-center gap-2">
@@ -17,16 +17,16 @@
             <p class="card-text text-muted small mb-3">{{ $spanType->description }}</p>
         @endif
         
-        @if($spanType->exampleSpans && $spanType->exampleSpans->count() > 0)
+        @if($exampleSpans && $exampleSpans->count() > 0)
             <div class="spans-list">
-                @foreach($spanType->exampleSpans as $span)
+                @foreach($exampleSpans as $span)
                     <div class="position-relative">
                         <x-spans.display.interactive-card :span="$span" />
                     </div>
                 @endforeach
             </div>
             
-            @if($spanType->exampleSpans->count() >= 5)
+            @if($exampleSpans->count() >= 5)
                 <div class="text-center mt-3">
                     <a href="{{ route('spans.types.show', $spanType->type_id) }}" 
                        class="btn btn-sm btn-outline-{{ $spanType->type_id }}">

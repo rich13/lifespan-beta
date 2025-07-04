@@ -86,7 +86,7 @@
         
         <div class="row">
             <div class="col-12">
-                {{ $spans->appends(request()->query())->links() }}
+                <x-pagination :paginator="$spans->appends(request()->query())" />
             </div>
         </div>
     @else

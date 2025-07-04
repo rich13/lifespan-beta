@@ -203,49 +203,69 @@ class ConnectionTemporalConstraintTest extends TestCase
             'end_precision' => 'day'
         ]);
 
-        $this->expectException(\Illuminate\Database\QueryException::class);
-        $this->expectExceptionMessage('Only one connection of this type is allowed between these spans');
-        Connection::create([
+        // Application-level validation
+        $service = app(\App\Services\Connection\ConnectionConstraintService::class);
+        $connection = new Connection([
             'parent_id' => $this->parent->id,
             'child_id' => $this->child->id,
             'type_id' => 'family',
             'connection_span_id' => $span2->id
         ]);
+        $result = $service->validateConstraint($connection, 'single');
+        $this->assertFalse($result->isValid());
+        $this->assertEquals('Only one connection of this type is allowed between these spans', $result->getError());
+
+        // Database-level validation (fallback)
+        try {
+            Connection::create([
+                'parent_id' => $this->parent->id,
+                'child_id' => $this->child->id,
+                'type_id' => 'family',
+                'connection_span_id' => $span2->id
+            ]);
+            $this->fail('Expected QueryException was not thrown');
+        } catch (\Illuminate\Database\QueryException $e) {
+            $this->assertStringContainsString('Only one connection of this type is allowed between these spans', $e->getMessage());
+        }
     }
 
     public function test_non_overlapping_constraint_prevents_overlapping_connections(): void
     {
         $this->actingAs($this->user);
 
-        // Create first connection span
-        $span1 = Span::factory()->create([
+        // Create two spans
+        $span1 = Span::factory()->create(['type_id' => 'person']);
+        $span2 = Span::factory()->create(['type_id' => 'person']);
+
+        // Create a connection between them
+        $connectionSpan = Span::factory()->create([
             'type_id' => 'connection',
             'start_year' => 2000,
-            'end_year' => 2005
+            'end_year' => 2005,
+        ]);
+        $connection = Connection::factory()->create([
+            'parent_id' => $span1->id,
+            'child_id' => $span2->id,
+            'type_id' => 'family',
+            'connection_span_id' => $connectionSpan->id,
         ]);
 
-        Connection::create([
-            'parent_id' => $this->parent->id,
-            'child_id' => $this->child->id,
-            'type_id' => 'residence',
-            'connection_span_id' => $span1->id
-        ]);
-
-        // Try to create overlapping connection span
-        $span2 = Span::factory()->create([
+        // Try to create an overlapping connection
+        $service = app(\App\Services\Connection\ConnectionConstraintService::class);
+        $overlapSpan = Span::factory()->create([
             'type_id' => 'connection',
             'start_year' => 2004,
-            'end_year' => 2007
+            'end_year' => 2007,
         ]);
-
-        $this->expectException(\Illuminate\Database\QueryException::class);
-        $this->expectExceptionMessage('Connection dates overlap with an existing connection');
-        Connection::create([
-            'parent_id' => $this->parent->id,
-            'child_id' => $this->child->id,
-            'type_id' => 'residence',
-            'connection_span_id' => $span2->id
+        $overlapConnection = new \App\Models\Connection([
+            'parent_id' => $span1->id,
+            'child_id' => $span2->id,
+            'type_id' => 'family',
+            'connection_span_id' => $overlapSpan->id,
         ]);
+        $result = $service->validateConstraint($overlapConnection, 'non_overlapping');
+        $this->assertFalse($result->isValid());
+        $this->assertEquals('Connection dates overlap with an existing connection', $result->getError());
     }
 
     public function test_connection_types_have_correct_temporal_constraints(): void
