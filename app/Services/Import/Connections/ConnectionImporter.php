@@ -146,6 +146,9 @@ class ConnectionImporter
             // If connection exists, update its connection span with new dates/metadata
             $connectionSpan = $existingConnection->connectionSpan;
             if ($dates || $metadata) {
+                // Update metadata (connection_type is now handled as a root field, not in metadata)
+                $updatedMetadata = array_merge($connectionSpan->metadata ?? [], $metadata ?? []);
+                
                 $connectionSpan->update([
                     'start_year' => $dates['start_year'] ?? $connectionSpan->start_year,
                     'start_month' => $dates['start_month'] ?? $connectionSpan->start_month,
@@ -153,7 +156,7 @@ class ConnectionImporter
                     'end_year' => $dates['end_year'] ?? $connectionSpan->end_year,
                     'end_month' => $dates['end_month'] ?? $connectionSpan->end_month,
                     'end_day' => $dates['end_day'] ?? $connectionSpan->end_day,
-                    'metadata' => array_merge($connectionSpan->metadata ?? [], $metadata ?? []),
+                    'metadata' => $updatedMetadata,
                     'updater_id' => $this->user->id,
                     'state' => 'placeholder'  // Always use placeholder state
                 ]);
@@ -168,6 +171,10 @@ class ConnectionImporter
             'child' => $child->name,
             'type' => $connectionType
         ]);
+        
+        // Use metadata as provided (connection_type is now handled as a root field, not in metadata)
+        $connectionMetadata = $metadata ?? [];
+        
         $connectionSpan = Span::create([
             'name' => $this->generateConnectionName($parent, $child, $connectionType),
             'type_id' => 'connection',
@@ -180,7 +187,7 @@ class ConnectionImporter
             'owner_id' => $this->user->id,
             'updater_id' => $this->user->id,
             'state' => 'placeholder',  // Always start as placeholder
-            'metadata' => $metadata
+            'metadata' => $connectionMetadata
         ]);
         Log::info('Created connection span', [
             'connection_span' => $connectionSpan->toArray(),

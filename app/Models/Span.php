@@ -559,6 +559,25 @@ class Span extends Model
     }
 
     /**
+     * Get the subtype of the span
+     * This is a semantic accessor for the subtype metadata field
+     * For connection spans, returns the connection type
+     *
+     * @return string|null
+     */
+    public function getSubtypeAttribute(): ?string
+    {
+        // For connection spans, get the connection type from the related connection
+        if ($this->type_id === 'connection') {
+            $connection = \App\Models\Connection::where('connection_span_id', $this->id)->first();
+            return $connection ? $connection->type_id : null;
+        }
+        
+        // For other spans, get the subtype from metadata
+        return $this->getMeta('subtype');
+    }
+
+    /**
      * Get the formatted start date
      */
     public function getFormattedStartDateAttribute(): ?string

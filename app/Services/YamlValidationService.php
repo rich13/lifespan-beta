@@ -90,6 +90,7 @@ class YamlValidationService
             'name' => ['type' => 'string', 'required' => true],
             'slug' => ['type' => 'string', 'required' => false],
             'type' => ['type' => 'string', 'required' => true],
+            'connection_type' => ['type' => 'string', 'required' => false], // For connection spans
             'state' => ['type' => 'string', 'required' => false],
             'start' => ['type' => 'string|integer', 'required' => false],
             'end' => ['type' => 'string|integer|null', 'required' => false],
@@ -164,6 +165,7 @@ class YamlValidationService
             'name' => ['type' => 'string', 'required' => true],
             'id' => ['type' => 'string', 'required' => false],
             'type' => ['type' => 'string', 'required' => true],
+            'connection_type' => ['type' => 'string', 'required' => false], // For connection spans
             'connection_id' => ['type' => 'string', 'required' => false],
             'start_date' => ['type' => 'string|integer|null', 'required' => false],
             'end_date' => ['type' => 'string|integer|null', 'required' => false],

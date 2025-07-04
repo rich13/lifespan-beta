@@ -121,6 +121,11 @@ class YamlSpanService
             'owner'
         ]);
 
+        // Special handling for connection spans
+        if ($span->type_id === 'connection') {
+            return $this->connectionSpanToArray($span);
+        }
+
         $data = [
             'name' => $span->name,
             'slug' => $span->slug,
@@ -268,6 +273,77 @@ class YamlSpanService
             $data['connections'] = $connections;
         }
 
+        return $data;
+    }
+
+    /**
+     * Convert a connection span to array format (for YAML conversion)
+     */
+    private function connectionSpanToArray(Span $span): array
+    {
+        // For connection spans, we need to find the related connection to get the connection type
+        $connection = null;
+        
+        // Check if this span is a connection span for any connection
+        $connection = \App\Models\Connection::where('connection_span_id', $span->id)->first();
+        
+        if (!$connection) {
+            // If no connection found, treat as regular span but remove connection_type from metadata
+            $metadata = $span->metadata ?? [];
+            unset($metadata['connection_type']);
+            
+            $data = [
+                'name' => $span->name,
+                'slug' => $span->slug,
+                'type' => $span->type_id,
+                'state' => $span->state,
+                'description' => $span->description,
+                'notes' => $span->notes,
+                'metadata' => $metadata,
+                'sources' => $span->sources,
+                'access_level' => $span->access_level,
+            ];
+            
+            // Add start and end as strings if present
+            $start = $span->getFormattedStartDateAttribute();
+            if ($start) {
+                $data['start'] = $start;
+            }
+            $end = $span->getFormattedEndDateAttribute();
+            if ($end) {
+                $data['end'] = $end;
+            }
+            
+            return $data;
+        }
+        
+        // For connection spans with a related connection, add connection_type as a root field
+        $metadata = $span->metadata ?? [];
+        unset($metadata['connection_type']); // Remove from metadata since it's now a root field
+        
+        $data = [
+            'name' => $span->name,
+            'slug' => $span->slug,
+            'type' => $span->type_id,
+            'connection_type' => $connection->type_id, // Add as root field
+            'state' => $span->state,
+            'description' => $span->description,
+            'notes' => $span->notes,
+            'metadata' => $metadata,
+            'sources' => $span->sources,
+            'access_level' => $span->access_level,
+        ];
+        
+        // Add start and end as strings if present
+        $start = $span->getFormattedStartDateAttribute();
+        if ($start) {
+            $data['start'] = $start;
+        }
+        $end = $span->getFormattedEndDateAttribute();
+        if ($end) {
+            $data['end'] = $end;
+        }
+        
         return $data;
     }
 
@@ -517,6 +593,7 @@ class YamlSpanService
             'name' => ['type' => 'string', 'required' => true],
             'id' => ['type' => 'string', 'required' => false],
             'type' => ['type' => 'string', 'required' => true],
+            'connection_type' => ['type' => 'string', 'required' => false], // For connection spans
             'connection_id' => ['type' => 'string', 'required' => false],
             'start_date' => ['type' => 'string', 'required' => false],
             'end_date' => ['type' => 'string', 'required' => false],
@@ -1326,7 +1403,9 @@ class YamlSpanService
         }
         
         if ($metadata) {
-            $updateData['metadata'] = array_merge($connectionSpan->metadata ?? [], $metadata);
+            // Update metadata (connection_type is now handled as a root field, not in metadata)
+            $updatedMetadata = array_merge($connectionSpan->metadata ?? [], $metadata);
+            $updateData['metadata'] = $updatedMetadata;
         }
         
         $connectionSpan->update($updateData);
