@@ -71,6 +71,7 @@ class Kernel extends HttpKernel
         'verified' => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
         'admin' => \App\Http\Middleware\AdminMiddleware::class,
         'span.access' => \App\Http\Middleware\SpanAccessMiddleware::class,
+        'sets.access' => \App\Http\Middleware\SetsAccessMiddleware::class,
         'user.switcher' => \App\Http\Middleware\UserSwitcherMiddleware::class,
     ];
 }

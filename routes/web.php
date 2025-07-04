@@ -333,6 +333,14 @@ Route::middleware('web')->group(function () {
         Route::post('/yaml-create', [\App\Http\Controllers\SpanController::class, 'createFromYaml'])->name('spans.yaml-create');
     });
 
+    // Sets routes with access control
+    Route::middleware('sets.access')->group(function () {
+        Route::get('/sets', [\App\Http\Controllers\SetsController::class, 'index'])->name('sets.index');
+        Route::get('/sets/{set}', [\App\Http\Controllers\SetsController::class, 'show'])->name('sets.show');
+        Route::get('/api/sets/containing/{item}', [\App\Http\Controllers\SetsController::class, 'getContainingSets'])->name('sets.containing');
+        Route::get('/api/sets/{set}/membership/{item}', [\App\Http\Controllers\SetsController::class, 'checkMembership'])->name('sets.membership');
+    });
+
     // Protected routes
     Route::middleware('auth')->group(function () {
         // Connection Management (for regular users) - must be before wildcard routes
@@ -354,7 +362,13 @@ Route::middleware('web')->group(function () {
         Route::get('/friends/data', [FriendsController::class, 'data'])->name('friends.data');
         Route::post('/api/friends/connections', [FriendsController::class, 'createConnection'])->name('friends.connections.create');
 
-
+        // Sets routes (authenticated only)
+        Route::post('/sets', [\App\Http\Controllers\SetsController::class, 'store'])->name('sets.store');
+        Route::get('/sets/modal-data', [\App\Http\Controllers\SetsController::class, 'getModalData'])->name('sets.modal-data');
+        Route::post('/sets/{set}/add-item', [\App\Http\Controllers\SetsController::class, 'addItem'])->name('sets.add-item');
+        Route::delete('/sets/{set}/remove-item', [\App\Http\Controllers\SetsController::class, 'removeItem'])->name('sets.remove-item');
+        // Sets modal routes
+        Route::post('/sets/{set}/items', [\App\Http\Controllers\SetsController::class, 'toggleItem'])->name('sets.toggle-item');
 
         // Admin routes
         Route::middleware('admin')->prefix('admin')->name('admin.')->group(function () {
@@ -496,6 +510,12 @@ Route::middleware('web')->group(function () {
                 ->name('tools.merge-spans');
             Route::get('/tools/span-details', [App\Http\Controllers\Admin\ToolsController::class, 'getSpanDetails'])
                 ->name('tools.span-details');
+            Route::post('/tools/create-desert-island-discs', [App\Http\Controllers\Admin\ToolsController::class, 'createDesertIslandDiscs'])
+                ->name('tools.create-desert-island-discs');
+            Route::get('/tools/make-things-public', [App\Http\Controllers\Admin\ToolsController::class, 'showMakeThingsPublic'])
+                ->name('tools.make-things-public');
+            Route::post('/tools/execute-make-things-public', [App\Http\Controllers\Admin\ToolsController::class, 'executeMakeThingsPublic'])
+                ->name('tools.execute-make-things-public');
 
             // Data Export
             Route::prefix('data-export')->name('data-export.')->group(function () {
