@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\DB;
 use App\Models\SpanType;
 use App\Models\ConnectionType;
 use App\Services\YamlSpanService;
+use App\Services\ConfigurableStoryGeneratorService;
 use InvalidArgumentException;
 use App\Models\Connection;
 use App\Models\ConnectionType as ConnectionTypeModel;
@@ -1485,5 +1486,50 @@ class SpanController extends Controller
                 return back()->withErrors([$createResult['message']])->withInput();
             }
         }
+    }
+
+    /**
+     * Display the version history for a span.
+     */
+    public function history(Request $request, Span $span): View
+    {
+        $versions = $span->versions()->with('changedBy')->orderByDesc('version_number')->get();
+        return view('spans.history', compact('span', 'versions'));
+    }
+
+    /**
+     * Display a specific version of a span with changes from the previous version.
+     */
+    public function showVersion(Request $request, Span $span, int $version): View
+    {
+        $versionModel = $span->getVersion($version);
+        
+        if (!$versionModel) {
+            abort(404, 'Version not found');
+        }
+
+        // Get the previous version for comparison
+        $previousVersion = $span->versions()
+            ->where('version_number', '<', $version)
+            ->orderByDesc('version_number')
+            ->first();
+
+        $changes = [];
+        if ($previousVersion) {
+            $changes = $versionModel->getDiffFrom($previousVersion);
+        }
+
+        return view('spans.version-show', compact('span', 'versionModel', 'previousVersion', 'changes'));
+    }
+
+    /**
+     * Display a story for a span.
+     */
+    public function story(Request $request, Span $span): View
+    {
+        $storyGenerator = app(ConfigurableStoryGeneratorService::class);
+        $story = $storyGenerator->generateStory($span);
+
+        return view('spans.story', compact('span', 'story'));
     }
 }

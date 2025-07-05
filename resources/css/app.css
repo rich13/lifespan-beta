@@ -42,3 +42,45 @@
     max-height: 90vh;
     overflow-y: auto;
 }
+
+/* Story card styles */
+.story-content {
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.story-content p {
+    margin-bottom: 0.75rem;
+}
+
+.story-content p:last-child {
+    margin-bottom: 0;
+}
+
+.story-content a {
+    color: var(--bs-primary);
+    text-decoration: none;
+}
+
+.story-content a:hover {
+    text-decoration: underline;
+}
+
+/* Custom scrollbar for story content */
+.story-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.story-content::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+.story-content::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+}
+
+.story-content::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}

@@ -1,7 +1,25 @@
 @extends('layouts.app')
 
 @section('page_title')
-    Editing: <a href="{{ route('spans.show', $span) }}" class="text-primary text-decoration-none">{{ $span ? $span->name : 'New Span' }}</a>
+    <x-breadcrumb :items="[
+    [
+            'text' => 'Spans',
+            'url' => route('spans.index'),
+            'icon' => 'view',
+            'icon_category' => 'action'
+        ],
+        [
+            'text' => $span ? $span->name : 'New Span',
+            'url' => route('spans.show', $span),
+            'icon' => 'view',
+            'icon_category' => 'action'
+        ],
+        [
+            'text' => 'Edit',
+            'icon' => $span->type_id,
+            'icon_category' => 'span'
+        ]
+    ]" />
 @endsection
 
 @section('page_tools')

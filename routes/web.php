@@ -330,10 +330,15 @@ Route::middleware('web')->group(function () {
         Route::middleware('span.access')->group(function () {
             Route::get('/', [SpanController::class, 'index'])->name('spans.index');
             Route::get('/{span}', [SpanController::class, 'show'])->name('spans.show');
+            Route::get('/{span}/story', [SpanController::class, 'story'])->name('spans.story');
         });
 
         // New POST route for creating a new span from YAML
         Route::post('/yaml-create', [\App\Http\Controllers\SpanController::class, 'createFromYaml'])->name('spans.yaml-create');
+
+        // Span version history
+        Route::get('/{span}/history', [\App\Http\Controllers\SpanController::class, 'history'])->name('spans.history');
+        Route::get('/{span}/history/{version}', [\App\Http\Controllers\SpanController::class, 'showVersion'])->name('spans.history.version');
     });
 
     // Sets routes with access control

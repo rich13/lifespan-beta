@@ -16,6 +16,7 @@
         ],
         [
             'text' => $span->getDisplayTitle(),
+            'url' => route('spans.show', $span),
             'icon' => $span->type_id,
             'icon_category' => 'span'
         ]
@@ -41,19 +42,22 @@
                     @method('DELETE')
                 </form>    
                 <a href="#" class="btn btn-sm btn-outline-danger" id="delete-span-btn">
-                    <i class="bi bi-trash me-1"></i>
+                    <i class="bi bi-trash me-1"></i> Delete
                 </a>
                 
             @endcan
         @endif
-        
-        <!-- Tools Button -->
-        <x-tools-button :model="$span" />
+
+        <a href="{{ route('spans.history', $span) }}" class="btn btn-sm btn-outline-info">
+            <i class="bi bi-clock-history me-1"></i> History
+        </a>
+
     @endauth
 @endsection
 
 @section('content')
     <div data-span-id="{{ $span->id }}" class="container-fluid">
+
         <!-- Timeline Cards -->
         @php
             $showOriginalTimeline = false;
@@ -89,8 +93,8 @@
             <div class="col-md-8">
                 <!-- Main Content -->
                 <div class="row">
-                    <div class="col-md-12">
-                        <x-spans.partials.details :span="$span" />
+                    <div class="col-12">
+                        <x-spans.partials.story :span="$span" />
                     </div>
                 </div>
                 <x-spans.partials.connections :span="$span" />
