@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Builder;
 use App\Traits\HasRelationshipAccess;
+use App\Traits\Versionable;
 
 /**
  * Represents a connection between two spans
@@ -26,7 +27,7 @@ use App\Traits\HasRelationshipAccess;
  */
 class Connection extends Model
 {
-    use HasFactory, HasUuids, HasRelationshipAccess;
+    use HasFactory, HasUuids, HasRelationshipAccess, Versionable;
 
     /**
      * The attributes that are mass assignable.

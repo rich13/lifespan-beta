@@ -75,7 +75,7 @@ class SpanFactory extends Factory
             'metadata' => [],
             'start_precision' => $startPrecision,
             'end_precision' => $endPrecision,
-            'slug' => Str::slug(fake()->name()),
+            'slug' => null, // Don't generate a slug by default
             'access_level' => 'public',
         ];
     }

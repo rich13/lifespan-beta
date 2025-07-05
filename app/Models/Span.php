@@ -17,6 +17,7 @@ use App\Models\Traits\HasSpanCapabilities;
 use App\Models\Traits\HasFamilyCapabilities;
 use App\Models\Traits\HasGeospatialCapabilities;
 use App\Models\Traits\HasBandCapabilities;
+use App\Traits\Versionable;
 use App\Models\User;
 use App\Models\Connection;
 use App\Services\SetFilterService;
@@ -65,7 +66,7 @@ use App\Services\SetFilterService;
  */
 class Span extends Model
 {
-    use HasUuids, HasFactory, HasSpanCapabilities, HasFamilyCapabilities, HasGeospatialCapabilities, HasBandCapabilities;
+    use HasUuids, HasFactory, HasSpanCapabilities, HasFamilyCapabilities, HasGeospatialCapabilities, HasBandCapabilities, Versionable;
 
     /**
      * The attributes that are mass assignable.
