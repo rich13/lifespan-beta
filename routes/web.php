@@ -552,6 +552,14 @@ Route::middleware('web')->group(function () {
                     ->name('preview');
             });
 
+            // System History
+            Route::prefix('system-history')->name('system-history.')->group(function () {
+                Route::get('/', [App\Http\Controllers\Admin\SystemHistoryController::class, 'index'])
+                    ->name('index');
+                Route::get('/stats', [App\Http\Controllers\Admin\SystemHistoryController::class, 'stats'])
+                    ->name('stats');
+            });
+
             // Import routes
             Route::get('/import', [ImportController::class, 'index'])
                 ->name('import.index');

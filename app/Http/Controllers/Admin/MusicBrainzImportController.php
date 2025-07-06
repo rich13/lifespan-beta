@@ -57,7 +57,78 @@ class MusicBrainzImportController extends Controller
         // Combine bands and musicians
         $allArtists = $bands->concat($musicians)->sortBy('name');
 
-        return view('admin.import.musicbrainz.index', compact('allArtists'));
+        // Get import statistics for each artist
+        $importStats = $this->getImportStatistics($allArtists);
+
+        return view('admin.import.musicbrainz.index', compact('allArtists', 'importStats'));
+    }
+
+    /**
+     * Get import statistics for artists
+     */
+    private function getImportStatistics($artists)
+    {
+        $stats = [];
+        
+        foreach ($artists as $artist) {
+            // Count albums created by this artist
+            $albumCount = Span::where('type_id', 'thing')
+                ->whereJsonContains('metadata->subtype', 'album')
+                ->whereHas('connectionsAsObject', function ($query) use ($artist) {
+                    $query->where('parent_id', $artist->id)
+                          ->where('type_id', 'created');
+                })
+                ->count();
+
+            // Count tracks created by this artist (through albums)
+            $trackCount = Span::where('type_id', 'thing')
+                ->whereJsonContains('metadata->subtype', 'track')
+                ->whereHas('connectionsAsObject', function ($query) use ($artist) {
+                    $query->whereHas('parent', function ($albumQuery) use ($artist) {
+                        $albumQuery->where('type_id', 'thing')
+                                  ->whereJsonContains('metadata->subtype', 'album')
+                                  ->whereHas('connectionsAsObject', function ($albumConnectionQuery) use ($artist) {
+                                      $albumConnectionQuery->where('parent_id', $artist->id)
+                                                          ->where('type_id', 'created');
+                                  });
+                    })
+                    ->where('type_id', 'contains');
+                })
+                ->count();
+
+            // Get list of albums with their track counts
+            $albums = Span::where('type_id', 'thing')
+                ->whereJsonContains('metadata->subtype', 'album')
+                ->whereHas('connectionsAsObject', function ($query) use ($artist) {
+                    $query->where('parent_id', $artist->id)
+                          ->where('type_id', 'created');
+                })
+                ->with(['connectionsAsSubject' => function ($query) {
+                    $query->where('type_id', 'contains');
+                }])
+                ->get()
+                ->map(function ($album) {
+                    return [
+                        'id' => $album->id,
+                        'name' => $album->name,
+                        'track_count' => $album->connectionsAsSubject->count(),
+                        'release_date' => $album->start_year ? 
+                            ($album->start_year . 
+                             ($album->start_month ? '-' . str_pad($album->start_month, 2, '0', STR_PAD_LEFT) : '') .
+                             ($album->start_day ? '-' . str_pad($album->start_day, 2, '0', STR_PAD_LEFT) : '')) : 
+                            null
+                    ];
+                })
+                ->sortBy('release_date');
+
+            $stats[$artist->id] = [
+                'album_count' => $albumCount,
+                'track_count' => $trackCount,
+                'albums' => $albums
+            ];
+        }
+
+        return $stats;
     }
 
     public function search(Request $request)

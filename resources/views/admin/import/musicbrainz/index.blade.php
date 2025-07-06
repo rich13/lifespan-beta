@@ -4,80 +4,255 @@
 
 @section('content')
 <div class="container-fluid">
+    <!-- Import Summary Card -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-music-note-list me-2"></i>Import Summary
+                    </h5>
+                </div>
+                <div class="card-body">
+                    @if(count($importStats) > 0)
+                        <!-- Summary Stats -->
+                        @php
+                            $totalAlbums = collect($importStats)->sum('album_count');
+                            $totalTracks = collect($importStats)->sum('track_count');
+                            $artistsWithAlbums = collect($importStats)->filter(function($stat) { return $stat['album_count'] > 0; })->count();
+                            $artistsWithoutAlbums = count($allArtists) - $artistsWithAlbums;
+                        @endphp
+                        <div class="row mb-3">
+                            <div class="col-md-3">
+                                <div class="text-center">
+                                    <h4 class="text-primary mb-0">{{ $totalAlbums }}</h4>
+                                    <small class="text-muted">Total Albums</small>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="text-center">
+                                    <h4 class="text-success mb-0">{{ $totalTracks }}</h4>
+                                    <small class="text-muted">Total Tracks</small>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="text-center">
+                                    <h4 class="text-info mb-0">{{ $artistsWithAlbums }}</h4>
+                                    <small class="text-muted">Artists with Albums</small>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="text-center">
+                                    <h4 class="text-secondary mb-0">{{ $artistsWithoutAlbums }}</h4>
+                                    <small class="text-muted">Ready for Import</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Artists Table -->
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Artist</th>
+                                        <th class="text-center">Type</th>
+                                        <th class="text-center">Albums</th>
+                                        <th class="text-center">Tracks</th>
+                                        <th>Recent Albums</th>
+                                        <th class="text-center">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($allArtists as $artist)
+                                        <tr>
+                                            <td>
+                                                <strong>{{ $artist->name }}</strong>
+                                            </td>
+                                            <td class="text-center">
+                                                @if($artist->type_id === 'band')
+                                                    <span class="badge bg-info">Band</span>
+                                                @elseif($artist->type_id === 'person')
+                                                    <span class="badge bg-warning">Musician</span>
+                                                @else
+                                                    <span class="badge bg-secondary">{{ ucfirst($artist->type_id) }}</span>
+                                                @endif
+                                            </td>
+                                            <td class="text-center">
+                                                @if(isset($importStats[$artist->id]) && $importStats[$artist->id]['album_count'] > 0)
+                                                    <span class="badge bg-primary">{{ $importStats[$artist->id]['album_count'] }}</span>
+                                                @else
+                                                    <span class="text-muted">0</span>
+                                                @endif
+                                            </td>
+                                            <td class="text-center">
+                                                @if(isset($importStats[$artist->id]) && $importStats[$artist->id]['track_count'] > 0)
+                                                    <span class="badge bg-success">{{ $importStats[$artist->id]['track_count'] }}</span>
+                                                @else
+                                                    <span class="text-muted">0</span>
+                                                @endif
+                                            </td>
+                                            <td>
+                                                @if(isset($importStats[$artist->id]) && $importStats[$artist->id]['album_count'] > 0)
+                                                    <div class="small">
+                                                        @foreach($importStats[$artist->id]['albums']->take(3) as $album)
+                                                            <span class="badge bg-light text-dark me-1">
+                                                                {{ $album['name'] }}
+                                                                @if($album['track_count'] > 0)
+                                                                    <small class="text-muted">({{ $album['track_count'] }})</small>
+                                                                @endif
+                                                            </span>
+                                                        @endforeach
+                                                        @if($importStats[$artist->id]['albums']->count() > 3)
+                                                            <small class="text-muted">+{{ $importStats[$artist->id]['albums']->count() - 3 }} more</small>
+                                                        @endif
+                                                    </div>
+                                                @else
+                                                    <span class="text-muted small">No albums imported</span>
+                                                @endif
+                                            </td>
+                                            <td class="text-center">
+                                                @if(isset($importStats[$artist->id]) && $importStats[$artist->id]['album_count'] > 0)
+                                                    <span class="badge bg-success">Imported</span>
+                                                @else
+                                                    <span class="badge bg-secondary">Ready</span>
+                                                @endif
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    @else
+                        <div class="text-center text-muted">
+                            <i class="bi bi-music-note-list fs-1 mb-3"></i>
+                            <p>No albums have been imported yet. Use the importer below to get started!</p>
+                        </div>
+                    @endif
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import Interface -->
     <div class="row">
         <div class="col-12">
             <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-box-arrow-in-down me-2"></i>Import Albums from MusicBrainz
+                    </h5>
+                </div>
                 <div class="card-body">
-                    <h5 class="card-title">Import Albums from MusicBrainz</h5>
-                    
                     @if(isset($error))
                         <div class="alert alert-danger">
                             {{ $error }}
                         </div>
                     @endif
                     
-                    <!-- Step 1: Select Band -->
-                    <div class="mb-4">
-                        <h6 class="mb-3">Step 1: Select an Artist</h6>
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="input-group">
-                                    <select id="bandSelect" class="form-select">
-                                        <option value="">Select an artist...</option>
-                                        @foreach($allArtists as $artist)
-                                            <option value="{{ $artist->id }}" data-name="{{ $artist->name }}">{{ $artist->name }}</option>
-                                        @endforeach
-                                    </select>
-                                    <button class="btn btn-primary" id="searchButton" disabled>
-                                        <i class="bi bi-search"></i> Search MusicBrainz
+                    <!-- Import Steps -->
+                    <div class="row">
+                        <!-- Step 1: Select Artist -->
+                        <div class="col-md-4 mb-3">
+                            <div class="card h-100 border-primary">
+                                <div class="card-header bg-primary text-white">
+                                    <h6 class="card-title mb-0">
+                                        <i class="bi bi-1-circle me-2"></i>Select Artist
+                                    </h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <label for="bandSelect" class="form-label">Choose an artist:</label>
+                                        <select id="bandSelect" class="form-select">
+                                            <option value="">Select an artist...</option>
+                                            @foreach($allArtists as $artist)
+                                                <option value="{{ $artist->id }}" data-name="{{ $artist->name }}">
+                                                    {{ $artist->name }}
+                                                    @if(isset($importStats[$artist->id]) && $importStats[$artist->id]['album_count'] > 0)
+                                                        ({{ $importStats[$artist->id]['album_count'] }} albums)
+                                                    @endif
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                    <button class="btn btn-primary w-100" id="searchButton" disabled>
+                                        <i class="bi bi-search me-2"></i>Search MusicBrainz
                                     </button>
                                 </div>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- Step 2: Select MusicBrainz Match -->
-                    <div class="mb-4">
-                        <h6 class="mb-3">Step 2: Select the Correct MusicBrainz Entry</h6>
-                        <div id="searchResults" class="mt-3 d-none">
-                            <div class="list-group">
-                                <!-- Results will be populated here -->
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Step 3: Select Albums -->
-                    <div class="mb-4">
-                        <h6 class="mb-3">Step 3: Select Albums to Import</h6>
-                        <div id="albumSelection" class="d-none">
-                            <div class="mb-3">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" id="selectAllAlbums">
-                                    <label class="form-check-label" for="selectAllAlbums">
-                                        Select All Albums
-                                    </label>
+                        <!-- Step 2: Select MusicBrainz Match -->
+                        <div class="col-md-4 mb-3">
+                            <div class="card h-100 border-secondary">
+                                <div class="card-header bg-secondary text-white">
+                                    <h6 class="card-title mb-0">
+                                        <i class="bi bi-2-circle me-2"></i>Choose Match
+                                    </h6>
+                                </div>
+                                <div class="card-body">
+                                    <p class="text-muted small mb-3">Select the correct MusicBrainz entry for your artist.</p>
+                                    <div id="searchResults" class="d-none">
+                                        <div class="list-group">
+                                            <!-- Results will be populated here -->
+                                        </div>
+                                    </div>
+                                    <div id="step2Placeholder" class="text-center text-muted py-4">
+                                        <i class="bi bi-arrow-left fs-1 mb-2"></i>
+                                        <p class="small">Select an artist first</p>
+                                    </div>
                                 </div>
                             </div>
-                            <div class="list-group" id="albumList">
-                                <!-- Albums will be populated here -->
-                            </div>
-                            <div class="mt-3">
-                                <button class="btn btn-success" id="importButton" disabled>
-                                    <i class="bi bi-box-arrow-in-down"></i> Import Selected Albums
-                                </button>
+                        </div>
+
+                        <!-- Step 3: Select Albums -->
+                        <div class="col-md-4 mb-3">
+                            <div class="card h-100 border-success">
+                                <div class="card-header bg-success text-white">
+                                    <h6 class="card-title mb-0">
+                                        <i class="bi bi-3-circle me-2"></i>Import Albums
+                                    </h6>
+                                </div>
+                                <div class="card-body">
+                                    <p class="text-muted small mb-3">Choose which albums to import.</p>
+                                    <div id="albumSelection" class="d-none">
+                                        <div class="mb-3">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="selectAllAlbums">
+                                                <label class="form-check-label" for="selectAllAlbums">
+                                                    Select All Albums
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="album-list-container" style="max-height: 200px; overflow-y: auto;">
+                                            <div class="list-group" id="albumList">
+                                                <!-- Albums will be populated here -->
+                                            </div>
+                                        </div>
+                                        <div class="mt-3">
+                                            <button class="btn btn-success w-100" id="importButton" disabled>
+                                                <i class="bi bi-box-arrow-in-down me-2"></i>Import Selected Albums
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div id="step3Placeholder" class="text-center text-muted py-4">
+                                        <i class="bi bi-arrow-left fs-1 mb-2"></i>
+                                        <p class="small">Choose a MusicBrainz match first</p>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
 
                     <!-- Loading States -->
-                    <div id="loadingIndicator" class="text-center d-none">
+                    <div id="loadingIndicator" class="text-center d-none mt-3">
                         <div class="spinner-border text-primary" role="status">
                             <span class="visually-hidden">Loading...</span>
                         </div>
+                        <p class="mt-2 text-muted">Searching MusicBrainz...</p>
                     </div>
 
                     <!-- Error Messages -->
-                    <div id="errorMessage" class="alert alert-danger d-none"></div>
+                    <div id="errorMessage" class="alert alert-danger d-none mt-3"></div>
                 </div>
             </div>
         </div>
@@ -86,6 +261,36 @@
 @endsection
 
 @section('scripts')
+<style>
+.album-list {
+    max-height: 120px;
+    overflow-y: auto;
+}
+
+.badge-sm {
+    font-size: 0.75em;
+    padding: 0.25em 0.5em;
+}
+
+.card.border-primary {
+    border-width: 2px;
+}
+
+.card.border-primary:hover {
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 123, 255, 0.075);
+    transform: translateY(-1px);
+    transition: all 0.15s ease-in-out;
+}
+
+.summary-stats h4 {
+    font-weight: 600;
+}
+
+.import-summary-card {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+}
+</style>
+
 <script>
 console.log('Script loaded');
 if (typeof jQuery === 'undefined') {
@@ -191,6 +396,7 @@ $(document).ready(function() {
 
     // Display search results
     function displaySearchResults(artists) {
+        $('#step2Placeholder').addClass('d-none');
         $searchResults.removeClass('d-none');
         $searchResults.find('.list-group').html(artists.map(artist => `
             <button type="button" class="list-group-item list-group-item-action" data-mbid="${artist.id}">
@@ -240,6 +446,7 @@ $(document).ready(function() {
 
     // Display albums
     function displayAlbums(albums) {
+        $('#step3Placeholder').addClass('d-none');
         $albumSelection.removeClass('d-none');
         $albumList.html(albums.map(album => `
             <div class="list-group-item">
@@ -398,6 +605,8 @@ $(document).ready(function() {
                 // Show success message and reset
                 alert(data.message);
                 resetSearch();
+                // Reload page to update summary
+                location.reload();
             } else {
                 showError(data.error || 'Failed to import albums');
             }
@@ -408,7 +617,18 @@ $(document).ready(function() {
         }
     });
 
-    // Utility functions
+    // Reset search
+    function resetSearch() {
+        $searchResults.addClass('d-none');
+        $('#step2Placeholder').removeClass('d-none');
+        $albumSelection.addClass('d-none');
+        $('#step3Placeholder').removeClass('d-none');
+        selectedMbid = null;
+        selectedAlbums.clear();
+        updateImportButton();
+    }
+
+    // Show/hide loading
     function showLoading() {
         $loadingIndicator.removeClass('d-none');
     }
@@ -417,18 +637,13 @@ $(document).ready(function() {
         $loadingIndicator.addClass('d-none');
     }
 
+    // Show/hide error
     function showError(message) {
-        $errorMessage.text(message).removeClass('d-none');
+        $errorMessage.removeClass('d-none').text(message);
     }
 
-    function resetSearch() {
-        $searchResults.addClass('d-none');
-        $albumSelection.addClass('d-none');
+    function hideError() {
         $errorMessage.addClass('d-none');
-        selectedMbid = null;
-        selectedAlbums.clear();
-        updateSearchButton();
-        $importButton.prop('disabled', true);
     }
 });
 </script>
