@@ -20,6 +20,20 @@ trait Versionable
      */
     protected static function bootVersionable()
     {
+        static::created(function ($model) {
+            // Skip versioning in testing environment unless explicitly enabled
+            if (app()->environment('testing') && !config('app.enable_versioning_in_tests', false)) {
+                return;
+            }
+            
+            try {
+                $model->createVersion('Initial version');
+            } catch (\Exception $e) {
+                // Log the error but don't break the create operation
+                \Log::warning('Failed to create initial version: ' . $e->getMessage());
+            }
+        });
+
         static::updated(function ($model) {
             // Skip versioning in testing environment unless explicitly enabled
             if (app()->environment('testing') && !config('app.enable_versioning_in_tests', false)) {
@@ -48,6 +62,17 @@ trait Versionable
         if (!$userId) {
             // If no authenticated user, try to get from the model
             $userId = $this->updater_id ?? $this->owner_id ?? null;
+        }
+        
+        // For connections, try to get user ID from connection span or connected spans
+        if (!$userId && $this instanceof \App\Models\Connection) {
+            if ($this->connectionSpan && $this->connectionSpan->owner_id) {
+                $userId = $this->connectionSpan->owner_id;
+            } elseif ($this->subject && $this->subject->owner_id) {
+                $userId = $this->subject->owner_id;
+            } elseif ($this->object && $this->object->owner_id) {
+                $userId = $this->object->owner_id;
+            }
         }
         
         // In testing environment, use a fallback user ID if available

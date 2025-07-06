@@ -8,9 +8,9 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\CreatesApplication;
 use Tests\PostgresRefreshDatabase;
 
-class SpanVersioning extends \Tests\PostgresRefreshDatabase
+class SpanVersioning extends \Tests\TestCase
 {
-    use CreatesApplication;
+    use CreatesApplication, \Tests\PostgresRefreshDatabase;
 
     public function test_span_creates_initial_version()
     {

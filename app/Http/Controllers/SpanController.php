@@ -21,6 +21,7 @@ use InvalidArgumentException;
 use App\Models\Connection;
 use App\Models\ConnectionType as ConnectionTypeModel;
 use App\Services\WikipediaOnThisDayService;
+use App\Models\ConnectionVersion;
 
 /**
  * Handle span viewing and management
@@ -1494,7 +1495,37 @@ class SpanController extends Controller
     public function history(Request $request, Span $span): View
     {
         $versions = $span->versions()->with('changedBy')->orderByDesc('version_number')->get();
-        return view('spans.history', compact('span', 'versions'));
+        
+        // Get connection changes affecting this span
+        $connectionChanges = ConnectionVersion::whereHas('connection', function($query) use ($span) {
+            $query->where('parent_id', $span->id)
+                  ->orWhere('child_id', $span->id);
+        })->with(['connection.subject', 'connection.object', 'connection.type', 'connection.connectionSpan', 'changedBy'])
+          ->orderByDesc('created_at')
+          ->get()
+          ->map(function($connVersion) use ($span) {
+              $connection = $connVersion->connection;
+              $otherSpan = $connection->parent_id === $span->id 
+                  ? $connection->object 
+                  : $connection->subject;
+              
+              return [
+                  'type' => 'connection_change',
+                  'version' => $connVersion,
+                  'connection' => $connection,
+                  'other_span' => $otherSpan,
+                  'relationship_type' => $connection->type->forward_predicate ?? $connection->type_id,
+                  'is_parent' => $connection->parent_id === $span->id
+              ];
+          });
+        
+        // Combine and sort by date
+        $allChanges = collect()
+            ->concat($versions->map(fn($v) => ['type' => 'span_change', 'version' => $v]))
+            ->concat($connectionChanges)
+            ->sortByDesc(fn($change) => $change['version']->created_at);
+        
+        return view('spans.history', compact('span', 'allChanges', 'versions'));
     }
 
     /**
