@@ -131,7 +131,7 @@ class StoryFeatureTest extends TestCase
         $this->assertStringContainsString('Alex Johnson', $storyText);
     }
 
-    public function test_story_page_shows_no_story_message_when_no_data(): void
+    public function test_story_page_shows_basic_story_when_minimal_data(): void
     {
         $user = User::factory()->create();
         $span = Span::factory()->create([
@@ -145,7 +145,8 @@ class StoryFeatureTest extends TestCase
         $this->actingAs($user);
         $response = $this->get(route('spans.story', $span->slug));
         $response->assertStatus(200);
-        $response->assertSee('is a person');
+        $response->assertSee('Empty Person');
+        $response->assertSee('was born');
     }
 
     public function test_debug_span_access(): void

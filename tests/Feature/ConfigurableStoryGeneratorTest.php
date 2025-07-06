@@ -76,6 +76,7 @@ class ConfigurableStoryGeneratorTest extends TestCase
         $this->assertArrayHasKey('paragraphs', $story);
         $this->assertArrayHasKey('metadata', $story);
         $this->assertEquals('male', $story['metadata']['gender']);
+        // Since the person has no end date, they should be ongoing (present tense)
         $this->assertEquals('present', $story['metadata']['tense']);
     }
 

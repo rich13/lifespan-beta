@@ -14,43 +14,49 @@ class ConfigurableStoryGeneratorServiceTest extends TestCase
         // Create a person who has ended (died)
         $person = Span::factory()->create([
             'name' => 'John Lennon',
-            'span_type' => 'person',
-            'start_date' => '1940-10-09',
-            'end_date' => '1980-12-08',
-            'is_ongoing' => false,
+            'type_id' => 'person',
+            'start_year' => 1940,
+            'start_month' => 10,
+            'start_day' => 9,
+            'end_year' => 1980,
+            'end_month' => 12,
+            'end_day' => 8,
         ]);
 
         // Create parents
-        $father = Span::factory()->create(['name' => 'Alfred Lennon', 'span_type' => 'person']);
-        $mother = Span::factory()->create(['name' => 'Julia Lennon', 'span_type' => 'person']);
+        $father = Span::factory()->create(['name' => 'Alfred Lennon', 'type_id' => 'person']);
+        $mother = Span::factory()->create(['name' => 'Julia Lennon', 'type_id' => 'person']);
         
         // Connect parents
         Connection::factory()->create([
             'parent_id' => $father->id,
             'child_id' => $person->id,
-            'connection_type' => 'parent',
+            'type_id' => 'family',
         ]);
         Connection::factory()->create([
             'parent_id' => $mother->id,
             'child_id' => $person->id,
-            'connection_type' => 'parent',
+            'type_id' => 'family',
         ]);
 
         // Create a child
-        $child = Span::factory()->create(['name' => 'Julian Lennon', 'span_type' => 'person']);
+        $child = Span::factory()->create(['name' => 'Julian Lennon', 'type_id' => 'person']);
         Connection::factory()->create([
             'parent_id' => $person->id,
             'child_id' => $child->id,
-            'connection_type' => 'parent',
+            'type_id' => 'family',
         ]);
 
         $service = new ConfigurableStoryGeneratorService();
         $story = $service->generateStory($person);
 
+        // The story structure has paragraphs as an array, get the first paragraph
+        $storyText = $story['paragraphs'][0] ?? '';
+
         // Check that past tense is used
-        $this->assertStringContainsString('was the child of', $story);
-        $this->assertStringContainsString('had 1 children', $story);
-        $this->assertStringNotContainsString('is the child of', $story);
-        $this->assertStringNotContainsString('has 1 children', $story);
+        $this->assertStringContainsString('was the child of', $storyText);
+        $this->assertStringContainsString('had one child', $storyText);
+        $this->assertStringNotContainsString('is the child of', $storyText);
+        $this->assertStringNotContainsString('has one child', $storyText);
     }
 } 
