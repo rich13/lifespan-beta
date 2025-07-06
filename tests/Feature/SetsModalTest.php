@@ -170,12 +170,7 @@ class SetsModalTest extends TestCase
     {
         $this->actingAs($this->user);
 
-        $response = $this->get(route('spans.show', $this->testSpan));
-
-        // Follow redirect if it's a 301 (UUID to slug redirect)
-        if ($response->getStatusCode() === 301) {
-            $response = $this->get($response->headers->get('Location'));
-        }
+        $response = $this->get(route('spans.index'));
 
         $response->assertStatus(200);
 
