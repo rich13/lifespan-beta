@@ -244,6 +244,7 @@ class SpanSearchController extends Controller
                     'type_name' => $connection->type->inverse_predicate ?? $connection->type_id,
                     'target_name' => $connection->parent->name,
                     'target_id' => $connection->parent->id,
+                    'target_type' => $connection->parent->type_id, // Include target span type
                     'start_year' => $connectionSpan ? $connectionSpan->start_year : null,
                     'start_month' => $connectionSpan ? $connectionSpan->start_month : null,
                     'start_day' => $connectionSpan ? $connectionSpan->start_day : null,
