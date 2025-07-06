@@ -59,4 +59,29 @@ class ConfigurableStoryGeneratorServiceTest extends TestCase
         $this->assertStringNotContainsString('is the child of', $storyText);
         $this->assertStringNotContainsString('has one child', $storyText);
     }
+
+    public function test_urls_are_preserved_in_story_generation(): void
+    {
+        $span = Span::factory()->create([
+            'type_id' => 'person',
+            'name' => 'Test Person',
+            'start_year' => 1990,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
+        ]);
+
+        $service = new ConfigurableStoryGeneratorService();
+        
+        // Generate a story
+        $result = $service->generateStory($span);
+        
+        // Get the story text from the paragraphs
+        $storyText = implode(' ', $result['paragraphs']);
+        
+        // Verify that URLs are preserved correctly (no spaces inserted)
+        $this->assertStringContainsString('/spans/', $storyText);
+        $this->assertStringNotContainsString('beta. lifespan. dev', $storyText);
+        $this->assertStringNotContainsString('localhost:8000. spans', $storyText);
+    }
 } 

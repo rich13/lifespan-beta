@@ -66,6 +66,9 @@ class ConfigurableStoryGeneratorTest extends TestCase
             'type_id' => 'person',
             'name' => 'John Doe',
             'start_year' => 1990,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
             'metadata' => ['gender' => 'male']
         ]);
 

@@ -303,6 +303,14 @@ class ConfigurableStoryGeneratorService
      */
     protected function cleanupTemplateText(string $text): string
     {
+        // First, temporarily protect URLs from being modified
+        $urls = [];
+        $text = preg_replace_callback('/https?:\/\/[^\s<>"{}|\\^`\[\]]+/', function($matches) use (&$urls) {
+            $placeholder = '___URL_' . count($urls) . '___';
+            $urls[$placeholder] = $matches[0];
+            return $placeholder;
+        }, $text);
+
         // Remove "in " followed by nothing (e.g., "was born in 1947 in ")
         $text = preg_replace('/\s+in\s+$/', '', $text);
         
@@ -333,8 +341,8 @@ class ConfigurableStoryGeneratorService
         // Remove "during " followed by nothing (e.g., "during ")
         $text = preg_replace('/\s+during\s+$/', '', $text);
         
-        // Remove double spaces
-        $text = preg_replace('/\s+/', ' ', $text);
+        // Remove double spaces (but be more careful about it)
+        $text = preg_replace('/[ \t\n\r]+/', ' ', $text);
         
         // Remove trailing spaces and punctuation
         $text = trim($text);
@@ -350,6 +358,11 @@ class ConfigurableStoryGeneratorService
         // Ensure the sentence starts with a capital letter
         if (!empty($text)) {
             $text = ucfirst($text);
+        }
+
+        // Restore URLs
+        foreach ($urls as $placeholder => $url) {
+            $text = str_replace($placeholder, $url, $text);
         }
         
         return $text;
