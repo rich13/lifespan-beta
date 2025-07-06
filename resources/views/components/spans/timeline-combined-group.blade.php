@@ -1,11 +1,26 @@
 @props(['span'])
 
+@php
+    $currentUserSpanId = auth()->user()->personal_span_id ?? null;
+@endphp
+
 <div class="card">
-    <div class="card-header">
+    <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="card-title mb-0">
             <i class="bi bi-diagram-3-fill me-2"></i>
             Timeline
         </h5>
+        <div class="btn-group btn-group-sm" role="group">
+            <input type="radio" class="btn-check" name="timeline-mode-{{ $span->id }}" id="absolute-mode-{{ $span->id }}" value="absolute" checked>
+            <label class="btn btn-outline-primary" for="absolute-mode-{{ $span->id }}">
+                Absolute
+            </label>
+            
+            <input type="radio" class="btn-check" name="timeline-mode-{{ $span->id }}" id="relative-mode-{{ $span->id }}" value="relative">
+            <label class="btn btn-outline-primary" for="relative-mode-{{ $span->id }}">
+                Relative
+            </label>
+        </div>
     </div>
     <div class="card-body">
         <div id="timeline-combined-container-{{ $span->id }}" style="height: 300px; width: 100%; cursor: crosshair;">
@@ -29,6 +44,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 function initializeCombinedTimeline_{{ str_replace('-', '_', $span->id) }}() {
     const spanId = '{{ $span->id }}';
+    const currentUserSpanId = '{{ $currentUserSpanId }}';
     const container = document.getElementById(`timeline-combined-container-${spanId}`);
     
     // Check if container exists
@@ -38,6 +54,7 @@ function initializeCombinedTimeline_{{ str_replace('-', '_', $span->id) }}() {
     }
     
     console.log('Initializing combined timeline for span:', spanId);
+    console.log('Current user span ID:', currentUserSpanId);
     
     // Fetch both the current span's timeline and object connections
     Promise.all([
@@ -45,8 +62,12 @@ function initializeCombinedTimeline_{{ str_replace('-', '_', $span->id) }}() {
         fetch(`/spans/${spanId}/timeline-object-connections`).then(response => response.json())
     ])
     .then(([currentSpanData, objectConnectionsData]) => {
-        // Extract unique subjects from the object connections
-        const subjects = [...new Set(objectConnectionsData.connections.map(conn => conn.target_id))];
+        // Extract unique subjects from the object connections, excluding connection spans
+        const subjects = [...new Set(
+            objectConnectionsData.connections
+                .filter(conn => conn.target_type !== 'connection') // Exclude connections to connection spans
+                .map(conn => conn.target_id)
+        )];
         
         // Start with the current span
         const timelineData = [{
@@ -77,16 +98,25 @@ function initializeCombinedTimeline_{{ str_replace('-', '_', $span->id) }}() {
                 .then(subjectData => {
                     const validSubjects = subjectData.filter(subject => subject !== null);
                     timelineData.push(...validSubjects);
-                    renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpanData.span);
+                    renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpanData.span, 'absolute', currentUserSpanId);
+                    
+                    // Add event listeners for mode toggle
+                    setupModeToggle_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpanData.span, currentUserSpanId);
                 })
                 .catch(error => {
                     console.error('Error loading subject timelines:', error);
                     // Still render with just the current span
-                    renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpanData.span);
+                    renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpanData.span, 'absolute', currentUserSpanId);
+                    
+                    // Add event listeners for mode toggle
+                    setupModeToggle_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpanData.span, currentUserSpanId);
                 });
         } else {
             // No subjects, just render current span
-            renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpanData.span);
+            renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpanData.span, 'absolute', currentUserSpanId);
+            
+            // Add event listeners for mode toggle
+            setupModeToggle_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpanData.span, currentUserSpanId);
         }
     })
     .catch(error => {
@@ -98,8 +128,10 @@ function initializeCombinedTimeline_{{ str_replace('-', '_', $span->id) }}() {
     });
 }
 
-function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpan) {
+function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpan, mode = 'absolute', currentUserSpanId = null) {
     const spanId = '{{ $span->id }}';
+    console.log('Rendering combined timeline with mode:', mode);
+    console.log('Current user span ID:', currentUserSpanId);
     const container = document.getElementById(`timeline-combined-container-${spanId}`);
     
     // Check if container exists
@@ -126,15 +158,17 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
         .attr('width', width)
         .attr('height', adjustedHeight);
 
-    // Calculate global time range across all timelines
-    const timeRange = calculateCombinedTimeRange_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpan);
+    // Calculate global time range across all timelines based on mode
+    const timeRange = mode === 'absolute' 
+        ? calculateCombinedTimeRange_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpan)
+        : calculateRelativeTimeRange_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpan);
     
     const xScale = d3.scaleLinear()
         .domain([timeRange.start, timeRange.end])
         .range([margin.left, width - margin.right]);
 
     const xAxis = d3.axisBottom(xScale)
-        .tickFormat(d3.format('d'))
+        .tickFormat(mode === 'absolute' ? d3.format('d') : (d) => `Age ${d}`)
         .ticks(10);
 
     svg.append('g')
@@ -168,24 +202,34 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
     timelineData.forEach((timeline, index) => {
         const swimlaneY = margin.top + index * (swimlaneHeight + swimlaneSpacing);
         const isCurrentSpan = timeline.isCurrentSpan;
+        const isCurrentUser = currentUserSpanId && timeline.id === currentUserSpanId;
         
-        // Draw swimlane background with special styling for current span
+        // Draw swimlane background with special styling for current span and current user
         svg.append('rect')
             .attr('x', margin.left)
             .attr('y', swimlaneY)
             .attr('width', width - margin.left - margin.right)
             .attr('height', swimlaneHeight)
             .attr('fill', isCurrentSpan ? '#e3f2fd' : '#f8f9fa')
-            .attr('stroke', isCurrentSpan ? '#dee2e6' : '#dee2e6')
-            .attr('stroke-width', isCurrentSpan ? 1 : 1)
+            .attr('stroke', isCurrentUser ? '#000000' : (isCurrentSpan ? '#dee2e6' : '#dee2e6'))
+            .attr('stroke-width', isCurrentUser ? 1 : (isCurrentSpan ? 1 : 1))
             .attr('rx', 4)
             .attr('ry', 4);
+
+        // Store label info for later rendering (after all timeline elements)
+        timeline.labelInfo = {
+            name: timeline.name,
+            swimlaneY: swimlaneY,
+            isCurrentSpan: isCurrentSpan
+        };
 
         // Add life span bar for this timeline
         const timelineSpan = timeline.timeline.span;
         if (timelineSpan && timelineSpan.start_year) {
-            const lifeStartYear = timelineSpan.start_year;
-            const lifeEndYear = timelineSpan.end_year || new Date().getFullYear();
+            const lifeStartYear = mode === 'absolute' ? timelineSpan.start_year : 0;
+            const lifeEndYear = mode === 'absolute' 
+                ? (timelineSpan.end_year || new Date().getFullYear())
+                : (timelineSpan.end_year ? timelineSpan.end_year - timelineSpan.start_year : new Date().getFullYear() - timelineSpan.start_year);
             const hasConnections = timeline.timeline.connections && timeline.timeline.connections.length > 0;
             
             svg.append('rect')
@@ -203,10 +247,10 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
                 .style('pointer-events', 'auto') // Always allow interaction
                 .on('mouseover', function(event) {
                     d3.select(this).style('opacity', 0.9);
-                    updateLifeSpanTooltip_{{ str_replace('-', '_', $span->id) }}(event, timelineSpan, timelineData, timeline.name, isCurrentSpan);
+                    updateLifeSpanTooltip_{{ str_replace('-', '_', $span->id) }}(event, timelineSpan, timelineData, timeline.name, isCurrentSpan, mode);
                 })
                 .on('mousemove', function(event) {
-                    updateLifeSpanTooltip_{{ str_replace('-', '_', $span->id) }}(event, timelineSpan, timelineData, timeline.name, isCurrentSpan);
+                    updateLifeSpanTooltip_{{ str_replace('-', '_', $span->id) }}(event, timelineSpan, timelineData, timeline.name, isCurrentSpan, mode);
                 })
                 .on('mouseout', function() {
                     d3.select(this).style('opacity', hasConnections ? 0.3 : 0.7);
@@ -216,11 +260,14 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
 
         // Add connections for this timeline
         if (timeline.timeline.connections) {
-            timeline.timeline.connections.forEach(connection => {
+            timeline.timeline.connections
+                .filter(connection => connection.target_type !== 'connection') // Exclude connections to connection spans
+                .forEach(connection => {
                 const connectionType = connection.type_id;
                 
                 if (connectionType === 'created') {
-                    const x = xScale(connection.start_year);
+                    const connectionStartYear = mode === 'absolute' ? connection.start_year : connection.start_year - timelineSpan.start_year;
+                    const x = xScale(connectionStartYear);
                     const y1 = swimlaneY;
                     const y2 = swimlaneY + swimlaneHeight;
                     const circleY = (y1 + y2) / 2;
@@ -237,10 +284,10 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
                         .style('opacity', 0.8)
                         .on('mouseover', function(event) {
                             d3.select(this).style('opacity', 0.9);
-                            updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}(event, [connection], timeline.name, isCurrentSpan);
+                            updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}(event, [connection], timeline.name, isCurrentSpan, mode);
                         })
                         .on('mousemove', function(event) {
-                            updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}(event, [connection], timeline.name, isCurrentSpan);
+                            updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}(event, [connection], timeline.name, isCurrentSpan, mode);
                         })
                         .on('mouseout', function() {
                             d3.select(this).style('opacity', 0.8);
@@ -258,22 +305,25 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
                         .style('opacity', 0.9)
                         .on('mouseover', function(event) {
                             d3.select(this).style('opacity', 1);
-                            updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}(event, [connection], timeline.name, isCurrentSpan);
+                            updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}(event, [connection], timeline.name, isCurrentSpan, mode);
                         })
                         .on('mousemove', function(event) {
-                            updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}(event, [connection], timeline.name, isCurrentSpan);
+                            updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}(event, [connection], timeline.name, isCurrentSpan, mode);
                         })
                         .on('mouseout', function() {
                             d3.select(this).style('opacity', 0.9);
                             hideCombinedTooltip_{{ str_replace('-', '_', $span->id) }}();
                         });
                 } else {
-                    const endYear = connection.end_year || new Date().getFullYear();
-                    const connectionWidth = xScale(endYear) - xScale(connection.start_year);
+                    const connectionStartYear = mode === 'absolute' ? connection.start_year : connection.start_year - timelineSpan.start_year;
+                    const connectionEndYear = mode === 'absolute' 
+                        ? (connection.end_year || new Date().getFullYear())
+                        : (connection.end_year ? connection.end_year - timelineSpan.start_year : new Date().getFullYear() - timelineSpan.start_year);
+                    const connectionWidth = xScale(connectionEndYear) - xScale(connectionStartYear);
                     
                     svg.append('rect')
                         .attr('class', 'timeline-bar')
-                        .attr('x', xScale(connection.start_year))
+                        .attr('x', xScale(connectionStartYear))
                         .attr('y', swimlaneY + 2)
                         .attr('width', Math.max(1, connectionWidth))
                         .attr('height', swimlaneHeight - 4)
@@ -285,10 +335,10 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
                         .style('opacity', 0.6)
                         .on('mouseover', function(event) {
                             d3.select(this).style('opacity', 0.9);
-                            updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}(event, [connection], timeline.name, isCurrentSpan);
+                            updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}(event, [connection], timeline.name, isCurrentSpan, mode);
                         })
                         .on('mousemove', function(event) {
-                            updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}(event, [connection], timeline.name, isCurrentSpan);
+                            updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}(event, [connection], timeline.name, isCurrentSpan, mode);
                         })
                         .on('mouseout', function() {
                             d3.select(this).style('opacity', 0.6);
@@ -299,33 +349,55 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
         }
     });
 
-    // Add "now" line (current year) - drawn last so it appears on top
-    const currentYear = new Date().getFullYear();
-    const nowX = xScale(currentYear);
-    
-    // Only show the "now" line if it's within the visible time range
-    if (nowX >= margin.left && nowX <= width - margin.right) {
-        svg.append('line')
-            .attr('class', 'now-line')
-            .attr('x1', nowX)
-            .attr('x2', nowX)
-            .attr('y1', margin.top)
-            .attr('y2', adjustedHeight - margin.bottom)
-            .attr('stroke', '#dc3545')
-            .attr('stroke-width', 1)
-            .style('opacity', 0.8);
+    // Add "now" line (current year) - only in absolute mode
+    if (mode === 'absolute') {
+        const currentYear = new Date().getFullYear();
+        const nowX = xScale(currentYear);
         
-        // Add "NOW" label
-        svg.append('text')
-            .attr('class', 'now-label')
-            .attr('x', nowX + 5)
-            .attr('y', margin.top + 15)
-            .attr('text-anchor', 'start')
-            .attr('font-size', '10px')
-            .attr('font-weight', 'bold')
-            .attr('fill', '#dc3545')
-            .text('NOW');
+        // Only show the "now" line if it's within the visible time range
+        if (nowX >= margin.left && nowX <= width - margin.right) {
+            svg.append('line')
+                .attr('class', 'now-line')
+                .attr('x1', nowX)
+                .attr('x2', nowX)
+                .attr('y1', margin.top)
+                .attr('y2', adjustedHeight - margin.bottom)
+                .attr('stroke', '#dc3545')
+                .attr('stroke-width', 1)
+                .style('opacity', 0.8);
+            
+            // Add "NOW" label
+            svg.append('text')
+                .attr('class', 'now-label')
+                .attr('x', nowX + 5)
+                .attr('y', margin.top + 15)
+                .attr('text-anchor', 'start')
+                .attr('font-size', '10px')
+                .attr('font-weight', 'bold')
+                .attr('fill', '#dc3545')
+                .text('NOW');
+        }
     }
+
+    // Add swimlane labels at the very end to ensure they're on top
+    timelineData.forEach((timeline) => {
+        if (timeline.labelInfo) {
+            const { name, swimlaneY, isCurrentSpan } = timeline.labelInfo;
+            
+            // Add swimlane label floating on top
+            svg.append('text')
+                .attr('class', 'swimlane-label')
+                .attr('x', margin.left + 8)
+                .attr('y', swimlaneY + swimlaneHeight / 2 + 4)
+                .attr('text-anchor', 'start')
+                .attr('font-size', '11px')
+                .attr('font-weight', isCurrentSpan ? 'bold' : 'normal')
+                .attr('fill', mode === 'relative' ? 'white' : (isCurrentSpan ? '#1976d2' : '#495057'))
+                .style('pointer-events', 'none')
+                .style('z-index', '1001')
+                .text(name);
+        }
+    });
 
     // Create tooltip
     const tooltip = d3.select('body').append('div')
@@ -339,38 +411,27 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
         .style('pointer-events', 'none')
         .style('opacity', 0);
 
-    function showCombinedTooltip_{{ str_replace('-', '_', $span->id) }}(event, connections, timelineName, isCurrentSpan, hoverYear) {
+    function showCombinedTooltip_{{ str_replace('-', '_', $span->id) }}(event, connections, timelineName, isCurrentSpan, hoverYear, mode = 'absolute') {
         tooltip.transition().duration(200).style('opacity', 1);
         let tooltipContent = '';
         
         console.log('showCombinedTooltip called with hoverYear:', hoverYear, 'timelineName:', timelineName);
         
-        if (connections.length === 1) {
-            const d = connections[0];
-            const endYear = d.end_year || 'Present';
-            tooltipContent = `<strong>${timelineName}: ${d.type_name} ${d.target_name}</strong><br/>${d.start_year} - ${endYear}`;
-            
-            // Add what others were doing at the specific hover time
-            const concurrentActivities = findActivitiesAtTime_{{ str_replace('-', '_', $span->id) }}(hoverYear, timelineData, timelineName);
-            console.log('Found concurrent activities:', concurrentActivities.length);
-            if (concurrentActivities.length > 0) {
-                tooltipContent += `<br/><br/><strong>Others in ${hoverYear}:</strong><br/>`;
-                tooltipContent += formatActivitiesWithDividers_{{ str_replace('-', '_', $span->id) }}(concurrentActivities);
-            }
+        if (mode === 'relative') {
+            // In relative mode, show "At age X" as the main header
+            tooltipContent = `<strong>At age ${hoverYear}</strong>`;
         } else {
-            tooltipContent = `<strong>${timelineName} - ${connections.length} overlapping connections:</strong><br/>`;
-            connections.forEach((d, index) => {
-                const endYear = d.end_year || 'Present';
-                const bulletColor = getConnectionColor(d.type_id);
-                tooltipContent += `<span style="color: ${bulletColor};">●</span> <strong>${d.type_name} ${d.target_name}</strong><br/>&nbsp;&nbsp;&nbsp;&nbsp;${d.start_year} - ${endYear}<br/>`;
-            });
-            
-            // Add what others were doing at the specific hover time for overlapping connections too
-            const concurrentActivities = findActivitiesAtTime_{{ str_replace('-', '_', $span->id) }}(hoverYear, timelineData, timelineName);
-            if (concurrentActivities.length > 0) {
-                tooltipContent += `<br/><strong>Others in ${hoverYear}:</strong><br/>`;
-                tooltipContent += formatActivitiesWithDividers_{{ str_replace('-', '_', $span->id) }}(concurrentActivities);
-            }
+            // In absolute mode, show "In {year}" as the main header
+            tooltipContent = `<strong>In ${hoverYear}</strong>`;
+        }
+        
+        // Add what others were doing at the specific hover time
+        const concurrentActivities = findActivitiesAtTime_{{ str_replace('-', '_', $span->id) }}(hoverYear, timelineData, timelineName, mode);
+        console.log('Found concurrent activities:', concurrentActivities.length);
+        if (concurrentActivities.length > 0) {
+            // In both modes, just show the activities directly since header already shows the time context
+            tooltipContent += `<br/><br/>`;
+            tooltipContent += formatActivitiesWithDividers_{{ str_replace('-', '_', $span->id) }}(concurrentActivities, mode);
         }
         
         tooltip.html(tooltipContent)
@@ -378,50 +439,120 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
             .style('top', (event.pageY + 20) + 'px');
     }
 
-    function findActivitiesAtTime_{{ str_replace('-', '_', $span->id) }}(year, timelineData, currentTimelineName) {
+    function findActivitiesAtTime_{{ str_replace('-', '_', $span->id) }}(year, timelineData, currentTimelineName, mode = 'absolute') {
         const activities = [];
         
-        console.log('findActivitiesAtTime called with year:', year, 'currentTimelineName:', currentTimelineName);
-        console.log('timelineData length:', timelineData.length);
-        
-        timelineData.forEach(timeline => {
-            console.log('Checking timeline:', timeline.name, 'connections:', timeline.timeline.connections ? timeline.timeline.connections.length : 0);
-            
-            if (timeline.timeline.connections) {
-                timeline.timeline.connections.forEach(otherConnection => {
-                    const otherStart = otherConnection.start_year;
-                    const otherEnd = otherConnection.end_year || new Date().getFullYear();
-                    
-                    console.log('Checking connection:', otherConnection.type_name, otherStart, '-', otherEnd, 'against year:', year);
-                    
-                    // Check if the connection was active at the specific year
-                    if (otherStart <= year && otherEnd >= year) {
-                        console.log('Found matching activity:', timeline.name, otherConnection.type_name);
-                        activities.push({
-                            timelineName: timeline.name,
-                            type_name: otherConnection.type_name,
-                            type_id: otherConnection.type_id,
-                            target_name: otherConnection.target_name,
-                            start_year: otherStart,
-                            end_year: otherEnd,
-                            isCurrentSpan: timeline.isCurrentSpan
-                        });
-                    }
-                });
-            }
-        });
-        
-        console.log('Total activities found:', activities.length);
-        
-        // Sort by timeline name for consistent ordering, with main span first
+        if (mode === 'absolute') {
+            timelineData.forEach(timeline => {
+                if (timeline.timeline.connections) {
+                    timeline.timeline.connections
+                        .filter(otherConnection => otherConnection.target_type !== 'connection') // Exclude connections to connection spans
+                        .forEach(otherConnection => {
+                        const otherStart = otherConnection.start_year;
+                        const otherEnd = otherConnection.end_year || new Date().getFullYear();
+                        if (otherStart <= year && otherEnd >= year) {
+                            activities.push({
+                                timelineName: timeline.name,
+                                type_name: otherConnection.type_name,
+                                type_id: otherConnection.type_id,
+                                target_name: otherConnection.target_name,
+                                start_year: otherConnection.start_year,
+                                end_year: otherConnection.end_year,
+                                isCurrentSpan: timeline.isCurrentSpan
+                            });
+                        }
+                    });
+                }
+            });
+        } else {
+            // Relative mode: always include all group members and their life span
+            timelineData.forEach(timeline => {
+                let found = false;
+                let lifeSpanIncluded = false;
+                let timelineSpan = timeline.timeline.span;
+                let lifeStartAge = 0;
+                let lifeEndAge = null;
+                if (timelineSpan && timelineSpan.start_year) {
+                    lifeEndAge = (timelineSpan.end_year ? timelineSpan.end_year : new Date().getFullYear()) - timelineSpan.start_year;
+                }
+                // Check if alive at this age
+                let alive = (lifeEndAge !== null && year >= lifeStartAge && year <= lifeEndAge);
+                // Add life span entry
+                if (lifeEndAge !== null) {
+                    activities.push({
+                        timelineName: timeline.name,
+                        type_name: 'Life span',
+                        type_id: 'life-span',
+                        target_name: '',
+                        start_age: lifeStartAge,
+                        end_age: lifeEndAge,
+                        isCurrentSpan: timeline.isCurrentSpan,
+                        isLifeSpan: true,
+                        alive: alive
+                    });
+                    lifeSpanIncluded = true;
+                }
+                // Add subspans if any
+                if (timeline.timeline.connections) {
+                    timeline.timeline.connections
+                        .filter(otherConnection => otherConnection.target_type !== 'connection') // Exclude connections to connection spans
+                        .forEach(otherConnection => {
+                        if (timelineSpan && timelineSpan.start_year) {
+                            const otherStart = otherConnection.start_year - timelineSpan.start_year;
+                            const otherEnd = otherConnection.end_year 
+                                ? otherConnection.end_year - timelineSpan.start_year 
+                                : new Date().getFullYear() - timelineSpan.start_year;
+                            if (otherStart <= year && otherEnd >= year) {
+                                activities.push({
+                                    timelineName: timeline.name,
+                                    type_name: otherConnection.type_name,
+                                    type_id: otherConnection.type_id,
+                                    target_name: otherConnection.target_name,
+                                    start_year: otherConnection.start_year,
+                                    end_year: otherConnection.end_year,
+                                    start_age: otherStart,
+                                    end_age: otherEnd,
+                                    isCurrentSpan: timeline.isCurrentSpan
+                                });
+                                found = true;
+                            }
+                        }
+                    });
+                }
+                if (!lifeSpanIncluded) {
+                    // No life span info, show not alive
+                    activities.push({
+                        timelineName: timeline.name,
+                        notAlive: true,
+                        isCurrentSpan: timeline.isCurrentSpan
+                    });
+                } else if (!alive) {
+                    // Not alive at this age
+                    activities.push({
+                        timelineName: timeline.name,
+                        notAlive: true,
+                        isCurrentSpan: timeline.isCurrentSpan
+                    });
+                } else if (!found) {
+                    // Alive but no subspans at this age
+                    activities.push({
+                        timelineName: timeline.name,
+                        noActivity: true,
+                        isCurrentSpan: timeline.isCurrentSpan
+                    });
+                }
+            });
+        }
+        // Preserve the original order from timelineData to match swimlane order
         return activities.sort((a, b) => {
-            if (a.isCurrentSpan && !b.isCurrentSpan) return -1;
-            if (!a.isCurrentSpan && b.isCurrentSpan) return 1;
-            return a.timelineName.localeCompare(b.timelineName);
+            // Find the original indices in timelineData
+            const aIndex = timelineData.findIndex(t => t.name === a.timelineName);
+            const bIndex = timelineData.findIndex(t => t.name === b.timelineName);
+            return aIndex - bIndex;
         });
     }
 
-    function formatActivitiesWithDividers_{{ str_replace('-', '_', $span->id) }}(activities) {
+    function formatActivitiesWithDividers_{{ str_replace('-', '_', $span->id) }}(activities, mode = 'absolute') {
         if (activities.length === 0) return '';
         
         let formattedContent = '';
@@ -436,8 +567,28 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
                 currentTimeline = activity.timelineName;
             }
             
-            const bulletColor = getConnectionColor(activity.type_id);
-            formattedContent += `<span style="color: ${bulletColor};">●</span> <em>${activity.timelineName}</em>: ${activity.type_name} ${activity.target_name}<br/>`;
+            if (activity.notAlive) {
+                formattedContent += `<span style='color: #ccc;'>●</span> <em>${activity.timelineName}</em>: <span style='color:#aaa'>Not alive at this age</span><br/>`;
+            } else if (activity.noActivity) {
+                formattedContent += `<span style='color: #ccc;'>●</span> <em>${activity.timelineName}</em>: <span style='color:#aaa'>No span at this age</span><br/>`;
+            } else if (activity.isLifeSpan && mode === 'absolute') {
+                // Only show life span in absolute mode, not in relative mode
+                let timeInfo = ` (${activity.start_year} - ${activity.end_year})`;
+                formattedContent += `<span style='color: black;'>●</span> <em>${activity.timelineName}</em>: <strong>Life span</strong>${timeInfo}<br/>`;
+            } else if (!activity.isLifeSpan) {
+                // Show regular activities (not life span)
+                const bulletColor = getConnectionColor(activity.type_id);
+                let timeInfo = '';
+                if (mode === 'absolute') {
+                    const endYear = activity.end_year || 'Present';
+                    timeInfo = ` (${activity.start_year} - ${endYear})`;
+                } else {
+                    const endAge = activity.end_age || 'Present';
+                    timeInfo = ` (Age ${activity.start_age} - ${endAge})`;
+                }
+                formattedContent += `<span style="color: ${bulletColor};">●</span> <em>${activity.timelineName}</em>: ${activity.type_name} ${activity.target_name}${timeInfo}<br/>`;
+            }
+            // Skip life span entries in relative mode (they're already shown as the black bar)
         });
         
         return formattedContent;
@@ -452,7 +603,9 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
             if (timeline.name === currentTimelineName) return; // Skip the current timeline
             
             if (timeline.timeline.connections) {
-                timeline.timeline.connections.forEach(otherConnection => {
+                timeline.timeline.connections
+                    .filter(otherConnection => otherConnection.target_type !== 'connection') // Exclude connections to connection spans
+                    .forEach(otherConnection => {
                     const otherStart = otherConnection.start_year;
                     const otherEnd = otherConnection.end_year || new Date().getFullYear();
                     
@@ -476,21 +629,27 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
         return activities.sort((a, b) => a.timelineName.localeCompare(b.timelineName));
     }
 
-    function updateLifeSpanTooltip_{{ str_replace('-', '_', $span->id) }}(event, span, timelineData, timelineName, isCurrentSpan) {
+    function updateLifeSpanTooltip_{{ str_replace('-', '_', $span->id) }}(event, span, timelineData, timelineName, isCurrentSpan, mode = 'absolute') {
         const svgRect = svg.node().getBoundingClientRect();
         const mouseX = event.clientX - svgRect.left;
         const hoverYear = Math.round(xScale.invert(mouseX));
-        console.log('Life span mousemove - mouseX:', mouseX, 'hoverYear:', hoverYear);
+        console.log('Life span mousemove - mouseX:', mouseX, 'hoverYear:', hoverYear, 'mode:', mode);
         
         tooltip.transition().duration(100).style('opacity', 1);
-        const endYear = span.end_year || 'Present';
-        let tooltipContent = `<strong>${timelineName}: Life ${span.name}</strong><br/>${span.start_year} - ${endYear}`;
+        
+        // Use consistent headers like connection tooltips
+        let tooltipContent = '';
+        if (mode === 'relative') {
+            tooltipContent = `<strong>At age ${hoverYear}</strong>`;
+        } else {
+            tooltipContent = `<strong>In ${hoverYear}</strong>`;
+        }
         
         // Add what others were doing at the specific hover time
-        const concurrentActivities = findActivitiesAtTime_{{ str_replace('-', '_', $span->id) }}(hoverYear, timelineData, timelineName);
+        const concurrentActivities = findActivitiesAtTime_{{ str_replace('-', '_', $span->id) }}(hoverYear, timelineData, timelineName, mode);
         if (concurrentActivities.length > 0) {
-            tooltipContent += `<br/><br/><strong>Others in ${hoverYear}:</strong><br/>`;
-            tooltipContent += formatActivitiesWithDividers_{{ str_replace('-', '_', $span->id) }}(concurrentActivities);
+            tooltipContent += `<br/><br/>`;
+            tooltipContent += formatActivitiesWithDividers_{{ str_replace('-', '_', $span->id) }}(concurrentActivities, mode);
         }
         
         tooltip.html(tooltipContent)
@@ -498,25 +657,31 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
             .style('top', (event.pageY + 20) + 'px');
     }
 
-    function updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}(event, connections, timelineName, isCurrentSpan) {
+    function updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}(event, connections, timelineName, isCurrentSpan, mode = 'absolute') {
         const svgRect = svg.node().getBoundingClientRect();
         const mouseX = event.clientX - svgRect.left;
         const hoverYear = Math.round(xScale.invert(mouseX));
         console.log('Connection mousemove - mouseX:', mouseX, 'hoverYear:', hoverYear);
         
-        showCombinedTooltip_{{ str_replace('-', '_', $span->id) }}(event, connections, timelineName, isCurrentSpan, hoverYear);
+        showCombinedTooltip_{{ str_replace('-', '_', $span->id) }}(event, connections, timelineName, isCurrentSpan, hoverYear, mode);
     }
 
-    function showCombinedLifeSpanTooltip_{{ str_replace('-', '_', $span->id) }}(event, span, timelineData, timelineName, isCurrentSpan, hoverYear) {
+    function showCombinedLifeSpanTooltip_{{ str_replace('-', '_', $span->id) }}(event, span, timelineData, timelineName, isCurrentSpan, hoverYear, mode = 'absolute') {
         tooltip.transition().duration(200).style('opacity', 1);
-        const endYear = span.end_year || 'Present';
-        let tooltipContent = `<strong>${timelineName}: Life ${span.name}</strong><br/>${span.start_year} - ${endYear}`;
+        
+        // Use consistent headers like connection tooltips
+        let tooltipContent = '';
+        if (mode === 'relative') {
+            tooltipContent = `<strong>At age ${hoverYear}</strong>`;
+        } else {
+            tooltipContent = `<strong>In ${hoverYear}</strong>`;
+        }
         
         // Add what others were doing at the specific hover time
-        const concurrentActivities = findActivitiesAtTime_{{ str_replace('-', '_', $span->id) }}(hoverYear, timelineData, timelineName);
+        const concurrentActivities = findActivitiesAtTime_{{ str_replace('-', '_', $span->id) }}(hoverYear, timelineData, timelineName, mode);
         if (concurrentActivities.length > 0) {
-            tooltipContent += `<br/><br/><strong>Others in ${hoverYear}:</strong><br/>`;
-            tooltipContent += formatActivitiesWithDividers_{{ str_replace('-', '_', $span->id) }}(concurrentActivities);
+            tooltipContent += `<br/><br/>`;
+            tooltipContent += formatActivitiesWithDividers_{{ str_replace('-', '_', $span->id) }}(concurrentActivities, mode);
         }
         
         tooltip.html(tooltipContent)
@@ -527,10 +692,15 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
     function hideCombinedTooltip_{{ str_replace('-', '_', $span->id) }}() {
         tooltip.transition().duration(500).style('opacity', 0);
     }
+    
+    // Set up mode toggle after rendering
+    setupModeToggle_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpan, currentUserSpanId);
+}
 
-    function calculateCombinedTimeRange_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpan) {
+function calculateCombinedTimeRange_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpan) {
+        const currentYear = new Date().getFullYear();
         let start = currentSpan.start_year || 1900;
-        let end = currentSpan.end_year || new Date().getFullYear();
+        let end = currentYear; // Always extend to current year
 
         // Extend range to include all timelines and their connections
         timelineData.forEach(timeline => {
@@ -538,18 +708,14 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
             if (timelineSpan && timelineSpan.start_year && timelineSpan.start_year < start) {
                 start = timelineSpan.start_year;
             }
-            if (timelineSpan && timelineSpan.end_year && timelineSpan.end_year > end) {
-                end = timelineSpan.end_year;
-            }
+            // Note: We don't check timelineSpan.end_year here since we always want to go to current year
 
             if (timeline.timeline.connections) {
                 timeline.timeline.connections.forEach(connection => {
                     if (connection.start_year && connection.start_year < start) {
                         start = connection.start_year;
                     }
-                    if (connection.end_year && connection.end_year > end) {
-                        end = connection.end_year;
-                    }
+                    // Note: We don't check connection.end_year here since we always want to go to current year
                 });
             }
         });
@@ -557,6 +723,78 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
         const padding = Math.max(5, Math.floor((end - start) * 0.1));
         return { start: start - padding, end: end + padding };
     }
+
+    function calculateRelativeTimeRange_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpan) {
+        const currentYear = new Date().getFullYear();
+        // Calculate ages for all timelines and their connections
+        const allAges = [];
+        
+        // Add ages for each timeline
+        timelineData.forEach(timeline => {
+            const timelineSpan = timeline.timeline.span;
+            if (timelineSpan && timelineSpan.start_year) {
+                // Add life span ages - always extend to current year for living people
+                const lifeEndAge = timelineSpan.end_year 
+                    ? timelineSpan.end_year - timelineSpan.start_year 
+                    : currentYear - timelineSpan.start_year;
+                allAges.push(0, lifeEndAge);
+                
+                // Add connection ages
+                if (timeline.timeline.connections) {
+                    timeline.timeline.connections.forEach(connection => {
+                        if (connection.start_year) {
+                            const startAge = connection.start_year - timelineSpan.start_year;
+                            allAges.push(startAge);
+                            
+                            if (connection.end_year) {
+                                const endAge = connection.end_year - timelineSpan.start_year;
+                                allAges.push(endAge);
+                            }
+                        }
+                    });
+                }
+            }
+        });
+
+        const minAge = Math.min(...allAges);
+        const maxAge = Math.max(...allAges);
+
+        // Add some padding
+        const padding = Math.max(2, Math.floor((maxAge - minAge) * 0.1));
+        return {
+            start: Math.max(0, minAge - padding),
+            end: maxAge + padding
+        };
+    }
+
+function setupModeToggle_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpan, currentUserSpanId = null) {
+    const spanId = '{{ $span->id }}';
+    
+    console.log('Setting up mode toggle for span:', spanId);
+    const radioButtons = document.querySelectorAll(`input[name="timeline-mode-${spanId}"]`);
+    console.log('Found radio buttons:', radioButtons.length);
+    
+    // Remove existing event listeners to prevent duplicates
+    radioButtons.forEach(radio => {
+        radio.removeEventListener('change', radio._modeToggleHandler);
+    });
+    
+    // Handle mode toggle
+    radioButtons.forEach(radio => {
+        const handler = function() {
+            const selectedMode = this.value;
+            console.log('Mode changed to:', selectedMode);
+            
+            if (this.checked) {
+                // Re-render timeline with new mode
+                renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpan, selectedMode, currentUserSpanId);
+            }
+        };
+        
+        // Store the handler reference so we can remove it later
+        radio._modeToggleHandler = handler;
+        radio.addEventListener('change', handler);
+    });
 }
 </script>
 @endpush 
