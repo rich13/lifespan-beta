@@ -1,7 +1,7 @@
 @extends('layouts.app')
 
 @section('page_title')
-    Comparing {{ $personalSpan->name }} with {{ $span->name }}
+    You and {{ $span->name }}
 @endsection
 
 <x-shared.interactive-card-styles />
