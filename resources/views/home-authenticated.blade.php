@@ -817,7 +817,7 @@
                     <div class="card">
                         <div class="card-header">
                             <h3 class="h6 mb-0">
-                                <i class="bi bi-patch-question text-warning me-2"></i>
+                                <i class="bi bi-border-style text-primary me-2"></i>
                                 Your Placeholders
                             </h3>
                         </div>
@@ -829,8 +829,8 @@
                     <div class="card">
                         <div class="card-header">
                             <h3 class="h6 mb-0">
-                                <i class="bi bi-patch-question text-warning me-2"></i>
-                                Placeholder Connections
+                                <i class="bi bi-border-style text-primary me-2"></i>
+                                Your Placeholders
                             </h3>
                         </div>
                         <div class="card-body">

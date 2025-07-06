@@ -1,5 +1,5 @@
 <!-- Brand/Title -->
-<div class="p-3 border-bottom border-secondary">
+<div class="p-3 border-bottom border-white bg-primary">
     <a class="text-decoration-none" href="{{ route('home') }}">
         <h5 class="mb-0 text-white sidebar-brand">
             <i class="bi bi-bar-chart-steps me-1"></i> <span>Lifespan</span>

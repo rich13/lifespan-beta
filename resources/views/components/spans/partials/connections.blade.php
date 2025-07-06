@@ -31,7 +31,8 @@
             <h2 class="card-title h5 mb-3">Connections</h2>
             
             @if($parentConnections->isNotEmpty())
-                <div class="connection-spans mb-4">
+            <h3 class="h6 mb-2"><i class="bi bi-box-arrow-in-right me-2"></i>From this span</h3>
+            <div class="connection-spans mb-4">
                     @foreach($parentConnections as $connection)
                         @if($connection->connectionSpan)
                             <x-connections.interactive-card :connection="$connection" />
@@ -41,7 +42,7 @@
             @endif
 
             @if($childConnections->isNotEmpty())
-                <h3 class="h6 mb-2">And...</h3>
+                <h3 class="h6 mb-2"><i class="bi bi-box-arrow-in-left me-2"></i>To this span</h3>
                 <div class="connection-spans">
                     @foreach($childConnections as $connection)
                         @if($connection->connectionSpan)

@@ -4,7 +4,7 @@
     <div class="card-header">
         <h5 class="card-title mb-0">
             <i class="bi bi-diagram-3-fill me-2"></i>
-            Combined Timeline
+            Timeline
         </h5>
     </div>
     <div class="card-body">

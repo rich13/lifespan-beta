@@ -2,34 +2,33 @@
 
 @section('title', $story['title'])
 
+@section('page_title')
+    <x-breadcrumb :items="[
+        [
+            'text' => 'Spans',
+            'url' => route('spans.index'),
+            'icon' => 'view',
+            'icon_category' => 'action'
+        ],
+        [
+            'text' => $span->getDisplayTitle(),
+            'url' => route('spans.show', $span),
+            'icon' => $span->type_id,
+            'icon_category' => 'span'
+        ],
+        [
+            'text' => 'Story',
+            'url' => route('spans.story', $span),
+            'icon' => 'book',
+            'icon_category' => 'action'
+        ]
+    ]" />
+@endsection
+
 @section('content')
 <div class="container-fluid">
     <div class="row">
         <div class="col-12">
-            <!-- Breadcrumb -->
-            <nav aria-label="breadcrumb">
-                <ol class="breadcrumb">
-                    <li class="breadcrumb-item">
-                        <a href="{{ route('spans.index') }}">Spans</a>
-                    </li>
-                    <li class="breadcrumb-item">
-                        <a href="{{ route('spans.show', $span) }}">{{ $span->name }}</a>
-                    </li>
-                    <li class="breadcrumb-item active" aria-current="page">Story</li>
-                </ol>
-            </nav>
-
-            <!-- Header -->
-            <div class="mb-4">
-                <h1 class="h2 mb-0">{{ $story['title'] }}</h1>
-                <p class="text-muted mb-0">
-                    <x-icon type="{{ $span->type_id }}" category="span" />
-                    {{ $span->type->name }}
-                    @if($span->subtype)
-                        <span class="badge bg-secondary ms-1">{{ ucfirst($span->subtype) }}</span>
-                    @endif
-                </p>
-            </div>
 
             <!-- Story Content -->
             <div class="card mb-4">
@@ -64,44 +63,8 @@
                         <h5 class="card-title mb-0">Debug Information</h5>
                     </div>
                     <div class="card-body">
-                        <h6>Story Generation Debug</h6>
-                        <p><strong>Span Type:</strong> {{ $span->type_id }}</p>
-                        <p><strong>Span Name:</strong> {{ $span->name }}</p>
-                        <p><strong>Start Year:</strong> {{ $span->start_year ?? 'None' }}</p>
-                        <p><strong>Is Ongoing:</strong> {{ $span->is_ongoing ? 'Yes' : 'No' }}</p>
-                        <p><strong>Gender:</strong> {{ $span->getMeta('gender') ?? 'Unknown' }}</p>
-                        
-                        <h6 class="mt-3">Available Templates</h6>
-                        @php
-                            $templates = config('story_templates');
-                            $spanTemplates = $templates[$span->type_id] ?? [];
-                        @endphp
-                        @if(!empty($spanTemplates['sentences']))
-                            <ul>
-                                @foreach($spanTemplates['sentences'] as $sentenceKey => $sentenceConfig)
-                                    <li><strong>{{ $sentenceKey }}:</strong> {{ $sentenceConfig['template'] ?? 'No template' }}</li>
-                                @endforeach
-                            </ul>
-                        @else
-                            <p class="text-muted">No templates found for span type: {{ $span->type_id }}</p>
-                        @endif
-
-                        <h6 class="mt-3">Generated Paragraphs</h6>
-                        @if(!empty($story['paragraphs']))
-                            <p><strong>Number of paragraphs:</strong> {{ count($story['paragraphs']) }}</p>
-                            @foreach($story['paragraphs'] as $index => $paragraph)
-                                <div class="mb-2">
-                                    <strong>Paragraph {{ $index + 1 }}:</strong>
-                                    <p class="mb-1">{{ $paragraph }}</p>
-                                </div>
-                            @endforeach
-                        @else
-                            <p class="text-muted">No paragraphs generated</p>
-                        @endif
-
-                        <h6 class="mt-3">Story Metadata</h6>
-                        <pre>{{ json_encode($story['metadata'] ?? [], JSON_PRETTY_PRINT) }}</pre>
-
+    
+    
                         @if(isset($story['debug']))
                             <h6 class="mt-3">Detailed Debug Information</h6>
                             @if(isset($story['debug']['error']))
