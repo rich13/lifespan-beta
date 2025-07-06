@@ -2,6 +2,7 @@
 
 return [
     'person' => [
+        'story_template' => '{birth}{current_role}{band_memberships}{residence}{longest_residence}{education}{work}{most_recent_job}{relationships}{current_relationship}{longest_relationship}{parents}{children}{siblings}',
         'sentences' => [
             'birth' => [
                 'template' => '{name} was {birth_preposition} {birth_date} in {birth_location}.',
@@ -34,7 +35,7 @@ return [
                 'condition' => 'hasResidences',
             ],
             'education' => [
-                'template' => '{subject} went to school at {institutions}.',
+                'template' => '{subject} studied at {institutions}.',
                 'data_methods' => [
                     'subject' => 'getPronoun',
                     'institutions' => 'getEducationInstitutions',
@@ -57,6 +58,17 @@ return [
                     'organisation' => 'getMostRecentJobOrganisation',
                 ],
                 'condition' => 'hasWork',
+            ],
+            'band_memberships' => [
+                'template' => '{subject} {object_is_verb} a member of {bands}.',
+                'single_template' => '{subject} {object_is_verb} a member of {band}.',
+                'data_methods' => [
+                    'subject' => 'getPronoun',
+                    'object_is_verb' => 'getObjectIsVerb',
+                    'bands' => 'getBandMembershipNames',
+                    'band' => 'getFirstBandMembershipName',
+                ],
+                'condition' => 'hasBandMemberships',
             ],
             'relationships' => [
                 'template' => '{subject} {has_verb} had relationships with {count} people.',
@@ -97,8 +109,8 @@ return [
                 'condition' => 'hasParents',
             ],
             'children' => [
-                'template' => '{subject} {has_verb} {count} children: {child_names}.',
-                'single_template' => '{subject} {has_verb} one child: {child_names}.',
+                'template' => '{subject} {has_verb} {count} children, {child_names}.',
+                'single_template' => '{subject} {has_verb} one child, {child_names}.',
                 'data_methods' => [
                     'subject' => 'getPronoun',
                     'has_verb' => 'getHasVerb',
@@ -108,8 +120,8 @@ return [
                 'condition' => 'hasChildren',
             ],
             'siblings' => [
-                'template' => '{subject} {has_verb} {count} siblings: {sibling_names}.',
-                'single_template' => '{subject} {has_verb} one sibling: {sibling_names}.',
+                'template' => '{subject} {has_verb} {count} siblings, {sibling_names}.',
+                'single_template' => '{subject} {has_verb} one sibling, {sibling_names}.',
                 'data_methods' => [
                     'subject' => 'getPronoun',
                     'has_verb' => 'getHasVerb',
@@ -118,9 +130,30 @@ return [
                 ],
                 'condition' => 'hasSiblings',
             ],
+            'has_role' => [
+                'template' => '{subject} {object_is_verb} a {roles}.',
+                'single_template' => '{subject} {object_is_verb} a {role}.',
+                'data_methods' => [
+                    'subject' => 'getPronoun',
+                    'object_is_verb' => 'getObjectIsVerb',
+                    'roles' => 'getRoleNames',
+                    'role' => 'getFirstRoleName',
+                ],
+                'condition' => 'hasRoles',
+            ],
+            'current_role' => [
+                'template' => '{subject} {is_verb} a {current_role}.',
+                'data_methods' => [
+                    'subject' => 'getPronoun',
+                    'is_verb' => 'getIsVerb',
+                    'current_role' => 'getCurrentRole',
+                ],
+                'condition' => 'hasCurrentRole',
+            ],
         ],
     ],
     'band' => [
+        'story_template' => '{formation}{member_names}{discography}',
         'sentences' => [
             'formation' => [
                 'template' => '{name} was formed in {formation_date} in {formation_location}.',

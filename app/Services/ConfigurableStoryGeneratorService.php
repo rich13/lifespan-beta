@@ -37,10 +37,42 @@ class ConfigurableStoryGeneratorService
         }
 
         $template = $this->templates[$spanType];
-        $sentences = [];
         $debug['templates_found'] = count($template['sentences']);
+        
+        // Check if we have a story template
+        if (!isset($template['story_template'])) {
+            $debug['error'] = "No story template found for span type: {$spanType}";
+            $debug['used_fallback'] = true;
+            $fallbackSentence = $this->generateFallbackSentence($span);
+            return [
+                'title' => "The Story of {$span->name}",
+                'paragraphs' => $this->groupIntoSentences([$fallbackSentence]),
+                'metadata' => $this->generateMetadata($span),
+                'debug' => $debug,
+            ];
+        }
 
-        foreach ($template['sentences'] as $sentenceKey => $sentenceConfig) {
+        $storyTemplate = $template['story_template'];
+        $debug['story_template'] = $storyTemplate;
+        
+        // Extract sentence keys from the story template
+        preg_match_all('/\{([^}]+)\}/', $storyTemplate, $matches);
+        $sentenceKeys = $matches[1] ?? [];
+        $debug['sentence_keys'] = $sentenceKeys;
+        
+        $generatedSentences = [];
+        $storyText = $storyTemplate;
+        
+        foreach ($sentenceKeys as $sentenceKey) {
+            if (!isset($template['sentences'][$sentenceKey])) {
+                $debug['sentences'][$sentenceKey] = [
+                    'included' => false,
+                    'reason' => 'Sentence key not found in template'
+                ];
+                continue;
+            }
+            
+            $sentenceConfig = $template['sentences'][$sentenceKey];
             $sentenceDebug = [
                 'key' => $sentenceKey,
                 'template' => $sentenceConfig['template'] ?? 'No template',
@@ -61,14 +93,14 @@ class ConfigurableStoryGeneratorService
                 $sentenceDebug['has_required_data'] = $hasRequiredData;
                 
                 if ($hasRequiredData) {
-                    $template = $this->selectTemplate($sentenceConfig, $data);
-                    $sentenceDebug['selected_template'] = $template;
+                    $selectedTemplate = $this->selectTemplate($sentenceConfig, $data);
+                    $sentenceDebug['selected_template'] = $selectedTemplate;
                     
-                    $sentence = $this->replacePlaceholders($template, $data);
+                    $sentence = $this->replacePlaceholders($selectedTemplate, $data);
                     $sentenceDebug['final_sentence'] = $sentence;
                     
                     if ($sentence) {
-                        $sentences[] = $sentence;
+                        $generatedSentences[$sentenceKey] = $sentence;
                         $sentenceDebug['included'] = true;
                     } else {
                         $sentenceDebug['included'] = false;
@@ -88,8 +120,33 @@ class ConfigurableStoryGeneratorService
             
             $debug['sentences'][$sentenceKey] = $sentenceDebug;
         }
-
+        
+        // Replace placeholders in the story template with generated sentences
+        foreach ($generatedSentences as $key => $sentence) {
+            $storyText = str_replace("{{$key}}", $sentence, $storyText);
+        }
+        
+        // Remove any remaining placeholders (for sentences that didn't generate)
+        $storyText = preg_replace('/\{[^}]+\}/', '', $storyText);
+        
+        // Clean up the text (remove extra spaces, etc.)
+        $storyText = $this->cleanupTemplateText($storyText);
+        
+        // Add spaces between sentence placeholders that were replaced
+        $storyText = preg_replace('/\.([A-Z])/', '. $1', $storyText);
+        
+        // Split into sentences and filter out empty ones
+        $sentences = array_filter(array_map('trim', explode('.', $storyText)), function($sentence) {
+            return !empty($sentence);
+        });
+        
+        // Add periods back to sentences
+        $sentences = array_map(function($sentence) {
+            return $sentence . '.';
+        }, $sentences);
+        
         $debug['total_sentences_generated'] = count($sentences);
+        $debug['final_story_text'] = $storyText;
 
         // If no sentences were generated, use the fallback message
         if (empty($sentences)) {
@@ -345,8 +402,11 @@ class ConfigurableStoryGeneratorService
             'hasParents' => $span->parents->isNotEmpty(),
             'hasChildren' => $span->children->isNotEmpty(),
             'hasSiblings' => $span->siblings()->count() > 0,
+            'hasBandMemberships' => $this->getBandMemberships($span)->isNotEmpty(),
             'hasMembers' => $this->getBandMembers($span)->isNotEmpty(),
             'hasDiscography' => $this->getDiscography($span)->isNotEmpty(),
+            'hasRoles' => $this->getPastRoles($span)->isNotEmpty(),
+            'hasCurrentRole' => $this->getCurrentRole($span) !== null,
             default => false,
         };
     }
@@ -389,8 +449,14 @@ class ConfigurableStoryGeneratorService
             'getSiblingCount' => $span->siblings()->count(),
             'getFirstSiblingName' => ($sibling = $span->siblings()->first()) ? $this->makeSpanLink($sibling->name, $sibling) : null,
             'getSiblingNames' => $this->getSiblingNames($span),
+            'getBandMembershipNames' => $this->getBandMembershipNames($span),
+            'getFirstBandMembershipName' => ($firstBand = $this->getBandMemberships($span)->first()) ? $this->makeSpanLink($firstBand['band'], $firstBand['band_span']) : null,
+            'getObjectIsVerb' => $this->getObjectIsVerb($span),
             'getMemberCount' => $this->getBandMembers($span)->count(),
             'getBandMemberNames' => $this->getBandMemberNames($span),
+            'getRoleNames' => $this->getRoleNames($span),
+            'getFirstRoleName' => ($firstRole = $this->getPastRoles($span)->first()) ? $this->makeSpanLink($firstRole['role'], $firstRole['role_span']) : null,
+            'getCurrentRole' => $this->getCurrentRole($span),
             'getTenseVerb' => $this->getTenseVerb($span),
             'getIsVerb' => $this->getIsVerb($span),
             'getHasVerb' => $this->getHasVerb($span),
@@ -1082,6 +1148,35 @@ class ConfigurableStoryGeneratorService
         return $this->formatList($memberLinks);
     }
 
+    protected function getBandMemberships(Span $person): Collection
+    {
+        return $person->connectionsAsSubject()
+            ->where('type_id', 'membership')
+            ->whereHas('child', function ($query) {
+                $query->where('type_id', 'band');
+            })
+            ->with(['child', 'connectionSpan'])
+            ->get()
+            ->map(function ($connection) {
+                return [
+                    'band' => $connection->child->name,
+                    'band_span' => $connection->child,
+                    'start_date' => $connection->connectionSpan?->formatted_start_date,
+                    'end_date' => $connection->connectionSpan?->formatted_end_date,
+                ];
+            });
+    }
+
+    protected function getBandMembershipNames(Span $person): string
+    {
+        $bands = $this->getBandMemberships($person);
+        $bandLinks = $bands->pluck('band_span')->map(function ($span) {
+            $link = route('spans.show', $span);
+            return '<a href="' . $link . '" class="text-decoration-none">' . e($span->name) . '</a>';
+        })->toArray();
+        return $this->formatList($bandLinks);
+    }
+
     protected function getTenseVerb(Span $span): string
     {
         return $span->is_ongoing ? 'are' : 'were';
@@ -1105,6 +1200,19 @@ class ConfigurableStoryGeneratorService
     protected function getHadVerb(Span $span): string
     {
         return $span->is_ongoing ? 'has' : 'had';
+    }
+
+    protected function getObjectIsVerb(Span $person): string
+    {
+        // Get the first band membership to determine the verb tense
+        $firstBand = $this->getBandMemberships($person)->first();
+        if ($firstBand && $firstBand['band_span']) {
+            // Use the band's ongoing status to determine tense
+            return $firstBand['band_span']->is_ongoing ? 'is' : 'was';
+        }
+        
+        // Fallback to person's status if no band found
+        return $person->is_ongoing ? 'is' : 'was';
     }
 
     protected function getDiscography(Span $band): Collection
@@ -1354,5 +1462,85 @@ class ConfigurableStoryGeneratorService
             'set' => 'set',
             default => $typeId,
         };
+    }
+
+    protected function getRoles(Span $person): Collection
+    {
+        return $person->connectionsAsSubject()
+            ->where('type_id', 'has_role')
+            ->whereHas('child', function ($query) {
+                $query->where('type_id', 'role');
+            })
+            ->with(['child', 'connectionSpan'])
+            ->get()
+            ->map(function ($connection) {
+                $roleSpan = $connection->child;
+                $connectionSpan = $connection->connectionSpan;
+                
+                // Get organisation info if available
+                $organisation = null;
+                if ($roleSpan && $roleSpan->getMeta('organisation')) {
+                    $organisationId = $roleSpan->getMeta('organisation');
+                    $organisation = \App\Models\Span::find($organisationId);
+                }
+                
+                return [
+                    'role' => $roleSpan->name,
+                    'role_span' => $roleSpan,
+                    'organisation' => $organisation ? $organisation->name : null,
+                    'organisation_span' => $organisation,
+                    'start_date' => $connectionSpan?->formatted_start_date,
+                    'end_date' => $connectionSpan?->formatted_end_date,
+                    'is_ongoing' => $connectionSpan?->is_ongoing ?? false,
+                ];
+            });
+    }
+
+    protected function getPastRoles(Span $person): Collection
+    {
+        return $this->getRoles($person)
+            ->where('is_ongoing', false);
+    }
+
+    protected function getRoleNames(Span $person): string
+    {
+        $roles = $this->getPastRoles($person);
+        
+        if ($roles->isEmpty()) {
+            return '';
+        }
+        
+        $roleNames = $roles->map(function ($role) {
+            $roleName = $this->makeSpanLink($role['role'], $role['role_span']);
+            
+            // Add organisation if available
+            if ($role['organisation']) {
+                $roleName .= ' at ' . $this->makeSpanLink($role['organisation'], $role['organisation_span']);
+            }
+            
+            return $roleName;
+        });
+        
+        return $this->formatList($roleNames->toArray());
+    }
+
+    protected function getCurrentRole(Span $person): ?string
+    {
+        $currentRole = $this->getRoles($person)
+            ->where('is_ongoing', true)
+            ->first();
+        
+        if (!$currentRole) {
+            return null;
+        }
+        
+        $roleName = $this->makeSpanLink($currentRole['role'], $currentRole['role_span']);
+        
+        // Add organisation if available
+        if ($currentRole['organisation']) {
+            $roleName .= ' at ' . $this->makeSpanLink($currentRole['organisation'], $currentRole['organisation_span']);
+        }
+        
+        return $roleName;
     }
 } 
