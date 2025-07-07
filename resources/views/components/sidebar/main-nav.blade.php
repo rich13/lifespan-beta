@@ -42,5 +42,10 @@
             <i class="bi bi-archive me-1"></i> <span>Sets</span>
         </a>
     </li>
+    <li class="nav-item">
+        <a class="nav-link {{ request()->routeIs('desert-island-discs.*') ? 'active' : '' }}" href="{{ route('desert-island-discs.index') }}">
+            <i class="bi bi-vinyl-fill me-1"></i> <span>Desert Island Discs</span>
+        </a>
+    </li>
 
 </ul> 

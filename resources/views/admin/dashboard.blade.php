@@ -274,6 +274,70 @@
                         </div>
                     </div>
                 </div>
+                <div class="col-md-3 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-3">
+                                <i class="bi bi-music-note-beamed fs-2 text-danger me-3"></i>
+                                <div>
+                                    <h5 class="card-title mb-1">Desert Island Discs</h5>
+                                    <p class="card-text text-muted">Import BBC Desert Island Discs data</p>
+                                </div>
+                            </div>
+                            <a href="{{ route('admin.import.desert-island-discs.index') }}" class="btn btn-outline-danger btn-sm w-100">
+                                <i class="bi bi-arrow-right"></i> Import
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-3">
+                                <i class="bi bi-music-note-beamed fs-2 text-warning me-3"></i>
+                                <div>
+                                    <h5 class="card-title mb-1">Simple DID Import</h5>
+                                    <p class="card-text text-muted">Import DID data as placeholders only</p>
+                                </div>
+                            </div>
+                            <a href="{{ route('admin.import.simple-desert-island-discs.index') }}" class="btn btn-outline-warning btn-sm w-100">
+                                <i class="bi bi-arrow-right"></i> Import
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-3">
+                                <i class="bi bi-building fs-2 text-primary me-3"></i>
+                                <div>
+                                    <h5 class="card-title mb-1">Parliament Explorer</h5>
+                                    <p class="card-text text-muted">Explore UK Parliament member data</p>
+                                </div>
+                            </div>
+                            <a href="{{ route('admin.import.parliament.index') }}" class="btn btn-outline-primary btn-sm w-100">
+                                <i class="bi bi-arrow-right"></i> Explore
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-3">
+                                <i class="bi bi-person-badge fs-2 text-success me-3"></i>
+                                <div>
+                                    <h5 class="card-title mb-1">Prime Ministers</h5>
+                                    <p class="card-text text-muted">Import UK Prime Ministers</p>
+                                </div>
+                            </div>
+                            <a href="{{ route('admin.import.prime-ministers.index') }}" class="btn btn-outline-success btn-sm w-100">
+                                <i class="bi bi-arrow-right"></i> Import
+                            </a>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
