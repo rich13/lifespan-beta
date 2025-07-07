@@ -958,6 +958,32 @@ class SpanController extends Controller
         // Clear the session data
         session()->forget('yaml_content');
         
+        // Validate the YAML to extract basic information
+        $validationResult = $this->yamlService->yamlToSpanData($yamlContent);
+        
+        $existingSpan = null;
+        $mergeData = null;
+        
+        if ($validationResult['success']) {
+            $data = $validationResult['data'];
+            $spanName = $data['name'] ?? '';
+            $spanType = $data['type'] ?? '';
+            
+            // Check if a span with this name and type already exists
+            if ($spanName && $spanType) {
+                $existingSpan = $this->yamlService->findExistingSpan($spanName, $spanType);
+                
+                if ($existingSpan) {
+                    // Check if user has permission to update this span
+                    if (auth()->user()->can('update', $existingSpan)) {
+                        // Generate merged data for preview
+                        $mergeData = $this->yamlService->mergeYamlWithExistingSpan($existingSpan, $data);
+                        $mergeData['yaml_content'] = $yamlContent;
+                    }
+                }
+            }
+        }
+        
         // Get all connection types and span types for help text
         $connectionTypes = ConnectionTypeModel::orderBy('type')->get();
         $spanTypes = SpanType::orderBy('type_id')->get();
@@ -967,33 +993,14 @@ class SpanController extends Controller
             'span' => null,
             'yamlContent' => $yamlContent,
             'connectionTypes' => $connectionTypes,
-            'spanTypes' => $spanTypes
+            'spanTypes' => $spanTypes,
+            'existingSpan' => $existingSpan,
+            'mergeData' => $mergeData
         ]);
     }
 
     /**
-     * Validate YAML content without applying changes
-     */
-    public function validateYaml(Request $request, Span $span)
-    {
-        $this->authorize('update', $span);
-        
-        $validated = $request->validate([
-            'yaml_content' => 'required|string'
-        ]);
-        
-        $result = $this->yamlService->yamlToSpanData($validated['yaml_content'], $span->slug, $span);
-        
-        // Add visual translation if validation was successful
-        if ($result['success']) {
-            $result['visual'] = $this->yamlService->translateToVisual($result['data']);
-        }
-        
-        return response()->json($result);
-    }
-
-    /**
-     * Validate YAML content for a new span without applying changes
+     * Validate YAML content for new spans
      */
     public function validateYamlNew(Request $request)
     {
@@ -1003,29 +1010,8 @@ class SpanController extends Controller
             'yaml_content' => 'required|string'
         ]);
         
-        $result = $this->yamlService->yamlToSpanData($validated['yaml_content']);
-        
-        // Add visual translation if validation was successful
-        if ($result['success']) {
-            $result['visual'] = $this->yamlService->translateToVisual($result['data']);
-        }
-        
-        return response()->json($result);
-    }
-
-    /**
-     * Apply validated YAML to span
-     */
-    public function applyYaml(Request $request, Span $span)
-    {
-        $this->authorize('update', $span);
-        
-        $validated = $request->validate([
-            'yaml_content' => 'required|string'
-        ]);
-        
         // First validate the YAML
-        $validationResult = $this->yamlService->yamlToSpanData($validated['yaml_content'], $span->slug, $span);
+        $validationResult = $this->yamlService->yamlToSpanData($validated['yaml_content']);
         
         if (!$validationResult['success']) {
             return response()->json([
@@ -1035,8 +1021,150 @@ class SpanController extends Controller
             ], 422);
         }
         
+        // Check for existing span
+        $data = $validationResult['data'];
+        $existingSpan = null;
+        $mergeData = null;
+        
+        if (isset($data['name']) && isset($data['type'])) {
+            $existingSpan = $this->yamlService->findExistingSpan($data['name'], $data['type']);
+            
+            if ($existingSpan) {
+                // Check if user has permission to update this span
+                if (auth()->user()->can('update', $existingSpan)) {
+                    // Generate merged data for preview
+                    $mergeData = $this->yamlService->mergeYamlWithExistingSpan($existingSpan, $data);
+                }
+            }
+        }
+        
+        // Generate visual translation
+        $visualTranslation = $this->yamlService->translateToVisual($validationResult['data']);
+        
+        return response()->json([
+            'success' => true,
+            'data' => $validationResult['data'],
+            'visual' => $visualTranslation,
+            'existingSpan' => $existingSpan ? [
+                'id' => $existingSpan->id,
+                'name' => $existingSpan->name,
+                'type' => $existingSpan->type_id,
+                'state' => $existingSpan->state,
+                'has_permission' => auth()->user()->can('update', $existingSpan)
+            ] : null,
+            'mergeData' => $mergeData
+        ]);
+    }
+
+    /**
+     * Validate YAML content without applying changes
+     */
+    public function validateYaml(Request $request, Span $span)
+    {
+        $this->authorize('update', $span);
+        $validated = $request->validate([
+            'yaml_content' => 'required|string'
+        ]);
+        $validationResult = $this->yamlService->yamlToSpanData($validated['yaml_content'], $span->slug, $span);
+        if (!$validationResult['success']) {
+            $debug = null;
+            if (auth()->user() && auth()->user()->is_admin) {
+                $debug = "Raw YAML:\n" . $validated['yaml_content'] . "\n\n";
+                if (!empty($validationResult['errors'])) {
+                    $debug .= "Errors:\n" . print_r($validationResult['errors'], true);
+                }
+            }
+            return response()->json([
+                'success' => false,
+                'message' => 'YAML validation failed',
+                'errors' => $validationResult['errors'],
+                'debug' => $debug,
+            ], 422);
+        }
+        // Generate visual translation and impact analysis
+        $visualTranslation = $this->yamlService->translateToVisual($validationResult['data']);
+        $changeImpacts = $this->yamlService->analyzeChangeImpacts($validationResult['data'], $span);
+        
+        return response()->json([
+            'success' => true,
+            'data' => $validationResult['data'],
+            'visual' => $visualTranslation,
+            'impacts' => $changeImpacts
+        ]);
+    }
+
+    /**
+     * Apply validated YAML to an existing span
+     */
+    public function applyYaml(Request $request, Span $span)
+    {
+        $this->authorize('update', $span);
+        $validated = $request->validate([
+            'yaml_content' => 'required|string'
+        ]);
+        $validationResult = $this->yamlService->yamlToSpanData($validated['yaml_content'], $span->slug, $span);
+        if (!$validationResult['success']) {
+            $debug = null;
+            if (auth()->user() && auth()->user()->is_admin) {
+                $debug = "Raw YAML:\n" . $validated['yaml_content'] . "\n\n";
+                if (!empty($validationResult['errors'])) {
+                    $debug .= "Errors:\n" . print_r($validationResult['errors'], true);
+                }
+            }
+            return response()->json([
+                'success' => false,
+                'message' => 'YAML validation failed',
+                'errors' => $validationResult['errors'],
+                'debug' => $debug,
+            ], 422);
+        }
         // Apply the changes to the database
         $applyResult = $this->yamlService->applyYamlToSpan($span, $validationResult['data']);
+        
+        if ($applyResult['success']) {
+            return response()->json([
+                'success' => true,
+                'message' => $applyResult['message'],
+                'redirect' => route('spans.yaml-editor', $span)
+            ]);
+        } else {
+            return response()->json([
+                'success' => false,
+                'message' => $applyResult['message']
+            ], 500);
+        }
+    }
+
+    /**
+     * Apply merged YAML to an existing span
+     */
+    public function applyMergedYaml(Request $request, Span $span)
+    {
+        $this->authorize('update', $span);
+        $validated = $request->validate([
+            'yaml_content' => 'required|string'
+        ]);
+        $validationResult = $this->yamlService->yamlToSpanData($validated['yaml_content']);
+        if (!$validationResult['success']) {
+            $debug = null;
+            if (auth()->user() && auth()->user()->is_admin) {
+                $debug = "Raw YAML:\n" . $validated['yaml_content'] . "\n\n";
+                if (!empty($validationResult['errors'])) {
+                    $debug .= "Errors:\n" . print_r($validationResult['errors'], true);
+                }
+            }
+            return response()->json([
+                'success' => false,
+                'message' => 'YAML validation failed',
+                'errors' => $validationResult['errors'],
+                'debug' => $debug,
+            ], 422);
+        }
+        // Generate merged data
+        $mergedData = $this->yamlService->mergeYamlWithExistingSpan($span, $validationResult['data']);
+        
+        // Apply the merged changes to the database
+        $applyResult = $this->yamlService->applyMergedYamlToSpan($span, $mergedData);
         
         if ($applyResult['success']) {
             return response()->json([
@@ -1058,22 +1186,25 @@ class SpanController extends Controller
     public function applyYamlNew(Request $request)
     {
         $this->authorize('create', Span::class);
-        
         $validated = $request->validate([
             'yaml_content' => 'required|string'
         ]);
-        
-        // First validate the YAML
         $validationResult = $this->yamlService->yamlToSpanData($validated['yaml_content']);
-        
         if (!$validationResult['success']) {
+            $debug = null;
+            if (auth()->user() && auth()->user()->is_admin) {
+                $debug = "Raw YAML:\n" . $validated['yaml_content'] . "\n\n";
+                if (!empty($validationResult['errors'])) {
+                    $debug .= "Errors:\n" . print_r($validationResult['errors'], true);
+                }
+            }
             return response()->json([
                 'success' => false,
                 'message' => 'YAML validation failed',
-                'errors' => $validationResult['errors']
+                'errors' => $validationResult['errors'],
+                'debug' => $debug,
             ], 422);
         }
-        
         // Create the new span
         $createResult = $this->yamlService->createSpanFromYaml($validationResult['data']);
         
