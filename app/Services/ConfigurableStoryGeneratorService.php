@@ -155,13 +155,14 @@ class ConfigurableStoryGeneratorService
             $debug['used_fallback'] = true;
         }
 
-        // TODO: INVESTIGATE ROOT CAUSE - URLs are getting %20 encoded spaces in production
+        // TODO: INVESTIGATE ROOT CAUSE - URLs are getting spaces inserted in production
         // This is a temporary workaround to fix the issue where URLs like 
-        // "https://beta.%20lifespan.%20dev/date/1976-02-13" are being generated
+        // "https://beta. lifespan. dev/date/1976-02-13" are being generated
         // instead of "https://beta.lifespan.dev/date/1976-02-13"
         // Apply the fix to all sentences before returning
         $sentences = array_map(function($sentence) {
-            return str_replace('%20', '', $sentence);
+            // Remove spaces from URLs in href attributes
+            return preg_replace('/href="([^"]*?)\s+([^"]*?)"/', 'href="$1$2"', $sentence);
         }, $sentences);
 
         return [
