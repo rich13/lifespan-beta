@@ -155,15 +155,7 @@ class ConfigurableStoryGeneratorService
             $debug['used_fallback'] = true;
         }
 
-        // TODO: INVESTIGATE ROOT CAUSE - URLs are getting spaces inserted in production
-        // This is a temporary workaround to fix the issue where URLs like 
-        // "https://beta. lifespan. dev/date/1976-02-13" are being generated
-        // instead of "https://beta.lifespan.dev/date/1976-02-13"
-        // Apply the fix to all sentences before returning
-        $sentences = array_map(function($sentence) {
-            // Remove spaces from URLs in href attributes
-            return preg_replace('/href="([^"]*?)\s+([^"]*?)"/', 'href="$1$2"', $sentence);
-        }, $sentences);
+
 
         return [
             'title' => "The Story of {$span->name}",
@@ -294,7 +286,7 @@ class ConfigurableStoryGeneratorService
             // Convert value to string, handling null and other types
             $stringValue = match (true) {
                 is_null($value) => '',
-                is_string($value) => $value,
+                is_string($value) => trim($value), // Trim to prevent spaces from being inserted
                 is_int($value) => (string) $value,
                 is_float($value) => (string) $value,
                 is_bool($value) => $value ? 'true' : 'false',
@@ -537,6 +529,12 @@ class ConfigurableStoryGeneratorService
         }
 
         $url = route('date.explore', $dateUrl);
+        
+        // Debug: Log the generated URL
+        if (app()->environment('local', 'development')) {
+            \Log::info('Generated date URL', ['url' => $url, 'dateUrl' => $dateUrl]);
+        }
+        
         return '<a href="' . $url . '" class="text-decoration-none">' . e($dateText) . '</a>';
     }
 
