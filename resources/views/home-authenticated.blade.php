@@ -650,7 +650,7 @@
 
                 <x-upcoming-anniversaries />
 
-                <x-this-month-in-history />
+                <x-wikipedia-on-this-day />
             </div>
         </div>
 

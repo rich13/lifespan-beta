@@ -37,6 +37,21 @@
         ->limit(50) // Get more candidates to filter from
         ->get();
     
+    // Get albums with release anniversaries in the next 30 days
+    $albumAnniversarySpans = \App\Models\Span::where('type_id', 'thing')
+        ->whereJsonContains('metadata->subtype', 'album')
+        ->where(function($query) {
+            $query->where('access_level', 'public')
+                ->orWhere('owner_id', auth()->id());
+        })
+        ->whereNotNull('start_year')
+        ->whereNotNull('start_month')
+        ->whereNotNull('start_day')
+        ->where('start_year', '<=', $targetDate->year) // Only albums released before or on target date
+        ->inRandomOrder()
+        ->limit(50) // Get more candidates to filter from
+        ->get();
+    
     // Calculate significant dates
     $significantDates = [];
     
@@ -99,6 +114,38 @@
                 'type' => 'death_anniversary',
                 'date' => $nextAnniversary,
                 'years' => $yearsSinceDeath,
+                'days_until' => $daysUntilAnniversary
+            ];
+        }
+    }
+    
+    // Process album release anniversaries
+    foreach ($albumAnniversarySpans as $span) {
+        $thisYearsAnniversary = \Carbon\Carbon::createFromDate(
+            $targetDate->year,
+            $span->start_month,
+            $span->start_day
+        );
+        
+        // Calculate next anniversary
+        $nextAnniversary = $thisYearsAnniversary->copy();
+        if ($thisYearsAnniversary->lt($targetDate)) {
+            $nextAnniversary = $thisYearsAnniversary->addYear();
+        }
+        
+        // Calculate years since release
+        $yearsSinceRelease = $nextAnniversary->year - $span->start_year;
+        
+        // Calculate days until next anniversary
+        $daysUntilAnniversary = $targetDate->diffInDays($nextAnniversary);
+        
+        // Add to significant dates if anniversary is within next 30 days and hasn't passed
+        if ($daysUntilAnniversary <= 30 && $daysUntilAnniversary >= 0) {
+            $significantDates[] = [
+                'span' => $span,
+                'type' => 'album_anniversary',
+                'date' => $nextAnniversary,
+                'years' => $yearsSinceRelease,
                 'days_until' => $daysUntilAnniversary
             ];
         }
@@ -175,7 +222,7 @@
                                         <button type="button" class="btn btn-outline-light text-dark inactive" disabled>will be {{ $event['age'] }} in {{ $event['days_until'] }} days</button>
                                     @endif
                                 @endif
-                            @else
+                            @elseif($event['type'] === 'death_anniversary')
                                 @if($event['days_until'] === 0)
                                     <!-- Death anniversary today -->
                                     <button type="button" class="btn btn-outline-light text-dark inactive" disabled>{{ $event['years'] }} years since</button>
@@ -198,6 +245,47 @@
                                         {{ $event['span']->name }}
                                     </a>
                                     <button type="button" class="btn btn-outline-light text-dark inactive" disabled>'s death in {{ $event['days_until'] }} days</button>
+                                @endif
+                            @elseif($event['type'] === 'album_anniversary')
+                                @php
+                                    $artist = $event['span']->getCreator();
+                                @endphp
+                                @if($event['days_until'] === 0)
+                                    <!-- Album anniversary today -->
+                                    <button type="button" class="btn btn-outline-light text-dark inactive" disabled>{{ $event['years'] }} years since</button>
+                                    <button type="button" class="btn btn-outline-{{ $event['span']->type_id }} disabled" style="min-width: 40px;">
+                                        <x-icon type="{{ $event['span']->type_id }}" category="span" />
+                                    </button>
+                                    <a href="{{ route('spans.show', $event['span']) }}" 
+                                       class="btn {{ $event['span']->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $event['span']->type_id }}">
+                                        {{ $event['span']->name }}
+                                    </a>
+                                    @if($artist)
+                                        <button type="button" class="btn btn-outline-light text-dark inactive" disabled>by</button>
+                                        <a href="{{ route('spans.show', $artist) }}" 
+                                           class="btn {{ $artist->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $artist->type_id }}">
+                                            {{ $artist->name }}
+                                        </a>
+                                    @endif
+                                    <button type="button" class="btn btn-outline-light text-dark inactive" disabled>was released</button>
+                                @else
+                                    <!-- Album anniversary in future -->
+                                    <button type="button" class="btn btn-outline-light text-dark inactive" disabled>{{ $event['years'] }} years since</button>
+                                    <button type="button" class="btn btn-outline-{{ $event['span']->type_id }} disabled" style="min-width: 40px;">
+                                        <x-icon type="{{ $event['span']->type_id }}" category="span" />
+                                    </button>
+                                    <a href="{{ route('spans.show', $event['span']) }}" 
+                                       class="btn {{ $event['span']->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $event['span']->type_id }}">
+                                        {{ $event['span']->name }}
+                                    </a>
+                                    @if($artist)
+                                        <button type="button" class="btn btn-outline-light text-dark inactive" disabled>by</button>
+                                        <a href="{{ route('spans.show', $artist) }}" 
+                                           class="btn {{ $artist->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $artist->type_id }}">
+                                            {{ $artist->name }}
+                                        </a>
+                                    @endif
+                                    <button type="button" class="btn btn-outline-light text-dark inactive" disabled>was released in {{ $event['days_until'] }} days</button>
                                 @endif
                             @endif
                         </div>
