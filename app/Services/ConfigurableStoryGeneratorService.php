@@ -300,71 +300,12 @@ class ConfigurableStoryGeneratorService
 
     /**
      * Clean up awkward text patterns that result from missing data
+     *
+     * Temporarily disabled for debugging: returns text unchanged.
      */
     protected function cleanupTemplateText(string $text): string
     {
-        // First, temporarily protect URLs from being modified
-        $urls = [];
-        $text = preg_replace_callback('/https?:\/\/[^\s<>"{}|\\^`\[\]]+/', function($matches) use (&$urls) {
-            $placeholder = '___URL_' . count($urls) . '___';
-            $urls[$placeholder] = $matches[0];
-            return $placeholder;
-        }, $text);
-
-        // Remove "in " followed by nothing (e.g., "was born in 1947 in ")
-        $text = preg_replace('/\s+in\s+$/', '', $text);
-        
-        // Remove "at " followed by nothing (e.g., "worked at ")
-        $text = preg_replace('/\s+at\s+$/', '', $text);
-        
-        // Remove "with " followed by nothing (e.g., "relationship with ")
-        $text = preg_replace('/\s+with\s+$/', '', $text);
-        
-        // Remove "for " followed by nothing (e.g., "worked for ")
-        $text = preg_replace('/\s+for\s+$/', '', $text);
-        
-        // Remove "of " followed by nothing (e.g., "child of ")
-        $text = preg_replace('/\s+of\s+$/', '', $text);
-        
-        // Remove "to " followed by nothing (e.g., "went to school at ")
-        $text = preg_replace('/\s+to\s+$/', '', $text);
-        
-        // Remove "by " followed by nothing (e.g., "released by ")
-        $text = preg_replace('/\s+by\s+$/', '', $text);
-        
-        // Remove "from " followed by nothing (e.g., "formed from ")
-        $text = preg_replace('/\s+from\s+$/', '', $text);
-        
-        // Remove "through " followed by nothing (e.g., "through ")
-        $text = preg_replace('/\s+through\s+$/', '', $text);
-        
-        // Remove "during " followed by nothing (e.g., "during ")
-        $text = preg_replace('/\s+during\s+$/', '', $text);
-        
-        // Remove double spaces (but be more careful about it)
-        $text = preg_replace('/[ \t\n\r]+/', ' ', $text);
-        
-        // Remove trailing spaces and punctuation
-        $text = trim($text);
-        
-        // Remove trailing commas, periods, and other punctuation that might be left
-        $text = rtrim($text, ' ,.;');
-        
-        // Add a period if the sentence doesn't end with punctuation
-        if (!empty($text) && !preg_match('/[.!?]$/', $text)) {
-            $text .= '.';
-        }
-        
-        // Ensure the sentence starts with a capital letter
-        if (!empty($text)) {
-            $text = ucfirst($text);
-        }
-
-        // Restore URLs
-        foreach ($urls as $placeholder => $url) {
-            $text = str_replace($placeholder, $url, $text);
-        }
-        
+        // TEMPORARY: Bypass all cleanup for debugging URL and sentence issues
         return $text;
     }
 
