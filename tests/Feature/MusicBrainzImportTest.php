@@ -385,4 +385,168 @@ class MusicBrainzImportTest extends TestCase
                 ->exists()
         );
     }
+
+    public function test_does_not_set_todays_date_as_release_date(): void
+    {
+        $today = now()->format('Y-m-d');
+        
+        $response = $this->actingAs($this->user)
+            ->postJson(route('admin.import.musicbrainz.import'), [
+                'band_id' => $this->band->id,
+                'albums' => [
+                    [
+                        'id' => 'test-id-1',
+                        'title' => 'Test Album with Today Date',
+                        'first_release_date' => $today, // Today's date
+                    ],
+                    [
+                        'id' => 'test-id-2',
+                        'title' => 'Test Album with Valid Date',
+                        'first_release_date' => '2023-01-01', // Valid historical date
+                    ],
+                    [
+                        'id' => 'test-id-3',
+                        'title' => 'Test Album with No Date',
+                        'first_release_date' => null, // No date
+                    ],
+                    [
+                        'id' => 'test-id-4',
+                        'title' => 'Test Album with Today Date and Tracks',
+                        'first_release_date' => $today,
+                        'tracks' => [
+                            [
+                                'id' => 'track-id-1',
+                                'title' => 'Track with Today Date',
+                                'length' => 180000,
+                                'isrc' => 'USABC1234567',
+                                'artist_credits' => 'Test Band',
+                                'first_release_date' => $today
+                            ],
+                            [
+                                'id' => 'track-id-2',
+                                'title' => 'Track with Valid Date',
+                                'length' => 240000,
+                                'isrc' => 'USABC1234568',
+                                'artist_credits' => 'Test Band',
+                                'first_release_date' => '2023-01-01'
+                            ]
+                        ]
+                    ]
+                ],
+            ]);
+
+        $response->assertOk();
+        $this->assertTrue($response->json('success'));
+
+        // Test 1: Album with today's date should NOT have date fields set
+        $albumWithTodayDate = Span::where('name', 'Test Album with Today Date')->first();
+        $this->assertNotNull($albumWithTodayDate);
+        $this->assertEquals('placeholder', $albumWithTodayDate->state); // Should be placeholder, not complete
+        $this->assertNull($albumWithTodayDate->start_year);
+        $this->assertNull($albumWithTodayDate->start_month);
+        $this->assertNull($albumWithTodayDate->start_day);
+
+        // Test 2: Album with valid date should have date fields set
+        $albumWithValidDate = Span::where('name', 'Test Album with Valid Date')->first();
+        $this->assertNotNull($albumWithValidDate);
+        $this->assertEquals('complete', $albumWithValidDate->state);
+        $this->assertEquals(2023, $albumWithValidDate->start_year);
+        $this->assertEquals(1, $albumWithValidDate->start_month);
+        $this->assertEquals(1, $albumWithValidDate->start_day);
+
+        // Test 3: Album with no date should be placeholder
+        $albumWithNoDate = Span::where('name', 'Test Album with No Date')->first();
+        $this->assertNotNull($albumWithNoDate);
+        $this->assertEquals('placeholder', $albumWithNoDate->state);
+        $this->assertNull($albumWithNoDate->start_year);
+        $this->assertNull($albumWithNoDate->start_month);
+        $this->assertNull($albumWithNoDate->start_day);
+
+        // Test 4: Connection spans should also not have today's date
+        $connectionWithTodayDate = Span::where('name', 'Test Band created Test Album with Today Date')->first();
+        $this->assertNotNull($connectionWithTodayDate);
+        $this->assertEquals('placeholder', $connectionWithTodayDate->state);
+        $this->assertNull($connectionWithTodayDate->start_year);
+        $this->assertNull($connectionWithTodayDate->start_month);
+        $this->assertNull($connectionWithTodayDate->start_day);
+
+        $connectionWithValidDate = Span::where('name', 'Test Band created Test Album with Valid Date')->first();
+        $this->assertNotNull($connectionWithValidDate);
+        $this->assertEquals('complete', $connectionWithValidDate->state);
+        $this->assertEquals(2023, $connectionWithValidDate->start_year);
+        $this->assertEquals(1, $connectionWithValidDate->start_month);
+        $this->assertEquals(1, $connectionWithValidDate->start_day);
+
+        // Test 5: Tracks with today's date should NOT have date fields set
+        $trackWithTodayDate = Span::where('name', 'Track with Today Date')->first();
+        $this->assertNotNull($trackWithTodayDate);
+        $this->assertEquals('placeholder', $trackWithTodayDate->state);
+        $this->assertNull($trackWithTodayDate->start_year);
+        $this->assertNull($trackWithTodayDate->start_month);
+        $this->assertNull($trackWithTodayDate->start_day);
+
+        // Test 6: Tracks with valid date should have date fields set
+        $trackWithValidDate = Span::where('name', 'Track with Valid Date')->first();
+        $this->assertNotNull($trackWithValidDate);
+        $this->assertEquals('complete', $trackWithValidDate->state);
+        $this->assertEquals(2023, $trackWithValidDate->start_year);
+        $this->assertEquals(1, $trackWithValidDate->start_month);
+        $this->assertEquals(1, $trackWithValidDate->start_day);
+
+        // Test 7: Track connection spans should also not have today's date
+        $trackConnectionWithTodayDate = Span::where('name', 'Test Album with Today Date and Tracks contains Track with Today Date')->first();
+        $this->assertNotNull($trackConnectionWithTodayDate);
+        $this->assertEquals('placeholder', $trackConnectionWithTodayDate->state);
+        $this->assertNull($trackConnectionWithTodayDate->start_year);
+        $this->assertNull($trackConnectionWithTodayDate->start_month);
+        $this->assertNull($trackConnectionWithTodayDate->start_day);
+
+        $trackConnectionWithValidDate = Span::where('name', 'Test Album with Today Date and Tracks contains Track with Valid Date')->first();
+        $this->assertNotNull($trackConnectionWithValidDate);
+        $this->assertEquals('complete', $trackConnectionWithValidDate->state);
+        $this->assertEquals(2023, $trackConnectionWithValidDate->start_year);
+        $this->assertEquals(1, $trackConnectionWithValidDate->start_month);
+        $this->assertEquals(1, $trackConnectionWithValidDate->start_day);
+    }
+
+    public function test_does_not_set_todays_date_as_release_date_in_service(): void
+    {
+        $today = now()->format('Y-m-d');
+        
+        // Test the MusicBrainzImportService directly
+        $service = new \App\Services\MusicBrainzImportService();
+        
+        // Create test albums data
+        $albums = [
+            [
+                'id' => 'test-id-1',
+                'title' => 'Test Album with Today Date',
+                'first_release_date' => $today,
+            ],
+            [
+                'id' => 'test-id-2',
+                'title' => 'Test Album with Valid Date',
+                'first_release_date' => '2023-01-01',
+            ],
+        ];
+
+        // Import using the service
+        $imported = $service->importDiscography($this->band, $albums, $this->user->id);
+
+        // Test that albums with today's date are created as placeholder
+        $albumWithTodayDate = Span::where('name', 'Test Album with Today Date')->first();
+        $this->assertNotNull($albumWithTodayDate);
+        $this->assertEquals('placeholder', $albumWithTodayDate->state);
+        $this->assertNull($albumWithTodayDate->start_year);
+        $this->assertNull($albumWithTodayDate->start_month);
+        $this->assertNull($albumWithTodayDate->start_day);
+
+        // Test that albums with valid dates are created as complete
+        $albumWithValidDate = Span::where('name', 'Test Album with Valid Date')->first();
+        $this->assertNotNull($albumWithValidDate);
+        $this->assertEquals('complete', $albumWithValidDate->state);
+        $this->assertEquals(2023, $albumWithValidDate->start_year);
+        $this->assertEquals(1, $albumWithValidDate->start_month);
+        $this->assertEquals(1, $albumWithValidDate->start_day);
+    }
 } 

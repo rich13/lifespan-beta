@@ -10,17 +10,18 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\Admin\SpanController;
 use App\Models\Connection;
+use App\Services\MusicBrainzImportService;
 
 class MusicBrainzImportController extends Controller
 {
-    protected $musicBrainzApiUrl = 'https://musicbrainz.org/ws/2';
-    protected $userAgent = 'LifespanBeta/1.0 (rich@example.com)';
     protected $spanController;
+    protected $musicBrainzService;
 
     public function __construct()
     {
         $this->middleware(['auth', 'admin']);
         $this->spanController = new SpanController();
+        $this->musicBrainzService = new MusicBrainzImportService();
     }
 
     public function index()
@@ -142,55 +143,17 @@ class MusicBrainzImportController extends Controller
             
             Log::info('Searching MusicBrainz for artist', [
                 'band_name' => $band->name,
-                'url' => "{$this->musicBrainzApiUrl}/artist",
-                'params' => [
-                    'query' => $band->name,
-                    'fmt' => 'json',
-                    'limit' => 10,
-                ]
             ]);
 
-            $response = Http::withHeaders([
-                'User-Agent' => $this->userAgent,
-            ])->get("{$this->musicBrainzApiUrl}/artist", [
-                'query' => $band->name,
-                'fmt' => 'json',
-                'limit' => 10,
-            ]);
-
-            Log::info('MusicBrainz artist search response', [
-                'status' => $response->status(),
-                'headers' => $response->headers(),
-                'body' => $response->body(),
-            ]);
-
-            if (!$response->successful()) {
-                Log::error('MusicBrainz API error', [
-                    'status' => $response->status(),
-                    'body' => $response->body(),
-                ]);
-                return response()->json([
-                    'error' => 'Failed to search MusicBrainz',
-                ], 500);
-            }
-
-            $data = $response->json();
+            $artists = $this->musicBrainzService->searchArtist($band->name);
             
             Log::info('Parsed artist search results', [
-                'has_artists' => isset($data['artists']),
-                'artists_count' => count($data['artists'] ?? []),
-                'first_artist' => $data['artists'][0] ?? null,
+                'artists_count' => count($artists),
+                'first_artist' => $artists[0] ?? null,
             ]);
 
             return response()->json([
-                'artists' => collect($data['artists'] ?? [])->map(function ($artist) {
-                    return [
-                        'id' => $artist['id'],
-                        'name' => $artist['name'],
-                        'disambiguation' => $artist['disambiguation'] ?? null,
-                        'type' => $artist['type'] ?? null,
-                    ];
-                }),
+                'artists' => $artists,
             ]);
         } catch (\Exception $e) {
             Log::error('MusicBrainz search error', [
@@ -213,81 +176,12 @@ class MusicBrainzImportController extends Controller
         try {
             Log::info('Fetching discography from MusicBrainz', [
                 'mbid' => $request->mbid,
-                'url' => "{$this->musicBrainzApiUrl}/release-group",
-                'params' => [
-                    'artist' => $request->mbid,
-                    'fmt' => 'json',
-                    'limit' => 100,
-                    'type' => 'album',
-                ]
             ]);
 
-            $response = Http::withHeaders([
-                'User-Agent' => $this->userAgent,
-            ])->get("{$this->musicBrainzApiUrl}/release-group", [
-                'artist' => $request->mbid,
-                'fmt' => 'json',
-                'limit' => 100,
-                'type' => 'album',
-            ]);
-
-            Log::info('MusicBrainz API response', [
-                'status' => $response->status(),
-                'headers' => $response->headers(),
-                'body' => $response->body(),
-            ]);
-
-            if (!$response->successful()) {
-                Log::error('MusicBrainz API error', [
-                    'status' => $response->status(),
-                    'body' => $response->body(),
-                ]);
-                return response()->json([
-                    'error' => 'Failed to fetch discography',
-                ], 500);
-            }
-
-            $data = $response->json();
+            $albums = $this->musicBrainzService->getDiscography($request->mbid);
             
-            // Log the raw data structure
-            Log::info('Parsed MusicBrainz data', [
-                'has_release_groups' => isset($data['release-groups']),
-                'release_groups_count' => count($data['release-groups'] ?? []),
-                'first_release_group' => $data['release-groups'][0] ?? null,
-            ]);
-
-            // Log a table of all release groups with their attributes
-            $releaseGroupsTable = collect($data['release-groups'] ?? [])->map(function ($album) {
-                return [
-                    'title' => $album['title'],
-                    'primary_type' => $album['primary-type'] ?? 'N/A',
-                    'secondary_types' => collect($album['secondary-types'] ?? [])->pluck('name')->join(', ') ?: 'N/A',
-                    'first_release_date' => $album['first-release-date'] ?? 'N/A',
-                    'disambiguation' => $album['disambiguation'] ?? 'N/A',
-                ];
-            })->toArray();
-
-            Log::info('Release Groups Table', [
-                'table' => $releaseGroupsTable
-            ]);
-
-            $albums = collect($data['release-groups'] ?? [])
-                ->filter(function ($album) {
-                    // Must have a primary type of "Album"
-                    return ($album['primary-type'] ?? '') === 'Album';
-                })
-                ->filter(function ($album) {
-                    // Must have a release date
-                    return !empty($album['first-release-date']);
-                })
-                ->filter(function ($album) {
-                    // Must not have any secondary types
-                    return empty($album['secondary-types']);
-                })
-                ->filter(function ($album) {
-                    // Must not have any disambiguation
-                    return empty($album['disambiguation']);
-                })
+            // Filter out unwanted album types
+            $albums = collect($albums)
                 ->filter(function ($album) {
                     // Must not have any of these words in the title
                     $excludeWords = [
@@ -307,8 +201,8 @@ class MusicBrainzImportController extends Controller
                     return [
                         'id' => $album['id'],
                         'title' => $album['title'],
-                        'first_release_date' => $album['first-release-date'],
-                        'type' => $album['primary-type'],
+                        'first_release_date' => $album['first_release_date'],
+                        'type' => $album['type'],
                     ];
                 })
                 ->sortBy('first_release_date')
@@ -340,99 +234,15 @@ class MusicBrainzImportController extends Controller
         ]);
 
         try {
-            // First, get the releases for this release group
-            Log::info('Fetching releases from MusicBrainz', [
+            Log::info('Fetching tracks from MusicBrainz', [
                 'release_group_id' => $request->release_group_id,
-                'url' => "{$this->musicBrainzApiUrl}/release",
-                'params' => [
-                    'release-group' => $request->release_group_id,
-                    'fmt' => 'json',
-                    'limit' => 100,
-                    'inc' => 'recordings+media+artist-credits+isrcs',
-                ]
             ]);
 
-            $response = Http::withHeaders([
-                'User-Agent' => $this->userAgent,
-            ])->get("{$this->musicBrainzApiUrl}/release", [
-                'release-group' => $request->release_group_id,
-                'fmt' => 'json',
-                'limit' => 100,
-                'inc' => 'recordings+media+artist-credits+isrcs',
-            ]);
-
-            if (!$response->successful()) {
-                Log::error('MusicBrainz API error', [
-                    'status' => $response->status(),
-                    'body' => $response->body(),
-                ]);
-                return response()->json([
-                    'error' => 'Failed to fetch tracks',
-                ], 500);
-            }
-
-            $data = $response->json();
+            $tracks = $this->musicBrainzService->getTracks($request->release_group_id);
             
-            // Get the first release (usually the original release)
-            $release = collect($data['releases'] ?? [])->first();
-            
-            if (!$release) {
-                return response()->json([
-                    'error' => 'No releases found for this album',
-                ], 404);
-            }
-
-            // Get the first medium (usually the first disc)
-            $medium = collect($release['media'] ?? [])->first();
-            
-            if (!$medium) {
-                return response()->json([
-                    'error' => 'No media found for this release',
-                ], 404);
-            }
-
-            // Log the medium structure to help debug
-            Log::info('Medium structure:', [
-                'medium' => $medium,
-                'first_track' => $medium['tracks'][0] ?? null,
-            ]);
-
-            // Now get the tracks from the medium
-            $tracks = collect($medium['tracks'] ?? [])
-                ->map(function ($track) use ($release) {
-                    $recording = $track['recording'] ?? null;
-                    if (!$recording) {
-                        Log::warning('Track missing recording data:', ['track' => $track]);
-                        return null;
-                    }
-
-                    // Log the recording structure to help debug
-                    Log::info('Recording structure:', [
-                        'recording' => $recording,
-                    ]);
-
-                    return [
-                        'id' => $recording['id'],
-                        'title' => $recording['title'],
-                        'length' => $recording['length'] ?? null,
-                        'isrc' => $recording['isrcs'][0] ?? null,
-                        'artist_credits' => collect($recording['artist-credit'] ?? [])
-                            ->map(function ($credit) {
-                                return $credit['name'] . ($credit['joinphrase'] ?? '');
-                            })
-                            ->join(''),
-                        'first_release_date' => $release['date'] ?? null,
-                        'position' => $track['position'] ?? null,
-                        'number' => $track['number'] ?? null,
-                    ];
-                })
-                ->filter() // Remove any null entries
-                ->sortBy('position') // Sort by track position instead of title
-                ->values();
-
             Log::info('Fetched tracks', [
-                'count' => $tracks->count(),
-                'first_track' => $tracks->first(),
+                'count' => count($tracks),
+                'first_track' => $tracks[0] ?? null,
             ]);
 
             return response()->json([
@@ -480,7 +290,7 @@ class MusicBrainzImportController extends Controller
                 
                 if ($albumSpan) {
                     // Update existing album
-                    $albumSpan->update([
+                    $updateData = [
                         'name' => $cleanTitle,
                         'metadata' => array_merge($albumSpan->metadata ?? [], [
                             'type' => $album['type'] ?? null,
@@ -488,16 +298,47 @@ class MusicBrainzImportController extends Controller
                             'subtype' => 'album'
                         ]),
                         'updater_id' => $request->user()->id,
-                        'start_year' => $album['first_release_date'] ? date('Y', strtotime($album['first_release_date'])) : null,
-                        'start_month' => $album['first_release_date'] ? date('m', strtotime($album['first_release_date'])) : null,
-                        'start_day' => $album['first_release_date'] ? date('d', strtotime($album['first_release_date'])) : null,
-                    ]);
+                    ];
+                    
+                    // Only set date fields if we have a release date and it's not today
+                    if (!empty($album['first_release_date'])) {
+                        $releaseDate = $this->parseReleaseDate($album['first_release_date']);
+                        $today = strtotime('today');
+                        
+                        // Don't set today's date as a release date
+                        if ($releaseDate !== $today) {
+                            $updateData['start_year'] = $this->extractYearFromDate($album['first_release_date']);
+                            // Set month/day based on available precision
+                            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $album['first_release_date'])) {
+                                $updateData['start_month'] = date('m', $releaseDate);
+                                $updateData['start_day'] = date('d', $releaseDate);
+                            } elseif (preg_match('/^\d{4}-\d{2}$/', $album['first_release_date'])) {
+                                $updateData['start_month'] = date('m', $releaseDate);
+                            }
+                        }
+                    }
+                    
+                    $albumSpan->update($updateData);
                 } else {
-                    // Create new album span
-                    $albumSpan = Span::create([
+                    // Determine state based on whether we have release date and it's not today
+                    $hasReleaseDate = !empty($album['first_release_date']);
+                    $albumState = 'placeholder'; // Default to placeholder
+                    
+                    if ($hasReleaseDate) {
+                        $releaseDate = $this->parseReleaseDate($album['first_release_date']);
+                        $today = strtotime('today');
+                        
+                        // Only set to complete if we have a valid release date that's not today
+                        if ($releaseDate !== $today) {
+                            $albumState = 'complete';
+                        }
+                    }
+                    
+                    // Prepare album data
+                    $albumData = [
                         'name' => $cleanTitle,
                         'type_id' => 'thing',
-                        'state' => 'complete',
+                        'state' => $albumState,
                         'access_level' => 'private',
                         'metadata' => [
                             'musicbrainz_id' => $album['id'],
@@ -507,26 +348,74 @@ class MusicBrainzImportController extends Controller
                         ],
                         'owner_id' => $request->user()->id,
                         'updater_id' => $request->user()->id,
-                        'start_year' => $album['first_release_date'] ? date('Y', strtotime($album['first_release_date'])) : null,
-                        'start_month' => $album['first_release_date'] ? date('m', strtotime($album['first_release_date'])) : null,
-                        'start_day' => $album['first_release_date'] ? date('d', strtotime($album['first_release_date'])) : null,
-                    ]);
+                    ];
+                    
+                    // Only set date fields if we have a release date and it's not today
+                    if ($hasReleaseDate) {
+                        $releaseDate = $this->parseReleaseDate($album['first_release_date']);
+                        $today = strtotime('today');
+                        
+                        // Don't set today's date as a release date
+                        if ($releaseDate !== $today) {
+                            $albumData['start_year'] = $this->extractYearFromDate($album['first_release_date']);
+                            // Set month/day based on available precision
+                            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $album['first_release_date'])) {
+                                $albumData['start_month'] = date('m', $releaseDate);
+                                $albumData['start_day'] = date('d', $releaseDate);
+                            } elseif (preg_match('/^\d{4}-\d{2}$/', $album['first_release_date'])) {
+                                $albumData['start_month'] = date('m', $releaseDate);
+                            }
+                        }
+                    }
+                    
+                    // Create new album span
+                    $albumSpan = Span::create($albumData);
 
                     // Create connection span for the created connection
-                    $connectionSpan1 = Span::create([
+                    $hasConnectionDate = !empty($album['first_release_date']);
+                    $connectionState = 'placeholder'; // Default to placeholder
+                    
+                    if ($hasConnectionDate) {
+                        $releaseDate = $this->parseReleaseDate($album['first_release_date']);
+                        $today = strtotime('today');
+                        
+                        // Only set to complete if we have a valid release date that's not today
+                        if ($releaseDate !== $today) {
+                            $connectionState = 'complete';
+                        }
+                    }
+                    
+                    $connectionData = [
                         'name' => "{$band->name} created {$albumSpan->name}",
                         'type_id' => 'connection',
-                        'state' => 'complete',
+                        'state' => $connectionState,
                         'access_level' => 'private',
                         'metadata' => [
                             'connection_type' => 'created'
                         ],
                         'owner_id' => $request->user()->id,
                         'updater_id' => $request->user()->id,
-                        'start_year' => $album['first_release_date'] ? date('Y', strtotime($album['first_release_date'])) : null,
-                        'start_month' => $album['first_release_date'] ? date('m', strtotime($album['first_release_date'])) : null,
-                        'start_day' => $album['first_release_date'] ? date('d', strtotime($album['first_release_date'])) : null,
-                    ]);
+                    ];
+                    
+                    // Only set date fields if we have a release date and it's not today
+                    if ($hasConnectionDate) {
+                        $releaseDate = $this->parseReleaseDate($album['first_release_date']);
+                        $today = strtotime('today');
+                        
+                        // Don't set today's date as a release date
+                        if ($releaseDate !== $today) {
+                            $connectionData['start_year'] = $this->extractYearFromDate($album['first_release_date']);
+                            // Set month/day based on available precision
+                            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $album['first_release_date'])) {
+                                $connectionData['start_month'] = date('m', $releaseDate);
+                                $connectionData['start_day'] = date('d', $releaseDate);
+                            } elseif (preg_match('/^\d{4}-\d{2}$/', $album['first_release_date'])) {
+                                $connectionData['start_month'] = date('m', $releaseDate);
+                            }
+                        }
+                    }
+                    
+                    $connectionSpan1 = Span::create($connectionData);
 
                     // Create connection between band and album
                     Connection::create([
@@ -545,7 +434,7 @@ class MusicBrainzImportController extends Controller
 
                         if ($trackSpan) {
                             // Update existing track
-                            $trackSpan->update([
+                            $updateData = [
                                 'name' => $track['title'],
                                 'metadata' => array_merge($trackSpan->metadata ?? [], [
                                     'isrc' => $track['isrc'],
@@ -554,16 +443,47 @@ class MusicBrainzImportController extends Controller
                                     'subtype' => 'track'
                                 ]),
                                 'updater_id' => $request->user()->id,
-                                'start_year' => $track['first_release_date'] ? date('Y', strtotime($track['first_release_date'])) : null,
-                                'start_month' => $track['first_release_date'] ? date('m', strtotime($track['first_release_date'])) : null,
-                                'start_day' => $track['first_release_date'] ? date('d', strtotime($track['first_release_date'])) : null,
-                            ]);
+                            ];
+                            
+                            // Only update date fields if we have a release date and it's not today
+                            if (!empty($track['first_release_date'])) {
+                                $releaseDate = $this->parseReleaseDate($track['first_release_date']);
+                                $today = strtotime('today');
+                                
+                                // Don't set today's date as a release date
+                                if ($releaseDate !== $today) {
+                                    $updateData['start_year'] = $this->extractYearFromDate($track['first_release_date']);
+                                    // Set month/day based on available precision
+                                    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $track['first_release_date'])) {
+                                        $updateData['start_month'] = date('m', $releaseDate);
+                                        $updateData['start_day'] = date('d', $releaseDate);
+                                    } elseif (preg_match('/^\d{4}-\d{2}$/', $track['first_release_date'])) {
+                                        $updateData['start_month'] = date('m', $releaseDate);
+                                    }
+                                }
+                            }
+                            
+                            $trackSpan->update($updateData);
                         } else {
-                            // Create new track span
-                            $trackSpan = Span::create([
+                            // Determine state based on whether we have release date and it's not today
+                            $hasTrackReleaseDate = !empty($track['first_release_date']);
+                            $trackState = 'placeholder'; // Default to placeholder
+                            
+                            if ($hasTrackReleaseDate) {
+                                $releaseDate = $this->parseReleaseDate($track['first_release_date']);
+                                $today = strtotime('today');
+                                
+                                // Only set to complete if we have a valid release date that's not today
+                                if ($releaseDate !== $today) {
+                                    $trackState = 'complete';
+                                }
+                            }
+                            
+                            // Prepare track data
+                            $trackData = [
                                 'name' => $track['title'],
                                 'type_id' => 'thing',
-                                'state' => 'complete',
+                                'state' => $trackState,
                                 'access_level' => 'private',
                                 'metadata' => [
                                     'musicbrainz_id' => $track['id'],
@@ -574,26 +494,74 @@ class MusicBrainzImportController extends Controller
                                 ],
                                 'owner_id' => $request->user()->id,
                                 'updater_id' => $request->user()->id,
-                                'start_year' => $track['first_release_date'] ? date('Y', strtotime($track['first_release_date'])) : null,
-                                'start_month' => $track['first_release_date'] ? date('m', strtotime($track['first_release_date'])) : null,
-                                'start_day' => $track['first_release_date'] ? date('d', strtotime($track['first_release_date'])) : null,
-                            ]);
+                            ];
+                            
+                            // Only set date fields if we have a release date and it's not today
+                            if ($hasTrackReleaseDate) {
+                                $releaseDate = $this->parseReleaseDate($track['first_release_date']);
+                                $today = strtotime('today');
+                                
+                                // Don't set today's date as a release date
+                                if ($releaseDate !== $today) {
+                                    $trackData['start_year'] = $this->extractYearFromDate($track['first_release_date']);
+                                    // Set month/day based on available precision
+                                    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $track['first_release_date'])) {
+                                        $trackData['start_month'] = date('m', $releaseDate);
+                                        $trackData['start_day'] = date('d', $releaseDate);
+                                    } elseif (preg_match('/^\d{4}-\d{2}$/', $track['first_release_date'])) {
+                                        $trackData['start_month'] = date('m', $releaseDate);
+                                    }
+                                }
+                            }
+                            
+                            // Create new track span
+                            $trackSpan = Span::create($trackData);
 
                             // Create connection span for the contains connection
-                            $connectionSpan2 = Span::create([
+                            $hasTrackConnectionDate = !empty($track['first_release_date']);
+                            $trackConnectionState = 'placeholder'; // Default to placeholder
+                            
+                            if ($hasTrackConnectionDate) {
+                                $releaseDate = $this->parseReleaseDate($track['first_release_date']);
+                                $today = strtotime('today');
+                                
+                                // Only set to complete if we have a valid release date that's not today
+                                if ($releaseDate !== $today) {
+                                    $trackConnectionState = 'complete';
+                                }
+                            }
+                            
+                            $trackConnectionData = [
                                 'name' => "{$albumSpan->name} contains {$trackSpan->name}",
                                 'type_id' => 'connection',
-                                'state' => 'complete',
+                                'state' => $trackConnectionState,
                                 'access_level' => 'private',
                                 'metadata' => [
                                     'connection_type' => 'contains'
                                 ],
                                 'owner_id' => $request->user()->id,
                                 'updater_id' => $request->user()->id,
-                                'start_year' => $track['first_release_date'] ? date('Y', strtotime($track['first_release_date'])) : null,
-                                'start_month' => $track['first_release_date'] ? date('m', strtotime($track['first_release_date'])) : null,
-                                'start_day' => $track['first_release_date'] ? date('d', strtotime($track['first_release_date'])) : null,
-                            ]);
+                            ];
+                            
+                            // Only set date fields if we have a release date and it's not today
+                            if ($hasTrackConnectionDate) {
+                                $releaseDate = $this->parseReleaseDate($track['first_release_date']);
+                                $today = strtotime('today');
+                                
+                                // Don't set today's date as a release date
+                                if ($releaseDate !== $today) {
+                                    $trackConnectionData['start_year'] = $this->extractYearFromDate($track['first_release_date']);
+                                    // Set month/day based on available precision
+                                    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $track['first_release_date'])) {
+                                        $trackConnectionData['start_month'] = date('m', $releaseDate);
+                                        $trackConnectionData['start_day'] = date('d', $releaseDate);
+                                    } elseif (preg_match('/^\d{4}-\d{2}$/', $track['first_release_date'])) {
+                                        $trackConnectionData['start_month'] = date('m', $releaseDate);
+                                    }
+                                }
+                            }
+                            
+                            $connectionSpan2 = Span::create($trackConnectionData);
 
                             // Create connection between album and track if it doesn't exist
                             if (!Connection::where('parent_id', $albumSpan->id)
@@ -628,5 +596,43 @@ class MusicBrainzImportController extends Controller
                 'error' => 'Failed to import albums',
             ], 500);
         }
+    }
+
+    /**
+     * Parse a release date from MusicBrainz, handling year-only dates properly
+     */
+    private function parseReleaseDate(string $dateString): int
+    {
+        // If it's just a 4-digit year, don't use strtotime as it interprets as time
+        if (preg_match('/^\d{4}$/', $dateString)) {
+            return strtotime($dateString . '-01-01');
+        }
+        
+        // If it's YYYY-MM format, don't use strtotime as it might interpret as time
+        if (preg_match('/^\d{4}-\d{2}$/', $dateString)) {
+            return strtotime($dateString . '-01');
+        }
+        
+        // Otherwise, use strtotime as normal
+        return strtotime($dateString);
+    }
+
+    /**
+     * Extract year from a release date string, handling year-only dates properly
+     */
+    private function extractYearFromDate(string $dateString): ?int
+    {
+        // If it's just a 4-digit year, extract directly
+        if (preg_match('/^\d{4}$/', $dateString)) {
+            return (int)$dateString;
+        }
+        
+        // For all other formats, use strtotime and extract year
+        $timestamp = strtotime($dateString);
+        if ($timestamp === false) {
+            return null;
+        }
+        
+        return (int)date('Y', $timestamp);
     }
 } 
