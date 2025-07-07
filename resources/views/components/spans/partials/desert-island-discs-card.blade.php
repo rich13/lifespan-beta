@@ -15,17 +15,17 @@
             @if($contents->isNotEmpty())
                 <div class="mb-3">
                     <div class="set-preview-contents">
-                        @foreach($contents->take(3) as $item)
+                        @foreach($contents->take(8) as $item)
                             @if($item->type_id === 'connection')
                                 <x-unified.interactive-card :connection="$item" />
                             @else
                                 <x-unified.interactive-card :span="$item" />
                             @endif
                         @endforeach
-                        @if($contents->count() > 3)
+                            @if($contents->count() > 8)
                             <div class="text-center text-muted small mt-2">
                                 <i class="bi bi-three-dots"></i>
-                                and {{ $contents->count() - 3 }} more items
+                                and {{ $contents->count() - 8 }} more items
                             </div>
                         @endif
                     </div>

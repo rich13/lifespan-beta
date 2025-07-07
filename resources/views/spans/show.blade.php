@@ -110,7 +110,7 @@
                 @endauth
                 @if($span->type_id === 'person')
                     <x-spans.partials.family-relationships :span="$span" />
-                    <x-spans.partials.desert-island-discs-card :span="$span" :desertIslandDiscsSet="$desertIslandDiscsSet" />
+                    <x-spans.partials.desert-island-discs-tracks-card :span="$span" :desertIslandDiscsSet="$desertIslandDiscsSet" />
                 @endif
                 <x-spans.partials.sources :span="$span" />
                 <x-spans.partials.status :span="$span" />
