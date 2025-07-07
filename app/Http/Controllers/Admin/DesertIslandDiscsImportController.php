@@ -535,6 +535,7 @@ class DesertIslandDiscsImportController extends Controller
                         'end_year' => null,
                         'owner_id' => auth()->id(),
                         'updater_id' => auth()->id(),
+                        'access_level' => 'public',
                         'metadata' => [
                             'import_row' => $rowNumber
                         ]
@@ -552,6 +553,7 @@ class DesertIslandDiscsImportController extends Controller
                     'end_year' => null,
                     'owner_id' => auth()->id(),
                     'updater_id' => auth()->id(),
+                    'access_level' => 'public',
                     'metadata' => [
                         'subtype' => 'track',
                         'import_row' => $rowNumber
@@ -623,7 +625,7 @@ class DesertIslandDiscsImportController extends Controller
         $connectionSpan = Span::create([
             'id' => Str::uuid(),
             'type_id' => 'connection',
-            'name' => "Connection: {$subject->name} {$typeName} {$object->name}",
+            'name' => "{$subject->name} {$typeName} {$object->name}",
             'state' => $startYear ? 'complete' : 'placeholder',
             'start_year' => $startYear,
             'start_month' => $startMonth,

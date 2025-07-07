@@ -79,8 +79,8 @@
                 </div>
                 <div class="card-body">
                     <p class="text-muted mb-4">
-                        This tool will make all thing spans (books, albums, tracks) public by default. 
-                        This ensures they can be added to Desert Island Discs sets and other public collections.
+                        This tool will make all thing spans (books, albums, tracks) and their related connections and spans public by default. 
+                        This ensures they can be added to Desert Island Discs sets and other public collections, and that the full context is publicly accessible.
                     </p>
 
                     <form id="makeThingsPublicForm">
@@ -139,13 +139,14 @@
                 <div class="card-body">
                     <h6>Why Make Things Public?</h6>
                     <p class="text-muted small">
-                        Thing spans (books, albums, tracks) should be public by default so they can be:
+                        Thing spans (books, albums, tracks) and their connections should be public by default so they can be:
                     </p>
                     <ul class="text-muted small">
                         <li>Added to Desert Island Discs sets</li>
                         <li>Shared in public collections</li>
                         <li>Discovered by other users</li>
                         <li>Used in public timelines</li>
+                        <li>Show complete context and relationships</li>
                     </ul>
 
                     <h6>Safety Features</h6>
@@ -208,11 +209,29 @@ $(document).ready(function() {
                     </div>`;
                     
                     if (response.changes && Object.keys(response.changes).length > 0) {
-                        resultHtml += '<div class="mt-3"><h6>Changes by subtype:</h6><ul>';
-                        for (const [subtype, count] of Object.entries(response.changes)) {
-                            resultHtml += `<li><strong>${subtype}:</strong> ${count} items</li>`;
+                        resultHtml += '<div class="mt-3"><h6>Changes Summary:</h6>';
+                        
+                        // Handle the new enhanced format
+                        if (response.changes.things) {
+                            resultHtml += '<div class="mb-3"><h6 class="text-primary">Things by subtype:</h6><ul>';
+                            for (const [subtype, count] of Object.entries(response.changes.things)) {
+                                resultHtml += `<li><strong>${subtype}:</strong> ${count} things</li>`;
+                            }
+                            resultHtml += '</ul></div>';
                         }
-                        resultHtml += '</ul></div>';
+                        
+                        // Show other item types
+                        if (response.changes.connections > 0) {
+                            resultHtml += `<div class="mb-2"><strong>Connections:</strong> ${response.changes.connections} connections</div>`;
+                        }
+                        if (response.changes.connection_spans > 0) {
+                            resultHtml += `<div class="mb-2"><strong>Connection Spans:</strong> ${response.changes.connection_spans} spans</div>`;
+                        }
+                        if (response.changes.related_spans > 0) {
+                            resultHtml += `<div class="mb-2"><strong>Related Spans:</strong> ${response.changes.related_spans} spans</div>`;
+                        }
+                        
+                        resultHtml += '</div>';
                     }
                     
                     if (response.dry_run) {

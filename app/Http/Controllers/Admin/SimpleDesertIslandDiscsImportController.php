@@ -481,6 +481,7 @@ class SimpleDesertIslandDiscsImportController extends Controller
                 'end_year' => null,
                 'owner_id' => auth()->id(),
                 'updater_id' => auth()->id(),
+                'access_level' => 'public',
                 'metadata' => [
                     'job' => !empty($data['Job']) ? $data['Job'] : null,
                     'import_row' => $rowNumber
@@ -491,9 +492,10 @@ class SimpleDesertIslandDiscsImportController extends Controller
         if ($castaway->wasRecentlyCreated) {
             $result['summary']['created'][] = "Person: {$data['Castaway']}";
         } else {
-            // Update metadata but keep current state
+            // Update metadata and ensure public access
             $castaway->update([
                 'updater_id' => auth()->id(),
+                'access_level' => 'public',
                 'metadata' => array_merge($castaway->metadata ?? [], [
                     'job' => !empty($data['Job']) ? $data['Job'] : null,
                     'import_row' => $rowNumber
@@ -518,6 +520,7 @@ class SimpleDesertIslandDiscsImportController extends Controller
                     'end_year' => null,
                     'owner_id' => auth()->id(),
                     'updater_id' => auth()->id(),
+                    'access_level' => 'public',
                     'metadata' => [
                         'subtype' => 'book',
                         'original_title' => $data['Book'],
@@ -529,6 +532,15 @@ class SimpleDesertIslandDiscsImportController extends Controller
             if ($book->wasRecentlyCreated) {
                 $result['summary']['created'][] = "Book: {$bookInfo['title']}";
             } else {
+                $book->update([
+                    'updater_id' => auth()->id(),
+                    'access_level' => 'public',
+                    'metadata' => array_merge($book->metadata ?? [], [
+                        'subtype' => 'book',
+                        'original_title' => $data['Book'],
+                        'import_row' => $rowNumber
+                    ])
+                ]);
                 $result['summary']['updated'][] = "Book: {$bookInfo['title']} (metadata updated)";
             }
             
@@ -545,6 +557,7 @@ class SimpleDesertIslandDiscsImportController extends Controller
                         'end_year' => null,
                         'owner_id' => auth()->id(),
                         'updater_id' => auth()->id(),
+                        'access_level' => 'public',
                         'metadata' => [
                             'import_row' => $rowNumber
                         ],
@@ -554,9 +567,9 @@ class SimpleDesertIslandDiscsImportController extends Controller
                 if ($author->wasRecentlyCreated) {
                     $result['summary']['created'][] = "Author: {$bookInfo['author']}";
                 } else {
-                    // Update metadata but keep current state
                     $author->update([
                         'updater_id' => auth()->id(),
+                        'access_level' => 'public',
                         'metadata' => array_merge($author->metadata ?? [], ['import_row' => $rowNumber])
                     ]);
                     $result['summary']['updated'][] = "Author: {$bookInfo['author']} (metadata updated)";
@@ -663,6 +676,11 @@ class SimpleDesertIslandDiscsImportController extends Controller
             $set->update($updates);
             $result['summary']['updated'][] = "Set: {$setName} (metadata updated)" . ($setStartYear && !$set->start_year ? " (start date: {$setStartYear})" : '');
         }
+        
+        // Ensure the set is public regardless of whether it was created or updated
+        if ($set->access_level !== 'public') {
+            $set->update(['access_level' => 'public']);
+        }
         $result['set'] = $set;
         
         // Connect castaway to set with broadcast date if available
@@ -712,6 +730,7 @@ class SimpleDesertIslandDiscsImportController extends Controller
                     'end_year' => null,
                     'owner_id' => auth()->id(),
                     'updater_id' => auth()->id(),
+                    'access_level' => 'public',
                     'metadata' => [
                         'import_row' => $rowNumber,
                         'artist_type_determined_by' => 'musicbrainz_lookup'
@@ -726,6 +745,7 @@ class SimpleDesertIslandDiscsImportController extends Controller
                     $artist->update([
                         'type_id' => $artistType,
                         'updater_id' => auth()->id(),
+                        'access_level' => 'public',
                         'metadata' => array_merge($artist->metadata ?? [], [
                             'import_row' => $rowNumber,
                             'artist_type_determined_by' => 'musicbrainz_lookup',
@@ -735,9 +755,10 @@ class SimpleDesertIslandDiscsImportController extends Controller
                     $typeChanged = true;
                     $result['summary']['updated'][] = "Artist: {$artistName} (type changed from {$oldType} to {$artistType})";
                 } else {
-                    // Type is correct, just update metadata
+                    // Type is correct, just update metadata and ensure public
                     $artist->update([
                         'updater_id' => auth()->id(),
+                        'access_level' => 'public',
                         'metadata' => array_merge($artist->metadata ?? [], ['import_row' => $rowNumber])
                     ]);
                     $result['summary']['updated'][] = "Artist: {$artistName} (metadata updated)";
@@ -754,6 +775,7 @@ class SimpleDesertIslandDiscsImportController extends Controller
                     'end_year' => null,
                     'owner_id' => auth()->id(),
                     'updater_id' => auth()->id(),
+                    'access_level' => 'public',
                     'metadata' => [
                         'subtype' => 'track',
                         'import_row' => $rowNumber
@@ -764,6 +786,14 @@ class SimpleDesertIslandDiscsImportController extends Controller
             if ($track->wasRecentlyCreated) {
                 $result['summary']['created'][] = "Track: {$songName}";
             } else {
+                $track->update([
+                    'updater_id' => auth()->id(),
+                    'access_level' => 'public',
+                    'metadata' => array_merge($track->metadata ?? [], [
+                        'subtype' => 'track',
+                        'import_row' => $rowNumber
+                    ])
+                ]);
                 $result['summary']['updated'][] = "Track: {$songName} (metadata updated)";
             }
             
@@ -833,7 +863,7 @@ class SimpleDesertIslandDiscsImportController extends Controller
         $connectionSpan = Span::create([
             'id' => Str::uuid(),
             'type_id' => 'connection',
-            'name' => "Connection: {$subject->name} {$typeName} {$object->name}",
+            'name' => "{$subject->name} {$typeName} {$object->name}",
             'state' => $state,
             'start_year' => $startYear,
             'start_month' => $startMonth,
@@ -841,6 +871,7 @@ class SimpleDesertIslandDiscsImportController extends Controller
             'end_year' => null,
             'owner_id' => auth()->id(),
             'updater_id' => auth()->id(),
+            'access_level' => 'public',
             'metadata' => [
                 'connection_type' => $typeName,
                 'subject_role' => $subjectRole,

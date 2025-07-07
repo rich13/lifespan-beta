@@ -332,7 +332,7 @@ class ToolsController extends Controller
             $ownerEmail = $request->get('owner_email');
             $isDryRun = $request->boolean('dry_run', true); // Default to dry run for safety
 
-            // Build the query
+            // Build the query for private things
             $query = Span::where('type_id', 'thing')
                 ->where('access_level', 'private');
 
@@ -347,43 +347,119 @@ class ToolsController extends Controller
 
             $privateThings = $query->get();
 
-            if ($privateThings->isEmpty()) {
+            // Find private connections to these things
+            $privateConnections = collect();
+            $privateConnectionSpans = collect();
+            $relatedSpans = collect();
+
+            if ($privateThings->isNotEmpty()) {
+                $thingIds = $privateThings->pluck('id')->toArray();
+
+                // Find private connections where things are the object (child)
+                $childConnections = \App\Models\Connection::whereIn('child_id', $thingIds)
+                    ->whereHas('connectionSpan', function($q) {
+                        $q->where('access_level', 'private');
+                    })
+                    ->with('connectionSpan')
+                    ->get();
+
+                // Find private connections where things are the subject (parent)
+                $parentConnections = \App\Models\Connection::whereIn('parent_id', $thingIds)
+                    ->whereHas('connectionSpan', function($q) {
+                        $q->where('access_level', 'private');
+                    })
+                    ->with('connectionSpan')
+                    ->get();
+
+                // Combine all connections
+                $privateConnections = $childConnections->merge($parentConnections);
+
+                // Find private connection spans related to these connections
+                $connectionSpanIds = $privateConnections->pluck('connection_span_id')->filter()->toArray();
+                $privateConnectionSpans = Span::whereIn('id', $connectionSpanIds)
+                    ->where('access_level', 'private')
+                    ->get();
+
+                // Find related spans that are connected to these things and are private
+                $relatedSpanIds = collect();
+                $relatedSpanIds = $relatedSpanIds->merge($childConnections->pluck('parent_id'));
+                $relatedSpanIds = $relatedSpanIds->merge($parentConnections->pluck('child_id'));
+                $relatedSpanIds = $relatedSpanIds->unique()->filter()->toArray();
+                
+                $relatedSpans = Span::whereIn('id', $relatedSpanIds)
+                    ->where('access_level', 'private')
+                    ->get();
+            }
+
+            // Check if we have anything to process
+            $totalItems = $privateThings->count() + $privateConnections->count() + $privateConnectionSpans->count() + $relatedSpans->count();
+            
+            if ($totalItems === 0) {
                 return response()->json([
                     'success' => true,
-                    'message' => 'No private thing spans found to make public.',
+                    'message' => 'No private items found to make public.',
                     'changes' => []
                 ]);
             }
 
-            // Group by subtype for reporting
+            // Group things by subtype for reporting
             $bySubtype = $privateThings->groupBy(function ($thing) {
                 return $thing->metadata['subtype'] ?? 'none';
             });
 
-            $changes = [];
-            foreach ($bySubtype as $subtype => $things) {
-                $changes[$subtype] = $things->count();
-            }
+            $changes = [
+                'things' => $bySubtype->map->count(),
+                'connections' => $privateConnections->count(),
+                'connection_spans' => $privateConnectionSpans->count(),
+                'related_spans' => $relatedSpans->count()
+            ];
 
             if ($isDryRun) {
                 return response()->json([
                     'success' => true,
-                    'message' => "Found {$privateThings->count()} private thing spans to make public.",
+                    'message' => "Found {$totalItems} private items to make public: " . 
+                                "{$privateThings->count()} things, " .
+                                "{$privateConnectionSpans->count()} connection spans, " .
+                                "{$relatedSpans->count()} related spans. " .
+                                "Will also make {$privateConnections->count()} connections accessible.",
                     'changes' => $changes,
                     'dry_run' => true
                 ]);
             }
 
             // Make the changes
-            $updatedCount = 0;
+            $updatedThings = 0;
+            $updatedConnectionSpans = 0;
+            $updatedRelatedSpans = 0;
+
+            // Update things
             foreach ($privateThings as $thing) {
                 $thing->access_level = 'public';
                 $thing->save();
-                $updatedCount++;
+                $updatedThings++;
             }
 
-            Log::info('Things made public', [
-                'updated_count' => $updatedCount,
+            // Update connection spans
+            foreach ($privateConnectionSpans as $connectionSpan) {
+                $connectionSpan->access_level = 'public';
+                $connectionSpan->save();
+                $updatedConnectionSpans++;
+            }
+
+            // Update related spans
+            foreach ($relatedSpans as $span) {
+                $span->access_level = 'public';
+                $span->save();
+                $updatedRelatedSpans++;
+            }
+
+            $totalUpdated = $updatedThings + $updatedConnectionSpans + $updatedRelatedSpans;
+
+            Log::info('Things and related items made public', [
+                'updated_things' => $updatedThings,
+                'updated_connection_spans' => $updatedConnectionSpans,
+                'updated_related_spans' => $updatedRelatedSpans,
+                'connections_found' => $privateConnections->count(),
                 'subtype_filter' => $subtype,
                 'owner_filter' => $ownerEmail,
                 'updated_by' => auth()->id(),
@@ -391,7 +467,11 @@ class ToolsController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => "Successfully made {$updatedCount} thing spans public!",
+                'message' => "Successfully made {$totalUpdated} items public: " .
+                            "{$updatedThings} things, " .
+                            "{$updatedConnectionSpans} connection spans, " .
+                            "{$updatedRelatedSpans} related spans! " .
+                            "Found {$privateConnections->count()} connections that will be accessible.",
                 'changes' => $changes,
                 'dry_run' => false
             ]);
