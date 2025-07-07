@@ -45,7 +45,14 @@
         @else
             <div class="story-content">
                 @foreach($story['paragraphs'] as $paragraph)
-                    <p class="lead mb-4">{!! $paragraph !!}</p>
+                    @php
+                        // Extra safety: remove any whitespace from href attributes
+                        $cleanParagraph = preg_replace_callback('/href="([^"]*)"/', function ($matches) {
+                            $cleanUrl = preg_replace('/\s+/', '', $matches[1]);
+                            return 'href="' . $cleanUrl . '"';
+                        }, $paragraph);
+                    @endphp
+                    <p class="lead mb-4">{!! $cleanParagraph !!}</p>
                 @endforeach
             </div>
             
@@ -53,7 +60,7 @@
             <div class="mt-4 pt-3 border-top">
                 <small class="text-muted">
                     <i class="bi bi-magic me-1"></i>
-                    Yes, this was automagically generated.
+                    Yes, this was automagically generated. There are bugs... <i class="bi bi-bug text-danger"></i>
                 </small>
             </div>
         @endif
