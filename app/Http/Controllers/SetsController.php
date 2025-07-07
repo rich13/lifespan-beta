@@ -38,14 +38,39 @@ class SetsController extends Controller
             ->get();
         $allSets = $allSets->merge($defaultSets);
         
-        // Add user-created sets (excluding default sets) - these belong to the user
-        $userSets = Span::where('owner_id', $user->id)
-            ->where('type_id', 'set')
-            ->where('is_predefined', false)
-            ->whereNotIn('id', $defaultSets->pluck('id')) // Exclude default sets
-            ->orderBy('name')
-            ->get();
-        $allSets = $allSets->merge($userSets);
+        // Get the user's personal span
+        $personalSpan = $user->personalSpan;
+        
+        if ($personalSpan) {
+            // Get sets that either:
+            // 1. Have a "creates" connection from the user's personal span (user owns them)
+            // 2. Have NO "creates" connection at all AND are owned by the current user (system/default sets)
+            $userCreatedSets = Span::where('type_id', 'set')
+                ->where(function($query) use ($personalSpan, $user) {
+                    $query->whereHas('connectionsAsObject', function($subQuery) use ($personalSpan) {
+                        $subQuery->where('parent_id', $personalSpan->id)
+                                ->where('type_id', 'created');
+                    })
+                    ->orWhere(function($subQuery) use ($user) {
+                        $subQuery->whereDoesntHave('connectionsAsObject', function($subSubQuery) {
+                            $subSubQuery->where('type_id', 'created');
+                        })
+                        ->where('owner_id', $user->id); // Must be owned by current user
+                    });
+                })
+                ->orderBy('name')
+                ->get();
+            $allSets = $allSets->merge($userCreatedSets);
+        } else {
+            // Fallback: if no personal span, use owner_id filtering
+            $userSets = Span::where('owner_id', $user->id)
+                ->where('type_id', 'set')
+                ->where('is_predefined', false)
+                ->whereNotIn('id', $defaultSets->pluck('id')) // Exclude default sets
+                ->orderBy('name')
+                ->get();
+            $allSets = $allSets->merge($userSets);
+        }
         
         // Sort all sets by name
         $allSets = $allSets->sortBy('name');
