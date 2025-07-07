@@ -525,6 +525,7 @@ class YamlSpanService
     private function validateMetadataStructure(array $metadata, ?string $spanType): array
     {
         $errors = [];
+        $warnings = [];
         
         // Define metadata schemas for each span type
         $metadataSchemas = [
@@ -558,14 +559,14 @@ class YamlSpanService
         if ($spanType && isset($metadataSchemas[$spanType])) {
             $schema = $metadataSchemas[$spanType];
             
-            // Check for unknown metadata fields
+            // Check for unknown metadata fields (warn instead of error)
             foreach ($metadata as $field => $value) {
                 if (!isset($schema[$field])) {
-                    $errors[] = "Unknown metadata field '{$field}' for span type '{$spanType}'. Valid fields are: " . implode(', ', array_keys($schema));
+                    $warnings[] = "Unknown metadata field '{$field}' for span type '{$spanType}'. Valid fields are: " . implode(', ', array_keys($schema));
                 }
             }
             
-            // Check data types
+            // Check data types for known fields
             foreach ($metadata as $field => $value) {
                 if (isset($schema[$field])) {
                     $expectedType = $schema[$field]['type'];
@@ -576,6 +577,11 @@ class YamlSpanService
                     }
                 }
             }
+        }
+        
+        // Log warnings for debugging but don't fail validation
+        if (!empty($warnings)) {
+            \Log::info('YAML metadata warnings: ' . implode('; ', $warnings));
         }
         
         return $errors;
@@ -1050,8 +1056,15 @@ class YamlSpanService
         });
         
         foreach ($data['connections'] as $connectionType => $connections) {
-            // Allow _incoming variants for backward compatibility
-            if (!in_array($connectionType, $validConnectionTypes) && !str_ends_with($connectionType, '_incoming')) {
+            // Handle virtual connection fields (incoming connections)
+            if (str_ends_with($connectionType, '_incoming')) {
+                // These are virtual fields that represent incoming connections
+                // They should be read-only and not processed as regular connection types
+                continue;
+            }
+            
+            // Validate connection type
+            if (!in_array($connectionType, $validConnectionTypes)) {
                 throw new \InvalidArgumentException("Unknown connection type '{$connectionType}'. Valid types are: " . implode(', ', $validConnectionTypes));
             }
             
@@ -1450,12 +1463,10 @@ class YamlSpanService
     }
 
     /**
-     * Analyze potential impacts of YAML changes
+     * Analyze impacts of YAML changes
      */
-    private function analyzeChangeImpacts(array $data, Span $originalSpan): array
+    public function analyzeChangeImpacts(array $data, Span $originalSpan): array
     {
-
-        
         $impacts = [];
         
         // Check for name changes
@@ -2703,6 +2714,315 @@ class YamlSpanService
             return [
                 'success' => false,
                 'message' => 'Failed to create span: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Check if a span with the given name and type already exists
+     */
+    public function findExistingSpan(string $name, string $type): ?Span
+    {
+        return Span::where('name', $name)
+            ->where('type_id', $type)
+            ->first();
+    }
+
+    /**
+     * Merge YAML data with an existing span, preserving existing data while adding new information
+     */
+    public function mergeYamlWithExistingSpan(Span $existingSpan, array $newData): array
+    {
+        $mergedData = [];
+        
+        // Keep existing basic fields (don't overwrite name/type)
+        $mergedData['name'] = $existingSpan->name;
+        $mergedData['type_id'] = $existingSpan->type_id;
+        $mergedData['slug'] = $existingSpan->slug;
+        
+        // Merge dates (only update if existing is null/empty and new has data)
+        $mergedData['start_year'] = $existingSpan->start_year ?: $newData['start_year'] ?? null;
+        $mergedData['start_month'] = $existingSpan->start_month ?: $newData['start_month'] ?? null;
+        $mergedData['start_day'] = $existingSpan->start_day ?: $newData['start_day'] ?? null;
+        
+        $mergedData['end_year'] = $existingSpan->end_year ?: $newData['end_year'] ?? null;
+        $mergedData['end_month'] = $existingSpan->end_month ?: $newData['end_month'] ?? null;
+        $mergedData['end_day'] = $existingSpan->end_day ?: $newData['end_day'] ?? null;
+        
+        // Reconstruct start and end strings if date parts are present
+        if ($mergedData['start_year']) {
+            $start = (string) $mergedData['start_year'];
+            if ($mergedData['start_month']) {
+                $start .= '-' . str_pad($mergedData['start_month'], 2, '0', STR_PAD_LEFT);
+                if ($mergedData['start_day']) {
+                    $start .= '-' . str_pad($mergedData['start_day'], 2, '0', STR_PAD_LEFT);
+                }
+            }
+            $mergedData['start'] = $start;
+        }
+        
+        if ($mergedData['end_year']) {
+            $end = (string) $mergedData['end_year'];
+            if ($mergedData['end_month']) {
+                $end .= '-' . str_pad($mergedData['end_month'], 2, '0', STR_PAD_LEFT);
+                if ($mergedData['end_day']) {
+                    $end .= '-' . str_pad($mergedData['end_day'], 2, '0', STR_PAD_LEFT);
+                }
+            }
+            $mergedData['end'] = $end;
+        }
+        
+        // Merge description (prefer existing if both have content, otherwise use whichever has content)
+        if ($existingSpan->description && $newData['description'] ?? null) {
+            $mergedData['description'] = $existingSpan->description;
+        } else {
+            $mergedData['description'] = $existingSpan->description ?: $newData['description'] ?? null;
+        }
+        
+        // Merge notes (prefer existing if both have content, otherwise use whichever has content)
+        if ($existingSpan->notes && $newData['notes'] ?? null) {
+            $mergedData['notes'] = $existingSpan->notes;
+        } else {
+            $mergedData['notes'] = $existingSpan->notes ?: $newData['notes'] ?? null;
+        }
+        
+        // Merge metadata (combine both, new data takes precedence for overlapping keys)
+        $existingMetadata = $existingSpan->metadata ?? [];
+        $newMetadata = $newData['metadata'] ?? [];
+        $mergedData['metadata'] = array_merge($existingMetadata, $newMetadata);
+        
+        // Merge sources (combine and deduplicate)
+        $existingSources = $existingSpan->sources ?? [];
+        $newSources = $newData['sources'] ?? [];
+        $mergedData['sources'] = array_unique(array_merge($existingSources, $newSources));
+        
+        // Keep existing access level
+        $mergedData['access_level'] = $existingSpan->access_level;
+        
+        // Determine state (upgrade to complete if we now have dates)
+        $hasDates = ($mergedData['start_year'] || $mergedData['end_year']);
+        if ($hasDates && $existingSpan->state === 'placeholder') {
+            $mergedData['state'] = 'complete';
+        } else {
+            $mergedData['state'] = $existingSpan->state;
+        }
+        
+        // Merge connections (add new ones, preserve existing ones)
+        $mergedData['connections'] = $this->mergeConnections($existingSpan, $newData['connections'] ?? []);
+        
+        return $mergedData;
+    }
+
+    /**
+     * Merge connections from new YAML with existing connections
+     */
+    private function mergeConnections(Span $existingSpan, array $newConnections): array
+    {
+        // Load existing connections
+        $existingSpan->load([
+            'connectionsAsSubject.child',
+            'connectionsAsSubject.type',
+            'connectionsAsObject.parent',
+            'connectionsAsObject.type'
+        ]);
+        
+        $mergedConnections = [];
+        
+        // Process new connections
+        foreach ($newConnections as $connectionType => $connections) {
+            // Skip virtual/readonly connection types
+            if (str_ends_with($connectionType, '_incoming')) {
+                continue;
+            }
+            if (!isset($mergedConnections[$connectionType])) {
+                $mergedConnections[$connectionType] = [];
+            }
+            
+            foreach ($connections as $connection) {
+                $targetName = $connection['name'] ?? '';
+                $targetId = $connection['id'] ?? null;
+                
+                // Check if this connection already exists
+                $existingConnection = $this->findExistingConnection($existingSpan, $connectionType, $targetName, $targetId);
+                
+                if ($existingConnection) {
+                    // Merge existing connection with new data
+                    $mergedConnection = $this->mergeConnectionData($existingConnection, $connection);
+                    $mergedConnections[$connectionType][] = $mergedConnection;
+                } else {
+                    // Add new connection
+                    $mergedConnections[$connectionType][] = $connection;
+                }
+            }
+        }
+        
+        // Add existing connections that weren't in the new YAML
+        $this->addRemainingExistingConnections($existingSpan, $mergedConnections);
+        
+        return $mergedConnections;
+    }
+
+    /**
+     * Find an existing connection by type and target
+     */
+    private function findExistingConnection(Span $span, string $connectionType, string $targetName, ?string $targetId): ?array
+    {
+        // Check outgoing connections
+        foreach ($span->connectionsAsSubject as $connection) {
+            if ($connection->type_id === $connectionType) {
+                $child = $connection->child;
+                if (($targetId && $child->id === $targetId) || 
+                    (!$targetId && $child->name === $targetName)) {
+                    return $this->connectionToArray($connection, 'outgoing');
+                }
+            }
+        }
+        
+        // Check incoming connections
+        foreach ($span->connectionsAsObject as $connection) {
+            if ($connection->type_id === $connectionType) {
+                $parent = $connection->parent;
+                if (($targetId && $parent->id === $targetId) || 
+                    (!$targetId && $parent->name === $targetName)) {
+                    return $this->connectionToArray($connection, 'incoming');
+                }
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * Convert a connection model to array format
+     */
+    private function connectionToArray($connection, string $direction): array
+    {
+        $targetSpan = $direction === 'outgoing' ? $connection->child : $connection->parent;
+        
+        $connectionData = [
+            'name' => $targetSpan->name,
+            'id' => $targetSpan->id,
+            'type' => $targetSpan->type_id,
+            'connection_id' => $connection->id,
+        ];
+        
+        // Add connection dates if available
+        if ($connection->connectionSpan) {
+            $this->addConnectionDates($connectionData, $connection->connectionSpan);
+        }
+        
+        return $connectionData;
+    }
+
+    /**
+     * Merge connection data, preserving existing dates/metadata while adding new ones
+     */
+    private function mergeConnectionData(array $existingConnection, array $newConnection): array
+    {
+        $merged = $existingConnection;
+        
+        // Merge dates (only add if not already present)
+        if (!isset($merged['start_date']) && isset($newConnection['start_date'])) {
+            $merged['start_date'] = $newConnection['start_date'];
+        }
+        if (!isset($merged['end_date']) && isset($newConnection['end_date'])) {
+            $merged['end_date'] = $newConnection['end_date'];
+        }
+        
+        // Merge metadata
+        $existingMetadata = $merged['metadata'] ?? [];
+        $newMetadata = $newConnection['metadata'] ?? [];
+        $merged['metadata'] = array_merge($existingMetadata, $newMetadata);
+        
+        return $merged;
+    }
+
+    /**
+     * Add existing connections that weren't in the new YAML
+     */
+    private function addRemainingExistingConnections(Span $existingSpan, array &$mergedConnections): void
+    {
+        // Track which connections we've already processed
+        $processedConnections = [];
+        foreach ($mergedConnections as $type => $connections) {
+            foreach ($connections as $connection) {
+                $key = $type . ':' . ($connection['id'] ?? $connection['name']);
+                $processedConnections[$key] = true;
+            }
+        }
+        
+        // Add outgoing connections that weren't processed
+        foreach ($existingSpan->connectionsAsSubject as $connection) {
+            $key = $connection->type_id . ':' . $connection->child->id;
+            if (!isset($processedConnections[$key])) {
+                if (!isset($mergedConnections[$connection->type_id])) {
+                    $mergedConnections[$connection->type_id] = [];
+                }
+                $mergedConnections[$connection->type_id][] = $this->connectionToArray($connection, 'outgoing');
+            }
+        }
+        
+        // Add incoming connections that weren't processed
+        foreach ($existingSpan->connectionsAsObject as $connection) {
+            $key = $connection->type_id . ':' . $connection->parent->id;
+            if (!isset($processedConnections[$key])) {
+                if (!isset($mergedConnections[$connection->type_id])) {
+                    $mergedConnections[$connection->type_id] = [];
+                }
+                $mergedConnections[$connection->type_id][] = $this->connectionToArray($connection, 'incoming');
+            }
+        }
+    }
+
+    /**
+     * Apply merged YAML data to an existing span
+     */
+    public function applyMergedYamlToSpan(Span $span, array $mergedData): array
+    {
+        try {
+            DB::beginTransaction();
+            
+            // Update basic span fields
+            $span->update([
+                'name' => $mergedData['name'],
+                'slug' => $mergedData['slug'] ?? null,
+                'type_id' => $mergedData['type_id'],
+                'state' => $mergedData['state'] ?? 'complete',
+                'description' => $mergedData['description'] ?? null,
+                'notes' => $mergedData['notes'] ?? null,
+                'metadata' => $mergedData['metadata'] ?? [],
+                'sources' => $mergedData['sources'] ?? null,
+                'start_year' => $mergedData['start_year'] ?? null,
+                'start_month' => $mergedData['start_month'] ?? null,
+                'start_day' => $mergedData['start_day'] ?? null,
+                'end_year' => $mergedData['end_year'] ?? null,
+                'end_month' => $mergedData['end_month'] ?? null,
+                'end_day' => $mergedData['end_day'] ?? null,
+                'access_level' => $mergedData['access_level'] ?? $span->access_level,
+            ]);
+
+            // Handle connections if present
+            if (isset($mergedData['connections'])) {
+                $this->updateConnections($span, $mergedData['connections']);
+            }
+            
+            DB::commit();
+            
+            return [
+                'success' => true,
+                'message' => 'Span updated successfully with merged YAML data'
+            ];
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Failed to apply merged YAML to span', [
+                'span_id' => $span->id,
+                'error' => $e->getMessage()
+            ]);
+            
+            return [
+                'success' => false,
+                'message' => 'Failed to update span: ' . $e->getMessage()
             ];
         }
     }

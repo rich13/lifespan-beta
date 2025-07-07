@@ -124,12 +124,18 @@ class YamlValidationService
         // Get metadata schema from database
         $metadataSchema = $spanTypeModel->metadata['schema'] ?? [];
         
-        // Check for unknown metadata fields
+        // Check for unknown metadata fields (warn instead of error)
+        $warnings = [];
         foreach ($metadata as $field => $value) {
             if (!isset($metadataSchema[$field])) {
                 $validFields = array_keys($metadataSchema);
-                $errors[] = "Unknown metadata field '{$field}' for span type '{$spanType}'. Valid fields are: " . implode(', ', $validFields);
+                $warnings[] = "Unknown metadata field '{$field}' for span type '{$spanType}'. Valid fields are: " . implode(', ', $validFields);
             }
+        }
+        
+        // Log warnings for debugging but don't fail validation
+        if (!empty($warnings)) {
+            \Log::info('YAML metadata warnings: ' . implode('; ', $warnings));
         }
         
         // Check data types and required fields
@@ -174,8 +180,15 @@ class YamlValidationService
         ];
         
         foreach ($connections as $connectionType => $connectionList) {
-            // Validate connection type - incoming connections are no longer supported in YAML
-            if (!in_array($connectionType, $validConnectionTypes) || str_ends_with($connectionType, '_incoming')) {
+            // Handle virtual connection fields (incoming connections)
+            if (str_ends_with($connectionType, '_incoming')) {
+                // These are virtual fields that represent incoming connections
+                // They should be read-only and not validated as regular connection types
+                continue;
+            }
+            
+            // Validate connection type
+            if (!in_array($connectionType, $validConnectionTypes)) {
                 $errors[] = "Unknown connection type '{$connectionType}'. Valid types are: " . implode(', ', $validConnectionTypes);
                 continue;
             }
@@ -406,5 +419,18 @@ class YamlValidationService
     {
         $types = ConnectionType::pluck('type')->toArray();
         return array_merge($types, ['parents', 'children']); // Include special family types
+    }
+    
+    /**
+     * Get all valid connection types including virtual incoming types
+     */
+    public function getAllConnectionTypes(): array
+    {
+        $baseTypes = $this->getValidConnectionTypes();
+        $incomingTypes = array_map(function($type) {
+            return $type . '_incoming';
+        }, $baseTypes);
+        
+        return array_merge($baseTypes, $incomingTypes);
     }
 } 

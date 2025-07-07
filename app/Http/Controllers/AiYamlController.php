@@ -8,12 +8,22 @@ use Illuminate\Support\Facades\Log;
 
 class AiYamlController extends Controller
 {
-    private AiYamlCreatorService $aiService;
+    private ?AiYamlCreatorService $aiService = null;
 
-    public function __construct(AiYamlCreatorService $aiService)
+    public function __construct()
     {
-        $this->aiService = $aiService;
         $this->middleware('admin');
+    }
+
+    /**
+     * Get the AI service, creating it only when needed
+     */
+    private function getAiService(): AiYamlCreatorService
+    {
+        if ($this->aiService === null) {
+            $this->aiService = app(AiYamlCreatorService::class);
+        }
+        return $this->aiService;
     }
 
     /**
@@ -27,7 +37,8 @@ class AiYamlController extends Controller
         ]);
 
         try {
-            $result = $this->aiService->generatePersonYaml(
+            $aiService = $this->getAiService();
+            $result = $aiService->generatePersonYaml(
                 $validated['name'],
                 $validated['disambiguation'] ?? null
             );
@@ -40,7 +51,7 @@ class AiYamlController extends Controller
             }
 
             // Validate the generated YAML
-            $validation = $this->aiService->validateYaml($result['yaml']);
+            $validation = $aiService->validateYaml($result['yaml']);
             
             return response()->json([
                 'success' => true,
@@ -70,5 +81,42 @@ class AiYamlController extends Controller
     public function show()
     {
         return view('ai-yaml-generator.index');
+    }
+
+    /**
+     * Get placeholder spans that are not connections
+     */
+    public function getPlaceholderSpans()
+    {
+        try {
+            $placeholders = \App\Models\Span::where('state', 'placeholder')
+                ->where('type_id', 'person') // Only show person spans for now
+                ->orderBy('created_at', 'desc')
+                ->limit(20) // Limit to 20 most recent
+                ->get(['id', 'name', 'type_id', 'created_at'])
+                ->map(function ($span) {
+                    return [
+                        'id' => $span->id,
+                        'name' => $span->name,
+                        'type_id' => $span->type_id,
+                        'created_at' => $span->created_at->format('Y-m-d H:i:s')
+                    ];
+                });
+
+            return response()->json([
+                'success' => true,
+                'placeholders' => $placeholders
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error fetching placeholder spans', [
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to fetch placeholder spans: ' . $e->getMessage()
+            ], 500);
+        }
     }
 } 

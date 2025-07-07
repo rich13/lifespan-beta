@@ -559,7 +559,7 @@
             
             <!-- Incoming Connections Panel -->
             @if($span && $span->connectionsAsObject->count() > 0)
-            <div class="card mb-3">
+            <div class="card">
                 <div class="card-header">
                     <h6 class="card-title mb-0">
                         <i class="bi bi-arrow-down-circle me-2"></i>Incoming Connections
@@ -579,6 +579,89 @@
                         @endphp
                         {!! implode(', ', $incomingLinks) !!}
                     </p>
+                </div>
+            </div>
+            @endif
+            
+            <!-- Merge Detection Section -->
+            @if(isset($existingSpan) && $existingSpan && isset($mergeData))
+            <div class="card border-warning">
+                <div class="card-header bg-warning text-dark">
+                    <h6 class="card-title mb-0">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>Existing Span Detected
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-warning mb-3">
+                        <strong>Found existing span:</strong> "{{ $existingSpan->name }}" ({{ $existingSpan->type_id }})
+                        <br><small class="text-muted">Current state: {{ ucfirst($existingSpan->state) }}</small>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="text-muted">Current Span Data</h6>
+                            <ul class="list-unstyled small">
+                                <li><strong>Name:</strong> {{ $existingSpan->name }}</li>
+                                <li><strong>Type:</strong> {{ $existingSpan->type_id }}</li>
+                                <li><strong>State:</strong> {{ ucfirst($existingSpan->state) }}</li>
+                                @if($existingSpan->start_year || $existingSpan->end_year)
+                                <li><strong>Dates:</strong> 
+                                    @if($existingSpan->start_year)
+                                        {{ $existingSpan->start_year }}
+                                        @if($existingSpan->start_month)-{{ $existingSpan->start_month }}{{ $existingSpan->start_day ? '-'.$existingSpan->start_day : '' }}@endif
+                                    @endif
+                                    @if($existingSpan->end_year)
+                                        @if($existingSpan->start_year) to @endif
+                                        {{ $existingSpan->end_year }}
+                                        @if($existingSpan->end_month)-{{ $existingSpan->end_month }}{{ $existingSpan->end_day ? '-'.$existingSpan->end_day : '' }}@endif
+                                    @endif
+                                </li>
+                                @endif
+                                @if($existingSpan->description)
+                                <li><strong>Description:</strong> {{ Str::limit($existingSpan->description, 100) }}</li>
+                                @endif
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="text-muted">AI-Generated Data</h6>
+                            <ul class="list-unstyled small">
+                                <li><strong>Name:</strong> {{ $mergeData['name'] ?? 'N/A' }}</li>
+                                <li><strong>Type:</strong> {{ $mergeData['type_id'] ?? 'N/A' }}</li>
+                                <li><strong>State:</strong> {{ ucfirst($mergeData['state'] ?? 'placeholder') }}</li>
+                                @if($mergeData['start_year'] || $mergeData['end_year'])
+                                <li><strong>Dates:</strong> 
+                                    @if($mergeData['start_year'])
+                                        {{ $mergeData['start_year'] }}
+                                        @if($mergeData['start_month'])-{{ $mergeData['start_month'] }}{{ $mergeData['start_day'] ? '-'.$mergeData['start_day'] : '' }}@endif
+                                    @endif
+                                    @if($mergeData['end_year'])
+                                        @if($mergeData['start_year']) to @endif
+                                        {{ $mergeData['end_year'] }}
+                                        @if($mergeData['end_month'])-{{ $mergeData['end_month'] }}{{ $mergeData['end_day'] ? '-'.$mergeData['end_day'] : '' }}@endif
+                                    @endif
+                                </li>
+                                @endif
+                                @if($mergeData['description'] ?? null)
+                                <li><strong>Description:</strong> {{ Str::limit($mergeData['description'], 100) }}</li>
+                                @endif
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3">
+                        <h6 class="text-muted">Merge Options</h6>
+                        <div class="d-grid gap-2">
+                            <button type="button" id="merge-btn" class="btn btn-warning">
+                                <i class="bi bi-arrow-left-right me-2"></i>Merge AI Data with Existing Span
+                            </button>
+                            <button type="button" id="create-new-btn" class="btn btn-outline-primary">
+                                <i class="bi bi-plus-circle me-2"></i>Create as New Span Anyway
+                            </button>
+                            <a href="{{ route('spans.show', $existingSpan) }}" class="btn btn-outline-secondary">
+                                <i class="bi bi-eye me-2"></i>View Existing Span
+                            </a>
+                        </div>
+                    </div>
                 </div>
             </div>
             @endif
@@ -610,6 +693,17 @@
         </div>
     </div>
 </div>
+
+<!-- Validation Results -->
+<div id="validation-results"></div>
+
+<!-- Debug Info (admin only) -->
+@can('admin')
+<div id="yaml-debug-info-container" class="mt-4" style="display:none;">
+    <label for="yaml-debug-info" class="form-label">Debug Info</label>
+    <textarea id="yaml-debug-info" class="form-control font-monospace" rows="6" readonly style="background:#f8f9fa;"></textarea>
+</div>
+@endcan
 @endsection
 
 @push('scripts')
@@ -732,6 +826,17 @@ $(document).ready(function() {
         
         validationResults.html(html);
         lastValidationResult = result;
+        
+        // Show debug info if present (admin only)
+        @can('admin')
+        if (result.debug) {
+            $('#yaml-debug-info-container').show();
+            $('#yaml-debug-info').val(result.debug);
+        } else {
+            $('#yaml-debug-info-container').hide();
+            $('#yaml-debug-info').val('');
+        }
+        @endcan
     }
     
     // Clear validation errors when user starts editing
@@ -1077,13 +1182,22 @@ $(document).ready(function() {
             },
             error: function(xhr) {
                 let errorMsg = 'Validation failed';
-                if (xhr.responseJSON && xhr.responseJSON.message) {
-                    errorMsg = xhr.responseJSON.message;
+                let debugInfo = null;
+                
+                if (xhr.responseJSON) {
+                    if (xhr.responseJSON.message) {
+                        errorMsg = xhr.responseJSON.message;
+                    }
+                    if (xhr.responseJSON.errors) {
+                        errorMsg = xhr.responseJSON.errors.join(', ');
+                    }
+                    debugInfo = xhr.responseJSON.debug || null;
                 }
                 
                 showValidationResults({
                     success: false,
-                    errors: [errorMsg]
+                    errors: [errorMsg],
+                    debug: debugInfo
                 });
                 // Reset change detection after validation completes (even on error)
                 resetChangeDetection();
@@ -1142,8 +1256,16 @@ $(document).ready(function() {
             },
             error: function(xhr) {
                 let errorMsg = 'Failed to apply changes';
-                if (xhr.responseJSON && xhr.responseJSON.message) {
-                    errorMsg = xhr.responseJSON.message;
+                let debugInfo = null;
+                
+                if (xhr.responseJSON) {
+                    if (xhr.responseJSON.message) {
+                        errorMsg = xhr.responseJSON.message;
+                    }
+                    if (xhr.responseJSON.errors) {
+                        errorMsg = xhr.responseJSON.errors.join(', ');
+                    }
+                    debugInfo = xhr.responseJSON.debug || null;
                 }
                 
                 validationResults.html(`
@@ -1155,6 +1277,17 @@ $(document).ready(function() {
                 `);
                 
                 updateValidationStatus('Error', 'danger');
+                
+                // Show debug info if present (admin only)
+                @can('admin')
+                if (debugInfo) {
+                    $('#yaml-debug-info-container').show();
+                    $('#yaml-debug-info').val(debugInfo);
+                } else {
+                    $('#yaml-debug-info-container').hide();
+                    $('#yaml-debug-info').val('');
+                }
+                @endcan
             },
             complete: function() {
                 applyBtn.html(originalText);
@@ -1163,6 +1296,117 @@ $(document).ready(function() {
                 updateApplyButtonText();
             }
         });
+    }
+
+    // Merge AI data with existing span
+    function mergeWithExistingSpan() {
+        const content = yamlTextarea.val();
+        
+        if (!content.trim()) {
+            alert('Please enter YAML content first');
+            return;
+        }
+        
+        const mergeBtn = $('#merge-btn');
+        mergeBtn.prop('disabled', true);
+        const originalText = mergeBtn.html();
+        mergeBtn.html('<span class="spinner-border spinner-border-sm me-1"></span>Merging...');
+        
+        $.ajax({
+            url: '{{ route("spans.yaml-merge", $existingSpan ?? 0) }}',
+            method: 'POST',
+            data: {
+                yaml_content: content,
+                _token: $('meta[name="csrf-token"]').attr('content')
+            },
+            success: function(result) {
+                if (result.success) {
+                    // Show success message
+                    validationResults.html(`
+                        <div class="text-success">
+                            <i class="bi bi-check-circle-fill me-2"></i>
+                            <strong>Merge Completed Successfully</strong>
+                            <div class="mt-2 small">
+                                ${result.message}
+                            </div>
+                        </div>
+                    `);
+                    
+                    updateValidationStatus('Merged', 'success');
+                    
+                    // Redirect after a delay
+                    if (result.redirect) {
+                        setTimeout(() => {
+                            window.location.href = result.redirect;
+                        }, 1500);
+                    }
+                } else {
+                    throw new Error(result.message || 'Failed to merge data');
+                }
+            },
+            error: function(xhr) {
+                let errorMsg = 'Failed to merge data';
+                let debugInfo = null;
+                
+                if (xhr.responseJSON) {
+                    if (xhr.responseJSON.message) {
+                        errorMsg = xhr.responseJSON.message;
+                    }
+                    if (xhr.responseJSON.errors) {
+                        errorMsg = xhr.responseJSON.errors.join(', ');
+                    }
+                    debugInfo = xhr.responseJSON.debug || null;
+                }
+                
+                validationResults.html(`
+                    <div class="text-danger">
+                        <i class="bi bi-exclamation-circle-fill me-2"></i>
+                        <strong>Error Merging Data</strong>
+                        <div class="mt-2 small">${errorMsg}</div>
+                    </div>
+                `);
+                
+                updateValidationStatus('Error', 'danger');
+                
+                // Show debug info if present (admin only)
+                @can('admin')
+                if (debugInfo) {
+                    $('#yaml-debug-info-container').show();
+                    $('#yaml-debug-info').val(debugInfo);
+                } else {
+                    $('#yaml-debug-info-container').hide();
+                    $('#yaml-debug-info').val('');
+                }
+                @endcan
+            },
+            complete: function() {
+                mergeBtn.html(originalText);
+                mergeBtn.prop('disabled', false);
+            }
+        });
+    }
+
+    // Create new span despite existing span
+    function createNewSpanAnyway() {
+        // Hide the merge detection section
+        $('.card.border-warning').hide();
+        
+        // Enable the normal apply button for creating a new span
+        applyBtn.prop('disabled', false);
+        updateApplyButtonText();
+        
+        // Show a message that we're now in "create new" mode
+        validationResults.html(`
+            <div class="text-info">
+                <i class="bi bi-info-circle me-2"></i>
+                <strong>Creating New Span</strong>
+                <div class="mt-2 small">
+                    You've chosen to create a new span. Validate and apply the YAML to create it.
+                </div>
+            </div>
+        `);
+        
+        updateValidationStatus('Ready to Create', 'info');
     }
     
     // Function to check for changes and update UI accordingly
@@ -1322,6 +1566,10 @@ $(document).ready(function() {
     
     // Discard changes
     discardBtn.on('click', discardChanges);
+    
+    // Merge functionality
+    $('#merge-btn').on('click', mergeWithExistingSpan);
+    $('#create-new-btn').on('click', createNewSpanAnyway);
     
     // Warn about unsaved changes
     $(window).on('beforeunload', function() {
