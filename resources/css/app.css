@@ -84,3 +84,95 @@
 .story-content::-webkit-scrollbar-thumb:hover {
     background: #a8a8a8;
 }
+
+/* Desert Island Discs tracks card styles */
+.desert-island-discs-tracks-card .tracks-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    gap: 8px;
+    margin-bottom: 1rem;
+}
+
+.desert-island-discs-tracks-card .track-square {
+    aspect-ratio: 1;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    transition: all 0.2s ease;
+    background-color: #f8f9fa;
+    position: relative;
+    color: inherit;
+    text-decoration: none;
+}
+
+.desert-island-discs-tracks-card .track-square:hover {
+    border-color: var(--bs-primary);
+    background-color: #e3f2fd;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    color: inherit;
+    text-decoration: none;
+}
+
+.desert-island-discs-tracks-card .track-square.empty {
+    background-color: #f8f9fa;
+    border-color: #dee2e6;
+    opacity: 0.6;
+}
+
+.desert-island-discs-tracks-card .track-square.empty:hover {
+    border-color: #adb5bd;
+    background-color: #f8f9fa;
+    transform: none;
+    box-shadow: none;
+}
+
+.desert-island-discs-tracks-card .track-square.empty {
+    pointer-events: none;
+}
+
+.desert-island-discs-tracks-card .track-number {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    font-size: 0.7rem;
+    font-weight: bold;
+    color: #6c757d;
+    background-color: rgba(255, 255, 255, 0.8);
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.desert-island-discs-tracks-card .track-title {
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.2;
+    margin-bottom: 2px;
+    word-break: break-word;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    color: #495057;
+}
+
+.desert-island-discs-tracks-card .track-artist {
+    font-size: 0.6rem;
+    color: #6c757d;
+    line-height: 1.1;
+    word-break: break-word;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+}
