@@ -506,12 +506,7 @@ class Span extends Model
      */
     public function getMeta(string $key, mixed $default = null): mixed
     {
-        $value = data_get($this->metadata, $key, $default);
-        Log::debug('Getting metadata', [
-            'key' => $key,
-            'value' => $value
-        ]);
-        return $value;
+        return data_get($this->metadata, $key, $default);
     }
 
     /**
@@ -526,11 +521,6 @@ class Span extends Model
         $metadata = $this->metadata ?? [];
         data_set($metadata, $key, $value);
         $this->metadata = $metadata;
-
-        Log::debug('Setting metadata', [
-            'key' => $key,
-            'value' => $value
-        ]);
 
         return $this;
     }
@@ -1381,6 +1371,27 @@ class Span extends Model
                 $q->where('type_id', 'set')
                   ->whereJsonContains('metadata->subtype', 'desertislanddiscs')
                   ->where('access_level', 'public');
+            })
+            ->first();
+
+        return $existingConnection ? $existingConnection->child : null;
+    }
+
+    /**
+     * Get any existing "Desert Island Discs" set for a person span (regardless of access level)
+     */
+    public static function getDesertIslandDiscsSet(Span $person): ?Span
+    {
+        if ($person->type_id !== 'person') {
+            throw new \InvalidArgumentException('Can only get Desert Island Discs sets for person spans');
+        }
+
+        // Check if this person already has a Desert Island Discs set via created connection
+        $existingConnection = $person->connectionsAsSubject()
+            ->where('type_id', 'created')
+            ->whereHas('child', function($q) {
+                $q->where('type_id', 'set')
+                  ->whereJsonContains('metadata->subtype', 'desertislanddiscs');
             })
             ->first();
 

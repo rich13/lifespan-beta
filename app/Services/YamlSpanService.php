@@ -1163,7 +1163,7 @@ class YamlSpanService
     /**
      * Update connections for a span
      */
-    private function updateConnections(Span $span, array $connectionsData): void
+    public function updateConnections(Span $span, array $connectionsData): void
     {
         $connectionImporter = new ConnectionImporter($span->owner);
         
@@ -2648,6 +2648,19 @@ class YamlSpanService
     {
         try {
             DB::beginTransaction();
+
+            // Check for existing span by name and type_id
+            $existingSpan = \App\Models\Span::where('name', $data['name'])
+                ->where('type_id', $data['type'])
+                ->first();
+            if ($existingSpan) {
+                DB::commit();
+                return [
+                    'success' => true,
+                    'span' => $existingSpan,
+                    'message' => 'Existing span found by name and type, no duplicate created.'
+                ];
+            }
 
             // Create the new span
             $span = Span::create([

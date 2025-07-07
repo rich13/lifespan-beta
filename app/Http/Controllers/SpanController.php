@@ -36,8 +36,8 @@ class SpanController extends Controller
      */
     public function __construct(YamlSpanService $yamlService)
     {
-        // Require auth for all routes except show, index, and search
-        $this->middleware('auth')->except(['show', 'index', 'search']);
+        // Require auth for all routes except show, index, search, and desertIslandDiscs
+        $this->middleware('auth')->except(['show', 'index', 'search', 'desertIslandDiscs']);
         $this->yamlService = $yamlService;
     }
 
@@ -321,7 +321,7 @@ class SpanController extends Controller
             $desertIslandDiscsSet = null;
             if ($span->type_id === 'person') {
                 try {
-                    $desertIslandDiscsSet = Span::getPublicDesertIslandDiscsSet($span);
+                    $desertIslandDiscsSet = Span::getDesertIslandDiscsSet($span);
                 } catch (\Exception $e) {
                     // Log the error but don't fail the page
                     Log::warning('Failed to get Desert Island Discs set for person', [
@@ -391,6 +391,7 @@ class SpanController extends Controller
         $availableSpans = Span::where('id', '!=', $span->id)
             ->with('type')
             ->orderBy('name')
+            ->limit(100) // Limit to prevent memory exhaustion
             ->get();
         
         // Get the current span type, or if type_id is provided in the query, get that type
@@ -1562,5 +1563,55 @@ class SpanController extends Controller
         $story = $storyGenerator->generateStory($span);
 
         return view('spans.story', compact('span', 'story'));
+    }
+
+    /**
+     * Display all Desert Island Discs sets.
+     */
+    public function desertIslandDiscs(Request $request): View
+    {
+        $query = Span::query()
+            ->where('type_id', 'set')
+            ->where(function($q) {
+                $q->whereJsonContains('metadata->subtype', 'desertislanddiscs')
+                  ->orWhere('metadata->subtype', 'desertislanddiscs');
+            })
+            ->orderBy('name');
+
+        // Apply access filtering
+        if (!Auth::check()) {
+            $query->where('access_level', 'public');
+        } else {
+            $user = Auth::user();
+            if (!$user->is_admin) {
+                $query->where(function ($query) use ($user) {
+                    $query->where('access_level', 'public')
+                        ->orWhere('owner_id', $user->id)
+                        ->orWhere(function ($query) use ($user) {
+                            $query->where('access_level', 'shared')
+                                ->whereExists(function ($subquery) use ($user) {
+                                    $subquery->select('id')
+                                        ->from('span_permissions')
+                                        ->whereColumn('span_permissions.span_id', 'spans.id')
+                                        ->where('span_permissions.user_id', $user->id);
+                                });
+                        });
+                });
+            }
+        }
+
+        $sets = $query->paginate(20);
+
+        // Debug: Log the query and results
+        \Illuminate\Support\Facades\Log::info('Desert Island Discs query', [
+            'sql' => $query->toSql(),
+            'bindings' => $query->getBindings(),
+            'count' => $sets->count(),
+            'total' => $sets->total(),
+            'is_authenticated' => Auth::check(),
+            'user_id' => Auth::id()
+        ]);
+
+        return view('desert-island-discs.index', compact('sets'));
     }
 }

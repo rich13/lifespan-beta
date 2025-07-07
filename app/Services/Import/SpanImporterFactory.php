@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Services\Import\Types\PersonImporter;
 use App\Services\Import\Types\BandImporter;
 use App\Services\Import\Types\OrganisationImporter;
+use App\Services\Import\Types\PrimeMinisterImporter;
 use Symfony\Component\Yaml\Yaml;
 
 class SpanImporterFactory
@@ -22,6 +23,7 @@ class SpanImporterFactory
             'person' => new PersonImporter($user),
             'band' => new BandImporter($user),
             'organisation' => new OrganisationImporter($user),
+            'prime_minister' => new PrimeMinisterImporter($user),
             default => throw new \InvalidArgumentException("Unsupported span type: {$data['type']}")
         };
     }
