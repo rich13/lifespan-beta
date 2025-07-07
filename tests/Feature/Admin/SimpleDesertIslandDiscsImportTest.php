@@ -69,6 +69,13 @@ class SimpleDesertIslandDiscsImportTest extends TestCase
 
     public function test_dry_run_shows_correct_actions_for_new_items()
     {
+        // Clean up any existing data that might interfere with this test
+        Span::where('name', 'A Tale of Two Cities')->delete();
+        Span::where('name', 'Charles Dickens')->delete();
+        Span::where('name', 'John Smith')->delete();
+        Span::where('name', 'The Beatles')->delete();
+        Span::where('name', 'Hey Jude')->delete();
+        
         $csvData = "Castaway,Job,Book,Date first broadcast,Artist 1,Song 1,URL\nJohn Smith,Writer,A Tale of Two Cities by Charles Dickens,2023-12-25,The Beatles,Hey Jude,https://example.com";
 
         $response = $this->actingAs($this->admin)

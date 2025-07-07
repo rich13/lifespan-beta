@@ -561,9 +561,30 @@ class SimpleDesertIslandDiscsImportController extends Controller
             }
         }
         
-        // Try strtotime as fallback
+        // Try strtotime as fallback, but be more strict about what we accept
         $timestamp = strtotime($dateString);
         if ($timestamp !== false) {
+            // Only accept if strtotime actually parsed the string as a date
+            // and didn't just return the current time for invalid input
+            $parsedDate = date('Y-m-d', $timestamp);
+            $currentDate = date('Y-m-d');
+            
+            // For debugging: log what strtotime is doing
+            \Log::info('parseDate debug', [
+                'input' => $dateString,
+                'timestamp' => $timestamp,
+                'parsed_date' => $parsedDate,
+                'current_date' => $currentDate,
+                'is_today' => $parsedDate === $currentDate,
+                'is_valid_format' => preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateString)
+            ]);
+            
+            // If strtotime returned today's date for an invalid string, reject it
+            if ($parsedDate === $currentDate && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateString)) {
+                \Log::info('Rejecting date as invalid', ['input' => $dateString]);
+                return null;
+            }
+            
             return [
                 'year' => (int) date('Y', $timestamp),
                 'month' => (int) date('m', $timestamp),

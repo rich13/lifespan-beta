@@ -17,40 +17,7 @@
         @endphp
         
         @if($tracks->isNotEmpty())
-            <div class="tracks-grid">
-                @foreach($tracks as $track)
-                    @php
-                        // Get the artist for this track
-                        $artist = $track->connectionsAsObject()
-                            ->whereHas('type', function($q) {
-                                $q->where('type', 'created');
-                            })
-                            ->whereHas('parent', function($q) {
-                                $q->whereIn('type_id', ['person', 'band']);
-                            })
-                            ->with('parent')
-                            ->first();
-                    @endphp
-                    
-                    <a href="{{ route('spans.show', $track) }}" class="track-square text-decoration-none">
-                        <div class="track-number">{{ $loop->iteration }}</div>
-                        <div class="track-title">
-                            {{ $track->name }}
-                        </div>
-                        @if($artist)
-                            <div class="track-artist text-muted">{{ $artist->parent->name }}</div>
-                        @endif
-                    </a>
-                @endforeach
-                
-                {{-- Fill remaining squares if less than 8 tracks --}}
-                @for($i = $tracks->count() + 1; $i <= 8; $i++)
-                    <div class="track-square empty">
-                        <div class="track-number">{{ $i }}</div>
-                        <div class="track-title text-muted">Empty</div>
-                    </div>
-                @endfor
-            </div>
+            <x-spans.partials.desert-island-discs-tracks-grid :tracks="$tracks" />
             
             <!-- <div class="mt-3 text-center">
                 <a href="{{ route('sets.show', $desertIslandDiscsSet) }}" class="btn btn-outline-primary btn-sm">
