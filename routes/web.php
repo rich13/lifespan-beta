@@ -237,6 +237,9 @@ Route::middleware('web')->group(function () {
             Route::post('/editor/new/validate', [SpanController::class, 'validateYamlNew'])->name('spans.yaml-validate-new');
             Route::post('/editor/new/apply', [SpanController::class, 'applyYamlNew'])->name('spans.yaml-apply-new');
             
+            // Merge functionality routes
+            Route::post('/{span}/editor/merge', [SpanController::class, 'applyMergedYaml'])->name('spans.yaml-merge');
+            
             // API search endpoint for AJAX calls (authenticated)
             Route::get('/api/search', [App\Http\Controllers\Api\SpanSearchController::class, 'search'])->name('spans.api.search');
             
@@ -390,6 +393,7 @@ Route::middleware('web')->group(function () {
             // AI YAML Generator routes
             Route::get('/ai-yaml-generator', [\App\Http\Controllers\AiYamlController::class, 'show'])->name('ai-yaml-generator.show');
             Route::post('/ai-yaml-generator/generate', [\App\Http\Controllers\AiYamlController::class, 'generatePersonYaml'])->name('ai-yaml-generator.generate');
+            Route::get('/ai-yaml-generator/placeholders', [\App\Http\Controllers\AiYamlController::class, 'getPlaceholderSpans'])->name('ai-yaml-generator.placeholders');
 
             // Import Management
             Route::prefix('import')->name('import.')->group(function () {
@@ -400,6 +404,7 @@ Route::middleware('web')->group(function () {
                     Route::post('/discography', [MusicBrainzImportController::class, 'showDiscography'])->name('show-discography');
                     Route::post('/tracks', [MusicBrainzImportController::class, 'showTracks'])->name('show-tracks');
                     Route::post('/import', [MusicBrainzImportController::class, 'import'])->name('import');
+                    Route::post('/import-all', [MusicBrainzImportController::class, 'importAll'])->name('import-all');
                 });
 
                 // Desert Island Discs Import (must come before legacy routes to avoid conflicts)

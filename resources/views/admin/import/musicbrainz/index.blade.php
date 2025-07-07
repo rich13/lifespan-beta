@@ -60,6 +60,7 @@
                                         <th class="text-center">Tracks</th>
                                         <th>Recent Albums</th>
                                         <th class="text-center">Status</th>
+                                        <th class="text-center">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -115,6 +116,17 @@
                                                     <span class="badge bg-success">Imported</span>
                                                 @else
                                                     <span class="badge bg-secondary">Ready</span>
+                                                @endif
+                                            </td>
+                                            <td class="text-center">
+                                                @if(isset($importStats[$artist->id]) && $importStats[$artist->id]['album_count'] > 0)
+                                                    <button class="btn btn-sm btn-outline-primary" onclick="reimportArtist('{{ $artist->id }}', '{{ $artist->name }}')">
+                                                        <i class="bi bi-arrow-clockwise me-1"></i>Re-import
+                                                    </button>
+                                                @else
+                                                    <button class="btn btn-sm btn-primary" onclick="importArtist('{{ $artist->id }}', '{{ $artist->name }}')">
+                                                        <i class="bi bi-box-arrow-in-down me-1"></i>Import
+                                                    </button>
                                                 @endif
                                             </td>
                                         </tr>
@@ -182,18 +194,30 @@
                         </div>
 
                         <!-- Step 2: Select MusicBrainz Match -->
-                        <div class="col-md-4 mb-3">
+                        <div class="col-md-8 mb-3">
                             <div class="card h-100 border-secondary">
                                 <div class="card-header bg-secondary text-white">
                                     <h6 class="card-title mb-0">
-                                        <i class="bi bi-2-circle me-2"></i>Choose Match
+                                        <i class="bi bi-2-circle me-2"></i>Choose MusicBrainz Match
                                     </h6>
                                 </div>
                                 <div class="card-body">
-                                    <p class="text-muted small mb-3">Select the correct MusicBrainz entry for your artist.</p>
+                                    <p class="text-muted small mb-3">Select the correct MusicBrainz entry for your artist. The first result is usually the best match.</p>
                                     <div id="searchResults" class="d-none">
-                                        <div class="list-group">
-                                            <!-- Results will be populated here -->
+                                        <div class="table-responsive">
+                                            <table class="table table-hover">
+                                                <thead class="table-light">
+                                                    <tr>
+                                                        <th>Artist Name</th>
+                                                        <th>Type</th>
+                                                        <th>Disambiguation</th>
+                                                        <th class="text-center">Action</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="searchResultsBody">
+                                                    <!-- Results will be populated here -->
+                                                </tbody>
+                                            </table>
                                         </div>
                                     </div>
                                     <div id="step2Placeholder" class="text-center text-muted py-4">
@@ -204,34 +228,61 @@
                             </div>
                         </div>
 
-                        <!-- Step 3: Select Albums -->
-                        <div class="col-md-4 mb-3">
-                            <div class="card h-100 border-success">
+                    </div>
+
+                    <!-- Step 3: Import Summary -->
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <div class="card border-success">
                                 <div class="card-header bg-success text-white">
                                     <h6 class="card-title mb-0">
-                                        <i class="bi bi-3-circle me-2"></i>Import Albums
+                                        <i class="bi bi-3-circle me-2"></i>Import Summary
                                     </h6>
                                 </div>
                                 <div class="card-body">
-                                    <p class="text-muted small mb-3">Choose which albums to import.</p>
-                                    <div id="albumSelection" class="d-none">
-                                        <div class="mb-3">
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" id="selectAllAlbums">
-                                                <label class="form-check-label" for="selectAllAlbums">
-                                                    Select All Albums
-                                                </label>
+                                    <p class="text-muted small mb-3">Review the albums to be imported and import all at once.</p>
+                                    <div id="albumSummary" class="d-none">
+                                        <div class="row mb-3">
+                                            <div class="col-md-3">
+                                                <div class="text-center">
+                                                    <h4 class="text-primary mb-0" id="totalAlbums">0</h4>
+                                                    <small class="text-muted">Total Albums</small>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <div class="text-center">
+                                                    <h4 class="text-info mb-0" id="dateRange">-</h4>
+                                                    <small class="text-muted">Date Range</small>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <div class="text-center">
+                                                    <h4 class="text-success mb-0" id="totalTracks">0</h4>
+                                                    <small class="text-muted">Estimated Tracks</small>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <div class="text-center">
+                                                    <button class="btn btn-success btn-lg" id="importAllButton">
+                                                        <i class="bi bi-box-arrow-in-down me-2"></i>Import All
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
-                                        <div class="album-list-container" style="max-height: 200px; overflow-y: auto;">
-                                            <div class="list-group" id="albumList">
-                                                <!-- Albums will be populated here -->
+                                        
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <h6 class="text-muted">Albums by Type:</h6>
+                                                <div id="albumsByType" class="small">
+                                                    <!-- Album types will be populated here -->
+                                                </div>
                                             </div>
-                                        </div>
-                                        <div class="mt-3">
-                                            <button class="btn btn-success w-100" id="importButton" disabled>
-                                                <i class="bi bi-box-arrow-in-down me-2"></i>Import Selected Albums
-                                            </button>
+                                            <div class="col-md-6">
+                                                <h6 class="text-muted">Sample Albums:</h6>
+                                                <div id="sampleAlbums" class="small">
+                                                    <!-- Sample albums will be populated here -->
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                     <div id="step3Placeholder" class="text-center text-muted py-4">
@@ -241,6 +292,7 @@
                                 </div>
                             </div>
                         </div>
+                    </div>
                     </div>
 
                     <!-- Loading States -->
@@ -253,6 +305,80 @@
 
                     <!-- Error Messages -->
                     <div id="errorMessage" class="alert alert-danger d-none mt-3"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Global Loading Overlay -->
+    <div id="globalLoadingOverlay" class="position-fixed top-0 start-0 w-100 h-100 d-none" style="background: rgba(0,0,0,0.5); z-index: 9999;">
+        <div class="d-flex justify-content-center align-items-center h-100">
+            <div class="text-center text-white">
+                <div class="spinner-border" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-3">Importing from MusicBrainz...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import Confirmation Modal -->
+    <div class="modal fade" id="importModal" tabindex="-1" aria-labelledby="importModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="importModalLabel">
+                        <i class="bi bi-box-arrow-in-down me-2"></i>Confirm Import
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <div class="text-center">
+                                <h4 class="text-primary mb-0" id="modalTotalAlbums">0</h4>
+                                <small class="text-muted">Total Albums</small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-center">
+                                <h4 class="text-success mb-0" id="modalEstimatedTracks">0</h4>
+                                <small class="text-muted">Estimated Tracks</small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-center">
+                                <h4 class="text-info mb-0" id="modalDateRange">-</h4>
+                                <small class="text-muted">Date Range</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <h6 class="text-muted">Albums by Type:</h6>
+                        <div id="modalAlbumsByType" class="small">
+                            <!-- Album types will be populated here -->
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <h6 class="text-muted">Albums to Import (<span id="modalAlbumCount">0</span> total):</h6>
+                        <div class="border rounded p-3" style="max-height: 400px; overflow-y: auto; background-color: #f8f9fa;">
+                            <div id="modalAlbumList" class="small">
+                                <!-- Album list will be populated here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-success" id="confirmImportButton">
+                        <i class="bi bi-box-arrow-in-down me-2"></i>Import All Albums & Tracks
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
                 </div>
             </div>
         </div>
@@ -305,10 +431,12 @@ $(document).ready(function() {
     const $bandSelect = $('#bandSelect');
     const $searchButton = $('#searchButton');
     const $searchResults = $('#searchResults');
-    const $albumSelection = $('#albumSelection');
-    const $albumList = $('#albumList');
-    const $selectAllAlbums = $('#selectAllAlbums');
-    const $importButton = $('#importButton');
+    const $albumSummary = $('#albumSummary');
+    const $totalAlbums = $('#totalAlbums');
+    const $dateRange = $('#dateRange');
+    const $albumsByType = $('#albumsByType');
+    const $sampleAlbums = $('#sampleAlbums');
+    const $importAllButton = $('#importAllButton');
     const $loadingIndicator = $('#loadingIndicator');
     const $errorMessage = $('#errorMessage');
 
@@ -321,7 +449,7 @@ $(document).ready(function() {
 
     let selectedBandId = null;
     let selectedMbid = null;
-    let selectedAlbums = new Set();
+    let albumSummary = null;
 
     // Initialize button state
     console.log('Initializing button state...');
@@ -398,19 +526,32 @@ $(document).ready(function() {
     function displaySearchResults(artists) {
         $('#step2Placeholder').addClass('d-none');
         $searchResults.removeClass('d-none');
-        $searchResults.find('.list-group').html(artists.map(artist => `
-            <button type="button" class="list-group-item list-group-item-action" data-mbid="${artist.id}">
-                <div class="d-flex w-100 justify-content-between">
-                    <h6 class="mb-1">${artist.name}</h6>
-                    <small>${artist.type || 'Unknown Type'}</small>
-                </div>
-                ${artist.disambiguation ? `<small class="text-muted">${artist.disambiguation}</small>` : ''}
-            </button>
+        
+        const tableBody = $('#searchResultsBody');
+        tableBody.html(artists.map((artist, index) => `
+            <tr class="${index === 0 ? 'table-primary' : ''}">
+                <td>
+                    <strong>${artist.name}</strong>
+                    ${index === 0 ? '<span class="badge bg-success ms-2">Recommended</span>' : ''}
+                </td>
+                <td>
+                    <span class="badge bg-secondary">${artist.type || 'Unknown'}</span>
+                </td>
+                <td>
+                    <small class="text-muted">${artist.disambiguation || '-'}</small>
+                </td>
+                <td class="text-center">
+                    <button type="button" class="btn btn-sm btn-primary" data-mbid="${artist.id}">
+                        <i class="bi bi-box-arrow-in-down me-1"></i>Import
+                    </button>
+                </td>
+            </tr>
         `).join(''));
 
         // Add click handlers
-        $searchResults.find('.list-group-item').on('click', function() {
-            selectArtist($(this).data('mbid'));
+        tableBody.find('.btn').on('click', function() {
+            const mbid = $(this).data('mbid');
+            selectArtist(mbid);
         });
     }
 
@@ -433,7 +574,7 @@ $(document).ready(function() {
 
             const data = await response.json();
             if (response.ok) {
-                displayAlbums(data.albums);
+                displayAlbumSummary(data);
             } else {
                 showError(data.error || 'Failed to fetch discography');
             }
@@ -444,151 +585,52 @@ $(document).ready(function() {
         }
     }
 
-    // Display albums
-    function displayAlbums(albums) {
+    // Display album summary
+    function displayAlbumSummary(summary) {
+        console.log('Frontend received summary:', summary);
+        
+        albumSummary = summary;
+        
         $('#step3Placeholder').addClass('d-none');
-        $albumSelection.removeClass('d-none');
-        $albumList.html(albums.map(album => `
-            <div class="list-group-item">
-                <div class="form-check">
-                    <input class="form-check-input album-checkbox" type="checkbox" 
-                           value="${album.id}" id="album-${album.id}">
-                    <label class="form-check-label" for="album-${album.id}">
-                        <div class="d-flex w-100 justify-content-between">
-                            <span class="album-title">${album.title}</span>
-                            <small class="text-muted release-date">${album.first_release_date || 'Unknown Date'}</small>
-                        </div>
-                        ${album.disambiguation ? `<small class="text-muted">${album.disambiguation}</small>` : ''}
-                    </label>
-                </div>
-                <div class="mt-2">
-                    <div class="tracks-container d-none" id="tracks-${album.id}">
-                        <div class="spinner-border spinner-border-sm text-primary" role="status">
-                            <span class="visually-hidden">Loading tracks...</span>
-                        </div>
-                        <div class="tracks-list"></div>
-                    </div>
-                </div>
-            </div>
-        `).join(''));
-
-        // Add change handlers
-        $albumList.find('.album-checkbox').on('change', async function() {
-            const $checkbox = $(this);
-            const albumId = $checkbox.val();
-            const $container = $(`#tracks-${albumId}`);
-            const $spinner = $container.find('.spinner-border');
-            const $tracksList = $container.find('.tracks-list');
-
-            if ($checkbox.prop('checked')) {
-                // Show tracks container and fetch tracks
-                $container.removeClass('d-none');
-                $spinner.removeClass('d-none');
-                $tracksList.empty();
-
-                try {
-                    const response = await fetch('{{ route("admin.import.musicbrainz.show-tracks") }}', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                        },
-                        body: JSON.stringify({
-                            release_group_id: albumId
-                        })
-                    });
-
-                    const data = await response.json();
-                    if (response.ok) {
-                        $tracksList.html(data.tracks.map(track => `
-                            <div class="track-item ms-4 mb-2" 
-                                 data-track-id="${track.id}"
-                                 data-length="${track.length}"
-                                 data-isrc="${track.isrc || ''}"
-                                 data-artist-credits="${track.artist_credits || ''}">
-                                <div class="d-flex w-100 justify-content-between">
-                                    <span class="track-title">${track.title}</span>
-                                    <small class="text-muted track-duration">${formatDuration(track.length)}</small>
-                                </div>
-                                ${track.isrc ? `<small class="text-muted track-isrc">ISRC: ${track.isrc}</small>` : ''}
-                            </div>
-                        `).join(''));
-                    } else {
-                        $tracksList.html('<div class="text-danger">Failed to fetch tracks</div>');
-                    }
-                } catch (error) {
-                    $tracksList.html('<div class="text-danger">Failed to fetch tracks</div>');
-                } finally {
-                    $spinner.addClass('d-none');
-                }
-            } else {
-                // Hide tracks container when unchecked
-                $container.addClass('d-none');
-            }
-            updateImportButton();
-        });
-
-        $selectAllAlbums.on('change', async function() {
-            const isChecked = $(this).prop('checked');
-            $albumList.find('.album-checkbox').prop('checked', isChecked);
-            
-            if (isChecked) {
-                // Fetch tracks for all albums
-                for (const $checkbox of $albumList.find('.album-checkbox')) {
-                    $($checkbox).trigger('change');
-                }
-            } else {
-                // Hide all track containers
-                $albumList.find('.tracks-container').addClass('d-none');
-            }
-            updateImportButton();
-        });
+        $albumSummary.removeClass('d-none');
+        
+        // Update summary stats
+        $totalAlbums.text(summary.total_albums);
+        
+        // Update date range
+        if (summary.date_range.earliest && summary.date_range.latest) {
+            $dateRange.text(`${summary.date_range.earliest} - ${summary.date_range.latest}`);
+        } else {
+            $dateRange.text('Unknown');
+        }
+        
+        // Update albums by type
+        const typeHtml = Object.entries(summary.albums_by_type)
+            .map(([type, count]) => `<span class="badge bg-secondary me-1">${type || 'Unknown'}: ${count}</span>`)
+            .join('');
+        $albumsByType.html(typeHtml || '<span class="text-muted">No type information</span>');
+        
+        // Update sample albums
+        const sampleHtml = summary.sample_albums
+            .map(album => `<div class="text-truncate"><strong>${album.title}</strong> (${album.type || 'Unknown'}) - ${album.date || 'Unknown Date'}</div>`)
+            .join('');
+        $sampleAlbums.html(sampleHtml || '<span class="text-muted">No albums found</span>');
     }
 
-    // Format duration in milliseconds to MM:SS
-    function formatDuration(ms) {
-        if (!ms) return '';
-        const minutes = Math.floor(ms / 60000);
-        const seconds = Math.floor((ms % 60000) / 1000);
-        return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-    }
+    // Handle import all
+    $importAllButton.on('click', async function() {
+        if (!albumSummary || albumSummary.total_albums === 0) {
+            showError('No albums to import');
+            return;
+        }
 
-    // Update import button state
-    function updateImportButton() {
-        const checkedBoxes = $albumList.find('.album-checkbox:checked');
-        $importButton.prop('disabled', checkedBoxes.length === 0);
-    }
-
-    // Handle import
-    $importButton.on('click', async function() {
-        const albums = $albumList.find('.album-checkbox:checked').map(function() {
-            const $checkbox = $(this);
-            const $item = $checkbox.closest('.list-group-item');
-            const albumId = $checkbox.val();
-            const $tracksContainer = $(`#tracks-${albumId}`);
-            const tracks = $tracksContainer.find('.track-item').map(function() {
-                const $track = $(this);
-                return {
-                    id: $track.data('track-id'),
-                    title: $track.find('.track-title').text().trim(),
-                    length: parseInt($track.data('length')),
-                    isrc: $track.data('isrc') || null,
-                    artist_credits: $track.data('artist-credits') || null,
-                    first_release_date: $item.find('.release-date').text().trim()
-                };
-            }).get();
-
-            return {
-                id: albumId,
-                title: $item.find('.album-title').text().trim(),
-                first_release_date: $item.find('.release-date').text().trim(),
-                tracks: tracks
-            };
-        }).get();
+        if (!confirm(`Are you sure you want to import all ${albumSummary.total_albums} albums with their tracks? This may take a while.`)) {
+            return;
+        }
 
         showLoading();
         try {
-            const response = await fetch('{{ route("admin.import.musicbrainz.import") }}', {
+            const response = await fetch('{{ route("admin.import.musicbrainz.import-all") }}', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -596,14 +638,14 @@ $(document).ready(function() {
                 },
                 body: JSON.stringify({
                     band_id: selectedBandId,
-                    albums: albums
+                    mbid: selectedMbid
                 })
             });
 
             const data = await response.json();
             if (response.ok) {
                 // Show success message and reset
-                alert(data.message);
+                hideError();
                 resetSearch();
                 // Reload page to update summary
                 location.reload();
@@ -621,11 +663,10 @@ $(document).ready(function() {
     function resetSearch() {
         $searchResults.addClass('d-none');
         $('#step2Placeholder').removeClass('d-none');
-        $albumSelection.addClass('d-none');
+        $albumSummary.addClass('d-none');
         $('#step3Placeholder').removeClass('d-none');
         selectedMbid = null;
-        selectedAlbums.clear();
-        updateImportButton();
+        albumSummary = null;
     }
 
     // Show/hide loading
@@ -645,6 +686,208 @@ $(document).ready(function() {
     function hideError() {
         $errorMessage.addClass('d-none');
     }
+
+    // Global functions for table import buttons
+    window.importArtist = async function(bandId, bandName) {
+        console.log('Importing artist:', bandId, bandName);
+        
+        // Show global loading overlay
+        $('#globalLoadingOverlay').removeClass('d-none');
+        
+        try {
+            // First, search for the artist on MusicBrainz
+            const searchResponse = await fetch('{{ route("admin.import.musicbrainz.search") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    band_id: bandId
+                })
+            });
+
+            const searchData = await searchResponse.json();
+            
+            if (!searchResponse.ok) {
+                showError(searchData.error || 'Failed to search MusicBrainz');
+                return;
+            }
+
+            if (!searchData.artists || searchData.artists.length === 0) {
+                showError('No artists found on MusicBrainz');
+                return;
+            }
+
+            // Use the first (best) result
+            const bestMatch = searchData.artists[0];
+            console.log('Using best match:', bestMatch);
+            
+            // Get the discography summary
+            const summaryResponse = await fetch('{{ route("admin.import.musicbrainz.show-discography") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    band_id: bandId,
+                    mbid: bestMatch.id
+                })
+            });
+
+            const summaryData = await summaryResponse.json();
+            
+            if (!summaryResponse.ok) {
+                showError(summaryData.error || 'Failed to fetch discography');
+                return;
+            }
+
+            // Show modal with import details
+            showImportModal(summaryData, bandName, bandId, bestMatch.id);
+            
+        } catch (error) {
+            console.error('Import error:', error);
+            showError('Failed to import artist');
+        } finally {
+            $('#globalLoadingOverlay').addClass('d-none');
+        }
+    };
+
+    window.reimportArtist = async function(bandId, bandName) {
+        const confirmed = confirm(
+            `Re-import albums for "${bandName}"?\n\n` +
+            `This will update existing albums and add any new ones found on MusicBrainz.`
+        );
+
+        if (confirmed) {
+            await importArtist(bandId, bandName);
+        }
+    };
+
+    // Show import confirmation modal
+    function showImportModal(summaryData, bandName, bandId, mbid) {
+        // Hide loading overlay
+        $('#globalLoadingOverlay').addClass('d-none');
+        
+        // Update modal content
+        $('#importModalLabel').html(`<i class="bi bi-box-arrow-in-down me-2"></i>Import Albums for "${bandName}"`);
+        $('#modalTotalAlbums').text(summaryData.total_albums);
+        $('#modalEstimatedTracks').text(summaryData.total_albums * 10); // Rough estimate
+        $('#modalAlbumCount').text(summaryData.total_albums);
+        
+        // Update date range
+        if (summaryData.date_range.earliest && summaryData.date_range.latest) {
+            $('#modalDateRange').text(`${summaryData.date_range.earliest} - ${summaryData.date_range.latest}`);
+        } else {
+            $('#modalDateRange').text('Unknown');
+        }
+        
+        // Update albums by type
+        const typeHtml = Object.entries(summaryData.albums_by_type)
+            .map(([type, count]) => `<span class="badge bg-secondary me-1">${type || 'Unknown'}: ${count}</span>`)
+            .join('');
+        $('#modalAlbumsByType').html(typeHtml || '<span class="text-muted">No type information</span>');
+        
+        // Update album list with ALL albums
+        const albumListHtml = summaryData.all_albums
+            .map((album, index) => `
+                <div class="d-flex justify-content-between align-items-start mb-2 p-2 border-bottom">
+                    <div class="flex-grow-1">
+                        <strong>${album.title}</strong>
+                        <br>
+                        <small class="text-muted">
+                            ${album.type || 'Unknown'} • ${album.first_release_date || 'Unknown Date'}
+                        </small>
+                    </div>
+                    <span class="badge bg-light text-dark ms-2">${index + 1}</span>
+                </div>
+            `)
+            .join('');
+        $('#modalAlbumList').html(albumListHtml || '<span class="text-muted">No albums found</span>');
+        
+        // Store import data for the confirm button
+        $('#confirmImportButton').data('import-data', {
+            bandId: bandId,
+            mbid: mbid,
+            bandName: bandName
+        });
+        
+        // Show modal
+        const modal = new bootstrap.Modal(document.getElementById('importModal'));
+        modal.show();
+    }
+
+    // Handle confirm import button
+    $('#confirmImportButton').on('click', async function() {
+        const importData = $(this).data('import-data');
+        if (!importData) {
+            showError('Import data not found');
+            return;
+        }
+
+        // Hide modal
+        const modal = bootstrap.Modal.getInstance(document.getElementById('importModal'));
+        modal.hide();
+
+        // Show loading overlay
+        $('#globalLoadingOverlay').removeClass('d-none');
+
+        try {
+            // Perform the import
+            const importResponse = await fetch('{{ route("admin.import.musicbrainz.import-all") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    band_id: importData.bandId,
+                    mbid: importData.mbid
+                })
+            });
+
+            const responseData = await importResponse.json();
+            
+            if (importResponse.ok) {
+                // Show success in modal instead of alert
+                const modal = new bootstrap.Modal(document.getElementById('importModal'));
+                modal.show();
+                
+                // Update modal content to show success
+                $('#importModalLabel').html(`<i class="bi bi-check-circle text-success me-2"></i>Import Complete`);
+                $('#modalTotalAlbums').text(responseData.imported_count || 0);
+                $('#modalEstimatedTracks').text(responseData.imported_tracks || 0);
+                $('#modalEstimatedTracks').next('small').text('Tracks Imported');
+                $('#modalDateRange').text('Import completed');
+                
+                // Show success message in modal body
+                const fixedTracksText = responseData.fixed_tracks > 0 ? ` (${responseData.fixed_tracks} existing tracks fixed)` : '';
+                const successHtml = `
+                    <div class="alert alert-success">
+                        <h6><i class="bi bi-check-circle me-2"></i>Import Successful!</h6>
+                        <p class="mb-2">Successfully imported <strong>${responseData.imported_count || 0}</strong> albums and <strong>${responseData.imported_tracks || 0}</strong> tracks for <strong>${importData.bandName}</strong>${fixedTracksText}.</p>
+                        <p class="mb-0 small text-muted">The page will refresh to show the updated data.</p>
+                    </div>
+                `;
+                $('#modalAlbumsByType').html(successHtml);
+                $('#modalAlbumList').html('<span class="text-muted">Import completed successfully</span>');
+                
+                // Change button to close and refresh
+                $('#confirmImportButton').text('Close & Refresh').off('click').on('click', function() {
+                    modal.hide();
+                    location.reload();
+                });
+            } else {
+                showError(responseData.error || 'Failed to import albums');
+            }
+        } catch (error) {
+            console.error('Import error:', error);
+            showError('Failed to import albums');
+        } finally {
+            $('#globalLoadingOverlay').addClass('d-none');
+        }
+    });
 });
 </script>
 @endsection 

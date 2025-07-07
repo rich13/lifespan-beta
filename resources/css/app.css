@@ -90,25 +90,33 @@
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     grid-template-rows: repeat(2, 1fr);
-    gap: 8px;
+    gap: 4px;
     margin-bottom: 1rem;
+    width: 100%;
+    height: 90px;
 }
 
 .desert-island-discs-tracks-card .track-square {
-    aspect-ratio: 1;
-    border: 2px solid #e9ecef;
-    border-radius: 8px;
-    padding: 8px;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    padding: 2px;
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    justify-content: space-between;
     align-items: center;
     text-align: center;
     transition: all 0.2s ease;
     background-color: #f8f9fa;
+    background-size: contain;
+    background-position: center;
+    background-repeat: no-repeat;
     position: relative;
     color: inherit;
     text-decoration: none;
+    overflow: hidden;
+    min-height: 0;
+    max-height: 100%;
+    aspect-ratio: 1;
 }
 
 .desert-island-discs-tracks-card .track-square:hover {
@@ -144,30 +152,52 @@
     font-size: 0.7rem;
     font-weight: bold;
     color: #6c757d;
-    background-color: rgba(255, 255, 255, 0.8);
+    background-color: rgba(255, 255, 255, 0.95);
     border-radius: 50%;
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
     display: flex;
     align-items: center;
     justify-content: center;
+    z-index: 10;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 .desert-island-discs-tracks-card .track-title {
-    font-size: 0.75rem;
+    font-size: 0.55rem;
     font-weight: 500;
-    line-height: 1.2;
-    margin-bottom: 2px;
+    line-height: 1.1;
+    margin-bottom: 0;
     word-break: break-word;
     overflow: hidden;
     display: -webkit-box;
-    -webkit-line-clamp: 2;
+    -webkit-line-clamp: 1;
     -webkit-box-orient: vertical;
     color: #495057;
+    flex-shrink: 0;
+    padding: 0 2px;
+}
+
+.desert-island-discs-tracks-card .track-square.has-cover-art .track-title,
+.desert-island-discs-tracks-card .track-square.has-cover-art .track-artist,
+.desert-island-discs-tracks-card .track-square.has-cover-art .track-album {
+    color: #333 !important;
+    font-weight: 600 !important;
+    background-color: rgba(255, 255, 255, 0.95) !important;
+    border-radius: 4px !important;
+    padding: 2px 4px !important;
+    margin: 1px 0 !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2) !important;
+    display: inline-block !important;
+    width: fit-content !important;
+    max-width: 100% !important;
+    overflow: visible !important;
+    -webkit-line-clamp: unset !important;
+    -webkit-box-orient: unset !important;
 }
 
 .desert-island-discs-tracks-card .track-artist {
-    font-size: 0.6rem;
+    font-size: 0.45rem;
     color: #6c757d;
     line-height: 1.1;
     word-break: break-word;
@@ -175,4 +205,23 @@
     display: -webkit-box;
     -webkit-line-clamp: 1;
     -webkit-box-orient: vertical;
+    flex-shrink: 0;
+    padding: 0 2px;
+    margin-bottom: 0;
+}
+
+
+
+.desert-island-discs-tracks-card .track-album {
+    font-size: 0.4rem;
+    color: #6c757d;
+    line-height: 1.1;
+    word-break: break-word;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    margin-top: 0;
+    flex-shrink: 0;
+    padding: 0 2px;
 }
