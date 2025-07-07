@@ -1292,4 +1292,37 @@ class SimpleDesertIslandDiscsImportController extends Controller
         
         return $connections;
     }
+
+    public function logError(Request $request)
+    {
+        $request->validate([
+            'error_type' => 'required|string',
+            'error_message' => 'required|string',
+            'file_size' => 'nullable|integer',
+            'file_name' => 'nullable|string',
+            'chunk' => 'nullable|integer',
+            'chunk_size' => 'nullable|integer',
+            'user_agent' => 'nullable|string',
+            'timestamp' => 'nullable|string'
+        ]);
+
+        $logData = [
+            'error_type' => $request->input('error_type'),
+            'error_message' => $request->input('error_message'),
+            'file_size' => $request->input('file_size'),
+            'file_name' => $request->input('file_name'),
+            'chunk' => $request->input('chunk'),
+            'chunk_size' => $request->input('chunk_size'),
+            'user_agent' => $request->input('user_agent'),
+            'timestamp' => $request->input('timestamp'),
+            'user_id' => auth()->id(),
+            'ip_address' => $request->ip(),
+            'server_time' => now()->toISOString()
+        ];
+
+        // Log to Laravel log file
+        \Log::error('Desert Island Discs Import Error', $logData);
+
+        return response()->json(['success' => true, 'message' => 'Error logged successfully']);
+    }
 } 

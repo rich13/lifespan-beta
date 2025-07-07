@@ -10,13 +10,13 @@
         ],
         [
             'text' => $span ? $span->name : 'New Span',
-            'url' => route('spans.show', $span),
+            'url' => $span ? route('spans.show', $span) : null,
             'icon' => 'view',
             'icon_category' => 'action'
         ],
         [
             'text' => 'Edit',
-            'icon' => $span->type_id,
+            'icon' => $span ? $span->type_id : 'plus',
             'icon_category' => 'span'
         ]
     ]" />

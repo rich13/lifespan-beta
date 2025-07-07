@@ -439,6 +439,8 @@ Route::middleware('web')->group(function () {
                     ->name('simple-desert-island-discs.dry-run-chunk');
                 Route::post('/simple-desert-island-discs/import-chunk', [App\Http\Controllers\Admin\SimpleDesertIslandDiscsImportController::class, 'importChunk'])
                     ->name('simple-desert-island-discs.import-chunk');
+                Route::post('/simple-desert-island-discs/log-error', [App\Http\Controllers\Admin\SimpleDesertIslandDiscsImportController::class, 'logError'])
+                    ->name('simple-desert-island-discs.log-error');
                 // Legacy routes for backward compatibility
                 Route::post('/simple-desert-island-discs/preview', [App\Http\Controllers\Admin\SimpleDesertIslandDiscsImportController::class, 'preview'])
                     ->name('simple-desert-island-discs.preview');

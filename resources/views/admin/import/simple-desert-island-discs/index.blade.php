@@ -269,8 +269,43 @@ function uploadCsv() {
         }
     })
     .catch(error => {
-        console.error('Error:', error);
-        document.getElementById('upload_message').textContent = 'Upload failed';
+        console.error('Upload Error:', error);
+        
+        // Check for 413 Payload Too Large error
+        if (error.name === 'TypeError' && error.message.includes('Load failed')) {
+            // This is likely a 413 error
+            const errorMessage = 'File too large (413 Payload Too Large). The server rejected the upload due to size limits.';
+            console.error('413 Payload Too Large Error detected:', {
+                error: error,
+                fileSize: file.size,
+                fileName: file.name,
+                timestamp: new Date().toISOString()
+            });
+            
+            // Log to server for debugging
+            fetch('/admin/import/simple-desert-island-discs/log-error', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify({
+                    error_type: '413_payload_too_large',
+                    error_message: error.message,
+                    file_size: file.size,
+                    file_name: file.name,
+                    user_agent: navigator.userAgent,
+                    timestamp: new Date().toISOString()
+                })
+            }).catch(logError => {
+                console.error('Failed to log error to server:', logError);
+            });
+            
+            document.getElementById('upload_message').textContent = errorMessage;
+        } else {
+            document.getElementById('upload_message').textContent = 'Upload failed: ' + (error.message || 'Unknown error');
+        }
+        
         document.getElementById('upload_status').classList.remove('alert-info');
         document.getElementById('upload_status').classList.add('alert-danger');
     });
@@ -328,8 +363,42 @@ function loadChunk() {
         }
     })
     .catch(error => {
-        console.error('Error:', error);
-        alert('Error loading preview');
+        console.error('Preview Chunk Error:', error);
+        
+        // Check for 413 Payload Too Large error
+        if (error.name === 'TypeError' && error.message.includes('Load failed')) {
+            // This is likely a 413 error
+            const errorMessage = 'Preview failed: File too large (413 Payload Too Large). The server rejected the request due to size limits.';
+            console.error('413 Payload Too Large Error in preview:', {
+                error: error,
+                chunk: currentChunk,
+                chunkSize: chunkSize,
+                timestamp: new Date().toISOString()
+            });
+            
+            // Log to server for debugging
+            fetch('/admin/import/simple-desert-island-discs/log-error', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify({
+                    error_type: '413_payload_too_large_preview',
+                    error_message: error.message,
+                    chunk: currentChunk,
+                    chunk_size: chunkSize,
+                    user_agent: navigator.userAgent,
+                    timestamp: new Date().toISOString()
+                })
+            }).catch(logError => {
+                console.error('Failed to log error to server:', logError);
+            });
+            
+            alert(errorMessage);
+        } else {
+            alert('Error loading preview: ' + (error.message || 'Unknown error'));
+        }
     });
 }
 
