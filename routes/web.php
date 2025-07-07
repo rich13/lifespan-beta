@@ -429,6 +429,17 @@ Route::middleware('web')->group(function () {
                 // Simple Desert Island Discs Import (placeholder-only)
                 Route::get('/simple-desert-island-discs', [App\Http\Controllers\Admin\SimpleDesertIslandDiscsImportController::class, 'index'])
                     ->name('simple-desert-island-discs.index');
+                Route::post('/simple-desert-island-discs/upload', [App\Http\Controllers\Admin\SimpleDesertIslandDiscsImportController::class, 'uploadCsv'])
+                    ->name('simple-desert-island-discs.upload');
+                Route::get('/simple-desert-island-discs/info', [App\Http\Controllers\Admin\SimpleDesertIslandDiscsImportController::class, 'getCsvInfo'])
+                    ->name('simple-desert-island-discs.info');
+                Route::post('/simple-desert-island-discs/preview-chunk', [App\Http\Controllers\Admin\SimpleDesertIslandDiscsImportController::class, 'previewChunk'])
+                    ->name('simple-desert-island-discs.preview-chunk');
+                Route::post('/simple-desert-island-discs/dry-run-chunk', [App\Http\Controllers\Admin\SimpleDesertIslandDiscsImportController::class, 'dryRunChunk'])
+                    ->name('simple-desert-island-discs.dry-run-chunk');
+                Route::post('/simple-desert-island-discs/import-chunk', [App\Http\Controllers\Admin\SimpleDesertIslandDiscsImportController::class, 'importChunk'])
+                    ->name('simple-desert-island-discs.import-chunk');
+                // Legacy routes for backward compatibility
                 Route::post('/simple-desert-island-discs/preview', [App\Http\Controllers\Admin\SimpleDesertIslandDiscsImportController::class, 'preview'])
                     ->name('simple-desert-island-discs.preview');
                 Route::post('/simple-desert-island-discs/dry-run', [App\Http\Controllers\Admin\SimpleDesertIslandDiscsImportController::class, 'dryRun'])

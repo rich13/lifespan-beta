@@ -37,6 +37,282 @@ class SimpleDesertIslandDiscsImportController extends Controller
         ]);
     }
 
+    public function uploadCsv(Request $request)
+    {
+        $request->validate([
+            'csv_file' => 'required|file|mimes:csv,txt|max:10240' // 10MB max
+        ]);
+
+        $file = $request->file('csv_file');
+        $content = file_get_contents($file->getPathname());
+        
+        // Store in session for processing
+        $request->session()->put('csv_data', $content);
+        $request->session()->put('csv_filename', $file->getClientOriginalName());
+        
+        // Parse to get basic info
+        $lines = explode("\n", trim($content));
+        $headers = str_getcsv(array_shift($lines));
+        $totalRows = count(array_filter($lines, function($line) {
+            return !empty(trim($line));
+        }));
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'CSV file uploaded successfully',
+            'filename' => $file->getClientOriginalName(),
+            'total_rows' => $totalRows,
+            'headers' => $headers
+        ]);
+    }
+
+    public function getCsvInfo(Request $request)
+    {
+        $csvData = $request->session()->get('csv_data');
+        
+        if (!$csvData) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No CSV data found. Please upload a file first.'
+            ], 404);
+        }
+        
+        $lines = explode("\n", trim($csvData));
+        $headers = str_getcsv(array_shift($lines));
+        $totalRows = count(array_filter($lines, function($line) {
+            return !empty(trim($line));
+        }));
+        
+        return response()->json([
+            'success' => true,
+            'filename' => $request->session()->get('csv_filename', 'Unknown'),
+            'total_rows' => $totalRows,
+            'headers' => $headers
+        ]);
+    }
+
+    public function previewChunk(Request $request)
+    {
+        $request->validate([
+            'start_row' => 'required|integer|min:1',
+            'chunk_size' => 'required|integer|min:1|max:50'
+        ]);
+
+        $csvData = $request->session()->get('csv_data');
+        
+        if (!$csvData) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No CSV data found. Please upload a file first.'
+            ], 404);
+        }
+
+        $lines = explode("\n", trim($csvData));
+        $originalHeaders = str_getcsv(array_shift($lines));
+        
+        // Find the indices of non-empty headers
+        $headerIndices = [];
+        $cleanHeaders = [];
+        foreach ($originalHeaders as $index => $header) {
+            if (!empty(trim($header))) {
+                $headerIndices[] = $index;
+                $cleanHeaders[] = trim($header);
+            }
+        }
+        
+        $startRow = $request->input('start_row') - 1; // Convert to 0-based index
+        $chunkSize = $request->input('chunk_size');
+        
+        // Filter out empty lines
+        $nonEmptyLines = array_filter($lines, function($line) {
+            return !empty(trim($line));
+        });
+        $nonEmptyLines = array_values($nonEmptyLines); // Re-index
+        
+        $totalRows = count($nonEmptyLines);
+        $chunkLines = array_slice($nonEmptyLines, $startRow, $chunkSize);
+        
+        $previewData = [];
+        
+        foreach ($chunkLines as $index => $line) {
+            $rowData = str_getcsv($line);
+            
+            // Extract only the columns that correspond to non-empty headers
+            $cleanRowData = [];
+            foreach ($headerIndices as $headerIndex) {
+                $cleanRowData[] = $rowData[$headerIndex] ?? '';
+            }
+            
+            $data = array_combine($cleanHeaders, $cleanRowData);
+            
+            $previewData[] = [
+                'row_number' => $startRow + $index + 1,
+                'castaway' => $data['Castaway'] ?? 'N/A',
+                'job' => $data['Job'] ?? 'N/A',
+                'book' => $data['Book'] ?? 'N/A',
+                'broadcast_date' => $data['Date first broadcast'] ?? 'N/A',
+                'songs_count' => $this->countSongs($data),
+                'data' => $data
+            ];
+        }
+        
+        return response()->json([
+            'success' => true,
+            'preview' => $previewData,
+            'total_rows' => $totalRows,
+            'start_row' => $startRow + 1,
+            'end_row' => min($startRow + count($chunkLines), $totalRows),
+            'has_more' => ($startRow + $chunkSize) < $totalRows,
+            'filename' => $request->session()->get('csv_filename', 'Unknown')
+        ]);
+    }
+
+    public function dryRunChunk(Request $request)
+    {
+        $request->validate([
+            'row_number' => 'required|integer|min:1'
+        ]);
+
+        $csvData = $request->session()->get('csv_data');
+        
+        if (!$csvData) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No CSV data found. Please upload a file first.'
+            ], 404);
+        }
+
+        $lines = explode("\n", trim($csvData));
+        $originalHeaders = str_getcsv(array_shift($lines));
+        
+        // Find the indices of non-empty headers
+        $headerIndices = [];
+        $cleanHeaders = [];
+        foreach ($originalHeaders as $index => $header) {
+            if (!empty(trim($header))) {
+                $headerIndices[] = $index;
+                $cleanHeaders[] = trim($header);
+            }
+        }
+        
+        // Filter out empty lines and re-index
+        $nonEmptyLines = array_filter($lines, function($line) {
+            return !empty(trim($line));
+        });
+        $nonEmptyLines = array_values($nonEmptyLines);
+        
+        $rowNumber = $request->input('row_number');
+        $targetRow = $nonEmptyLines[$rowNumber - 1] ?? null;
+        
+        if (!$targetRow) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Row not found'
+            ], 404);
+        }
+        
+        $rowData = str_getcsv($targetRow);
+        
+        // Extract only the columns that correspond to non-empty headers
+        $cleanRowData = [];
+        foreach ($headerIndices as $headerIndex) {
+            $cleanRowData[] = $rowData[$headerIndex] ?? '';
+        }
+        
+        $data = array_combine($cleanHeaders, $cleanRowData);
+        
+        $dryRunResult = $this->simulateImport($data, $rowNumber);
+        
+        return response()->json([
+            'success' => true,
+            'dry_run' => $dryRunResult,
+            'row_number' => $rowNumber
+        ]);
+    }
+
+    public function importChunk(Request $request)
+    {
+        $request->validate([
+            'row_number' => 'required|integer|min:1'
+        ]);
+
+        $csvData = $request->session()->get('csv_data');
+        
+        if (!$csvData) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No CSV data found. Please upload a file first.'
+            ], 404);
+        }
+
+        $lines = explode("\n", trim($csvData));
+        $originalHeaders = str_getcsv(array_shift($lines));
+        
+        // Find the indices of non-empty headers
+        $headerIndices = [];
+        $cleanHeaders = [];
+        foreach ($originalHeaders as $index => $header) {
+            if (!empty(trim($header))) {
+                $headerIndices[] = $index;
+                $cleanHeaders[] = trim($header);
+            }
+        }
+        
+        // Filter out empty lines and re-index
+        $nonEmptyLines = array_filter($lines, function($line) {
+            return !empty(trim($line));
+        });
+        $nonEmptyLines = array_values($nonEmptyLines);
+        
+        $rowNumber = $request->input('row_number');
+        $targetRow = $nonEmptyLines[$rowNumber - 1] ?? null;
+        
+        if (!$targetRow) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Row not found'
+            ], 404);
+        }
+        
+        $rowData = str_getcsv($targetRow);
+        
+        // Extract only the columns that correspond to non-empty headers
+        $cleanRowData = [];
+        foreach ($headerIndices as $headerIndex) {
+            $cleanRowData[] = $rowData[$headerIndex] ?? '';
+        }
+        
+        $data = array_combine($cleanHeaders, $cleanRowData);
+        
+        DB::beginTransaction();
+        
+        try {
+            $result = $this->processRow($data, $rowNumber);
+            DB::commit();
+            
+            return response()->json([
+                'success' => true,
+                'message' => "Successfully imported row $rowNumber",
+                'data' => $result,
+                'summary' => [
+                    'created_count' => count($result['summary']['created']),
+                    'updated_count' => count($result['summary']['updated']),
+                    'skipped_count' => count($result['summary']['skipped']),
+                    'created' => $result['summary']['created'],
+                    'updated' => $result['summary']['updated'],
+                    'skipped' => $result['summary']['skipped']
+                ]
+            ]);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Import failed: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
     public function preview(Request $request)
     {
         $request->validate([

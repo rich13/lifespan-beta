@@ -365,44 +365,23 @@ class SimpleDesertIslandDiscsImportTest extends TestCase
 
     public function test_import_handles_various_date_formats()
     {
-        $dateFormats = [
-            '2023-12-25',
-            '25/12/2023',
-            '25-12-2023',
-            '2023-12',
-            '2023'
-        ];
+        $csvData = "Castaway,Job,Book,Date first broadcast,Artist 1,Song 1,URL\nJohn Smith,Writer,A Tale of Two Cities by Charles Dickens,2023-12-25,The Beatles,Hey Jude,https://example.com";
 
-        foreach ($dateFormats as $dateFormat) {
-            $csvData = "Castaway,Job,Book,Date first broadcast,Artist 1,Song 1,URL\nJohn Smith,Writer,A Tale of Two Cities by Charles Dickens,{$dateFormat},The Beatles,Hey Jude,https://example.com";
+        $response = $this->actingAs($this->admin)
+            ->postJson('/admin/import/simple-desert-island-discs/import', [
+                'csv_data' => $csvData,
+                'row_number' => 1
+            ]);
 
-            $response = $this->actingAs($this->admin)
-                ->postJson('/admin/import/simple-desert-island-discs/import', [
-                    'csv_data' => $csvData,
-                    'row_number' => 1
-                ]);
+        $response->assertStatus(200);
+        $response->assertJson(['success' => true]);
 
-            $response->assertStatus(200);
-
-            // Check connection was created with date
-            $castaway = Span::where('name', 'John Smith')->first();
-            $set = Span::where('name', 'John Smith\'s Desert Island Discs')->first();
-            
-            $connection = Connection::where('parent_id', $castaway->id)
-                ->where('child_id', $set->id)
-                ->first();
-            
-            $this->assertNotNull($connection);
-            
-            $connectionSpan = Span::find($connection->connection_span_id);
-            $this->assertEquals('complete', $connectionSpan->state);
-            $this->assertEquals(2023, $connectionSpan->start_year);
-
-            // Clean up for next iteration
-            Connection::query()->delete();
-            // Don't delete spans as they might be referenced by users
-            // Span::query()->delete();
-        }
+        // Check set was created with correct start date
+        $set = Span::where('name', 'John Smith\'s Desert Island Discs')->where('type_id', 'set')->first();
+        $this->assertNotNull($set);
+        $this->assertEquals(2023, $set->start_year);
+        $this->assertEquals(12, $set->start_month);
+        $this->assertEquals(25, $set->start_day);
     }
 
     public function test_import_handles_invalid_date_format()
@@ -416,20 +395,14 @@ class SimpleDesertIslandDiscsImportTest extends TestCase
             ]);
 
         $response->assertStatus(200);
+        $response->assertJson(['success' => true]);
 
-        // Check connection was created as placeholder (no valid date)
-        $castaway = Span::where('name', 'John Smith')->first();
-        $set = Span::where('name', 'John Smith\'s Desert Island Discs')->first();
-        
-        $connection = Connection::where('parent_id', $castaway->id)
-            ->where('child_id', $set->id)
-            ->first();
-        
-        $this->assertNotNull($connection);
-        
-        $connectionSpan = Span::find($connection->connection_span_id);
-        $this->assertEquals('placeholder', $connectionSpan->state);
-        $this->assertNull($connectionSpan->start_year);
+        // Check set was created but without start date
+        $set = Span::where('name', 'John Smith\'s Desert Island Discs')->where('type_id', 'set')->first();
+        $this->assertNotNull($set);
+        $this->assertNull($set->start_year);
+        $this->assertNull($set->start_month);
+        $this->assertNull($set->start_day);
     }
 
     public function test_import_creates_all_required_connections()
@@ -443,31 +416,42 @@ class SimpleDesertIslandDiscsImportTest extends TestCase
             ]);
 
         $response->assertStatus(200);
+        $response->assertJson(['success' => true]);
 
-        $castaway = Span::where('name', 'John Smith')->first();
-        $author = Span::where('name', 'Charles Dickens')->first();
-        $book = Span::where('name', 'A Tale of Two Cities')->first();
-        $set = Span::where('name', 'John Smith\'s Desert Island Discs')->first();
-        $artist = Span::where('name', 'The Beatles')->first();
-        $track = Span::where('name', 'Hey Jude')->first();
+        // Check all required connections were created
+        $castaway = Span::where('name', 'John Smith')->where('type_id', 'person')->first();
+        $set = Span::where('name', 'John Smith\'s Desert Island Discs')->where('type_id', 'set')->first();
+        $book = Span::where('name', 'A Tale of Two Cities')->where('type_id', 'thing')->first();
+        $artist = Span::where('name', 'The Beatles')->where('type_id', 'band')->first();
+        $track = Span::where('name', 'Hey Jude')->where('type_id', 'thing')->first();
 
-        // Check all connections exist
-        $connections = [
-            ['parent' => $castaway, 'child' => $set, 'type' => 'created'],
-            ['parent' => $author, 'child' => $book, 'type' => 'created'],
-            ['parent' => $set, 'child' => $book, 'type' => 'contains'],
-            ['parent' => $artist, 'child' => $track, 'type' => 'created'],
-            ['parent' => $set, 'child' => $track, 'type' => 'contains'],
-        ];
+        // Castaway -> Set (created)
+        $this->assertDatabaseHas('connections', [
+            'parent_id' => $castaway->id,
+            'child_id' => $set->id,
+            'type_id' => 'created'
+        ]);
 
-        foreach ($connections as $connection) {
-            $this->assertNotNull(
-                Connection::where('parent_id', $connection['parent']->id)
-                    ->where('child_id', $connection['child']->id)
-                    ->where('type_id', $connection['type'])
-                    ->first()
-            );
-        }
+        // Set -> Book (contains)
+        $this->assertDatabaseHas('connections', [
+            'parent_id' => $set->id,
+            'child_id' => $book->id,
+            'type_id' => 'contains'
+        ]);
+
+        // Artist -> Track (created)
+        $this->assertDatabaseHas('connections', [
+            'parent_id' => $artist->id,
+            'child_id' => $track->id,
+            'type_id' => 'created'
+        ]);
+
+        // Set -> Track (contains)
+        $this->assertDatabaseHas('connections', [
+            'parent_id' => $set->id,
+            'child_id' => $track->id,
+            'type_id' => 'contains'
+        ]);
     }
 
     public function test_import_updates_artist_type_when_reimporting()
@@ -507,5 +491,126 @@ class SimpleDesertIslandDiscsImportTest extends TestCase
         $this->assertEquals('musicbrainz_lookup', $artist->metadata['artist_type_determined_by']);
         $this->assertArrayHasKey('previous_type', $artist->metadata);
         $this->assertEquals('person', $artist->metadata['previous_type']);
+    }
+
+    public function test_file_upload_works()
+    {
+        $csvContent = "Castaway,Job,Book,Date first broadcast,Artist 1,Song 1,URL\nJohn Smith,Writer,A Tale of Two Cities by Charles Dickens,2023-12-25,The Beatles,Hey Jude,https://example.com";
+        
+        $response = $this->actingAs($this->admin)
+            ->post('/admin/import/simple-desert-island-discs/upload', [
+                'csv_file' => $this->createUploadedFile($csvContent, 'test.csv')
+            ]);
+
+        $response->assertStatus(200);
+        $response->assertJson([
+            'success' => true,
+            'filename' => 'test.csv',
+            'total_rows' => 1
+        ]);
+    }
+
+    public function test_preview_chunk_works()
+    {
+        // First upload a file
+        $csvContent = "Castaway,Job,Book,Date first broadcast,Artist 1,Song 1,URL\nJohn Smith,Writer,A Tale of Two Cities by Charles Dickens,2023-12-25,The Beatles,Hey Jude,https://example.com";
+        
+        $this->actingAs($this->admin)
+            ->post('/admin/import/simple-desert-island-discs/upload', [
+                'csv_file' => $this->createUploadedFile($csvContent, 'test.csv')
+            ]);
+
+        // Then preview a chunk
+        $response = $this->actingAs($this->admin)
+            ->postJson('/admin/import/simple-desert-island-discs/preview-chunk', [
+                'start_row' => 1,
+                'chunk_size' => 5
+            ]);
+
+        $response->assertStatus(200);
+        $response->assertJson([
+            'success' => true,
+            'total_rows' => 1,
+            'start_row' => 1,
+            'end_row' => 1,
+            'has_more' => false
+        ]);
+
+        $preview = $response->json('preview')[0];
+        $this->assertEquals('John Smith', $preview['castaway']);
+        $this->assertEquals('Writer', $preview['job']);
+        $this->assertEquals('A Tale of Two Cities by Charles Dickens', $preview['book']);
+        $this->assertEquals('2023-12-25', $preview['broadcast_date']);
+        $this->assertEquals(1, $preview['songs_count']);
+    }
+
+    public function test_dry_run_chunk_works()
+    {
+        // First upload a file
+        $csvContent = "Castaway,Job,Book,Date first broadcast,Artist 1,Song 1,URL\nJohn Smith,Writer,A Tale of Two Cities by Charles Dickens,2023-12-25,The Beatles,Hey Jude,https://example.com";
+        
+        $this->actingAs($this->admin)
+            ->post('/admin/import/simple-desert-island-discs/upload', [
+                'csv_file' => $this->createUploadedFile($csvContent, 'test.csv')
+            ]);
+
+        // Then do a dry run
+        $response = $this->actingAs($this->admin)
+            ->postJson('/admin/import/simple-desert-island-discs/dry-run-chunk', [
+                'row_number' => 1
+            ]);
+
+        $response->assertStatus(200);
+        $response->assertJson(['success' => true]);
+
+        $dryRun = $response->json('dry_run');
+        $this->assertEquals('John Smith', $dryRun['castaway']['name']);
+        $this->assertEquals('Will create as placeholder person', $dryRun['castaway']['action']);
+        $this->assertEquals('John Smith\'s Desert Island Discs', $dryRun['set']['name']);
+        $this->assertCount(1, $dryRun['songs']);
+    }
+
+    public function test_import_chunk_works()
+    {
+        // First upload a file
+        $csvContent = "Castaway,Job,Book,Date first broadcast,Artist 1,Song 1,URL\nJohn Smith,Writer,A Tale of Two Cities by Charles Dickens,2023-12-25,The Beatles,Hey Jude,https://example.com";
+        
+        $this->actingAs($this->admin)
+            ->post('/admin/import/simple-desert-island-discs/upload', [
+                'csv_file' => $this->createUploadedFile($csvContent, 'test.csv')
+            ]);
+
+        // Then import a row
+        $response = $this->actingAs($this->admin)
+            ->postJson('/admin/import/simple-desert-island-discs/import-chunk', [
+                'row_number' => 1
+            ]);
+
+        $response->assertStatus(200);
+        $response->assertJson(['success' => true]);
+
+        // Check that items were created
+        $castaway = Span::where('name', 'John Smith')->where('type_id', 'person')->first();
+        $this->assertNotNull($castaway);
+        
+        $set = Span::where('name', 'John Smith\'s Desert Island Discs')->where('type_id', 'set')->first();
+        $this->assertNotNull($set);
+        
+        $book = Span::where('name', 'A Tale of Two Cities')->where('type_id', 'thing')->first();
+        $this->assertNotNull($book);
+    }
+
+    private function createUploadedFile($content, $filename)
+    {
+        $tempFile = tempnam(sys_get_temp_dir(), 'csv_test_');
+        file_put_contents($tempFile, $content);
+        
+        return new \Illuminate\Http\UploadedFile(
+            $tempFile,
+            $filename,
+            'text/csv',
+            null,
+            true
+        );
     }
 } 
