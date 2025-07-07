@@ -69,24 +69,54 @@ function initializeCombinedTimeline_{{ str_replace('-', '_', $span->id) }}() {
                 .map(conn => conn.target_id)
         )];
         
-        // Start with the current span
-        const timelineData = [{
+        // Check if we need to add the current user's span
+        const allSubjectIds = new Set(subjects);
+        const needsUserSpan = currentUserSpanId && 
+                             currentUserSpanId !== spanId && 
+                             !allSubjectIds.has(currentUserSpanId);
+        
+        if (needsUserSpan) {
+            allSubjectIds.add(currentUserSpanId);
+        }
+        
+        // Prepare timeline data array - we'll build it in the desired order
+        let timelineData = [];
+        
+        // Add user's span first if it exists and is different from current span
+        if (needsUserSpan) {
+            timelineData.push({
+                id: currentUserSpanId,
+                name: 'You',
+                timeline: null, // Will be fetched
+                isCurrentSpan: false,
+                isCurrentUser: true
+            });
+        }
+        
+        // Add current span
+        timelineData.push({
             id: spanId,
             name: currentSpanData.span.name,
             timeline: currentSpanData,
-            isCurrentSpan: true
-        }];
+            isCurrentSpan: true,
+            isCurrentUser: false
+        });
         
-        if (subjects.length > 0) {
-            // Fetch timeline data for each subject
-            const subjectPromises = subjects.map(subjectId => 
+        if (allSubjectIds.size > 0) {
+            // Fetch timeline data for each subject (excluding user and current span)
+            const subjectIdsToFetch = Array.from(allSubjectIds).filter(subjectId => 
+                subjectId !== currentUserSpanId && subjectId !== spanId
+            );
+            
+            const subjectPromises = subjectIdsToFetch.map(subjectId => 
                 fetch(`/spans/${subjectId}/timeline`)
                     .then(response => response.json())
                     .then(subjectData => ({
                         id: subjectId,
                         name: objectConnectionsData.connections.find(conn => conn.target_id === subjectId)?.target_name || 'Unknown',
                         timeline: subjectData,
-                        isCurrentSpan: false
+                        isCurrentSpan: false,
+                        isCurrentUser: false
                     }))
                     .catch(error => {
                         console.error(`Error loading timeline for subject ${subjectId}:`, error);
@@ -94,10 +124,43 @@ function initializeCombinedTimeline_{{ str_replace('-', '_', $span->id) }}() {
                     })
             );
             
+            // If we need to fetch user's timeline data, add it to the promises
+            if (needsUserSpan) {
+                subjectPromises.unshift(
+                    fetch(`/spans/${currentUserSpanId}/timeline`)
+                        .then(response => response.json())
+                        .then(subjectData => ({
+                            id: currentUserSpanId,
+                            name: 'You',
+                            timeline: subjectData,
+                            isCurrentSpan: false,
+                            isCurrentUser: true
+                        }))
+                        .catch(error => {
+                            console.error(`Error loading timeline for user ${currentUserSpanId}:`, error);
+                            return null;
+                        })
+                );
+            }
+            
             Promise.all(subjectPromises)
                 .then(subjectData => {
                     const validSubjects = subjectData.filter(subject => subject !== null);
-                    timelineData.push(...validSubjects);
+                    
+                    // Update the timeline data with fetched data
+                    if (needsUserSpan) {
+                        const userData = validSubjects.find(subject => subject.id === currentUserSpanId);
+                        if (userData) {
+                            timelineData[0] = userData; // Update the user's entry with fetched data
+                        }
+                    }
+                    
+                    // Add other subjects after current span
+                    const otherSubjects = validSubjects.filter(subject => 
+                        subject.id !== currentUserSpanId && subject.id !== spanId
+                    );
+                    timelineData.push(...otherSubjects);
+                    
                     renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpanData.span, 'absolute', currentUserSpanId);
                     
                     // Add event listeners for mode toggle
@@ -105,14 +168,14 @@ function initializeCombinedTimeline_{{ str_replace('-', '_', $span->id) }}() {
                 })
                 .catch(error => {
                     console.error('Error loading subject timelines:', error);
-                    // Still render with just the current span
+                    // Still render with what we have
                     renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpanData.span, 'absolute', currentUserSpanId);
                     
                     // Add event listeners for mode toggle
                     setupModeToggle_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpanData.span, currentUserSpanId);
                 });
         } else {
-            // No subjects, just render current span
+            // No subjects, just render current span (and user span if needed)
             renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpanData.span, 'absolute', currentUserSpanId);
             
             // Add event listeners for mode toggle
@@ -220,7 +283,8 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
         timeline.labelInfo = {
             name: timeline.name,
             swimlaneY: swimlaneY,
-            isCurrentSpan: isCurrentSpan
+            isCurrentSpan: isCurrentSpan,
+            isCurrentUser: isCurrentUser
         };
 
         // Add life span bar for this timeline
@@ -382,7 +446,7 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
     // Add swimlane labels at the very end to ensure they're on top
     timelineData.forEach((timeline) => {
         if (timeline.labelInfo) {
-            const { name, swimlaneY, isCurrentSpan } = timeline.labelInfo;
+            const { name, swimlaneY, isCurrentSpan, isCurrentUser } = timeline.labelInfo;
             
             // Add swimlane label floating on top
             svg.append('text')
@@ -391,8 +455,8 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
                 .attr('y', swimlaneY + swimlaneHeight / 2 + 4)
                 .attr('text-anchor', 'start')
                 .attr('font-size', '11px')
-                .attr('font-weight', isCurrentSpan ? 'bold' : 'normal')
-                .attr('fill', mode === 'relative' ? 'white' : (isCurrentSpan ? '#1976d2' : '#495057'))
+                .attr('font-weight', (isCurrentSpan || isCurrentUser) ? 'bold' : 'normal')
+                .attr('fill', mode === 'relative' ? 'white' : (isCurrentSpan ? '#1976d2' : (isCurrentUser ? '#000000' : '#495057')))
                 .style('pointer-events', 'none')
                 .style('z-index', '1001')
                 .text(name);
