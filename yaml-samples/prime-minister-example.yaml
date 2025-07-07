@@ -1,0 +1,65 @@
+name: "Winston Churchill"
+type: "prime_minister"
+parliament_id: 662
+party: "Conservative"
+constituency: "Woodford"
+description: "Winston Churchill was a British statesman, army officer, and writer who served as Prime Minister of the United Kingdom from 1940 to 1945 and again from 1951 to 1955."
+start: "1874-11-30"
+end: "1965-01-24"
+metadata:
+  gender: "male"
+  is_prime_minister: true
+  political_party: "Conservative"
+  constituency: "Woodford"
+  party_abbreviation: "Con"
+
+prime_ministerships:
+  - start_date: "1940-05-10"
+    end_date: "1945-07-26"
+    party: "Conservative"
+  - start_date: "1951-10-26"
+    end_date: "1955-04-06"
+    party: "Conservative"
+
+# Standard person fields (inherited from PersonImporter)
+family:
+  father: "Lord Randolph Churchill"
+  mother: "Jennie Jerome"
+  children:
+    - "Diana Churchill"
+    - "Randolph Churchill"
+    - "Sarah Churchill"
+    - "Marigold Churchill"
+    - "Mary Churchill"
+
+education:
+  - institution: "Harrow School"
+    start: "1888"
+    end: "1892"
+  - institution: "Royal Military Academy Sandhurst"
+    start: "1893"
+    end: "1894"
+
+work:
+  - organisation: "British Army"
+    role: "Officer"
+    start: "1895"
+    end: "1900"
+  - organisation: "British Army"
+    role: "Officer"
+    start: "1914"
+    end: "1918"
+
+places:
+  - location: "Blenheim Palace"
+    start: "1874"
+    end: "1880"
+  - location: "London"
+    start: "1880"
+    end: "1965"
+
+relationships:
+  - person: "Clementine Churchill"
+    type: "spouse"
+    start: "1908"
+    end: "1965" 
