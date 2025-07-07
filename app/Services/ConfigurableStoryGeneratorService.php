@@ -155,6 +155,15 @@ class ConfigurableStoryGeneratorService
             $debug['used_fallback'] = true;
         }
 
+        // TODO: INVESTIGATE ROOT CAUSE - URLs are getting %20 encoded spaces in production
+        // This is a temporary workaround to fix the issue where URLs like 
+        // "https://beta.%20lifespan.%20dev/date/1976-02-13" are being generated
+        // instead of "https://beta.lifespan.dev/date/1976-02-13"
+        // Apply the fix to all sentences before returning
+        $sentences = array_map(function($sentence) {
+            return str_replace('%20', '', $sentence);
+        }, $sentences);
+
         return [
             'title' => "The Story of {$span->name}",
             'paragraphs' => $this->groupIntoSentences($sentences),
