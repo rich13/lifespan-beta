@@ -194,6 +194,9 @@ Route::middleware('web')->group(function () {
         return view('home');
     })->name('home');
 
+    // Desert Island Discs route
+    Route::get('/desert-island-discs', [SpanController::class, 'desertIslandDiscs'])->name('desert-island-discs.index');
+
     // Date exploration route - supports YYYY, YYYY-MM, and YYYY-MM-DD formats
     Route::get('/date/{date}', [SpanController::class, 'exploreDate'])
         ->where('date', '[0-9]{4}(-[0-9]{2}(-[0-9]{2})?)?')
@@ -399,7 +402,73 @@ Route::middleware('web')->group(function () {
                     Route::post('/import', [MusicBrainzImportController::class, 'import'])->name('import');
                 });
 
-                // Legacy YAML Import
+                // Desert Island Discs Import (must come before legacy routes to avoid conflicts)
+                Route::get('/desert-island-discs', [App\Http\Controllers\Admin\DesertIslandDiscsImportController::class, 'index'])
+                    ->name('desert-island-discs.index');
+                Route::post('/desert-island-discs/preview', [App\Http\Controllers\Admin\DesertIslandDiscsImportController::class, 'preview'])
+                    ->name('desert-island-discs.preview');
+                Route::post('/desert-island-discs/dry-run', [App\Http\Controllers\Admin\DesertIslandDiscsImportController::class, 'dryRun'])
+                    ->name('desert-island-discs.dry-run');
+                Route::post('/desert-island-discs/import', [App\Http\Controllers\Admin\DesertIslandDiscsImportController::class, 'import'])
+                    ->name('desert-island-discs.import');
+                
+                // Desert Island Discs Step-by-Step Import
+                Route::get('/desert-island-discs/step-import', [App\Http\Controllers\Admin\DesertIslandDiscsStepImportController::class, 'index'])
+                    ->name('desert-island-discs.step-import');
+                Route::post('/desert-island-discs/step1', [App\Http\Controllers\Admin\DesertIslandDiscsStepImportController::class, 'step1ParseCsv'])
+                    ->name('desert-island-discs.step1');
+                Route::post('/desert-island-discs/step2', [App\Http\Controllers\Admin\DesertIslandDiscsStepImportController::class, 'step2ArtistLookup'])
+                    ->name('desert-island-discs.step2');
+                Route::post('/desert-island-discs/step3', [App\Http\Controllers\Admin\DesertIslandDiscsStepImportController::class, 'step3ImportArtist'])
+                    ->name('desert-island-discs.step3');
+                Route::post('/desert-island-discs/step4', [App\Http\Controllers\Admin\DesertIslandDiscsStepImportController::class, 'step4ConnectTracks'])
+                    ->name('desert-island-discs.step4');
+                Route::post('/desert-island-discs/step5', [App\Http\Controllers\Admin\DesertIslandDiscsStepImportController::class, 'step5FinalizeEpisode'])
+                    ->name('desert-island-discs.step5');
+                
+                // Simple Desert Island Discs Import (placeholder-only)
+                Route::get('/simple-desert-island-discs', [App\Http\Controllers\Admin\SimpleDesertIslandDiscsImportController::class, 'index'])
+                    ->name('simple-desert-island-discs.index');
+                Route::post('/simple-desert-island-discs/preview', [App\Http\Controllers\Admin\SimpleDesertIslandDiscsImportController::class, 'preview'])
+                    ->name('simple-desert-island-discs.preview');
+                Route::post('/simple-desert-island-discs/dry-run', [App\Http\Controllers\Admin\SimpleDesertIslandDiscsImportController::class, 'dryRun'])
+                    ->name('simple-desert-island-discs.dry-run');
+                Route::post('/simple-desert-island-discs/import', [App\Http\Controllers\Admin\SimpleDesertIslandDiscsImportController::class, 'import'])
+                    ->name('simple-desert-island-discs.import');
+                
+                // Parliament Explorer (must come before legacy routes to avoid conflicts)
+                Route::prefix('parliament')->name('parliament.')->group(function () {
+                    Route::get('/', [App\Http\Controllers\Admin\ParliamentExplorerController::class, 'index'])
+                        ->name('index');
+                    Route::post('/search', [App\Http\Controllers\Admin\ParliamentExplorerController::class, 'search'])
+                        ->name('search');
+                    Route::post('/get-member', [App\Http\Controllers\Admin\ParliamentExplorerController::class, 'getMember'])
+                        ->name('get-member');
+                    Route::post('/sparql', [App\Http\Controllers\Admin\ParliamentExplorerController::class, 'runSparqlQuery'])
+                        ->name('sparql');
+                    Route::post('/import-member', [App\Http\Controllers\Admin\ParliamentExplorerController::class, 'importMember'])
+                        ->name('import-member');
+                });
+                
+                // Prime Minister Import
+                Route::prefix('prime-ministers')->name('prime-ministers.')->group(function () {
+                    Route::get('/', [App\Http\Controllers\Admin\PrimeMinisterImportController::class, 'index'])
+                        ->name('index');
+                    Route::post('/search', [App\Http\Controllers\Admin\PrimeMinisterImportController::class, 'search'])
+                        ->name('search');
+                    Route::post('/get-data', [App\Http\Controllers\Admin\PrimeMinisterImportController::class, 'getPrimeMinisterData'])
+                        ->name('get-data');
+                    Route::post('/preview', [App\Http\Controllers\Admin\PrimeMinisterImportController::class, 'preview'])
+                        ->name('preview');
+                    Route::post('/import', [App\Http\Controllers\Admin\PrimeMinisterImportController::class, 'import'])
+                        ->name('import');
+                    Route::get('/recent', [App\Http\Controllers\Admin\PrimeMinisterImportController::class, 'recentImports'])
+                        ->name('recent');
+                    Route::post('/clear-cache', [App\Http\Controllers\Admin\PrimeMinisterImportController::class, 'clearCache'])
+                        ->name('clear-cache');
+                });
+                
+                // Legacy YAML Import (must come last to avoid catching other routes)
                 Route::get('/', [ImportController::class, 'index'])
                     ->name('index');
                 Route::get('/{id}', [ImportController::class, 'show'])
@@ -560,15 +629,7 @@ Route::middleware('web')->group(function () {
                     ->name('stats');
             });
 
-            // Import routes
-            Route::get('/import', [ImportController::class, 'index'])
-                ->name('import.index');
-            Route::get('/import/musicbrainz', [MusicbrainzImportController::class, 'index'])
-                ->name('import.musicbrainz.index');
-            Route::post('/import/musicbrainz/search', [MusicbrainzImportController::class, 'search'])
-                ->name('import.musicbrainz.search');
-            Route::post('/import/musicbrainz/import', [MusicbrainzImportController::class, 'import'])
-                ->name('import.musicbrainz.import');
+
         });
         
         // User Switcher - moved outside admin middleware but still under auth
