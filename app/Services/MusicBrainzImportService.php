@@ -52,6 +52,9 @@ class MusicBrainzImportService
         
         $response = Http::withHeaders([
             'User-Agent' => $this->userAgent,
+            'Cache-Control' => 'no-cache, no-store, must-revalidate',
+            'Pragma' => 'no-cache',
+            'Expires' => '0',
         ])->get($url, $params);
         
         // If we get a 503 rate limit error, wait and retry once
@@ -66,6 +69,9 @@ class MusicBrainzImportService
             
             $response = Http::withHeaders([
                 'User-Agent' => $this->userAgent,
+                'Cache-Control' => 'no-cache, no-store, must-revalidate',
+                'Pragma' => 'no-cache',
+                'Expires' => '0',
             ])->get($url, $params);
         }
         
@@ -87,11 +93,17 @@ class MusicBrainzImportService
             ]
         ]);
 
-        $response = $this->makeRateLimitedRequest("{$this->musicBrainzApiUrl}/artist", [
-            'query' => $artistName,
+        // Use more specific query parameters for better results
+        $queryParams = [
             'fmt' => 'json',
-            'limit' => 10,
-        ]);
+            'limit' => 25, // Get more results to filter from
+            '_' => time(), // Cache-busting parameter
+        ];
+        
+        // Try exact name match first
+        $queryParams['query'] = '"' . $artistName . '"';
+        
+        $response = $this->makeRateLimitedRequest("{$this->musicBrainzApiUrl}/artist", $queryParams);
 
         if (!$response->successful()) {
             Log::error('MusicBrainz API error', [
@@ -103,14 +115,102 @@ class MusicBrainzImportService
 
         $data = $response->json();
         
-        return collect($data['artists'] ?? [])->map(function ($artist) {
+        // If we don't get good results with exact match, try a broader search
+        if (empty($data['artists']) || count($data['artists']) < 2) {
+            Log::info('Exact match returned few results, trying broader search', [
+                'artist_name' => $artistName,
+                'exact_results' => count($data['artists'] ?? [])
+            ]);
+            
+            $queryParams['query'] = $artistName;
+            $response = $this->makeRateLimitedRequest("{$this->musicBrainzApiUrl}/artist", $queryParams);
+            
+            if ($response->successful()) {
+                $data = $response->json();
+            }
+        }
+        
+        // More comprehensive exclusion list
+        $excludeNames = [
+            '[unknown]', 'various artists', 'various', 'unknown artist',
+            'the beatles', 'bruce springsteen', 'the rolling stones',
+            'academy of st martin in the fields', 'fields of the nephilim'
+        ];
+        $excludeTypes = ['Other'];
+        $artistNameLower = mb_strtolower($artistName);
+        
+        // Extract search terms for relevance checking
+        $searchTerms = array_filter(explode(' ', $artistNameLower));
+        
+        Log::info('Raw MusicBrainz search results', [
+            'artist_name' => $artistName,
+            'raw_results' => collect($data['artists'] ?? [])->pluck('name')->toArray(),
+            'search_terms' => $searchTerms
+        ]);
+
+        $artists = collect($data['artists'] ?? [])->map(function ($artist) {
             return [
                 'id' => $artist['id'],
                 'name' => $artist['name'],
                 'disambiguation' => $artist['disambiguation'] ?? null,
                 'type' => $artist['type'] ?? null,
             ];
-        })->toArray();
+        })
+        // Exclude generic/unknown artists and obviously unrelated results
+        ->filter(function ($artist) use ($excludeNames, $excludeTypes, $searchTerms, $artistNameLower) {
+            $name = mb_strtolower($artist['name']);
+            
+            // Exclude by name
+            if (in_array($name, $excludeNames)) {
+                Log::info('Excluding artist by name', ['name' => $artist['name']]);
+                return false;
+            }
+            
+            // Exclude by type
+            if (isset($artist['type']) && in_array($artist['type'], $excludeTypes)) {
+                Log::info('Excluding artist by type', ['name' => $artist['name'], 'type' => $artist['type']]);
+                return false;
+            }
+            
+            // Check relevance - artist name should contain at least one search term
+            $hasRelevance = false;
+            foreach ($searchTerms as $term) {
+                if (strlen($term) > 2 && str_contains($name, $term)) {
+                    $hasRelevance = true;
+                    break;
+                }
+            }
+            
+            // Allow exact matches even if they don't contain search terms
+            if (mb_strtolower($artist['name']) === $artistNameLower) {
+                $hasRelevance = true;
+            }
+            
+            if (!$hasRelevance) {
+                Log::info('Excluding artist for lack of relevance', [
+                    'artist_name' => $artist['name'], 
+                    'search_terms' => $searchTerms
+                ]);
+                return false;
+            }
+            
+            return true;
+        })
+        // Prioritise exact (case-insensitive) name matches
+        ->sortByDesc(function ($artist) use ($artistNameLower) {
+            return mb_strtolower($artist['name']) === $artistNameLower ? 1 : 0;
+        })
+        ->take(10) // Limit to top 10 results
+        ->values()
+        ->toArray();
+
+        Log::info('Filtered MusicBrainz search results', [
+            'artist_name' => $artistName,
+            'filtered_results' => collect($artists)->pluck('name')->toArray(),
+            'filtered_count' => count($artists)
+        ]);
+
+        return $artists;
     }
 
     /**
@@ -244,6 +344,8 @@ class MusicBrainzImportService
                 'id' => $releaseGroup['id'],
                 'title' => $releaseGroup['title'],
                 'type' => $releaseGroup['primary-type'] ?? null,
+                'primary-type' => $releaseGroup['primary-type'] ?? null,
+                'secondary-types' => $releaseGroup['secondary-types'] ?? [],
                 'disambiguation' => $releaseGroup['disambiguation'] ?? null,
                 'first_release_date' => $releaseGroup['first-release-date'] ?? null,
             ];
@@ -317,8 +419,56 @@ class MusicBrainzImportService
             'first_release' => $data['releases'][0] ?? null
         ]);
         
-        // Get the first release (usually the original release)
-        $release = collect($data['releases'] ?? [])->first();
+        // Select the best release (prefer original releases over compilations/re-releases)
+        $releases = collect($data['releases'] ?? []);
+        
+        // Score releases to find the best one
+        $scoredReleases = $releases->map(function ($release) {
+            $score = 0;
+            
+            // Prefer releases with dates (original releases usually have dates)
+            if (!empty($release['date'])) {
+                $score += 10;
+                
+                // Prefer earlier dates (original releases come first)
+                if (preg_match('/^(\d{4})/', $release['date'], $matches) && isset($matches[1])) {
+                    $year = (int)$matches[1];
+                    // Higher score for earlier years (but not too old, to avoid pre-release versions)
+                    if ($year >= 1950 && $year <= 2030) {
+                        $score += (2030 - $year); // Earlier years get higher scores
+                    }
+                }
+            }
+            
+            // Prefer releases with country codes (official releases)
+            if (!empty($release['country'])) {
+                $score += 5;
+                
+                // Prefer major markets (GB, US, etc.)
+                $majorMarkets = ['GB', 'US', 'CA', 'AU', 'DE', 'FR', 'JP'];
+                if (in_array($release['country'], $majorMarkets)) {
+                    $score += 3;
+                }
+            }
+            
+            // Penalize releases with suspicious titles (compilations, re-releases)
+            $title = strtolower($release['title'] ?? '');
+            $suspiciousWords = ['second', 'deluxe', 'remastered', 'expanded', 'bonus', 'b-sides', 'rarities'];
+            foreach ($suspiciousWords as $word) {
+                if (str_contains($title, $word)) {
+                    $score -= 20;
+                }
+            }
+            
+            return [
+                'release' => $release,
+                'score' => $score
+            ];
+        });
+        
+        // Sort by score (highest first) and take the best
+        $bestRelease = $scoredReleases->sortByDesc('score')->first();
+        $release = $bestRelease ? $bestRelease['release'] : $releases->first();
         
         if (!$release) {
             Log::warning('No releases found for release group', [
@@ -327,14 +477,27 @@ class MusicBrainzImportService
             ]);
             return [];
         }
-
+        
+        // Log which release was selected and why
         Log::info('Selected release for tracks', [
             'release_group_id' => $releaseGroupId,
-            'release_id' => $release['id'] ?? null,
-            'release_title' => $release['title'] ?? null,
-            'has_media' => isset($release['media']),
-            'media_count' => count($release['media'] ?? [])
+            'selected_release_id' => $release['id'] ?? null,
+            'selected_release_title' => $release['title'] ?? null,
+            'selected_release_date' => $release['date'] ?? null,
+            'selected_release_country' => $release['country'] ?? null,
+            'selection_score' => $bestRelease ? $bestRelease['score'] : null,
+            'total_releases_available' => $releases->count(),
+            'top_3_scores' => $scoredReleases->sortByDesc('score')->take(3)->map(function ($item) {
+                return [
+                    'title' => $item['release']['title'] ?? null,
+                    'date' => $item['release']['date'] ?? null,
+                    'country' => $item['release']['country'] ?? null,
+                    'score' => $item['score']
+                ];
+            })->toArray()
         ]);
+
+
 
         // Get the first medium (usually the first disc)
         $medium = collect($release['media'] ?? [])->first();
@@ -442,13 +605,7 @@ class MusicBrainzImportService
             if ($albumSpan) {
                 // Update existing album
                 $hasReleaseDate = !empty($album['first_release_date']);
-                $isToday = false;
-                if ($hasReleaseDate) {
-                    $releaseDate = $this->parseReleaseDate($album['first_release_date']);
-                    $today = strtotime('today');
-                    $isToday = (date('Y-m-d', $releaseDate) === date('Y-m-d', $today));
-                }
-                $albumState = ($hasReleaseDate && !$isToday) ? 'complete' : 'placeholder';
+                $albumState = $hasReleaseDate ? 'complete' : 'placeholder';
                 
                 $updateData = [
                     'name' => $cleanTitle,
@@ -461,35 +618,25 @@ class MusicBrainzImportService
                     'updater_id' => $ownerId,
                 ];
                 
-                // Only update date fields if we have a release date and it's not today
+                // Update date fields if we have a release date
                 if (!empty($album['first_release_date'])) {
                     $releaseDate = $this->parseReleaseDate($album['first_release_date']);
-                    $today = strtotime('today');
                     
-                    // Don't set today's date as a release date
-                    if (date('Y-m-d', $releaseDate) !== date('Y-m-d', $today)) {
-                        $updateData['start_year'] = $this->extractYearFromDate($album['first_release_date']);
-                        // Set month/day based on available precision
-                        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $album['first_release_date'])) {
-                            $updateData['start_month'] = date('m', $releaseDate);
-                            $updateData['start_day'] = date('d', $releaseDate);
-                        } elseif (preg_match('/^\d{4}-\d{2}$/', $album['first_release_date'])) {
-                            $updateData['start_month'] = date('m', $releaseDate);
-                        }
+                    $updateData['start_year'] = $this->extractYearFromDate($album['first_release_date']);
+                    // Set month/day based on available precision
+                    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $album['first_release_date'])) {
+                        $updateData['start_month'] = date('m', $releaseDate);
+                        $updateData['start_day'] = date('d', $releaseDate);
+                    } elseif (preg_match('/^\d{4}-\d{2}$/', $album['first_release_date'])) {
+                        $updateData['start_month'] = date('m', $releaseDate);
                     }
                 }
                 
                 $albumSpan->update($updateData);
             } else {
-                // Determine state based on whether we have release date and it's not today
+                // Determine state based on whether we have release date
                 $hasReleaseDate = !empty($album['first_release_date']);
-                $isToday = false;
-                if ($hasReleaseDate) {
-                    $releaseDate = $this->parseReleaseDate($album['first_release_date']);
-                    $today = strtotime('today');
-                    $isToday = (date('Y-m-d', $releaseDate) === date('Y-m-d', $today));
-                }
-                $albumState = ($hasReleaseDate && !$isToday) ? 'complete' : 'placeholder';
+                $albumState = $hasReleaseDate ? 'complete' : 'placeholder';
                 
                 // Prepare album data
                 $albumData = [
@@ -507,37 +654,26 @@ class MusicBrainzImportService
                     'updater_id' => $ownerId,
                 ];
                 
-                // Only set date fields if we have a release date and it's not today
+                // Set date fields if we have a release date
                 if ($hasReleaseDate) {
                     $releaseDate = $this->parseReleaseDate($album['first_release_date']);
-                    $today = strtotime('today');
                     
                     Log::info('Processing album release date', [
                         'album_title' => $cleanTitle,
                         'first_release_date' => $album['first_release_date'],
                         'release_date_timestamp' => $releaseDate,
-                        'today_timestamp' => $today,
-                        'dates_equal' => date('Y-m-d', $releaseDate) === date('Y-m-d', $today),
                         'parsed_year' => $releaseDate ? date('Y', $releaseDate) : null,
                         'parsed_month' => $releaseDate ? date('m', $releaseDate) : null,
                         'parsed_day' => $releaseDate ? date('d', $releaseDate) : null
                     ]);
                     
-                    // Don't set today's date as a release date
-                    if (date('Y-m-d', $releaseDate) !== date('Y-m-d', $today)) {
-                        $albumData['start_year'] = $this->extractYearFromDate($album['first_release_date']);
-                        // Set month/day based on available precision
-                        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $album['first_release_date'])) {
-                            $albumData['start_month'] = date('m', $releaseDate);
-                            $albumData['start_day'] = date('d', $releaseDate);
-                        } elseif (preg_match('/^\d{4}-\d{2}$/', $album['first_release_date'])) {
-                            $albumData['start_month'] = date('m', $releaseDate);
-                        }
-                    } else {
-                        Log::warning('Skipping today\'s date for album', [
-                            'album_title' => $cleanTitle,
-                            'first_release_date' => $album['first_release_date']
-                        ]);
+                    $albumData['start_year'] = $this->extractYearFromDate($album['first_release_date']);
+                    // Set month/day based on available precision
+                    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $album['first_release_date'])) {
+                        $albumData['start_month'] = date('m', $releaseDate);
+                        $albumData['start_day'] = date('d', $releaseDate);
+                    } elseif (preg_match('/^\d{4}-\d{2}$/', $album['first_release_date'])) {
+                        $albumData['start_month'] = date('m', $releaseDate);
                     }
                 }
                 
@@ -546,13 +682,7 @@ class MusicBrainzImportService
 
                 // Create connection span for the created connection
                 $hasConnectionDate = !empty($album['first_release_date']);
-                $isConnectionToday = false;
-                if ($hasConnectionDate) {
-                    $releaseDate = $this->parseReleaseDate($album['first_release_date']);
-                    $today = strtotime('today');
-                    $isConnectionToday = (date('Y-m-d', $releaseDate) === date('Y-m-d', $today));
-                }
-                $connectionState = ($hasConnectionDate && !$isConnectionToday) ? 'complete' : 'placeholder';
+                $connectionState = $hasConnectionDate ? 'complete' : 'placeholder';
                 
                 $connectionData = [
                     'name' => "{$artist->name} created {$albumSpan->name}",
@@ -566,37 +696,26 @@ class MusicBrainzImportService
                     'updater_id' => $ownerId,
                 ];
                 
-                // Only set date fields if we have a release date and it's not today
+                // Set date fields if we have a release date
                 if ($hasConnectionDate) {
                     $releaseDate = $this->parseReleaseDate($album['first_release_date']);
-                    $today = strtotime('today');
                     
                     Log::info('Processing connection release date', [
                         'connection_name' => $connectionData['name'],
                         'first_release_date' => $album['first_release_date'],
                         'release_date_timestamp' => $releaseDate,
-                        'today_timestamp' => $today,
-                        'dates_equal' => date('Y-m-d', $releaseDate) === date('Y-m-d', $today),
                         'parsed_year' => $releaseDate ? date('Y', $releaseDate) : null,
                         'parsed_month' => $releaseDate ? date('m', $releaseDate) : null,
                         'parsed_day' => $releaseDate ? date('d', $releaseDate) : null
                     ]);
                     
-                    // Don't set today's date as a release date
-                    if (date('Y-m-d', $releaseDate) !== date('Y-m-d', $today)) {
-                        $connectionData['start_year'] = $this->extractYearFromDate($album['first_release_date']);
-                        // Set month/day based on available precision
-                        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $album['first_release_date'])) {
-                            $connectionData['start_month'] = date('m', $releaseDate);
-                            $connectionData['start_day'] = date('d', $releaseDate);
-                        } elseif (preg_match('/^\d{4}-\d{2}$/', $album['first_release_date'])) {
-                            $connectionData['start_month'] = date('m', $releaseDate);
-                        }
-                    } else {
-                        Log::warning('Skipping today\'s date for connection', [
-                            'connection_name' => $connectionData['name'],
-                            'first_release_date' => $album['first_release_date']
-                        ]);
+                    $connectionData['start_year'] = $this->extractYearFromDate($album['first_release_date']);
+                    // Set month/day based on available precision
+                    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $album['first_release_date'])) {
+                        $connectionData['start_month'] = date('m', $releaseDate);
+                        $connectionData['start_day'] = date('d', $releaseDate);
+                    } elseif (preg_match('/^\d{4}-\d{2}$/', $album['first_release_date'])) {
+                        $connectionData['start_month'] = date('m', $releaseDate);
                     }
                 }
                 
@@ -627,13 +746,7 @@ class MusicBrainzImportService
                     if ($trackSpan) {
                         // Update existing track
                         $hasTrackReleaseDate = !empty($track['first_release_date']);
-                        $isTrackToday = false;
-                        if ($hasTrackReleaseDate) {
-                            $releaseDate = $this->parseReleaseDate($track['first_release_date']);
-                            $today = strtotime('today');
-                            $isTrackToday = (date('Y-m-d', $releaseDate) === date('Y-m-d', $today));
-                        }
-                        $trackState = ($hasTrackReleaseDate && !$isTrackToday) ? 'complete' : 'placeholder';
+                        $trackState = $hasTrackReleaseDate ? 'complete' : 'placeholder';
                         
                         $updateData = [
                             'name' => $track['title'],
@@ -647,35 +760,25 @@ class MusicBrainzImportService
                             'updater_id' => $ownerId,
                         ];
                         
-                        // Only update date fields if we have a release date and it's not today
+                        // Update date fields if we have a release date
                         if (!empty($track['first_release_date'])) {
                             $releaseDate = $this->parseReleaseDate($track['first_release_date']);
-                            $today = strtotime('today');
                             
-                            // Don't set today's date as a release date
-                            if (date('Y-m-d', $releaseDate) !== date('Y-m-d', $today)) {
-                                $updateData['start_year'] = $this->extractYearFromDate($track['first_release_date']);
-                                // Set month/day based on available precision
-                                if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $track['first_release_date'])) {
-                                    $updateData['start_month'] = date('m', $releaseDate);
-                                    $updateData['start_day'] = date('d', $releaseDate);
-                                } elseif (preg_match('/^\d{4}-\d{2}$/', $track['first_release_date'])) {
-                                    $updateData['start_month'] = date('m', $releaseDate);
-                                }
+                            $updateData['start_year'] = $this->extractYearFromDate($track['first_release_date']);
+                            // Set month/day based on available precision
+                            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $track['first_release_date'])) {
+                                $updateData['start_month'] = date('m', $releaseDate);
+                                $updateData['start_day'] = date('d', $releaseDate);
+                            } elseif (preg_match('/^\d{4}-\d{2}$/', $track['first_release_date'])) {
+                                $updateData['start_month'] = date('m', $releaseDate);
                             }
                         }
                         
                         $trackSpan->update($updateData);
                     } else {
-                        // Determine state based on whether we have release date and it's not today
+                        // Determine state based on whether we have release date
                         $hasTrackReleaseDate = !empty($track['first_release_date']);
-                        $isTrackToday = false;
-                        if ($hasTrackReleaseDate) {
-                            $releaseDate = $this->parseReleaseDate($track['first_release_date']);
-                            $today = strtotime('today');
-                            $isTrackToday = (date('Y-m-d', $releaseDate) === date('Y-m-d', $today));
-                        }
-                        $trackState = ($hasTrackReleaseDate && !$isTrackToday) ? 'complete' : 'placeholder';
+                        $trackState = $hasTrackReleaseDate ? 'complete' : 'placeholder';
                         
                         // Prepare track data
                         $trackData = [
@@ -694,21 +797,17 @@ class MusicBrainzImportService
                             'updater_id' => $ownerId,
                         ];
                         
-                        // Only set date fields if we have a release date and it's not today
+                        // Set date fields if we have a release date
                         if ($hasTrackReleaseDate) {
                             $releaseDate = $this->parseReleaseDate($track['first_release_date']);
-                            $today = strtotime('today');
                             
-                            // Don't set today's date as a release date
-                            if (date('Y-m-d', $releaseDate) !== date('Y-m-d', $today)) {
-                                $trackData['start_year'] = $this->extractYearFromDate($track['first_release_date']);
-                                // Set month/day based on available precision
-                                if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $track['first_release_date'])) {
-                                    $trackData['start_month'] = date('m', $releaseDate);
-                                    $trackData['start_day'] = date('d', $releaseDate);
-                                } elseif (preg_match('/^\d{4}-\d{2}$/', $track['first_release_date'])) {
-                                    $trackData['start_month'] = date('m', $releaseDate);
-                                }
+                            $trackData['start_year'] = $this->extractYearFromDate($track['first_release_date']);
+                            // Set month/day based on available precision
+                            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $track['first_release_date'])) {
+                                $trackData['start_month'] = date('m', $releaseDate);
+                                $trackData['start_day'] = date('d', $releaseDate);
+                            } elseif (preg_match('/^\d{4}-\d{2}$/', $track['first_release_date'])) {
+                                $trackData['start_month'] = date('m', $releaseDate);
                             }
                         }
                         
@@ -717,13 +816,7 @@ class MusicBrainzImportService
 
                         // Create connection span for the contains connection
                         $hasTrackConnectionDate = !empty($track['first_release_date']);
-                        $isTrackConnectionToday = false;
-                        if ($hasTrackConnectionDate) {
-                            $releaseDate = $this->parseReleaseDate($track['first_release_date']);
-                            $today = strtotime('today');
-                            $isTrackConnectionToday = (date('Y-m-d', $releaseDate) === date('Y-m-d', $today));
-                        }
-                        $trackConnectionState = ($hasTrackConnectionDate && !$isTrackConnectionToday) ? 'complete' : 'placeholder';
+                        $trackConnectionState = $hasTrackConnectionDate ? 'complete' : 'placeholder';
                         
                         $trackConnectionData = [
                             'name' => "{$albumSpan->name} contains {$trackSpan->name}",
@@ -737,21 +830,17 @@ class MusicBrainzImportService
                             'updater_id' => $ownerId,
                         ];
                         
-                        // Only set date fields if we have a release date and it's not today
+                        // Set date fields if we have a release date
                         if ($hasTrackConnectionDate) {
                             $releaseDate = $this->parseReleaseDate($track['first_release_date']);
-                            $today = strtotime('today');
                             
-                            // Don't set today's date as a release date
-                            if (date('Y-m-d', $releaseDate) !== date('Y-m-d', $today)) {
-                                $trackConnectionData['start_year'] = $this->extractYearFromDate($track['first_release_date']);
-                                // Set month/day based on available precision
-                                if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $track['first_release_date'])) {
-                                    $trackConnectionData['start_month'] = date('m', $releaseDate);
-                                    $trackConnectionData['start_day'] = date('d', $releaseDate);
-                                } elseif (preg_match('/^\d{4}-\d{2}$/', $track['first_release_date'])) {
-                                    $trackConnectionData['start_month'] = date('m', $releaseDate);
-                                }
+                            $trackConnectionData['start_year'] = $this->extractYearFromDate($track['first_release_date']);
+                            // Set month/day based on available precision
+                            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $track['first_release_date'])) {
+                                $trackConnectionData['start_month'] = date('m', $releaseDate);
+                                $trackConnectionData['start_day'] = date('d', $releaseDate);
+                            } elseif (preg_match('/^\d{4}-\d{2}$/', $track['first_release_date'])) {
+                                $trackConnectionData['start_month'] = date('m', $releaseDate);
                             }
                         }
                         

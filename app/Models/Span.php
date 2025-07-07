@@ -569,6 +569,112 @@ class Span extends Model
     }
 
     /**
+     * Get the MusicBrainz ID for this span
+     */
+    public function getMusicBrainzIdAttribute(): ?string
+    {
+        return $this->getMeta('musicbrainz_id');
+    }
+
+    /**
+     * Get the ISRC for tracks
+     */
+    public function getIsrcAttribute(): ?string
+    {
+        return $this->getMeta('isrc');
+    }
+
+    /**
+     * Get the track length in milliseconds
+     */
+    public function getTrackLengthAttribute(): ?int
+    {
+        return $this->getMeta('length');
+    }
+
+    /**
+     * Get the artist credits for tracks
+     */
+    public function getArtistCreditsAttribute(): ?string
+    {
+        return $this->getMeta('artist_credits');
+    }
+
+    /**
+     * Get the MusicBrainz URL for this span
+     */
+    public function getMusicBrainzUrlAttribute(): ?string
+    {
+        $mbid = $this->music_brainz_id;
+        if (!$mbid) {
+            return null;
+        }
+
+        // Determine the type of entity and construct the appropriate URL
+        if ($this->subtype === 'album') {
+            return "https://musicbrainz.org/release-group/{$mbid}";
+        } elseif ($this->subtype === 'track') {
+            return "https://musicbrainz.org/recording/{$mbid}";
+        } elseif ($this->type_id === 'band' || $this->type_id === 'person') {
+            return "https://musicbrainz.org/artist/{$mbid}";
+        }
+
+        return null;
+    }
+
+    /**
+     * Get the front cover art URL for this album
+     */
+    public function getCoverArtUrlAttribute(): ?string
+    {
+        if ($this->subtype !== 'album' || !$this->music_brainz_id) {
+            return null;
+        }
+
+        $coverArtService = new \App\Services\MusicBrainzCoverArtService();
+        return $coverArtService->getFrontCoverUrl($this->music_brainz_id, '500');
+    }
+
+    /**
+     * Get the large front cover art URL for this album
+     */
+    public function getCoverArtLargeUrlAttribute(): ?string
+    {
+        if ($this->subtype !== 'album' || !$this->music_brainz_id) {
+            return null;
+        }
+
+        $coverArtService = new \App\Services\MusicBrainzCoverArtService();
+        return $coverArtService->getFrontCoverUrl($this->music_brainz_id, '1200');
+    }
+
+    /**
+     * Get the small front cover art URL for this album
+     */
+    public function getCoverArtSmallUrlAttribute(): ?string
+    {
+        if ($this->subtype !== 'album' || !$this->music_brainz_id) {
+            return null;
+        }
+
+        $coverArtService = new \App\Services\MusicBrainzCoverArtService();
+        return $coverArtService->getFrontCoverUrl($this->music_brainz_id, '250');
+    }
+
+    /**
+     * Check if this album has cover art available
+     */
+    public function getHasCoverArtAttribute(): bool
+    {
+        if ($this->subtype !== 'album' || !$this->music_brainz_id) {
+            return false;
+        }
+
+        $coverArtService = new \App\Services\MusicBrainzCoverArtService();
+        return $coverArtService->hasCoverArt($this->music_brainz_id);
+    }
+
+    /**
      * Get the formatted start date
      */
     public function getFormattedStartDateAttribute(): ?string
@@ -839,6 +945,89 @@ class Span extends Model
             ->first();
 
         return $createdConnection?->subject;
+    }
+
+    /**
+     * Get all albums created by this artist
+     */
+    public function getCreatedAlbums()
+    {
+        return $this->connectionsAsSubject()
+            ->where('type_id', 'created')
+            ->whereHas('child', function($query) {
+                $query->whereJsonContains('metadata->subtype', 'album');
+            })
+            ->with('child')
+            ->get()
+            ->pluck('child');
+    }
+
+    /**
+     * Get all tracks contained in this album
+     */
+    public function getContainedTracks()
+    {
+        return $this->connectionsAsSubject()
+            ->where('type_id', 'contains')
+            ->whereHas('child', function($query) {
+                $query->whereJsonContains('metadata->subtype', 'track');
+            })
+            ->with('child')
+            ->get()
+            ->pluck('child');
+    }
+
+    /**
+     * Get the album that contains this track
+     */
+    public function getContainingAlbum(): ?Span
+    {
+        if ($this->getMeta('subtype') !== 'track') {
+            return null;
+        }
+
+        $containingConnection = $this->connectionsAsObject()
+            ->where('type_id', 'contains')
+            ->whereHas('parent', function($query) {
+                $query->whereJsonContains('metadata->subtype', 'album');
+            })
+            ->with('parent')
+            ->first();
+
+        return $containingConnection?->parent;
+    }
+
+    /**
+     * Get the artist that created this track (via album)
+     */
+    public function getTrackArtist(): ?Span
+    {
+        if ($this->getMeta('subtype') !== 'track') {
+            return null;
+        }
+
+        $album = $this->getContainingAlbum();
+        return $album?->getCreator();
+    }
+
+    /**
+     * Get all tracks by this artist (via albums)
+     */
+    public function getAllTracks()
+    {
+        if ($this->type_id !== 'band' && $this->type_id !== 'person') {
+            return collect();
+        }
+
+        $albums = $this->getCreatedAlbums();
+        $allTracks = collect();
+
+        foreach ($albums as $album) {
+            $tracks = $album->getContainedTracks();
+            $allTracks = $allTracks->merge($tracks);
+        }
+
+        return $allTracks;
     }
 
     /**

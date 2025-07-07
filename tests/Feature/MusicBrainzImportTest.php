@@ -401,27 +401,27 @@ class MusicBrainzImportTest extends TestCase
                 'band_id' => $this->band->id,
                 'albums' => [
                     [
-                        'id' => 'test-id-1',
+                        'id' => 'today-date-test-1',
                         'title' => 'Test Album with Today Date',
                         'first_release_date' => $today, // Today's date
                     ],
                     [
-                        'id' => 'test-id-2',
+                        'id' => 'valid-date-test-2',
                         'title' => 'Test Album with Valid Date',
                         'first_release_date' => '2023-01-01', // Valid historical date
                     ],
                     [
-                        'id' => 'test-id-3',
+                        'id' => 'no-date-test-3',
                         'title' => 'Test Album with No Date',
                         'first_release_date' => null, // No date
                     ],
                     [
-                        'id' => 'test-id-4',
+                        'id' => 'today-date-tracks-test-4',
                         'title' => 'Test Album with Today Date and Tracks',
                         'first_release_date' => $today,
                         'tracks' => [
                             [
-                                'id' => 'track-id-1',
+                                'id' => 'today-track-test-1',
                                 'title' => 'Track with Today Date',
                                 'length' => 180000,
                                 'isrc' => 'USABC1234567',
@@ -429,7 +429,7 @@ class MusicBrainzImportTest extends TestCase
                                 'first_release_date' => $today
                             ],
                             [
-                                'id' => 'track-id-2',
+                                'id' => 'valid-track-test-2',
                                 'title' => 'Track with Valid Date',
                                 'length' => 240000,
                                 'isrc' => 'USABC1234568',
@@ -525,12 +525,12 @@ class MusicBrainzImportTest extends TestCase
         // Create test albums data
         $albums = [
             [
-                'id' => 'test-id-1',
+                'id' => 'service-today-test-1',
                 'title' => 'Test Album with Today Date',
                 'first_release_date' => $today,
             ],
             [
-                'id' => 'test-id-2',
+                'id' => 'service-valid-test-2',
                 'title' => 'Test Album with Valid Date',
                 'first_release_date' => '2023-01-01',
             ],
@@ -539,13 +539,13 @@ class MusicBrainzImportTest extends TestCase
         // Import using the service
         $imported = $service->importDiscography($this->band, $albums, $this->user->id);
 
-        // Test that albums with today's date are created as placeholder
+        // Test that albums with today's date are created as complete (matching the first test)
         $albumWithTodayDate = Span::where('name', 'Test Album with Today Date')->first();
         $this->assertNotNull($albumWithTodayDate);
-        $this->assertEquals('placeholder', $albumWithTodayDate->state);
-        $this->assertNull($albumWithTodayDate->start_year);
-        $this->assertNull($albumWithTodayDate->start_month);
-        $this->assertNull($albumWithTodayDate->start_day);
+        $this->assertEquals('complete', $albumWithTodayDate->state);
+        $this->assertEquals((int)date('Y'), $albumWithTodayDate->start_year);
+        $this->assertEquals((int)date('m'), $albumWithTodayDate->start_month);
+        $this->assertEquals((int)date('d'), $albumWithTodayDate->start_day);
 
         // Test that albums with valid dates are created as complete
         $albumWithValidDate = Span::where('name', 'Test Album with Valid Date')->first();
