@@ -307,7 +307,11 @@ class ConfigurableStoryGeneratorService
      */
     protected function cleanupTemplateText(string $text): string
     {
-        // TEMPORARY: Bypass all cleanup for debugging URL and sentence issues
+        // Remove all whitespace (spaces, tabs, newlines) from within href attribute values
+        $text = preg_replace_callback('/href="([^"]*)"/', function ($matches) {
+            $cleanUrl = preg_replace('/\s+/', '', $matches[1]);
+            return 'href="' . $cleanUrl . '"';
+        }, $text);
         return $text;
     }
 
@@ -528,7 +532,7 @@ class ConfigurableStoryGeneratorService
             $dateUrl = (string) $year;
         }
 
-        $url = route('date.explore', $dateUrl);
+        $url = route('date.explore', ['date' => $dateUrl]);
         
         // Debug: Log the generated URL
         if (app()->environment('local', 'development')) {
