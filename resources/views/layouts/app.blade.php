@@ -44,6 +44,19 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
         @viteReactRefresh
         @vite(['resources/scss/app.scss', 'resources/js/app.js', 'resources/js/routes.js'])
 
+        <!-- Google Analytics - Production Only -->
+        @if(app()->environment('production'))
+        <!-- Google tag (gtag.js) -->
+        <script async src="https://www.googletagmanager.com/gtag/js?id=G-R7VL06STVL"></script>
+        <script>
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+
+          gtag('config', 'G-R7VL06STVL');
+        </script>
+        @endif
+
         <!-- Page-specific styles -->
         @stack('styles')
         
