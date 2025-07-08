@@ -1372,7 +1372,7 @@ class Span extends Model
                 ->whereHas('type', function ($query) {
                     $query->where('type', 'contains');
                 })
-                ->with(['child:id,name,type_id,description,start_year,end_year,owner_id,access_level'])
+                ->with(['child:id,name,type_id,description,start_year,end_year,owner_id,access_level,metadata'])
                 ->get()
                 ->map(function ($connection) {
                     $child = $connection->child;
