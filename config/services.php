@@ -35,4 +35,19 @@ return [
         'api_key' => env('OPENAI_API_KEY'),
     ],
 
+    'slack' => [
+        // Incoming Webhook (current setup)
+        'webhook_url' => env('SLACK_WEBHOOK_URL'),
+        'channel' => env('SLACK_CHANNEL', '#general'),
+        'username' => env('SLACK_USERNAME', 'Lifespan Bot'),
+        'icon' => env('SLACK_ICON', ':calendar:'),
+        
+        // OAuth App credentials (for full Slack app integration)
+        'client_id' => env('SLACK_CLIENT_ID'),
+        'client_secret' => env('SLACK_CLIENT_SECRET'),
+        'signing_secret' => env('SLACK_SIGNING_SECRET'),
+        'bot_token' => env('SLACK_BOT_TOKEN'),
+        'user_token' => env('SLACK_USER_TOKEN'),
+    ],
+
 ];

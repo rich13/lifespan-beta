@@ -11,6 +11,7 @@
         "laravel/breeze": "^1.29",
         "laravel/framework": "^10.10",
         "laravel/sanctum": "^3.3",
+        "laravel/slack-notification-channel": "^3.6",
         "laravel/telescope": "^5.4",
         "laravel/tinker": "^2.8",
         "openai-php/client": "^0.14.0",
