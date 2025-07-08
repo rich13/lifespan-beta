@@ -180,6 +180,22 @@ class YamlSpanService
                 'type' => $targetSpan->type_id, // Always use type_id, not the loaded relationship
                 'connection_id' => $connection->id,
             ];
+            // Always include metadata from the connected span if present
+            if (!empty($targetSpan->metadata)) {
+                $connectionData['metadata'] = $targetSpan->metadata;
+            }
+            // Add span dates and state
+            $start = $targetSpan->getFormattedStartDateAttribute();
+            if ($start) {
+                $connectionData['start'] = $start;
+            }
+            $end = $targetSpan->getFormattedEndDateAttribute();
+            if ($end) {
+                $connectionData['end'] = $end;
+            }
+            if ($targetSpan->state) {
+                $connectionData['state'] = $targetSpan->state;
+            }
             
             // Add connection dates from the connection span if available
             if ($connection->connectionSpan) {
@@ -192,7 +208,7 @@ class YamlSpanService
                 }
                 
                 // Special handling for has_role connections: extract dates from nested at_organisation connection span
-                if ($connectionType === 'has_role' && !isset($connectionData['start_date']) && !isset($connectionData['end_date'])) {
+                if ($connectionType === 'has_role' && !isset($connectionData['start']) && !isset($connectionData['end'])) {
                     $this->extractDatesFromNestedConnections($connectionData, $connection->connectionSpan);
                 }
             }
@@ -229,6 +245,22 @@ class YamlSpanService
                 'type' => $sourceSpan->type_id,
                 'connection_id' => $connection->id,
             ];
+            // Always include metadata from the connected span if present
+            if (!empty($sourceSpan->metadata)) {
+                $connectionData['metadata'] = $sourceSpan->metadata;
+            }
+            // Add span dates and state
+            $start = $sourceSpan->getFormattedStartDateAttribute();
+            if ($start) {
+                $connectionData['start'] = $start;
+            }
+            $end = $sourceSpan->getFormattedEndDateAttribute();
+            if ($end) {
+                $connectionData['end'] = $end;
+            }
+            if ($sourceSpan->state) {
+                $connectionData['state'] = $sourceSpan->state;
+            }
             
             // Add connection dates from the connection span if available
             if ($connection->connectionSpan) {
@@ -241,7 +273,7 @@ class YamlSpanService
                 }
                 
                 // Special handling for has_role connections: extract dates from nested at_organisation connection span
-                if ($connectionType === 'has_role' && !isset($connectionData['start_date']) && !isset($connectionData['end_date'])) {
+                if ($connectionType === 'has_role' && !isset($connectionData['start']) && !isset($connectionData['end'])) {
                     $this->extractDatesFromNestedConnections($connectionData, $connection->connectionSpan);
                 }
             }
@@ -342,6 +374,116 @@ class YamlSpanService
         $end = $span->getFormattedEndDateAttribute();
         if ($end) {
             $data['end'] = $end;
+        }
+        
+        // Process connections for connection spans (they can have their own connections)
+        $connections = [];
+        
+        // Process outgoing connections (where this span is the subject/parent)
+        foreach ($span->connectionsAsSubject as $connection) {
+            $connectionType = $connection->type_id;
+            $targetSpan = $connection->child;
+            
+            $connectionData = [
+                'name' => $targetSpan->name,
+                'id' => $targetSpan->id,
+                'type' => $targetSpan->type_id,
+                'connection_id' => $connection->id,
+            ];
+            // Always include metadata from the connected span if present
+            if (!empty($targetSpan->metadata)) {
+                $connectionData['metadata'] = $targetSpan->metadata;
+            }
+            // Add span dates and state
+            $start = $targetSpan->getFormattedStartDateAttribute();
+            if ($start) {
+                $connectionData['start'] = $start;
+            }
+            $end = $targetSpan->getFormattedEndDateAttribute();
+            if ($end) {
+                $connectionData['end'] = $end;
+            }
+            if ($targetSpan->state) {
+                $connectionData['state'] = $targetSpan->state;
+            }
+            
+            // Add connection dates from the connection span if available
+            if ($connection->connectionSpan) {
+                $this->addConnectionDates($connectionData, $connection->connectionSpan);
+                
+                // Add nested connections from the connection span
+                $nestedConnections = $this->getNestedConnections($connection->connectionSpan);
+                if (!empty($nestedConnections)) {
+                    $connectionData['nested_connections'] = $nestedConnections;
+                }
+            }
+            
+            // Add connection metadata if present
+            if (!empty($connection->metadata)) {
+                $connectionData['connection_metadata'] = $connection->metadata;
+            }
+            
+            if (!isset($connections[$connectionType])) {
+                $connections[$connectionType] = [];
+            }
+            $connections[$connectionType][] = $connectionData;
+        }
+        
+        // Process incoming connections (where this span is the object/child)
+        foreach ($span->connectionsAsObject as $connection) {
+            $connectionType = $connection->type_id;
+            $sourceSpan = $connection->parent;
+            
+            $connectionData = [
+                'name' => $sourceSpan->name,
+                'id' => $sourceSpan->id,
+                'type' => $sourceSpan->type_id,
+                'connection_id' => $connection->id,
+            ];
+            // Always include metadata from the connected span if present
+            if (!empty($sourceSpan->metadata)) {
+                $connectionData['metadata'] = $sourceSpan->metadata;
+            }
+            // Add span dates and state
+            $start = $sourceSpan->getFormattedStartDateAttribute();
+            if ($start) {
+                $connectionData['start'] = $start;
+            }
+            $end = $sourceSpan->getFormattedEndDateAttribute();
+            if ($end) {
+                $connectionData['end'] = $end;
+            }
+            if ($sourceSpan->state) {
+                $connectionData['state'] = $sourceSpan->state;
+            }
+            
+            // Add connection dates from the connection span if available
+            if ($connection->connectionSpan) {
+                $this->addConnectionDates($connectionData, $connection->connectionSpan);
+                
+                // Add nested connections from the connection span
+                $nestedConnections = $this->getNestedConnections($connection->connectionSpan);
+                if (!empty($nestedConnections)) {
+                    $connectionData['nested_connections'] = $nestedConnections;
+                }
+            }
+            
+            // Add connection metadata if present
+            if (!empty($connection->metadata)) {
+                $connectionData['connection_metadata'] = $connection->metadata;
+            }
+            
+            // For non-family incoming connections, use the _incoming suffix
+            $incomingKey = $connectionType . '_incoming';
+            if (!isset($connections[$incomingKey])) {
+                $connections[$incomingKey] = [];
+            }
+            $connections[$incomingKey][] = $connectionData;
+        }
+        
+        // Add connections to data if any exist
+        if (!empty($connections)) {
+            $data['connections'] = $connections;
         }
         
         return $data;
@@ -774,7 +916,7 @@ class YamlSpanService
                     $start .= '-' . str_pad($connectionSpan->start_day, 2, '0', STR_PAD_LEFT);
                 }
             }
-            $connectionData['start_date'] = $start;
+            $connectionData['start'] = $start;
         }
 
         // Add end date if available
@@ -786,7 +928,7 @@ class YamlSpanService
                     $end .= '-' . str_pad($connectionSpan->end_day, 2, '0', STR_PAD_LEFT);
                 }
             }
-            $connectionData['end_date'] = $end;
+            $connectionData['end'] = $end;
         }
 
         // Add connection span metadata if present (like job titles, degrees, etc.)
@@ -821,7 +963,7 @@ class YamlSpanService
                             $start .= '-' . str_pad($nestedConnectionSpan->start_day, 2, '0', STR_PAD_LEFT);
                         }
                     }
-                    $connectionData['start_date'] = $start;
+                    $connectionData['start'] = $start;
                 }
 
                 if ($nestedConnectionSpan->end_year) {
@@ -832,7 +974,7 @@ class YamlSpanService
                             $end .= '-' . str_pad($nestedConnectionSpan->end_day, 2, '0', STR_PAD_LEFT);
                         }
                     }
-                    $connectionData['end_date'] = $end;
+                    $connectionData['end'] = $end;
                 }
                 
                 // We found the at_organisation connection with dates, so break
@@ -1056,16 +1198,13 @@ class YamlSpanService
         });
         
         foreach ($data['connections'] as $connectionType => $connections) {
-            // Handle virtual connection fields (incoming connections)
-            if (str_ends_with($connectionType, '_incoming')) {
-                // These are virtual fields that represent incoming connections
-                // They should be read-only and not processed as regular connection types
-                continue;
-            }
+            // Handle incoming connections - these are now editable
+            $isIncoming = str_ends_with($connectionType, '_incoming');
+            $baseConnectionType = $isIncoming ? str_replace('_incoming', '', $connectionType) : $connectionType;
             
-            // Validate connection type
-            if (!in_array($connectionType, $validConnectionTypes)) {
-                throw new \InvalidArgumentException("Unknown connection type '{$connectionType}'. Valid types are: " . implode(', ', $validConnectionTypes));
+            // Validate connection type (use base type for incoming connections)
+            if (!in_array($baseConnectionType, $validConnectionTypes)) {
+                throw new \InvalidArgumentException("Unknown connection type '{$baseConnectionType}'. Valid types are: " . implode(', ', $validConnectionTypes));
             }
             
             if (!is_array($connections)) {
@@ -1102,19 +1241,19 @@ class YamlSpanService
                 }
                 
                 // Validate date fields if present
-                if (isset($connection['start_date'])) {
+                if (isset($connection['start'])) {
                     try {
-                        $this->parseDate($connection['start_date']);
+                        $this->parseDate($connection['start']);
                     } catch (\InvalidArgumentException $e) {
-                        throw new \InvalidArgumentException("Invalid start_date for connection '{$connection['name']}' in '{$connectionType}': " . $e->getMessage());
+                        throw new \InvalidArgumentException("Invalid start date for connection '{$connection['name']}' in '{$connectionType}': " . $e->getMessage());
                     }
                 }
                 
-                if (isset($connection['end_date'])) {
+                if (isset($connection['end'])) {
                     try {
-                        $this->parseDate($connection['end_date']);
+                        $this->parseDate($connection['end']);
                     } catch (\InvalidArgumentException $e) {
-                        throw new \InvalidArgumentException("Invalid end_date for connection '{$connection['name']}' in '{$connectionType}': " . $e->getMessage());
+                        throw new \InvalidArgumentException("Invalid end date for connection '{$connection['name']}' in '{$connectionType}': " . $e->getMessage());
                     }
                 }
                 
@@ -1191,15 +1330,19 @@ class YamlSpanService
                 }
                 
                 try {
+                    // Handle incoming connections
+                    $isIncoming = str_ends_with($connectionType, '_incoming');
+                    $baseConnectionType = $isIncoming ? str_replace('_incoming', '', $connectionType) : $connectionType;
+                    
                     // Handle special family connection mapping
-                    $actualConnectionType = $this->mapConnectionType($connectionType);
+                    $actualConnectionType = $this->mapConnectionType($baseConnectionType);
                     
                     // Parse connection dates if present
                     $dates = null;
-                    if (isset($connectionData['start_date'])) {
+                    if (isset($connectionData['start'])) {
                         $dates = $connectionImporter->parseDatesFromStrings(
-                            $connectionData['start_date'] ?? null,
-                            $connectionData['end_date'] ?? null
+                            $connectionData['start'] ?? null,
+                            $connectionData['end'] ?? null
                         );
                     }
                     
@@ -1247,6 +1390,29 @@ class YamlSpanService
                                 throw new \InvalidArgumentException("Span with ID '{$connectionData['id']}' not found, and no existing span with name '{$connectionData['name']}' and type '{$connectionData['type']}' exists");
                             }
                         }
+                        // Update start, end, and state if present in YAML
+                        $spanChanged = false;
+                        if (isset($connectionData['start'])) {
+                            $parsedStart = $this->parseDate($connectionData['start']);
+                            $connectedSpan->start_year = $parsedStart['year'];
+                            $connectedSpan->start_month = $parsedStart['month'];
+                            $connectedSpan->start_day = $parsedStart['day'];
+                            $spanChanged = true;
+                        }
+                        if (isset($connectionData['end'])) {
+                            $parsedEnd = $this->parseDate($connectionData['end']);
+                            $connectedSpan->end_year = $parsedEnd['year'];
+                            $connectedSpan->end_month = $parsedEnd['month'];
+                            $connectedSpan->end_day = $parsedEnd['day'];
+                            $spanChanged = true;
+                        }
+                        if (isset($connectionData['state'])) {
+                            $connectedSpan->state = $connectionData['state'];
+                            $spanChanged = true;
+                        }
+                        if ($spanChanged) {
+                            $connectedSpan->save();
+                        }
                     } else {
                         // No ID provided - find or create by name and type
                         $connectedSpan = $connectionImporter->findOrCreateConnectedSpan(
@@ -1255,6 +1421,29 @@ class YamlSpanService
                             null, // Don't pass connection dates as span dates
                             $metadata
                         );
+                        // Update start, end, and state if present in YAML
+                        $spanChanged = false;
+                        if (isset($connectionData['start'])) {
+                            $parsedStart = $this->parseDate($connectionData['start']);
+                            $connectedSpan->start_year = $parsedStart['year'];
+                            $connectedSpan->start_month = $parsedStart['month'];
+                            $connectedSpan->start_day = $parsedStart['day'];
+                            $spanChanged = true;
+                        }
+                        if (isset($connectionData['end'])) {
+                            $parsedEnd = $this->parseDate($connectionData['end']);
+                            $connectedSpan->end_year = $parsedEnd['year'];
+                            $connectedSpan->end_month = $parsedEnd['month'];
+                            $connectedSpan->end_day = $parsedEnd['day'];
+                            $spanChanged = true;
+                        }
+                        if (isset($connectionData['state'])) {
+                            $connectedSpan->state = $connectionData['state'];
+                            $spanChanged = true;
+                        }
+                        if ($spanChanged) {
+                            $connectedSpan->save();
+                        }
                     }
                     
                     // Determine parent/child relationship based on connection type
@@ -1262,7 +1451,8 @@ class YamlSpanService
                         $span, 
                         $connectedSpan, 
                         $actualConnectionType, 
-                        $connectionType
+                        $baseConnectionType,
+                        $isIncoming
                     );
                     
                     // Create new connection
@@ -1446,7 +1636,7 @@ class YamlSpanService
     /**
      * Determine parent/child relationship based on connection type and context
      */
-    private function determineConnectionDirection(Span $mainSpan, Span $connectedSpan, string $connectionType, string $yamlConnectionType): array
+    private function determineConnectionDirection(Span $mainSpan, Span $connectedSpan, string $connectionType, string $yamlConnectionType, bool $isIncoming = false): array
     {
         // For family connections, YAML structure determines direction
         if ($connectionType === 'family') {
@@ -1457,7 +1647,12 @@ class YamlSpanService
             }
         }
         
-        // For other connection types, use the main span as parent by default
+        // For incoming connections, the connected span is the parent and main span is the child
+        if ($isIncoming) {
+            return [$connectedSpan, $mainSpan]; // Connected span -> Main span
+        }
+        
+        // For outgoing connections, use the main span as parent by default
         // This matches the YAML export structure where outgoing connections are listed
         return [$mainSpan, $connectedSpan];
     }
@@ -1712,16 +1907,23 @@ class YamlSpanService
         $changes = [];
         
         // Check for date changes with normalized comparison
-        $newStartDate = $newConnection['start_date'] ?? null;
-        $currentStartDate = $currentConnection['start_date'] ?? null;
+        $newStartDate = $newConnection['start'] ?? null;
+        $currentStartDate = $currentConnection['start'] ?? null;
         if ($this->normalizeDateForComparison($newStartDate) !== $this->normalizeDateForComparison($currentStartDate)) {
-            $changes[] = "start_date: '{$currentStartDate}' → '{$newStartDate}'";
+            $changes[] = "start date: '{$currentStartDate}' → '{$newStartDate}'";
         }
         
-        $newEndDate = $newConnection['end_date'] ?? null;
-        $currentEndDate = $currentConnection['end_date'] ?? null;
+        $newEndDate = $newConnection['end'] ?? null;
+        $currentEndDate = $currentConnection['end'] ?? null;
         if ($this->normalizeDateForComparison($newEndDate) !== $this->normalizeDateForComparison($currentEndDate)) {
-            $changes[] = "end_date: '{$currentEndDate}' → '{$newEndDate}'";
+            $changes[] = "end date: '{$currentEndDate}' → '{$newEndDate}'";
+        }
+        
+        // Check for state changes
+        $newState = $newConnection['state'] ?? null;
+        $currentState = $currentConnection['state'] ?? null;
+        if ($newState !== $currentState) {
+            $changes[] = "state: '{$currentState}' → '{$newState}'";
         }
         
         // Check for metadata changes
@@ -1735,7 +1937,7 @@ class YamlSpanService
     }
     
     /**
-     * Normalize date for comparison (extract year from various formats)
+     * Normalize date for comparison (preserve month-level precision)
      */
     private function normalizeDateForComparison(?string $date): ?string
     {
@@ -1749,13 +1951,13 @@ class YamlSpanService
             return $date;
         }
         
-        // If it's a full date, extract the year
-        if (preg_match('/^(\d{4})-\d{2}-\d{2}$/', $date, $matches)) {
-            return $matches[1];
+        // If it's a year-month format, return as is (preserve month precision)
+        if (preg_match('/^\d{4}-\d{2}$/', $date)) {
+            return $date;
         }
         
-        // If it's a year-month format, extract the year
-        if (preg_match('/^(\d{4})-\d{2}$/', $date, $matches)) {
+        // If it's a full date, extract year-month (preserve month precision)
+        if (preg_match('/^(\d{4}-\d{2})-\d{2}$/', $date, $matches)) {
             return $matches[1];
         }
         
@@ -2378,7 +2580,7 @@ class YamlSpanService
         }
         
         // Check for single date (no start/end range)
-        if (empty($connectionData['start_date']) && empty($connectionData['end_date']) && !empty($connectionData['date'])) {
+        if (empty($connectionData['start']) && empty($connectionData['end']) && !empty($connectionData['date'])) {
             $dateButtons[] = $this->createConnectorButton('on', 'connector');
             $dateButtons[] = $this->createInteractiveDateButton($connectionData['date'], 'date');
         }
@@ -2922,11 +3124,11 @@ class YamlSpanService
         $merged = $existingConnection;
         
         // Merge dates (only add if not already present)
-        if (!isset($merged['start_date']) && isset($newConnection['start_date'])) {
-            $merged['start_date'] = $newConnection['start_date'];
+        if (!isset($merged['start']) && isset($newConnection['start'])) {
+            $merged['start'] = $newConnection['start'];
         }
-        if (!isset($merged['end_date']) && isset($newConnection['end_date'])) {
-            $merged['end_date'] = $newConnection['end_date'];
+        if (!isset($merged['end']) && isset($newConnection['end'])) {
+            $merged['end'] = $newConnection['end'];
         }
         
         // Merge metadata

@@ -173,8 +173,9 @@ class YamlValidationService
             'type' => ['type' => 'string', 'required' => true],
             'connection_type' => ['type' => 'string', 'required' => false], // For connection spans
             'connection_id' => ['type' => 'string', 'required' => false],
-            'start_date' => ['type' => 'string|integer|null', 'required' => false],
-            'end_date' => ['type' => 'string|integer|null', 'required' => false],
+            'start' => ['type' => 'string|integer|null', 'required' => false],
+            'end' => ['type' => 'string|integer|null', 'required' => false],
+            'state' => ['type' => 'string', 'required' => false],
             'metadata' => ['type' => 'array', 'required' => false],
             'nested_connections' => ['type' => 'array', 'required' => false],
         ];
