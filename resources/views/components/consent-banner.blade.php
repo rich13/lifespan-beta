@@ -4,15 +4,14 @@
         <div class="row align-items-center">
             <div class="col-md-8">
                 <p class="mb-2 mb-md-0">
-                    Lifespan uses Google Analytics. Please click "Accept" so I can learn about how you use it. Nothing personal is collected.
-                </p>
+                    Lifespan uses Google Analytics. Please click "Accept" so basics can be collected <i class="bi bi-emoji-smile"></i></p>
             </div>
             <div class="col-md-4 text-md-end">
                 <button type="button" class="btn btn-outline-light btn-sm me-2" onclick="consentDeniedAll(); hideConsentBanner();">
-                    Reject
+                    No thanks
                 </button>
                 <button type="button" class="btn btn-success btn-sm" onclick="consentGrantedAnalytics(); hideConsentBanner();">
-                    Accept
+                    OK then
                 </button>
             </div>
         </div>
