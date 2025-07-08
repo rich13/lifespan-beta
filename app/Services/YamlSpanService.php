@@ -1412,6 +1412,8 @@ class YamlSpanService
                         }
                         if ($spanChanged) {
                             $connectedSpan->save();
+                            // Explicitly clear timeline caches for the updated connected span
+                            $connectedSpan->clearTimelineCaches();
                         }
                     } else {
                         // No ID provided - find or create by name and type
@@ -1443,6 +1445,8 @@ class YamlSpanService
                         }
                         if ($spanChanged) {
                             $connectedSpan->save();
+                            // Explicitly clear timeline caches for the updated connected span
+                            $connectedSpan->clearTimelineCaches();
                         }
                     }
                     

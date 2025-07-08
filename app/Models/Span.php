@@ -984,6 +984,14 @@ class Span extends Model
             Cache::forget("timeline_object_{$this->id}_{$userId}");
             Cache::forget("timeline_during_{$this->id}_{$userId}");
         }
+        
+        // Also clear for the current user if authenticated
+        if (auth()->check()) {
+            $currentUserId = auth()->id();
+            Cache::forget("timeline_{$this->id}_{$currentUserId}");
+            Cache::forget("timeline_object_{$this->id}_{$currentUserId}");
+            Cache::forget("timeline_during_{$this->id}_{$currentUserId}");
+        }
     }
 
 

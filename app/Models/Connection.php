@@ -228,6 +228,14 @@ class Connection extends Model
             Cache::forget("timeline_object_{$spanId}_{$userId}");
             Cache::forget("timeline_during_{$spanId}_{$userId}");
         }
+        
+        // Also clear for the current user if authenticated
+        if (auth()->check()) {
+            $currentUserId = auth()->id();
+            Cache::forget("timeline_{$spanId}_{$currentUserId}");
+            Cache::forget("timeline_object_{$spanId}_{$currentUserId}");
+            Cache::forget("timeline_during_{$spanId}_{$currentUserId}");
+        }
     }
 
     /**

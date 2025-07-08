@@ -3,11 +3,19 @@
 namespace App\Observers;
 
 use App\Models\Span;
+use App\Services\SlackNotificationService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class SpanObserver
 {
+    protected SlackNotificationService $slackService;
+
+    public function __construct(SlackNotificationService $slackService)
+    {
+        $this->slackService = $slackService;
+    }
+
     /**
      * Handle the Span "saving" event.
      */
@@ -48,5 +56,24 @@ class SpanObserver
                 ->where('id', $span->owner_id)
                 ->update(['personal_span_id' => $span->id]);
         }
+    }
+
+    /**
+     * Handle the Span "created" event.
+     */
+    public function created(Span $span): void
+    {
+        // Send Slack notification for span creation
+        $this->slackService->notifySpanCreated($span);
+    }
+
+    /**
+     * Handle the Span "updated" event.
+     */
+    public function updated(Span $span): void
+    {
+        // Send Slack notification for span updates
+        $changes = $span->getDirty();
+        $this->slackService->notifySpanUpdated($span, $changes);
     }
 } 

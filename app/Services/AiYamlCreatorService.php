@@ -156,27 +156,27 @@ You may include the following groups:
 - children: each entry includes:
   - name
   - type: person
-  - start_date (if birthdate is known)
+  - start (if birthdate is known)
 
 - education: each entry includes:
   - name of school/university
   - type: organisation
-  - start_date and end_date (if available)
+  - start and end (if available)
 
 - employment: summarised roles at major employers (use one entry per organisation):
   - name of organisation
   - type: organisation
-  - start_date / end_date (approximate if necessary)
+  - start / end (approximate if necessary)
 
 - residence: notable known places of residence, each with:
   - name: place
   - type: place
-  - start_date / end_date (if known)
+  - start / end (if known)
 
 - relationship: list of confirmed romantic relationships/marriages:
   - name
   - type: person
-  - start_date / end_date (if available)
+  - start / end (if available)
   - metadata.relationship: spouse (if married)
 
 - parents: only include if both parent's full names are publicly known
@@ -187,8 +187,8 @@ You may include the following groups:
 - has_role: specific roles held at organisations (this is distinct from employment):
   - name: <role title>
   - type: role
-  - start_date: <YYYY or YYYY-MM>
-  - end_date: <YYYY, YYYY-MM, or null>
+  - start: <YYYY or YYYY-MM>
+  - end: <YYYY, YYYY-MM, or null>
   - metadata: {}  # leave empty
   - nested_connections:
     - 
