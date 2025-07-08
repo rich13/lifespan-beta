@@ -1,4 +1,4 @@
-@props(['connection'])
+@props(['connection', 'isIncoming' => false])
 
 <x-shared.interactive-card-styles />
 

@@ -24,7 +24,7 @@ function loadCardTimelineData_{{ str_replace('-', '_', $span->id) }}() {
     const spanId = '{{ $span->id }}';
     
     // Fetch timeline data for this span
-    fetch(`/spans/${spanId}/timeline`)
+    fetch(`/api/spans/${spanId}`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
         .then(response => response.json())
         .then(data => {
             renderCardTimeline_{{ str_replace('-', '_', $span->id) }}(data.connections || [], data.span);

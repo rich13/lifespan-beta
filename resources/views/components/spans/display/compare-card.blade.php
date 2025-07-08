@@ -157,8 +157,8 @@ function initializeMiniComparisonTimeline_{{ str_replace('-', '_', $span->id) }}
     
     // Fetch timeline data for both spans
     Promise.all([
-        fetch(`/spans/${spanId}/timeline`),
-        fetch(`/spans/${personalSpanId}/timeline`)
+        fetch(`/api/spans/${spanId}`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }),
+        fetch(`/api/spans/${personalSpanId}`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
     ])
     .then(responses => Promise.all(responses.map(r => r.json())))
     .then(([data1, data2]) => {

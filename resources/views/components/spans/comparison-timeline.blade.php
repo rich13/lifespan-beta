@@ -46,8 +46,8 @@ function initializeComparisonTimeline_{{ str_replace('-', '_', $span1->id) }}_{{
     
     // Fetch timeline data for both spans
     Promise.all([
-        fetch(`/spans/${span1Id}/timeline`),
-        fetch(`/spans/${span2Id}/timeline`)
+        fetch(`/api/spans/${span1Id}`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }),
+        fetch(`/api/spans/${span2Id}`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
     ])
     .then(responses => Promise.all(responses.map(r => r.json())))
     .then(([data1, data2]) => {
