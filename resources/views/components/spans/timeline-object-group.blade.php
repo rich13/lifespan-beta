@@ -37,7 +37,7 @@ function initializeGroupTimeline_{{ str_replace('-', '_', $span->id) }}() {
     console.log('Initializing group timeline for span:', spanId);
     
     // Fetch timeline data for object connections to get the subjects
-    fetch(`/spans/${spanId}/timeline-object-connections`)
+    fetch(`/api/spans/${spanId}/object-connections`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
         .then(response => response.json())
         .then(data => {
             // Extract unique subjects from the object connections
@@ -50,7 +50,7 @@ function initializeGroupTimeline_{{ str_replace('-', '_', $span->id) }}() {
             
             // Fetch timeline data for each subject
             const subjectPromises = subjects.map(subjectId => 
-                fetch(`/spans/${subjectId}/timeline`)
+                fetch(`/api/spans/${subjectId}`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
                     .then(response => response.json())
                     .then(subjectData => ({
                         id: subjectId,

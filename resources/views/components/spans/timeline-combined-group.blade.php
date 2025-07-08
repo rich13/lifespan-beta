@@ -7,7 +7,7 @@
 <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="card-title mb-0">
-            <i class="bi bi-diagram-3-fill me-2"></i>
+            <i class="bi bi-person-lines-fill me-2"></i>
             Timeline
         </h5>
         <div class="btn-group btn-group-sm" role="group">
@@ -58,10 +58,11 @@ function initializeCombinedTimeline_{{ str_replace('-', '_', $span->id) }}() {
     
     // Fetch both the current span's timeline and object connections
     Promise.all([
-        fetch(`/spans/${spanId}/timeline`).then(response => response.json()),
-        fetch(`/spans/${spanId}/timeline-object-connections`).then(response => response.json())
+        fetch(`/api/spans/${spanId}`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }).then(response => response.json()),
+        fetch(`/api/spans/${spanId}/object-connections`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }).then(response => response.json()),
+        fetch(`/api/spans/${spanId}/during-connections`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }).then(response => response.json())
     ])
-    .then(([currentSpanData, objectConnectionsData]) => {
+    .then(([currentSpanData, objectConnectionsData, duringConnectionsData]) => {
         // Extract unique subjects from the object connections, excluding connection spans
         const subjects = [...new Set(
             objectConnectionsData.connections
@@ -98,6 +99,7 @@ function initializeCombinedTimeline_{{ str_replace('-', '_', $span->id) }}() {
             id: spanId,
             name: currentSpanData.span.name,
             timeline: currentSpanData,
+            duringConnections: duringConnectionsData.connections || [],
             isCurrentSpan: true,
             isCurrentUser: false
         });
@@ -109,37 +111,43 @@ function initializeCombinedTimeline_{{ str_replace('-', '_', $span->id) }}() {
             );
             
             const subjectPromises = subjectIdsToFetch.map(subjectId => 
-                fetch(`/spans/${subjectId}/timeline`)
-                    .then(response => response.json())
-                    .then(subjectData => ({
-                        id: subjectId,
-                        name: objectConnectionsData.connections.find(conn => conn.target_id === subjectId)?.target_name || 'Unknown',
-                        timeline: subjectData,
-                        isCurrentSpan: false,
-                        isCurrentUser: false
-                    }))
-                    .catch(error => {
-                        console.error(`Error loading timeline for subject ${subjectId}:`, error);
-                        return null;
-                    })
+                Promise.all([
+                    fetch(`/api/spans/${subjectId}`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }).then(response => response.json()),
+                    fetch(`/api/spans/${subjectId}/during-connections`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }).then(response => response.json())
+                ])
+                .then(([subjectData, duringData]) => ({
+                    id: subjectId,
+                    name: objectConnectionsData.connections.find(conn => conn.target_id === subjectId)?.target_name || 'Unknown',
+                    timeline: subjectData,
+                    duringConnections: duringData.connections || [],
+                    isCurrentSpan: false,
+                    isCurrentUser: false
+                }))
+                .catch(error => {
+                    console.error(`Error loading timeline for subject ${subjectId}:`, error);
+                    return null;
+                })
             );
             
             // If we need to fetch user's timeline data, add it to the promises
             if (needsUserSpan) {
                 subjectPromises.unshift(
-                    fetch(`/spans/${currentUserSpanId}/timeline`)
-                        .then(response => response.json())
-                        .then(subjectData => ({
-                            id: currentUserSpanId,
-                            name: 'You',
-                            timeline: subjectData,
-                            isCurrentSpan: false,
-                            isCurrentUser: true
-                        }))
-                        .catch(error => {
-                            console.error(`Error loading timeline for user ${currentUserSpanId}:`, error);
-                            return null;
-                        })
+                    Promise.all([
+                        fetch(`/api/spans/${currentUserSpanId}`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }).then(response => response.json()),
+                        fetch(`/api/spans/${currentUserSpanId}/during-connections`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }).then(response => response.json())
+                    ])
+                    .then(([subjectData, duringData]) => ({
+                        id: currentUserSpanId,
+                        name: 'You',
+                        timeline: subjectData,
+                        duringConnections: duringData.connections || [],
+                        isCurrentSpan: false,
+                        isCurrentUser: true
+                    }))
+                    .catch(error => {
+                        console.error(`Error loading timeline for user ${currentUserSpanId}:`, error);
+                        return null;
+                    })
                 );
             }
             
@@ -160,6 +168,27 @@ function initializeCombinedTimeline_{{ str_replace('-', '_', $span->id) }}() {
                         subject.id !== currentUserSpanId && subject.id !== spanId
                     );
                     timelineData.push(...otherSubjects);
+                    
+                    // Collect all during connections and nested connections from all timelines
+                    const allDuringConnections = [];
+                    timelineData.forEach(timeline => {
+                        if (timeline.duringConnections) {
+                            allDuringConnections.push(...timeline.duringConnections);
+                        }
+                        // Also collect nested connections from the timeline data itself
+                        if (timeline.timeline.connections) {
+                            timeline.timeline.connections.forEach(connection => {
+                                if (connection.nested_connections) {
+                                    allDuringConnections.push(...connection.nested_connections);
+                                }
+                            });
+                        }
+                    });
+                    
+                    // Add all during connections to the person's timeline (assuming the first timeline is the person)
+                    if (timelineData.length > 0) {
+                        timelineData[0].duringConnections = allDuringConnections;
+                    }
                     
                     renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpanData.span, 'absolute', currentUserSpanId);
                     
@@ -411,6 +440,44 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
                 }
             });
         }
+
+        // Add "during" connections for this timeline (nested within the span)
+        if (timeline.duringConnections && timeline.duringConnections.length > 0 && index === 0) {
+            // Only show during connections in the person's timeline (first timeline)
+            timeline.duringConnections.forEach(connection => {
+                const connectionStartYear = mode === 'absolute' ? connection.start_year : connection.start_year - timelineSpan.start_year;
+                const connectionEndYear = mode === 'absolute' 
+                    ? (connection.end_year || new Date().getFullYear())
+                    : (connection.end_year ? connection.end_year - timelineSpan.start_year : new Date().getFullYear() - timelineSpan.start_year);
+                const connectionWidth = xScale(connectionEndYear) - xScale(connectionStartYear);
+                
+                // Create a nested bar with a different style to show it's within the span
+                svg.append('rect')
+                    .attr('class', 'timeline-during-bar')
+                    .attr('x', xScale(connectionStartYear))
+                    .attr('y', swimlaneY + 4)
+                    .attr('width', Math.max(1, connectionWidth))
+                    .attr('height', swimlaneHeight - 8)
+                    .attr('fill', getConnectionColor(connection.type_id))
+                    .attr('stroke', 'white')
+                    .attr('stroke-width', 1)
+                    .attr('rx', 1)
+                    .attr('ry', 1)
+                    .style('opacity', 0.4) // Make more subtle
+                    // .style('stroke-dasharray', '2,2') // Remove dashed border
+                    .on('mouseover', function(event) {
+                        d3.select(this).style('opacity', 1);
+                        updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}(event, [connection], timeline.name, isCurrentSpan, mode, true);
+                    })
+                    .on('mousemove', function(event) {
+                        updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}(event, [connection], timeline.name, isCurrentSpan, mode, true);
+                    })
+                    .on('mouseout', function() {
+                        d3.select(this).style('opacity', 0.4);
+                        hideCombinedTooltip_{{ str_replace('-', '_', $span->id) }}();
+                    });
+            });
+        }
     });
 
     // Add "now" line (current year) - only in absolute mode
@@ -475,11 +542,11 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
         .style('pointer-events', 'none')
         .style('opacity', 0);
 
-    function showCombinedTooltip_{{ str_replace('-', '_', $span->id) }}(event, connections, timelineName, isCurrentSpan, hoverYear, mode = 'absolute') {
+    function showCombinedTooltip_{{ str_replace('-', '_', $span->id) }}(event, connections, timelineName, isCurrentSpan, hoverYear, mode = 'absolute', isDuring = false) {
         tooltip.transition().duration(200).style('opacity', 1);
         let tooltipContent = '';
         
-        console.log('showCombinedTooltip called with hoverYear:', hoverYear, 'timelineName:', timelineName);
+        console.log('showCombinedTooltip called with hoverYear:', hoverYear, 'timelineName:', timelineName, 'isDuring:', isDuring);
         
         if (mode === 'relative') {
             // In relative mode, show "At age X" as the main header
@@ -487,6 +554,33 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
         } else {
             // In absolute mode, show "In {year}" as the main header
             tooltipContent = `<strong>In ${hoverYear}</strong>`;
+        }
+        
+        // Add connection details
+        if (connections && connections.length > 0) {
+            const connection = connections[0];
+            const connectionType = isDuring ? 'during' : connection.type_id;
+            const targetName = connection.target_name || 'Unknown';
+            const targetType = connection.target_type || 'unknown';
+            
+            tooltipContent += `<br/><br/>`;
+            if (isDuring) {
+                tooltipContent += `<strong>${targetName}</strong> (${targetType})<br/>`;
+                tooltipContent += `<em>Phase during ${timelineName}'s activities</em>`;
+            } else {
+                tooltipContent += `<strong>${connectionType}</strong> ${targetName} (${targetType})`;
+            }
+            
+            // Add time information
+            const startYear = connection.start_year;
+            const endYear = connection.end_year || 'Present';
+            if (mode === 'absolute') {
+                tooltipContent += `<br/>${startYear} - ${endYear}`;
+            } else {
+                const startAge = startYear - (timelineData.find(t => t.name === timelineName)?.timeline?.span?.start_year || startYear);
+                const endAge = endYear === 'Present' ? 'Present' : (endYear - (timelineData.find(t => t.name === timelineName)?.timeline?.span?.start_year || endYear));
+                tooltipContent += `<br/>Age ${startAge} - ${endAge}`;
+            }
         }
         
         // Add what others were doing at the specific hover time
@@ -721,13 +815,13 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
             .style('top', (event.pageY + 20) + 'px');
     }
 
-    function updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}(event, connections, timelineName, isCurrentSpan, mode = 'absolute') {
+    function updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}(event, connections, timelineName, isCurrentSpan, mode = 'absolute', isDuring = false) {
         const svgRect = svg.node().getBoundingClientRect();
         const mouseX = event.clientX - svgRect.left;
         const hoverYear = Math.round(xScale.invert(mouseX));
-        console.log('Connection mousemove - mouseX:', mouseX, 'hoverYear:', hoverYear);
+        console.log('Connection mousemove - mouseX:', mouseX, 'hoverYear:', hoverYear, 'isDuring:', isDuring);
         
-        showCombinedTooltip_{{ str_replace('-', '_', $span->id) }}(event, connections, timelineName, isCurrentSpan, hoverYear, mode);
+        showCombinedTooltip_{{ str_replace('-', '_', $span->id) }}(event, connections, timelineName, isCurrentSpan, hoverYear, mode, isDuring);
     }
 
     function showCombinedLifeSpanTooltip_{{ str_replace('-', '_', $span->id) }}(event, span, timelineData, timelineName, isCurrentSpan, hoverYear, mode = 'absolute') {
@@ -782,6 +876,16 @@ function calculateCombinedTimeRange_{{ str_replace('-', '_', $span->id) }}(timel
                     // Note: We don't check connection.end_year here since we always want to go to current year
                 });
             }
+            
+            // Include during connections in time range calculation
+            if (timeline.duringConnections) {
+                timeline.duringConnections.forEach(connection => {
+                    if (connection.start_year && connection.start_year < start) {
+                        start = connection.start_year;
+                    }
+                    // Note: We don't check connection.end_year here since we always want to go to current year
+                });
+            }
         });
 
         const padding = Math.max(5, Math.floor((end - start) * 0.1));
@@ -806,6 +910,21 @@ function calculateCombinedTimeRange_{{ str_replace('-', '_', $span->id) }}(timel
                 // Add connection ages
                 if (timeline.timeline.connections) {
                     timeline.timeline.connections.forEach(connection => {
+                        if (connection.start_year) {
+                            const startAge = connection.start_year - timelineSpan.start_year;
+                            allAges.push(startAge);
+                            
+                            if (connection.end_year) {
+                                const endAge = connection.end_year - timelineSpan.start_year;
+                                allAges.push(endAge);
+                            }
+                        }
+                    });
+                }
+                
+                // Add during connection ages
+                if (timeline.duringConnections) {
+                    timeline.duringConnections.forEach(connection => {
                         if (connection.start_year) {
                             const startAge = connection.start_year - timelineSpan.start_year;
                             allAges.push(startAge);

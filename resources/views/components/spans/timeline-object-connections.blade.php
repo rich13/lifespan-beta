@@ -23,8 +23,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
 function initializeObjectTimeline_{{ str_replace('-', '_', $span->id) }}() {
     const spanId = '{{ $span->id }}';
-    // Consistent with the original timeline: use /spans/${spanId}/timeline-object-connections
-    fetch(`/spans/${spanId}/timeline-object-connections`)
+    // Consistent with the new API structure: use /api/spans/${spanId}/object-connections
+    fetch(`/api/spans/${spanId}/object-connections`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
         .then(response => response.json())
         .then(data => {
             renderObjectTimeline_{{ str_replace('-', '_', $span->id) }}(data.connections || [], data.span);

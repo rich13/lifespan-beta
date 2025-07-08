@@ -23,7 +23,10 @@
         
         this.isSearching = true;
         try {
-            const response = await fetch(`/api/spans/search?q=${encodeURIComponent(this.searchQuery)}${this.spanType ? '&type=' + this.spanType : ''}`);
+            const response = await fetch(`/api/spans/search?q=${encodeURIComponent(this.searchQuery)}${this.spanType ? '&type=' + this.spanType : ''}`, {
+                credentials: 'same-origin',
+                headers: { 'Accept': 'application/json' }
+            });
             const data = await response.json();
             this.searchResults = data;
         } catch (error) {
@@ -39,8 +42,10 @@
         try {
             const response = await fetch('/api/spans', {
                 method: 'POST',
+                credentials: 'same-origin',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Accept': 'application/json',
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                 },
                 body: JSON.stringify({

@@ -51,7 +51,7 @@ function loadCardTimelineData_{{ str_replace('-', '_', $span->id) }}_{{ $contain
     console.log(`Loading card timeline data for span ${spanId} in container ${containerId}`);
     
     // Fetch timeline data for this span
-    fetch(`/spans/${spanId}/timeline`)
+    fetch(`/api/spans/${spanId}`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
         .then(response => {
             console.log(`API response for span ${spanId}:`, response.status);
             return response.json();

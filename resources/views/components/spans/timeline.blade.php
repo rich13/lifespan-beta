@@ -37,7 +37,7 @@ function initializeTimeline_{{ str_replace('-', '_', $span->id) }}() {
     console.log('Initializing timeline for span:', spanId);
     
     // Fetch timeline data
-    fetch(`/spans/${spanId}/timeline`)
+    fetch(`/api/spans/${spanId}`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
         .then(response => {
             console.log('API response status:', response.status);
             return response.json();
