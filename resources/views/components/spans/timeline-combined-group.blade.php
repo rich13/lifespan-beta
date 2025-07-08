@@ -589,7 +589,7 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
         if (concurrentActivities.length > 0) {
             // In both modes, just show the activities directly since header already shows the time context
             tooltipContent += `<br/><br/>`;
-            tooltipContent += formatActivitiesWithDividers_{{ str_replace('-', '_', $span->id) }}(concurrentActivities, mode);
+            tooltipContent += formatActivitiesWithDividers_{{ str_replace('-', '_', $span->id) }}(concurrentActivities, mode, hoverYear);
         }
         
         tooltip.html(tooltipContent)
@@ -616,7 +616,8 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
                                 target_name: otherConnection.target_name,
                                 start_year: otherConnection.start_year,
                                 end_year: otherConnection.end_year,
-                                isCurrentSpan: timeline.isCurrentSpan
+                                isCurrentSpan: timeline.isCurrentSpan,
+                                nested_connections: otherConnection.nested_connections || []
                             });
                         }
                     });
@@ -670,7 +671,8 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
                                     end_year: otherConnection.end_year,
                                     start_age: otherStart,
                                     end_age: otherEnd,
-                                    isCurrentSpan: timeline.isCurrentSpan
+                                    isCurrentSpan: timeline.isCurrentSpan,
+                                    nested_connections: otherConnection.nested_connections || []
                                 });
                                 found = true;
                             }
@@ -710,7 +712,7 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
         });
     }
 
-    function formatActivitiesWithDividers_{{ str_replace('-', '_', $span->id) }}(activities, mode = 'absolute') {
+    function formatActivitiesWithDividers_{{ str_replace('-', '_', $span->id) }}(activities, mode = 'absolute', hoverYear = null) {
         if (activities.length === 0) return '';
         
         let formattedContent = '';
@@ -745,6 +747,35 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
                     timeInfo = ` (Age ${activity.start_age} - ${endAge})`;
                 }
                 formattedContent += `<span style="color: ${bulletColor};">●</span> <em>${activity.timelineName}</em>: ${activity.type_name} ${activity.target_name}${timeInfo}<br/>`;
+                
+                // Add nested connections (phases) if they exist
+                if (activity.nested_connections && activity.nested_connections.length > 0) {
+                    activity.nested_connections.forEach(nestedConnection => {
+                        const nestedStart = nestedConnection.start_year;
+                        const nestedEnd = nestedConnection.end_year || new Date().getFullYear();
+                        
+                        // Only show phases that are active at the current hover time
+                        if (nestedStart <= hoverYear && nestedEnd >= hoverYear) {
+                            let nestedTimeInfo = '';
+                            if (mode === 'absolute') {
+                                const nestedEndYear = nestedConnection.end_year || 'Present';
+                                nestedTimeInfo = ` (${nestedConnection.start_year} - ${nestedEndYear})`;
+                            } else {
+                                const timelineSpan = timelineData.find(t => t.name === activity.timelineName)?.timeline?.span;
+                                if (timelineSpan && timelineSpan.start_year) {
+                                    const nestedStartAge = nestedConnection.start_year - timelineSpan.start_year;
+                                    const nestedEndAge = nestedConnection.end_year 
+                                        ? nestedConnection.end_year - timelineSpan.start_year 
+                                        : new Date().getFullYear() - timelineSpan.start_year;
+                                    nestedTimeInfo = ` (Age ${nestedStartAge} - ${nestedEndAge})`;
+                                }
+                            }
+                            
+                            const nestedBulletColor = getConnectionColor(nestedConnection.type_id);
+                            formattedContent += `<span style="color: ${nestedBulletColor}; margin-left: 12px;">└─</span> ${nestedConnection.type_name} ${nestedConnection.target_name}${nestedTimeInfo}<br/>`;
+                        }
+                    });
+                }
             }
             // Skip life span entries in relative mode (they're already shown as the black bar)
         });
@@ -839,7 +870,7 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
         const concurrentActivities = findActivitiesAtTime_{{ str_replace('-', '_', $span->id) }}(hoverYear, timelineData, timelineName, mode);
         if (concurrentActivities.length > 0) {
             tooltipContent += `<br/><br/>`;
-            tooltipContent += formatActivitiesWithDividers_{{ str_replace('-', '_', $span->id) }}(concurrentActivities, mode);
+            tooltipContent += formatActivitiesWithDividers_{{ str_replace('-', '_', $span->id) }}(concurrentActivities, mode, hoverYear);
         }
         
         tooltip.html(tooltipContent)
