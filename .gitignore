@@ -69,3 +69,4 @@ Thumbs.db
 # Ensure yaml-samples is not ignored
 !/yaml-samples/
 !/yaml-samples/*.yaml
+storage/debugbar/
