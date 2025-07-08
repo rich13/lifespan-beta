@@ -3,19 +3,25 @@
 <div class="tracks-grid">
     @foreach($tracks as $track)
         @php
-            // Get the artist for this track
-            $artist = $track->connectionsAsObject()
-                ->whereHas('type', function($q) {
-                    $q->where('type', 'created');
-                })
-                ->whereHas('parent', function($q) {
-                    $q->whereIn('type_id', ['person', 'band']);
-                })
-                ->with('parent')
-                ->first();
+            // Use pre-loaded artist data if available, otherwise fall back to query
+            $artist = null;
+            if (isset($track->connectionsAsObject) && $track->connectionsAsObject->isNotEmpty()) {
+                $artist = $track->connectionsAsObject->first();
+            } else {
+                // Fallback to query if not pre-loaded
+                $artist = $track->connectionsAsObject()
+                    ->whereHas('type', function($q) {
+                        $q->where('type', 'created');
+                    })
+                    ->whereHas('parent', function($q) {
+                        $q->whereIn('type_id', ['person', 'band']);
+                    })
+                    ->with('parent')
+                    ->first();
+            }
             
-            // Get the album that contains this track
-            $album = $track->getContainingAlbum();
+            // Use pre-loaded album data if available, otherwise fall back to query
+            $album = $track->cached_album ?? $track->getContainingAlbum();
         @endphp
         
         <a href="{{ route('spans.show', $track) }}" class="track-square text-decoration-none @if($album && $album->has_cover_art) has-cover-art @endif" 

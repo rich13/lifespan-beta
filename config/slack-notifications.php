@@ -104,8 +104,8 @@ return [
     */
     'environments' => [
         'production' => true,
-        'staging' => true,
-        'local' => env('SLACK_ENABLE_LOCAL', false),
+        'staging' => false,
+        'local' => false,
         'testing' => false,
     ],
 

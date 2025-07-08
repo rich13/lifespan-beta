@@ -1892,7 +1892,16 @@ class SpanController extends Controller
 
         $sets = $query->paginate(20);
 
-        // Debug: Log the query and results
+        // Use cached set contents for each set
+        $sets->getCollection()->transform(function ($set) {
+            $tracks = $set->getSetContents()->filter(function($item) {
+                return $item->type_id === 'thing' && 
+                       ($item->metadata['subtype'] ?? null) === 'track';
+            });
+            $set->preloaded_tracks = $tracks;
+            return $set;
+        });
+
         \Illuminate\Support\Facades\Log::info('Desert Island Discs query', [
             'sql' => $query->toSql(),
             'bindings' => $query->getBindings(),
