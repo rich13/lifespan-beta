@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Span;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 
 class SpanSearchController extends Controller
 {
@@ -182,83 +183,105 @@ class SpanSearchController extends Controller
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
-        // Get all connections for this span that have temporal data
-        $connections = $span->connectionsAsSubject()
-            ->with(['child', 'connectionSpan', 'type'])
-            ->get()
-            ->map(function ($connection) {
-                $connectionSpan = $connection->connectionSpan;
-                $connectionData = [
-                    'id' => $connection->id,
-                    'type_id' => $connection->type_id,
-                    'type_name' => $connection->type->forward_predicate ?? $connection->type_id,
-                    'target_name' => $connection->child->name,
-                    'target_id' => $connection->child->id,
-                    'target_type' => $connection->child->type_id,
-                    'start_year' => $connectionSpan ? $connectionSpan->start_year : null,
-                    'start_month' => $connectionSpan ? $connectionSpan->start_month : null,
-                    'start_day' => $connectionSpan ? $connectionSpan->start_day : null,
-                    'end_year' => $connectionSpan ? $connectionSpan->end_year : null,
-                    'end_month' => $connectionSpan ? $connectionSpan->end_month : null,
-                    'end_day' => $connectionSpan ? $connectionSpan->end_day : null,
-                    'metadata' => $connection->metadata ?? []
-                ];
-                
-                // If this is a connection span (has a connectionSpan), also include its during connections
-                if ($connectionSpan) {
-                    $connectionId = $connection->id;
-                    $duringConnections = $connectionSpan->connectionsAsObject()
-                        ->where('type_id', 'during')
-                        ->with(['parent', 'connectionSpan', 'type'])
-                        ->get()
-                        ->map(function ($duringConnection) use ($connectionId) {
-                            $duringConnectionSpan = $duringConnection->connectionSpan;
-                            return [
-                                'id' => $duringConnection->id,
-                                'type_id' => $duringConnection->type_id,
-                                'type_name' => $duringConnection->type->inverse_predicate ?? $duringConnection->type_id,
-                                'target_name' => $duringConnection->parent->name,
-                                'target_id' => $duringConnection->parent->id,
-                                'target_type' => $duringConnection->parent->type_id,
-                                'start_year' => $duringConnectionSpan ? $duringConnectionSpan->start_year : null,
-                                'start_month' => $duringConnectionSpan ? $duringConnectionSpan->start_month : null,
-                                'start_day' => $duringConnectionSpan ? $duringConnectionSpan->start_day : null,
-                                'end_year' => $duringConnectionSpan ? $duringConnectionSpan->end_year : null,
-                                'end_month' => $duringConnectionSpan ? $duringConnectionSpan->end_month : null,
-                                'end_day' => $duringConnectionSpan ? $duringConnectionSpan->end_day : null,
-                                'metadata' => $duringConnection->metadata ?? [],
-                                'is_nested' => true,
-                                'parent_connection_id' => $connectionId
-                            ];
-                        })
-                        ->filter(function ($duringConnection) {
-                            // Only include during connections with start dates
-                            return $duringConnection['start_year'] !== null;
-                        })
-                        ->values()
-                        ->toArray();
+        // Cache key includes user ID for proper access control
+        $cacheKey = "timeline_{$span->id}_" . ($user?->id ?? 'guest');
+        
+        return Cache::remember($cacheKey, 300, function () use ($span) {
+            // Optimized query with eager loading and joins
+            $connections = $span->connectionsAsSubject()
+                ->with([
+                    'child:id,name,type_id,start_year,end_year',
+                    'connectionSpan:id,start_year,start_month,start_day,end_year,end_month,end_day',
+                    'type:type,forward_predicate'
+                ])
+                ->whereHas('connectionSpan', function ($query) {
+                    $query->whereNotNull('start_year');
+                })
+                ->get()
+                ->map(function ($connection) {
+                    $connectionSpan = $connection->connectionSpan;
+                    $connectionData = [
+                        'id' => $connection->id,
+                        'type_id' => $connection->type_id,
+                        'type_name' => $connection->type->forward_predicate ?? $connection->type_id,
+                        'target_name' => $connection->child->name,
+                        'target_id' => $connection->child->id,
+                        'target_type' => $connection->child->type_id,
+                        'start_year' => $connectionSpan ? $connectionSpan->start_year : null,
+                        'start_month' => $connectionSpan ? $connectionSpan->start_month : null,
+                        'start_day' => $connectionSpan ? $connectionSpan->start_day : null,
+                        'end_year' => $connectionSpan ? $connectionSpan->end_year : null,
+                        'end_month' => $connectionSpan ? $connectionSpan->end_month : null,
+                        'end_day' => $connectionSpan ? $connectionSpan->end_day : null,
+                        'metadata' => $connection->metadata ?? []
+                    ];
                     
-                    $connectionData['nested_connections'] = $duringConnections;
-                }
-                
-                return $connectionData;
-            })
-            ->filter(function ($connection) {
-                // Only include connections with start dates
-                return $connection['start_year'] !== null;
-            })
-            ->sortBy('start_year')
-            ->values();
+                    // Only load nested connections if this connection has a span
+                    if ($connectionSpan) {
+                        $connectionData['nested_connections'] = $this->getNestedConnections($connectionSpan);
+                    }
+                    
+                    return $connectionData;
+                })
+                ->filter(function ($connection) {
+                    return $connection['start_year'] !== null;
+                })
+                ->sortBy('start_year')
+                ->values();
 
-        return response()->json([
-            'span' => [
-                'id' => $span->id,
-                'name' => $span->name,
-                'start_year' => $span->start_year,
-                'end_year' => $span->end_year
-            ],
-            'connections' => $connections
-        ]);
+            return [
+                'span' => [
+                    'id' => $span->id,
+                    'name' => $span->name,
+                    'start_year' => $span->start_year,
+                    'end_year' => $span->end_year
+                ],
+                'connections' => $connections
+            ];
+        });
+    }
+
+    /**
+     * Get nested connections for a connection span (optimized)
+     */
+    private function getNestedConnections(Span $connectionSpan): array
+    {
+        return $connectionSpan->connectionsAsObject()
+            ->where('type_id', 'during')
+            ->with([
+                'parent:id,name,type_id',
+                'connectionSpan:id,start_year,start_month,start_day,end_year,end_month,end_day',
+                'type:type,inverse_predicate'
+            ])
+            ->whereHas('connectionSpan', function ($query) {
+                $query->whereNotNull('start_year');
+            })
+            ->get()
+            ->map(function ($duringConnection) {
+                $duringConnectionSpan = $duringConnection->connectionSpan;
+                return [
+                    'id' => $duringConnection->id,
+                    'type_id' => $duringConnection->type_id,
+                    'type_name' => $duringConnection->type->inverse_predicate ?? $duringConnection->type_id,
+                    'target_name' => $duringConnection->parent->name,
+                    'target_id' => $duringConnection->parent->id,
+                    'target_type' => $duringConnection->parent->type_id,
+                    'start_year' => $duringConnectionSpan ? $duringConnectionSpan->start_year : null,
+                    'start_month' => $duringConnectionSpan ? $duringConnectionSpan->start_month : null,
+                    'start_day' => $duringConnectionSpan ? $duringConnectionSpan->start_day : null,
+                    'end_year' => $duringConnectionSpan ? $duringConnectionSpan->end_year : null,
+                    'end_month' => $duringConnectionSpan ? $duringConnectionSpan->end_month : null,
+                    'end_day' => $duringConnectionSpan ? $duringConnectionSpan->end_day : null,
+                    'metadata' => $duringConnection->metadata ?? [],
+                    'is_nested' => true,
+                    'parent_connection_id' => $duringConnection->parent_id
+                ];
+            })
+            ->filter(function ($duringConnection) {
+                return $duringConnection['start_year'] !== null;
+            })
+            ->values()
+            ->toArray();
     }
 
     /**
@@ -272,46 +295,56 @@ class SpanSearchController extends Controller
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
-        // Get all connections where this span is the object (child) that have temporal data
-        // Exclude "during" connections as they are handled separately
-        $connections = $span->connectionsAsObject()
-            ->where('type_id', '!=', 'during')
-            ->with(['parent', 'connectionSpan', 'type'])
-            ->get()
-            ->map(function ($connection) {
-                $connectionSpan = $connection->connectionSpan;
-                return [
-                    'id' => $connection->id,
-                    'type_id' => $connection->type_id,
-                    'type_name' => $connection->type->inverse_predicate ?? $connection->type_id,
-                    'target_name' => $connection->parent->name,
-                    'target_id' => $connection->parent->id,
-                    'target_type' => $connection->parent->type_id, // Include target span type
-                    'start_year' => $connectionSpan ? $connectionSpan->start_year : null,
-                    'start_month' => $connectionSpan ? $connectionSpan->start_month : null,
-                    'start_day' => $connectionSpan ? $connectionSpan->start_day : null,
-                    'end_year' => $connectionSpan ? $connectionSpan->end_year : null,
-                    'end_month' => $connectionSpan ? $connectionSpan->end_month : null,
-                    'end_day' => $connectionSpan ? $connectionSpan->end_day : null,
-                    'metadata' => $connection->metadata ?? []
-                ];
-            })
-            ->filter(function ($connection) {
-                // Only include connections with start dates
-                return $connection['start_year'] !== null;
-            })
-            ->sortBy('start_year')
-            ->values();
+        // Cache key includes user ID for proper access control
+        $cacheKey = "timeline_object_{$span->id}_" . ($user?->id ?? 'guest');
+        
+        return Cache::remember($cacheKey, 300, function () use ($span) {
+            // Optimized query with eager loading and joins
+            $connections = $span->connectionsAsObject()
+                ->where('type_id', '!=', 'during')
+                ->with([
+                    'parent:id,name,type_id,start_year,end_year',
+                    'connectionSpan:id,start_year,start_month,start_day,end_year,end_month,end_day',
+                    'type:type,inverse_predicate'
+                ])
+                ->whereHas('connectionSpan', function ($query) {
+                    $query->whereNotNull('start_year');
+                })
+                ->get()
+                ->map(function ($connection) {
+                    $connectionSpan = $connection->connectionSpan;
+                    return [
+                        'id' => $connection->id,
+                        'type_id' => $connection->type_id,
+                        'type_name' => $connection->type->inverse_predicate ?? $connection->type_id,
+                        'target_name' => $connection->parent->name,
+                        'target_id' => $connection->parent->id,
+                        'target_type' => $connection->parent->type_id,
+                        'start_year' => $connectionSpan ? $connectionSpan->start_year : null,
+                        'start_month' => $connectionSpan ? $connectionSpan->start_month : null,
+                        'start_day' => $connectionSpan ? $connectionSpan->start_day : null,
+                        'end_year' => $connectionSpan ? $connectionSpan->end_year : null,
+                        'end_month' => $connectionSpan ? $connectionSpan->end_month : null,
+                        'end_day' => $connectionSpan ? $connectionSpan->end_day : null,
+                        'metadata' => $connection->metadata ?? []
+                    ];
+                })
+                ->filter(function ($connection) {
+                    return $connection['start_year'] !== null;
+                })
+                ->sortBy('start_year')
+                ->values();
 
-        return response()->json([
-            'span' => [
-                'id' => $span->id,
-                'name' => $span->name,
-                'start_year' => $span->start_year,
-                'end_year' => $span->end_year
-            ],
-            'connections' => $connections
-        ]);
+            return [
+                'span' => [
+                    'id' => $span->id,
+                    'name' => $span->name,
+                    'start_year' => $span->start_year,
+                    'end_year' => $span->end_year
+                ],
+                'connections' => $connections
+            ];
+        });
     }
 
     /**
@@ -325,44 +358,55 @@ class SpanSearchController extends Controller
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
-        // Get all "during" connections where this span is the child/object (the span that contains other spans)
-        $connections = $span->connectionsAsObject()
-            ->where('type_id', 'during')
-            ->with(['parent', 'connectionSpan', 'type'])
-            ->get()
-            ->map(function ($connection) {
-                $connectionSpan = $connection->connectionSpan;
-                return [
-                    'id' => $connection->id,
-                    'type_id' => $connection->type_id,
-                    'type_name' => $connection->type->inverse_predicate ?? $connection->type_id,
-                    'target_name' => $connection->parent->name,
-                    'target_id' => $connection->parent->id,
-                    'target_type' => $connection->parent->type_id,
-                    'start_year' => $connectionSpan ? $connectionSpan->start_year : null,
-                    'start_month' => $connectionSpan ? $connectionSpan->start_month : null,
-                    'start_day' => $connectionSpan ? $connectionSpan->start_day : null,
-                    'end_year' => $connectionSpan ? $connectionSpan->end_year : null,
-                    'end_month' => $connectionSpan ? $connectionSpan->end_month : null,
-                    'end_day' => $connectionSpan ? $connectionSpan->end_day : null,
-                    'metadata' => $connection->metadata ?? []
-                ];
-            })
-            ->filter(function ($connection) {
-                // Only include connections with start dates
-                return $connection['start_year'] !== null;
-            })
-            ->sortBy('start_year')
-            ->values();
+        // Cache key includes user ID for proper access control
+        $cacheKey = "timeline_during_{$span->id}_" . ($user?->id ?? 'guest');
+        
+        return Cache::remember($cacheKey, 300, function () use ($span) {
+            // Optimized query with eager loading and joins
+            $connections = $span->connectionsAsObject()
+                ->where('type_id', 'during')
+                ->with([
+                    'parent:id,name,type_id,start_year,end_year',
+                    'connectionSpan:id,start_year,start_month,start_day,end_year,end_month,end_day',
+                    'type:type,inverse_predicate'
+                ])
+                ->whereHas('connectionSpan', function ($query) {
+                    $query->whereNotNull('start_year');
+                })
+                ->get()
+                ->map(function ($connection) {
+                    $connectionSpan = $connection->connectionSpan;
+                    return [
+                        'id' => $connection->id,
+                        'type_id' => $connection->type_id,
+                        'type_name' => $connection->type->inverse_predicate ?? $connection->type_id,
+                        'target_name' => $connection->parent->name,
+                        'target_id' => $connection->parent->id,
+                        'target_type' => $connection->parent->type_id,
+                        'start_year' => $connectionSpan ? $connectionSpan->start_year : null,
+                        'start_month' => $connectionSpan ? $connectionSpan->start_month : null,
+                        'start_day' => $connectionSpan ? $connectionSpan->start_day : null,
+                        'end_year' => $connectionSpan ? $connectionSpan->end_year : null,
+                        'end_month' => $connectionSpan ? $connectionSpan->end_month : null,
+                        'end_day' => $connectionSpan ? $connectionSpan->end_day : null,
+                        'metadata' => $connection->metadata ?? []
+                    ];
+                })
+                ->filter(function ($connection) {
+                    return $connection['start_year'] !== null;
+                })
+                ->sortBy('start_year')
+                ->values();
 
-        return response()->json([
-            'span' => [
-                'id' => $span->id,
-                'name' => $span->name,
-                'start_year' => $span->start_year,
-                'end_year' => $span->end_year
-            ],
-            'connections' => $connections
-        ]);
+            return [
+                'span' => [
+                    'id' => $span->id,
+                    'name' => $span->name,
+                    'start_year' => $span->start_year,
+                    'end_year' => $span->end_year
+                ],
+                'connections' => $connections
+            ];
+        });
     }
 } 

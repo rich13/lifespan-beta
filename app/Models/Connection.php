@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Cache;
 use App\Traits\HasRelationshipAccess;
 use App\Traits\Versionable;
 
@@ -181,6 +182,50 @@ class Connection extends Model
                 }
             }
         });
+
+        // Clear timeline caches when connections are created, updated, or deleted
+        static::saved(function ($connection) {
+            $connection->clearTimelineCaches();
+        });
+
+        static::deleted(function ($connection) {
+            $connection->clearTimelineCaches();
+        });
+    }
+
+    /**
+     * Clear timeline caches for both spans involved in this connection
+     */
+    public function clearTimelineCaches(): void
+    {
+        // Clear caches for both parent and child spans
+        $this->clearSpanTimelineCaches($this->parent_id);
+        $this->clearSpanTimelineCaches($this->child_id);
+        
+        // Also clear caches for the connection span if it exists
+        if ($this->connection_span_id) {
+            $this->clearSpanTimelineCaches($this->connection_span_id);
+        }
+    }
+
+    /**
+     * Clear all timeline caches for a specific span
+     */
+    private function clearSpanTimelineCaches(string $spanId): void
+    {
+        // Clear main timeline cache
+        Cache::forget("timeline_{$spanId}_guest");
+        Cache::forget("timeline_object_{$spanId}_guest");
+        Cache::forget("timeline_during_{$spanId}_guest");
+        
+        // Clear caches for all users (we'll use a pattern-based approach)
+        // Note: In a production environment, you might want to use Redis SCAN or similar
+        // For now, we'll clear the most common user IDs (1-1000)
+        for ($userId = 1; $userId <= 1000; $userId++) {
+            Cache::forget("timeline_{$spanId}_{$userId}");
+            Cache::forget("timeline_object_{$spanId}_{$userId}");
+            Cache::forget("timeline_during_{$spanId}_{$userId}");
+        }
     }
 
     /**

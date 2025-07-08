@@ -8,6 +8,7 @@ use Illuminate\Support\Str;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -319,6 +320,15 @@ class Span extends Model
                 'type' => $span->type,
                 'name' => $span->name
             ]);
+        });
+
+        // Clear timeline caches when spans are updated or deleted
+        static::saved(function ($span) {
+            $span->clearTimelineCaches();
+        });
+
+        static::deleted(function ($span) {
+            $span->clearTimelineCaches();
         });
 
         static::creating(function ($span) {
@@ -927,6 +937,26 @@ class Span extends Model
                     ->select('spans.*', 'connections.parent_id as pivot_parent_id', 'connections.child_id as pivot_child_id')
                     ->where('connections.type_id', 'relationship')
             );
+    }
+
+    /**
+     * Clear all timeline caches for this span
+     */
+    public function clearTimelineCaches(): void
+    {
+        // Clear main timeline cache
+        Cache::forget("timeline_{$this->id}_guest");
+        Cache::forget("timeline_object_{$this->id}_guest");
+        Cache::forget("timeline_during_{$this->id}_guest");
+        
+        // Clear caches for all users (we'll use a pattern-based approach)
+        // Note: In a production environment, you might want to use Redis SCAN or similar
+        // For now, we'll clear the most common user IDs (1-1000)
+        for ($userId = 1; $userId <= 1000; $userId++) {
+            Cache::forget("timeline_{$this->id}_{$userId}");
+            Cache::forget("timeline_object_{$this->id}_{$userId}");
+            Cache::forget("timeline_during_{$this->id}_{$userId}");
+        }
     }
 
     /**
