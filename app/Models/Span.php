@@ -325,10 +325,12 @@ class Span extends Model
         // Clear timeline caches when spans are updated or deleted
         static::saved(function ($span) {
             $span->clearTimelineCaches();
+            $span->clearSetCaches($span);
         });
 
         static::deleted(function ($span) {
             $span->clearTimelineCaches();
+            $span->clearSetCaches($span);
         });
 
         static::creating(function ($span) {
@@ -959,587 +961,25 @@ class Span extends Model
         }
     }
 
-    /**
-     * Get the creator of this thing (if it's a thing with a 'created' connection)
-     */
-    public function getCreator(): ?Span
-    {
-        if ($this->type_id !== 'thing') {
-            return null;
-        }
 
-        // Look for a 'created' connection where this thing is the object (child)
-        $createdConnection = $this->connectionsAsObject()
-            ->where('type_id', 'created')
-            ->with('subject')
-            ->first();
-
-        return $createdConnection?->subject;
-    }
 
     /**
-     * Get all albums created by this artist
+     * Clear all set-related caches for this span and an item
      */
-    public function getCreatedAlbums()
+    private function clearSetCaches(Span $item): void
     {
-        return $this->connectionsAsSubject()
-            ->where('type_id', 'created')
-            ->whereHas('child', function($query) {
-                $query->whereJsonContains('metadata->subtype', 'album');
-            })
-            ->with('child')
-            ->get()
-            ->pluck('child');
-    }
-
-    /**
-     * Get all tracks contained in this album
-     */
-    public function getContainedTracks()
-    {
-        return $this->connectionsAsSubject()
-            ->where('type_id', 'contains')
-            ->whereHas('child', function($query) {
-                $query->whereJsonContains('metadata->subtype', 'track');
-            })
-            ->with('child')
-            ->get()
-            ->pluck('child');
-    }
-
-    /**
-     * Get the album that contains this track
-     */
-    public function getContainingAlbum(): ?Span
-    {
-        if ($this->getMeta('subtype') !== 'track') {
-            return null;
+        $user = auth()->user();
+        $userId = $user?->id ?? 'guest';
+        \Cache::forget("set_contents_{$this->id}_{$userId}");
+        \Cache::forget("containing_sets_{$item->id}_{$userId}");
+        \Cache::forget("in_set_{$item->id}_{$this->id}");
+        \Cache::forget("contains_item_{$this->id}_{$item->id}");
+        for ($uid = 1; $uid <= 1000; $uid++) {
+            \Cache::forget("set_contents_{$this->id}_{$uid}");
+            \Cache::forget("containing_sets_{$item->id}_{$uid}");
+            \Cache::forget("in_set_{$item->id}_{$this->id}");
+            \Cache::forget("contains_item_{$this->id}_{$item->id}");
         }
-
-        $containingConnection = $this->connectionsAsObject()
-            ->where('type_id', 'contains')
-            ->whereHas('parent', function($query) {
-                $query->whereJsonContains('metadata->subtype', 'album');
-            })
-            ->with('parent')
-            ->first();
-
-        return $containingConnection?->parent;
-    }
-
-    /**
-     * Get the artist that created this track (via album)
-     */
-    public function getTrackArtist(): ?Span
-    {
-        if ($this->getMeta('subtype') !== 'track') {
-            return null;
-        }
-
-        $album = $this->getContainingAlbum();
-        return $album?->getCreator();
-    }
-
-    /**
-     * Get all tracks by this artist (via albums)
-     */
-    public function getAllTracks()
-    {
-        if ($this->type_id !== 'band' && $this->type_id !== 'person') {
-            return collect();
-        }
-
-        $albums = $this->getCreatedAlbums();
-        $allTracks = collect();
-
-        foreach ($albums as $album) {
-            $tracks = $album->getContainedTracks();
-            $allTracks = $allTracks->merge($tracks);
-        }
-
-        return $allTracks;
-    }
-
-    /**
-     * Check if the span is public
-     */
-    public function isPublic(): bool
-    {
-        return $this->access_level === 'public';
-    }
-
-    /**
-     * Check if the span is private
-     */
-    public function isPrivate(): bool
-    {
-        return $this->access_level === 'private';
-    }
-
-    /**
-     * Check if the span is shared
-     */
-    public function isShared(): bool
-    {
-        return $this->access_level === 'shared';
-    }
-
-    /**
-     * Make the span public
-     */
-    public function makePublic(): self
-    {
-        $this->access_level = 'public';
-        $this->save();
-        return $this;
-    }
-
-    /**
-     * Make the span private
-     */
-    public function makePrivate(): self
-    {
-        $this->access_level = 'private';
-        $this->save();
-        return $this;
-    }
-
-    /**
-     * Make the span shared and optionally grant permissions
-     */
-    public function makeShared(?array $userIds = null, string $permission = 'view'): self
-    {
-        $this->access_level = 'shared';
-        $this->save();
-
-        if ($userIds) {
-            foreach ($userIds as $userId) {
-                $this->permissions()->create([
-                    'user_id' => $userId,
-                    'permission_type' => $permission
-                ]);
-            }
-        }
-
-        return $this;
-    }
-
-    /**
-     * Grant permission to a user
-     */
-    public function grantPermission(string|User $user, string $permission = 'view'): self
-    {
-        $userId = $user instanceof User ? $user->id : $user;
-        
-        $this->permissions()->firstOrCreate([
-            'user_id' => $userId,
-            'permission_type' => $permission
-        ]);
-
-        // If granting edit permission, also grant view permission (edit implies view)
-        if ($permission === 'edit') {
-            $this->permissions()->firstOrCreate([
-                'user_id' => $userId,
-                'permission_type' => 'view'
-            ]);
-        }
-
-        if ($this->access_level === 'private') {
-            $this->access_level = 'shared';
-            $this->save();
-        }
-
-        return $this;
-    }
-
-    /**
-     * Revoke permission from a user
-     */
-    public function revokePermission(string|User $user, ?string $permission = null): self
-    {
-        $userId = $user instanceof User ? $user->id : $user;
-        
-        $query = $this->permissions()->where('user_id', $userId);
-        if ($permission) {
-            $query->where('permission_type', $permission);
-        }
-        $query->delete();
-
-        // If no more shared permissions, make private
-        if ($this->access_level === 'shared' && !$this->permissions()->exists()) {
-            $this->access_level = 'private';
-            $this->save();
-        }
-
-        return $this;
-    }
-
-    /**
-     * Check if a user has specific permission
-     */
-    public function hasPermission(string|User $user, string $permission): bool
-    {
-        $userId = $user instanceof User ? $user->id : $user;
-        
-        // Admin always has permission
-        if ($user instanceof User && $user->is_admin) {
-            return true;
-        }
-
-        // Owner always has permission
-        if ($userId === $this->owner_id) {
-            return true;
-        }
-
-        // For public spans, only view permission is granted to everyone
-        if ($this->isPublic() && $permission === 'view') {
-            return true;
-        }
-
-        // For shared spans, check specific permissions
-        if ($this->access_level === 'shared') {
-            return $this->permissions()
-                ->where('user_id', $userId)
-                ->where('permission_type', $permission)
-                ->exists();
-        }
-
-        return false;
-    }
-
-    /**
-     * Check if a user can edit this span
-     */
-    public function isEditableBy(?User $user = null): bool
-    {
-        if (!$user) {
-            return false;
-        }
-
-        // Admin can edit anything
-        if ($user->is_admin) {
-            return true;
-        }
-
-        // Owner can edit their own spans
-        if ($user->id === $this->owner_id) {
-            return true;
-        }
-
-        // Check if user has edit permission
-        return $this->hasPermission($user, 'edit');
-    }
-
-    /**
-     * Get the route key for the model.
-     */
-    public function getRouteKeyName(): string
-    {
-        return 'id';
-    }
-
-    /**
-     * Resolve the model by either UUID or slug.
-     */
-    public function resolveRouteBinding($value, $field = null)
-    {
-        if (Str::isUuid($value)) {
-            return $this->where('id', $value)->first();
-        }
-        return $this->where('slug', $value)->first();
-    }
-
-    /**
-     * Get the effective permissions for this span, taking into account inheritance
-     */
-    public function getEffectivePermissions(): int
-    {
-        if ($this->permission_mode === 'inherit' && $this->parent) {
-            return $this->parent->getEffectivePermissions();
-        }
-
-        return $this->permissions_value ?? 0;
-    }
-
-    /**
-     * Get a string representation of the permissions (e.g. "rwxr--r--")
-     */
-    public function getPermissionsString(): string
-    {
-        if ($this->permission_mode === 'inherit' && $this->parent) {
-            return $this->parent->getPermissionsString();
-        }
-
-        $perms = $this->getEffectivePermissions();
-        $result = '';
-
-        // Owner permissions
-        $result .= ($perms & 0400) ? 'r' : '-';
-        $result .= ($perms & 0200) ? 'w' : '-';
-        $result .= ($perms & 0100) ? 'x' : '-';
-
-        // Group permissions
-        $result .= ($perms & 0040) ? 'r' : '-';
-        $result .= ($perms & 0020) ? 'w' : '-';
-        $result .= ($perms & 0010) ? 'x' : '-';
-
-        // Other permissions
-        $result .= ($perms & 0004) ? 'r' : '-';
-        $result .= ($perms & 0002) ? 'w' : '-';
-        $result .= ($perms & 0001) ? 'x' : '-';
-
-        return $result;
-    }
-
-    /**
-     * Get all capabilities for this span
-     *
-     * @return \Illuminate\Support\Collection<SpanCapability>
-     */
-    public function getCapabilities()
-    {
-        return SpanCapabilityRegistry::getCapabilities($this);
-    }
-
-    /**
-     * Get a specific capability
-     */
-    public function getCapability(string $name): ?SpanCapability
-    {
-        return SpanCapabilityRegistry::getCapability($this, $name);
-    }
-
-    /**
-     * Check if this span has a specific capability
-     */
-    public function hasCapability(string $name): bool
-    {
-        return SpanCapabilityRegistry::hasCapability($this, $name);
-    }
-
-    /**
-     * Handle transitioning from one type to another
-     * 
-     * @param string $newTypeId The new type ID to transition to
-     * @param array $newMetadata Optional metadata to set for the new type
-     * @return array Array containing success status and any warnings/messages
-     */
-    public function transitionToType(string $newTypeId, ?array $newMetadata = null): array
-    {
-        $oldType = $this->type;
-        $newType = SpanType::findOrFail($newTypeId);
-        
-        $result = [
-            'success' => true,
-            'warnings' => [],
-            'messages' => []
-        ];
-
-        // Get the old and new metadata schemas
-        $oldSchema = $oldType->getMetadataSchema() ?? [];
-        $newSchema = $newType->getMetadataSchema() ?? [];
-        
-        // Store current metadata
-        $currentMetadata = $this->metadata ?? [];
-        
-        // Track fields that will be lost
-        $lostFields = array_diff_key($currentMetadata, $newSchema);
-        if (!empty($lostFields)) {
-            $result['warnings'][] = "The following fields will be lost during type transition: " . implode(', ', array_keys($lostFields));
-        }
-
-        // Validate required fields from new schema
-        foreach ($newSchema as $field => $schema) {
-            if (isset($schema['required']) && $schema['required']) {
-                if (!isset($newMetadata[$field]) && !isset($currentMetadata[$field])) {
-                    $result['success'] = false;
-                    $result['messages'][] = "Required field '{$field}' is missing for {$newType->name} spans";
-                }
-            }
-        }
-
-        if (!$result['success']) {
-            return $result;
-        }
-
-        // Merge metadata, preferring new values over old ones
-        $mergedMetadata = array_merge($currentMetadata, $newMetadata ?? []);
-        
-        // Filter out fields that don't exist in new schema
-        $finalMetadata = array_intersect_key($mergedMetadata, $newSchema);
-        
-        // Update the span
-        $this->type_id = $newTypeId;
-        $this->metadata = $finalMetadata;
-        $this->save();
-
-        $result['messages'][] = "Successfully transitioned from {$oldType->name} to {$newType->name}";
-        
-        return $result;
-    }
-
-    /**
-     * Check if this span is a set
-     */
-    public function isSet(): bool
-    {
-        return $this->type_id === 'set';
-    }
-
-    /**
-     * Get all sets that contain this span
-     */
-    public function getContainingSets()
-    {
-        return $this->connectionsAsObject()
-            ->whereHas('type', function ($query) {
-                $query->where('type', 'contains');
-            })
-            ->whereHas('parent', function ($query) {
-                $query->where('type_id', 'set');
-            })
-            ->with('parent')
-            ->get()
-            ->pluck('parent');
-    }
-
-    /**
-     * Check if this span is contained in a specific set
-     */
-    public function isInSet(Span $set): bool
-    {
-        if (!$set->isSet()) {
-            return false;
-        }
-
-        return $this->connectionsAsObject()
-            ->where('parent_id', $set->id)
-            ->whereHas('type', function ($query) {
-                $query->where('type', 'contains');
-            })
-            ->exists();
-    }
-
-    /**
-     * Get all items contained in this set
-     */
-    public function getSetContents()
-    {
-        if (!$this->isSet()) {
-            return collect();
-        }
-
-        // If this is a smart set (has filter_type), use the filter system
-        if ($this->filter_type && $this->filter_type !== 'in_set') {
-            $user = auth()->user();
-            if (!$user && $this->owner_id) {
-                // If no authenticated user but we have an owner_id, try to get the user
-                $user = \App\Models\User::find($this->owner_id);
-            }
-            
-            if (!$user) {
-                return collect(); // Can't filter without a user
-            }
-            
-            return SetFilterService::applyFilter(
-                $this->filter_type,
-                $this->filter_criteria ?? [],
-                $user
-            );
-        }
-
-        // Traditional set - use the existing connection-based approach
-        return $this->connectionsAsSubject()
-            ->whereHas('type', function ($query) {
-                $query->where('type', 'contains');
-            })
-            ->with('child')
-            ->get()
-            ->map(function ($connection) {
-                // Add pivot data to the child span
-                $child = $connection->child;
-                $child->pivot = (object) [
-                    'created_at' => $connection->created_at,
-                    'updated_at' => $connection->updated_at
-                ];
-                return $child;
-            });
-    }
-
-    /**
-     * Add an item to this set
-     */
-    public function addToSet(Span $item): bool
-    {
-        if (!$this->isSet()) {
-            return false;
-        }
-
-        // Check if already in set
-        if ($this->containsItem($item)) {
-            return false;
-        }
-
-        // Create the connection
-        $connection = new Connection([
-            'parent_id' => $this->id,
-            'child_id' => $item->id,
-            'type_id' => 'contains',
-            'connection_span_id' => Span::create([
-                'name' => "{$this->name} contains {$item->name}",
-                'type_id' => 'connection',
-                'owner_id' => auth()->id(),
-                'updater_id' => auth()->id(),
-                'state' => 'complete',
-                'metadata' => ['timeless' => true] // Connection spans for sets are timeless
-            ])->id
-        ]);
-
-        return $connection->save();
-    }
-
-    /**
-     * Remove an item from this set
-     */
-    public function removeFromSet(Span $item): bool
-    {
-        if (!$this->isSet()) {
-            return false;
-        }
-
-        $connection = $this->connectionsAsSubject()
-            ->where('child_id', $item->id)
-            ->whereHas('type', function ($query) {
-                $query->where('type', 'contains');
-            })
-            ->first();
-
-        if ($connection) {
-            // Delete the connection span
-            if ($connection->connectionSpan) {
-                $connection->connectionSpan->delete();
-            }
-            return $connection->delete();
-        }
-
-        return false;
-    }
-
-    /**
-     * Check if this set contains a specific item
-     */
-    public function containsItem(Span $item): bool
-    {
-        if (!$this->isSet()) {
-            return false;
-        }
-
-        return $this->connectionsAsSubject()
-            ->where('child_id', $item->id)
-            ->whereHas('type', function ($query) {
-                $query->where('type', 'contains');
-            })
-            ->exists();
     }
 
     /**
@@ -1821,5 +1261,228 @@ class Span extends Model
         }
         
         return $sets;
+    }
+
+    /**
+     * Check if this span is a set
+     */
+    public function isSet(): bool
+    {
+        return $this->type_id === 'set';
+    }
+
+    /**
+     * Check if this span can be edited by the given user
+     */
+    public function isEditableBy(?User $user = null): bool
+    {
+        if (!$user) {
+            return false;
+        }
+
+        // Admins can edit everything
+        if ($user->is_admin) {
+            return true;
+        }
+
+        // Owner can edit their own spans
+        if ($this->owner_id === $user->id) {
+            return true;
+        }
+
+        // Check if user has edit permission
+        return $this->hasPermission($user, 'edit');
+    }
+
+    /**
+     * Check if a user has a specific permission on this span
+     */
+    public function hasPermission($user, string $permission): bool
+    {
+        if (!$user) {
+            return false;
+        }
+        // Admins can do anything
+        if (isset($user->is_admin) && $user->is_admin) {
+            return true;
+        }
+        // Owner can always view and edit
+        if ($this->owner_id === $user->id) {
+            return true;
+        }
+        // Check explicit permissions
+        return $this->permissions()
+            ->where('user_id', $user->id)
+            ->where('permission_type', $permission)
+            ->exists();
+    }
+
+    /**
+     * Get all sets that contain this span
+     */
+    public function getContainingSets()
+    {
+        $user = auth()->user();
+        $cacheKey = "containing_sets_{$this->id}_" . ($user?->id ?? 'guest');
+        return \Cache::remember($cacheKey, 300, function () {
+            return $this->connectionsAsObject()
+                ->whereHas('type', function ($query) {
+                    $query->where('type', 'contains');
+                })
+                ->whereHas('parent', function ($query) {
+                    $query->where('type_id', 'set');
+                })
+                ->with(['parent:id,name,description,owner_id,access_level'])
+                ->get()
+                ->pluck('parent');
+        });
+    }
+
+    /**
+     * Check if this span is contained in a specific set
+     */
+    public function isInSet(Span $set): bool
+    {
+        if (!$set->isSet()) {
+            return false;
+        }
+        $cacheKey = "in_set_{$this->id}_{$set->id}";
+        return \Cache::remember($cacheKey, 300, function () use ($set) {
+            return $this->connectionsAsObject()
+                ->where('parent_id', $set->id)
+                ->whereHas('type', function ($query) {
+                    $query->where('type', 'contains');
+                })
+                ->exists();
+        });
+    }
+
+    /**
+     * Get all items contained in this set
+     */
+    public function getSetContents()
+    {
+        if (!$this->isSet()) {
+            return collect();
+        }
+        $user = auth()->user();
+        $cacheKey = "set_contents_{$this->id}_" . ($user?->id ?? 'guest');
+        return \Cache::remember($cacheKey, 300, function () {
+            return $this->connectionsAsSubject()
+                ->whereHas('type', function ($query) {
+                    $query->where('type', 'contains');
+                })
+                ->with(['child:id,name,type_id,description,start_year,end_year,owner_id,access_level'])
+                ->get()
+                ->map(function ($connection) {
+                    $child = $connection->child;
+                    $child->pivot = (object) [
+                        'created_at' => $connection->created_at,
+                        'updated_at' => $connection->updated_at
+                    ];
+                    return $child;
+                });
+        });
+    }
+
+    /**
+     * Add an item to this set
+     */
+    public function addToSet(Span $item): bool
+    {
+        if (!$this->isSet()) {
+            return false;
+        }
+        if ($this->containsItem($item)) {
+            return false;
+        }
+        $connection = new \App\Models\Connection([
+            'parent_id' => $this->id,
+            'child_id' => $item->id,
+            'type_id' => 'contains',
+            'connection_span_id' => self::create([
+                'name' => "{$this->name} contains {$item->name}",
+                'type_id' => 'connection',
+                'owner_id' => auth()->id(),
+                'updater_id' => auth()->id(),
+                'state' => 'complete',
+                'metadata' => ['timeless' => true]
+            ])->id
+        ]);
+        $result = $connection->save();
+        if ($result) {
+            $this->clearSetCaches($item);
+        }
+        return $result;
+    }
+
+    /**
+     * Remove an item from this set
+     */
+    public function removeFromSet(Span $item): bool
+    {
+        if (!$this->isSet()) {
+            return false;
+        }
+        $connection = $this->connectionsAsSubject()
+            ->where('child_id', $item->id)
+            ->whereHas('type', function ($query) {
+                $query->where('type', 'contains');
+            })
+            ->first();
+        if ($connection) {
+            if ($connection->connectionSpan) {
+                $connection->connectionSpan->delete();
+            }
+            $result = $connection->delete();
+            if ($result) {
+                $this->clearSetCaches($item);
+            }
+            return $result;
+        }
+        return false;
+    }
+
+    /**
+     * Check if this set contains a specific item
+     */
+    public function containsItem(Span $item): bool
+    {
+        if (!$this->isSet()) {
+            return false;
+        }
+        $cacheKey = "contains_item_{$this->id}_{$item->id}";
+        return \Cache::remember($cacheKey, 300, function () use ($item) {
+            return $this->connectionsAsSubject()
+                ->where('child_id', $item->id)
+                ->whereHas('type', function ($query) {
+                    $query->where('type', 'contains');
+                })
+                ->exists();
+        });
+    }
+
+    /**
+     * Check if this span is public
+     */
+    public function isPublic(): bool
+    {
+        return $this->access_level === 'public';
+    }
+
+    /**
+     * Check if this span is private
+     */
+    public function isPrivate(): bool
+    {
+        return $this->access_level === 'private';
+    }
+
+    /**
+     * Check if this span is shared/group access
+     */
+    public function isShared(): bool
+    {
+        return $this->access_level === 'shared' || $this->access_level === 'group';
     }
 } 

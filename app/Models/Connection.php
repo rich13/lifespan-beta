@@ -186,10 +186,12 @@ class Connection extends Model
         // Clear timeline caches when connections are created, updated, or deleted
         static::saved(function ($connection) {
             $connection->clearTimelineCaches();
+            $connection->clearSetCaches();
         });
 
         static::deleted(function ($connection) {
             $connection->clearTimelineCaches();
+            $connection->clearSetCaches();
         });
     }
 
@@ -225,6 +227,56 @@ class Connection extends Model
             Cache::forget("timeline_{$spanId}_{$userId}");
             Cache::forget("timeline_object_{$spanId}_{$userId}");
             Cache::forget("timeline_during_{$spanId}_{$userId}");
+        }
+    }
+
+    /**
+     * Clear all set-related caches for this connection
+     */
+    public function clearSetCaches(): void
+    {
+        $user = auth()->user();
+        $userId = $user?->id ?? 'guest';
+        
+        // Clear caches for parent and child spans
+        if ($this->parent_id) {
+            Cache::forget("containing_sets_{$this->parent_id}_{$userId}");
+            Cache::forget("set_contents_{$this->parent_id}_{$userId}");
+        }
+        
+        if ($this->child_id) {
+            Cache::forget("containing_sets_{$this->child_id}_{$userId}");
+        }
+        
+        if ($this->connection_span_id) {
+            Cache::forget("containing_sets_{$this->connection_span_id}_{$userId}");
+        }
+        
+        // Clear membership check caches
+        if ($this->parent_id && $this->child_id) {
+            Cache::forget("in_set_{$this->child_id}_{$this->parent_id}");
+            Cache::forget("contains_item_{$this->parent_id}_{$this->child_id}");
+        }
+        
+        // Clear caches for all users (1-1000)
+        for ($uid = 1; $uid <= 1000; $uid++) {
+            if ($this->parent_id) {
+                Cache::forget("containing_sets_{$this->parent_id}_{$uid}");
+                Cache::forget("set_contents_{$this->parent_id}_{$uid}");
+            }
+            
+            if ($this->child_id) {
+                Cache::forget("containing_sets_{$this->child_id}_{$uid}");
+            }
+            
+            if ($this->connection_span_id) {
+                Cache::forget("containing_sets_{$this->connection_span_id}_{$uid}");
+            }
+            
+            if ($this->parent_id && $this->child_id) {
+                Cache::forget("in_set_{$this->child_id}_{$this->parent_id}");
+                Cache::forget("contains_item_{$this->parent_id}_{$this->child_id}");
+            }
         }
     }
 
