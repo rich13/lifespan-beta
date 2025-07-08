@@ -207,11 +207,7 @@ Route::middleware('web')->group(function () {
         // Search route (works with session auth)
         Route::get('/search', [SpanController::class, 'search'])->name('spans.search');
         
-        // Timeline route (works with session auth)
-        Route::get('/{span}/timeline', [App\Http\Controllers\Api\SpanSearchController::class, 'timeline'])->name('spans.timeline');
-        
-        // Object connections timeline route (works with session auth)
-        Route::get('/{span}/timeline-object-connections', [App\Http\Controllers\Api\SpanSearchController::class, 'timelineObjectConnections'])->name('spans.timeline-object-connections');
+        // Timeline routes moved to /api/spans/{span} for better separation of HTML and JSON endpoints
         
         // Types route (public)
             Route::get('/types', [SpanController::class, 'types'])->name('spans.types');
