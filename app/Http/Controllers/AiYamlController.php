@@ -3,16 +3,20 @@
 namespace App\Http\Controllers;
 
 use App\Services\AiYamlCreatorService;
+use App\Services\SlackNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
 class AiYamlController extends Controller
 {
     private ?AiYamlCreatorService $aiService = null;
+    private SlackNotificationService $slackService;
 
-    public function __construct()
+    public function __construct(SlackNotificationService $slackService)
     {
-        $this->middleware('admin');
+        $this->slackService = $slackService;
+        // Apply admin middleware only to show and getPlaceholderSpans methods
+        $this->middleware('admin')->only(['show', 'getPlaceholderSpans']);
     }
 
     /**
@@ -44,11 +48,17 @@ class AiYamlController extends Controller
             );
 
             if (!$result['success']) {
+                // Send Slack notification for failed AI generation
+                $this->slackService->notifyAiYamlGenerated($validated['name'], false, $result['error']);
+                
                 return response()->json([
                     'success' => false,
                     'error' => $result['error']
                 ], 500);
             }
+
+            // Send Slack notification for successful AI generation
+            $this->slackService->notifyAiYamlGenerated($validated['name'], true);
 
             // Validate the generated YAML
             $validation = $aiService->validateYaml($result['yaml']);
@@ -67,6 +77,9 @@ class AiYamlController extends Controller
                 'name' => $validated['name'],
                 'disambiguation' => $validated['disambiguation'] ?? null
             ]);
+
+            // Send Slack notification for failed AI generation
+            $this->slackService->notifyAiYamlGenerated($validated['name'], false, $e->getMessage());
 
             return response()->json([
                 'success' => false,

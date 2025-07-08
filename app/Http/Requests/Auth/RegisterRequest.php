@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\ValidationException;
 use App\Models\InvitationCode;
 use App\Models\User;
+use App\Services\SlackNotificationService;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Support\Facades\Log;
 use App\Models\Span;
@@ -135,6 +136,10 @@ class RegisterRequest extends FormRequest
         ]);
 
         event(new Registered($user));
+
+        // Send Slack notification for new user registration
+        $slackService = app(SlackNotificationService::class);
+        $slackService->notifyUserRegistered($user);
 
         Auth::login($user);
 

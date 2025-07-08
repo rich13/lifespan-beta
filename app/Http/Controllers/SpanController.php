@@ -6,6 +6,7 @@ use App\Models\Span;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
@@ -221,7 +222,10 @@ class SpanController extends Controller
     {
         $this->authorize('create', Span::class);
         
-
+        // Check if this is an AI-generated span
+        if ($request->has('ai_yaml')) {
+            return $this->storeWithAiYaml($request);
+        }
         
         // Get validation rules with special handling for timeless span types
         $typeId = $request->input('type_id');
@@ -243,8 +247,6 @@ class SpanController extends Controller
             $startYearRule = 'required|integer';
         }
         
-
-
         $validated = $request->validate([
             'id' => 'nullable|uuid|unique:spans,id',  // Allow UUID to be provided
             'name' => 'required|string|max:255',
@@ -281,6 +283,129 @@ class SpanController extends Controller
 
         // Otherwise return the redirect for web requests
         return redirect()->route('spans.show', $span);
+    }
+
+    /**
+     * Store a span with AI-generated YAML data
+     */
+    private function storeWithAiYaml(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'type_id' => 'required|string|exists:span_types,type_id',
+            'state' => 'required|in:draft,placeholder,complete',
+            'ai_yaml' => 'required|string',
+        ]);
+
+        $confirmMerge = $request->boolean('confirm_merge', false);
+
+        try {
+            $user = Auth::user();
+            $yamlService = app(YamlSpanService::class);
+
+            // Parse and validate the AI YAML data
+            Log::info('AI YAML content for validation', [
+                'name' => $validated['name'],
+                'yaml_length' => strlen($validated['ai_yaml']),
+                'yaml_sample' => substr($validated['ai_yaml'], 0, 500)
+            ]);
+            $validationResult = $yamlService->yamlToSpanData($validated['ai_yaml']);
+            Log::info('YAML validation result', [
+                'name' => $validated['name'],
+                'success' => $validationResult['success'],
+                'errors' => $validationResult['errors'] ?? []
+            ]);
+            if (!$validationResult['success']) {
+                $errorMessage = 'Failed to validate AI data';
+                if (!empty($validationResult['errors'])) {
+                    $errorMessage .= ': ' . implode(', ', $validationResult['errors']);
+                }
+                return response()->json([
+                    'success' => false,
+                    'error' => $errorMessage
+                ], 422);
+            }
+
+            // Check for existing span
+            $existingSpan = $yamlService->findExistingSpan($validated['name'], $validated['type_id']);
+            if ($existingSpan) {
+                $mergedData = $yamlService->mergeYamlWithExistingSpan($existingSpan, $validationResult['data']);
+                if (!$confirmMerge) {
+                    // Return merge preview, do not apply yet
+                    return response()->json([
+                        'success' => false,
+                        'merge_available' => true,
+                        'existing_span' => $existingSpan,
+                        'merge_data' => $mergedData,
+                        'message' => 'A span with this name and type already exists. Confirm to merge AI data.'
+                    ]);
+                } else {
+                    // Apply the merge
+                    $applyResult = $yamlService->applyMergedYamlToSpan($existingSpan, $mergedData);
+                    if ($applyResult['success']) {
+                        // Clear AI cache for this person so future generations include the new data
+                        $this->clearAiCacheForPerson($validated['name']);
+                        
+                        // Explicitly clear timeline caches for the updated span
+                        $existingSpan->clearTimelineCaches();
+                        
+                        return response()->json([
+                            'success' => true,
+                            'span_id' => $existingSpan->id,
+                            'span' => $existingSpan,
+                            'message' => 'Existing span updated with AI data.'
+                        ]);
+                    } else {
+                        return response()->json([
+                            'success' => false,
+                            'error' => $applyResult['message']
+                        ], 500);
+                    }
+                }
+            }
+
+            // No existing span, create new
+            $span = new Span([
+                'name' => $validated['name'],
+                'type_id' => $validated['type_id'],
+                'state' => $validated['state'],
+                'owner_id' => $user->id,
+                'updater_id' => $user->id,
+                'access_level' => 'private',
+            ]);
+            $span->save();
+
+            $result = $yamlService->applyYamlToSpan($span, $validationResult['data']);
+            if (!$result['success']) {
+                $span->delete();
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Failed to apply AI data: ' . $result['message']
+                ], 422);
+            }
+
+            // Clear timeline caches for the new span
+            $span->clearTimelineCaches();
+
+            return response()->json([
+                'success' => true,
+                'span_id' => $span->id,
+                'span' => $span,
+                'message' => 'New span created with AI data.'
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Failed to create span with AI YAML', [
+                'error' => $e->getMessage(),
+                'name' => $validated['name'],
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to create span: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
@@ -1220,6 +1345,40 @@ class SpanController extends Controller
                 'success' => false,
                 'message' => $createResult['message']
             ], 500);
+        }
+    }
+
+    /**
+     * Clear AI cache for a specific person
+     */
+    private function clearAiCacheForPerson(string $name): void
+    {
+        try {
+            // Clear cache for the name without disambiguation
+            $cacheKey = 'ai_yaml_' . md5(strtolower($name));
+            Cache::forget($cacheKey);
+            
+            // Also clear any cached versions with disambiguation (common patterns)
+            $commonDisambiguations = [
+                'the musician',
+                'the actor',
+                'the politician',
+                'the writer',
+                'the scientist',
+                'the artist'
+            ];
+            
+            foreach ($commonDisambiguations as $disambiguation) {
+                $cacheKeyWithDisambiguation = $cacheKey . '_' . md5(strtolower($disambiguation));
+                Cache::forget($cacheKeyWithDisambiguation);
+            }
+            
+            Log::info('Cleared AI cache for person', ['name' => $name]);
+        } catch (\Exception $e) {
+            Log::warning('Failed to clear AI cache for person', [
+                'name' => $name,
+                'error' => $e->getMessage()
+            ]);
         }
     }
 
