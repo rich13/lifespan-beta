@@ -188,6 +188,37 @@ Route::get('/error', function(Request $request) {
     abort((int) $code);
 })->name('error.test');
 
+// Sentry test route - works in all environments
+Route::post('/sentry-test', function() {
+    try {
+        if (app()->bound('sentry')) {
+            // Send a test event to Sentry
+            app('sentry')->captureMessage('Test event from ' . app()->environment(), 'info');
+            
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Test event sent to Sentry',
+                'environment' => app()->environment(),
+                'sentry_configured' => true
+            ]);
+        } else {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Sentry not configured',
+                'environment' => app()->environment(),
+                'sentry_configured' => false
+            ], 500);
+        }
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Failed to send test event',
+            'error' => $e->getMessage(),
+            'environment' => app()->environment()
+        ], 500);
+    }
+})->name('sentry.test');
+
 Route::middleware('web')->group(function () {
     // Public routes
     Route::get('/', function () {

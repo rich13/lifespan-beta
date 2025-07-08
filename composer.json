@@ -14,11 +14,13 @@
         "laravel/telescope": "^5.4",
         "laravel/tinker": "^2.8",
         "openai-php/client": "^0.14.0",
+        "sentry/sentry-laravel": "^4.15",
         "spatie/laravel-backup": "^9.2",
         "symfony/yaml": "^6.3",
         "wnx/laravel-backup-restore": "^1.6"
     },
     "require-dev": {
+        "barryvdh/laravel-debugbar": "^3.15",
         "fakerphp/faker": "^1.9.1",
         "laravel/pint": "^1.0",
         "laravel/sail": "^1.18",
