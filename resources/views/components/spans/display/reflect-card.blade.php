@@ -287,8 +287,15 @@
                         
                         {{-- Show person's age at that time --}}
                         @if($reflectionType === 'person_younger')
+                            @php
+                                // Calculate the person's age as of the reflection date, not their current age
+                                $personAgeAtReflection = \App\Helpers\DateDurationCalculator::calculateDuration(
+                                    (object)['year' => $personBirthDate->year, 'month' => $personBirthDate->month, 'day' => $personBirthDate->day],
+                                    (object)['year' => $reflectionDate->year, 'month' => $reflectionDate->month, 'day' => $reflectionDate->day]
+                                );
+                            @endphp
                             <p class="text-muted mb-2">
-                                This is when {{ $span->name }} {{ $isReflectionAgeInPast ? 'was' : 'will be' }} {{ $personCurrentAge['years'] ?? 0 }} years, {{ $personCurrentAge['months'] ?? 0 }} months, and {{ $personCurrentAge['days'] ?? 0 }} days old.
+                                This is when {{ $span->name }} {{ $isReflectionAgeInPast ? 'was' : 'will be' }} {{ $personAgeAtReflection['years'] ?? 0 }} years, {{ $personAgeAtReflection['months'] ?? 0 }} months, and {{ $personAgeAtReflection['days'] ?? 0 }} days old.
                             </p>
                         @elseif($reflectionType === 'person_younger_dead')
                             <p class="text-muted mb-2">

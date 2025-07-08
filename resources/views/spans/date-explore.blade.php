@@ -46,8 +46,11 @@
 
 @section('content')
 <div class="container-fluid">
-    <!-- Year Timeline Card will go here-->
-
+    <!-- Date Navigation Timeline -->
+    <x-timeline.date-navigation-timeline 
+        :current-date="(object)['year' => $year, 'month' => $month ?? 1, 'day' => $day ?? 1]"
+        :user="auth()->user()"
+        :precision="$precision" />
 
     <!-- 3-Column Layout (5/5/2) -->
     <div class="row">

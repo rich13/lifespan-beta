@@ -139,10 +139,11 @@ class ConfigurableStoryGeneratorService
         $sentences = array_filter(array_map('trim', explode('.', $storyText)), function($sentence) {
             return !empty($sentence);
         });
-        
-        // Add periods back to sentences
+
+        // Capitalize the first letter of each sentence and add periods back
         $sentences = array_map(function($sentence) {
-            return $sentence . '.';
+            $sentence = ltrim($sentence);
+            return mb_strtoupper(mb_substr($sentence, 0, 1)) . mb_substr($sentence, 1) . '.';
         }, $sentences);
         
         $debug['total_sentences_generated'] = count($sentences);
@@ -425,6 +426,7 @@ class ConfigurableStoryGeneratorService
             'getAlbumCount' => $this->getDiscography($span)->count(),
             'getLatestAlbum' => $this->getDiscography($span)->sortByDesc('date')->first()['thing'] ?? null,
             'getFirstAlbum' => $this->getDiscography($span)->first()['thing'] ?? null,
+            'getAge' => $this->getAge($span),
             default => null,
         };
 
@@ -1150,7 +1152,16 @@ class ConfigurableStoryGeneratorService
 
     protected function getIsVerb(Span $span): string
     {
-        return $span->is_ongoing ? 'is' : 'was';
+        $pronoun = $this->getPronoun($span, 'subject');
+        $tense = $span->is_ongoing ? 'present' : 'past';
+        
+        // Handle plural "they" case
+        if ($pronoun === 'they') {
+            return $tense === 'present' ? 'are' : 'were';
+        }
+        
+        // Handle singular cases
+        return $tense === 'present' ? 'is' : 'was';
     }
 
     protected function getHasVerb(Span $span): string
@@ -1508,5 +1519,43 @@ class ConfigurableStoryGeneratorService
         }
         
         return $roleName;
+    }
+
+    /**
+     * Get the current age of a person, rounded to the nearest 0.25 years with Unicode fractions
+     */
+    protected function getAge(Span $span): ?string
+    {
+        if (!$span->start_year) {
+            return null;
+        }
+
+        // Use current date or end date if available
+        $endYear = $span->end_year ?? (int)date('Y');
+        $endMonth = $span->end_month ?? (int)date('n');
+        $endDay = $span->end_day ?? (int)date('j');
+
+        $startYear = $span->start_year;
+        $startMonth = $span->start_month ?? 1;
+        $startDay = $span->start_day ?? 1;
+
+        // Calculate age in years as a float
+        $start = mktime(0, 0, 0, $startMonth, $startDay, $startYear);
+        $end = mktime(0, 0, 0, $endMonth, $endDay, $endYear);
+        $ageYears = ($end - $start) / (365.25 * 24 * 60 * 60);
+
+        // Round to nearest 0.25
+        $rounded = round($ageYears * 4) / 4;
+        $whole = floor($rounded);
+        $fraction = $rounded - $whole;
+        $fractionSymbol = '';
+        if (abs($fraction - 0.25) < 0.01) {
+            $fractionSymbol = '¼';
+        } elseif (abs($fraction - 0.5) < 0.01) {
+            $fractionSymbol = '½';
+        } elseif (abs($fraction - 0.75) < 0.01) {
+            $fractionSymbol = '¾';
+        }
+        return $whole . $fractionSymbol;
     }
 } 

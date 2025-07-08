@@ -2,7 +2,7 @@
 
 return [
     'person' => [
-        'story_template' => '{birth}{current_role}{band_memberships}{residence}{longest_residence}{education}{work}{most_recent_job}{relationships}{current_relationship}{longest_relationship}{parents}{children}{siblings}',
+        'story_template' => '{birth}{age}{current_role}{band_memberships}{residence}{longest_residence}{education}{work}{most_recent_job}{relationships}{current_relationship}{parents}{children}{siblings}',
         'sentences' => [
             'birth' => [
                 'template' => '{name} was {birth_preposition} {birth_date} in {birth_location}.',
@@ -12,6 +12,15 @@ return [
                     'birth_preposition' => 'getBirthPreposition',
                     'birth_date' => 'getHumanReadableBirthDate',
                     'birth_location' => 'getBirthLocation',
+                ],
+                'condition' => 'hasStartYear',
+            ],
+            'age' => [
+                'template' => '{subject} {is_verb} {age} years old.',
+                'data_methods' => [
+                    'subject' => 'getPronoun',
+                    'is_verb' => 'getIsVerb',
+                    'age' => 'getAge',
                 ],
                 'condition' => 'hasStartYear',
             ],
