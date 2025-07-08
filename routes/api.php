@@ -36,7 +36,7 @@ Route::middleware(['auth'])->group(function () {
 });
 
 // Residence timeline API
-Route::get('/spans/{span}/residence-timeline', [SpanSearchController::class, 'residenceTimeline']);
+
 
 // Wikipedia On This Day API
 Route::get('/wikipedia/on-this-day/{month}/{day}', function ($month, $day) {
