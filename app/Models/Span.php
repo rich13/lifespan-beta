@@ -254,10 +254,9 @@ class Span extends Model
                 ));
             }
 
-            // Generate slug if not provided
+            // Generate slug if not provided (handled in creating event)
             if (empty($span->slug)) {
-                $span->slug = Str::slug($span->name);
-                Log::debug('Generated slug', ['slug' => $span->slug]);
+                Log::debug('Slug will be generated in creating event', ['name' => $span->name]);
             }
 
             // Set metadata to empty array if not provided
@@ -684,6 +683,32 @@ class Span extends Model
 
         $coverArtService = new \App\Services\MusicBrainzCoverArtService();
         return $coverArtService->hasCoverArt($this->music_brainz_id);
+    }
+
+    /**
+     * Get the album that contains this track
+     */
+    public function getContainingAlbum(): ?Span
+    {
+        // Only tracks can have containing albums
+        if ($this->type_id !== 'thing' || ($this->metadata['subtype'] ?? null) !== 'track') {
+            return null;
+        }
+
+        $cacheKey = "containing_album_{$this->id}";
+        return \Cache::remember($cacheKey, 300, function () {
+            return $this->connectionsAsObject()
+                ->whereHas('type', function ($query) {
+                    $query->where('type', 'contains');
+                })
+                ->whereHas('parent', function ($query) {
+                    $query->where('type_id', 'thing')
+                          ->whereJsonContains('metadata->subtype', 'album');
+                })
+                ->with(['parent:id,name,type_id,description,start_year,end_year,owner_id,access_level,metadata'])
+                ->first()
+                ?->parent;
+        });
     }
 
     /**
