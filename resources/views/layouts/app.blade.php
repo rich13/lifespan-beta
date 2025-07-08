@@ -310,7 +310,7 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
                                 <x-topnav.page-title />
                                 <x-topnav.page-filters />
                                 <x-topnav.page-tools />
-                                <x-topnav.user-profile />
+                                <x-topnav.user-profile :span="$span ?? null" />
                             </div>
                         </div>
                         

@@ -1,3 +1,5 @@
+@props(['span' => null])
+
 @php
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Session;
@@ -18,6 +20,23 @@ use Illuminate\Support\Facades\Session;
             </button>
         </div>
     @endauth
+    
+    <!-- Improve Span Button (only on span show pages) -->
+    @auth
+        @if(request()->routeIs('spans.show') && $span)
+            <div class="me-3" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Improve this span with AI data (⌘I)">
+                <button type="button" class="btn btn-sm btn-success" 
+                        data-bs-toggle="modal" data-bs-target="#newSpanModal" 
+                        id="improve-span-btn"
+                        data-span-name="{{ $span->name }}"
+                        data-span-type="{{ $span->type_id }}">
+                    <i class="bi bi-magic me-1"></i>Improve
+                </button>
+            </div>
+        @endif
+    @endauth
+    
+
     
     <!-- Custom User Dropdown -->
     <div class="position-relative" id="customUserDropdown">
@@ -82,9 +101,9 @@ use Illuminate\Support\Facades\Session;
 
 <script>
 $(document).ready(function() {
-    // Global keyboard shortcut for New Span (Cmd+K or Ctrl+K)
+    // Global keyboard shortcuts
     $(document).on('keydown', function(e) {
-        // Check for Cmd+K (Mac) or Ctrl+K (Windows/Linux)
+        // Check for Cmd+K (Mac) or Ctrl+K (Windows/Linux) - New Span
         if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
             e.preventDefault(); // Prevent any potential conflicts
             
@@ -92,6 +111,17 @@ $(document).ready(function() {
             const newSpanBtn = document.getElementById('new-span-btn');
             if (newSpanBtn) {
                 newSpanBtn.click();
+            }
+        }
+        
+        // Check for Cmd+I (Mac) or Ctrl+I (Windows/Linux) - Improve Span
+        if ((e.metaKey || e.ctrlKey) && e.key === 'i') {
+            e.preventDefault(); // Prevent any potential conflicts
+            
+            // Check if user is authenticated and improve button exists
+            const improveSpanBtn = document.getElementById('improve-span-btn');
+            if (improveSpanBtn) {
+                improveSpanBtn.click();
             }
         }
     });
