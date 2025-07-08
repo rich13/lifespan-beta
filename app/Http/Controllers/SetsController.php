@@ -259,15 +259,6 @@ class SetsController extends Controller
      */
     public function getModalData(Request $request)
     {
-        // Debug logging at the very start
-        \Log::info('getModalData method called', [
-            'method' => $request->method(),
-            'url' => $request->url(),
-            'all_params' => $request->all(),
-            'query_params' => $request->query(),
-            'user' => Auth::user() ? Auth::user()->id : 'not authenticated'
-        ]);
-
         $user = Auth::user();
         
         // Check if user is authenticated
@@ -278,25 +269,15 @@ class SetsController extends Controller
         $modelId = $request->get('model_id');
         $modelClass = $request->get('model_class');
 
-        // Debug logging
-        \Log::info('getModalData called', [
-            'model_id' => $modelId,
-            'model_class' => $modelClass,
-            'user_id' => $user ? $user->id : null,
-            'request_all' => $request->all()
-        ]);
-
-        // Get the model instance
+        // Get the model instance with optimized loading
         $model = null;
         if ($modelClass === 'App\\Models\\Span' || $modelClass === 'App\Models\Span') {
-            $model = Span::find($modelId);
-            \Log::info('Span lookup result', [
-                'model_id' => $modelId,
-                'found' => $model ? true : false,
-                'model' => $model ? $model->toArray() : null
-            ]);
+            $model = Span::with(['type:type_id,name'])->find($modelId);
+            if ($model instanceof \Illuminate\Database\Eloquent\Collection) {
+                $model = $model->first();
+            }
         } elseif ($modelClass === 'App\\Models\\Connection' || $modelClass === 'App\Models\Connection') {
-            $model = Connection::find($modelId);
+            $model = Connection::with(['parent:id,name', 'child:id,name', 'type:type,name', 'connectionSpan:id,name'])->find($modelId);
         }
 
         // Permission check
@@ -304,14 +285,15 @@ class SetsController extends Controller
             return response()->json(['error' => 'Forbidden'], 403);
         }
 
-        // Get user's sets (exclude smart sets since they can't be toggled)
+        // Get user's sets with optimized query
         $sets = Span::where('owner_id', $user->id)
             ->where('type_id', 'set')
             ->where('is_predefined', false) // Only user-created sets
+            ->select('id', 'name', 'description')
             ->orderBy('name')
             ->get();
 
-        // Get current memberships for all possible items
+        // Get current memberships for all possible items with optimized batching
         $currentMemberships = [];
         $membershipDetails = [];
         
@@ -321,31 +303,50 @@ class SetsController extends Controller
                 ->pluck('id')
                 ->toArray();
         } elseif ($model instanceof Connection) {
-            // For connections, check all possible items that could be added
-            $membershipSets = collect();
+            // For connections, batch the membership checks to reduce queries
+            $itemsToCheck = collect();
             
-            // Check connection span
+            // Add connection span if it exists
             if ($model->connectionSpan) {
-                $connectionMemberships = $model->connectionSpan->getContainingSets()->where('owner_id', $user->id);
-                $membershipSets = $membershipSets->merge($connectionMemberships);
-                $membershipDetails['connection_' . $model->id] = $connectionMemberships->pluck('id')->toArray();
+                $itemsToCheck->push([
+                    'id' => $model->connectionSpan->id,
+                    'type' => 'connection',
+                    'name' => $model->connectionSpan->name
+                ]);
             }
             
-            // Check subject (parent)
+            // Add subject (parent) if it exists
             if ($model->parent) {
-                $subjectMemberships = $model->parent->getContainingSets()->where('owner_id', $user->id);
-                $membershipSets = $membershipSets->merge($subjectMemberships);
-                $membershipDetails['subject_' . $model->parent->id] = $subjectMemberships->pluck('id')->toArray();
+                $itemsToCheck->push([
+                    'id' => $model->parent->id,
+                    'type' => 'subject',
+                    'name' => $model->parent->name
+                ]);
             }
             
-            // Check object (child)
+            // Add object (child) if it exists
             if ($model->child) {
-                $objectMemberships = $model->child->getContainingSets()->where('owner_id', $user->id);
-                $membershipSets = $membershipSets->merge($objectMemberships);
-                $membershipDetails['object_' . $model->child->id] = $objectMemberships->pluck('id')->toArray();
+                $itemsToCheck->push([
+                    'id' => $model->child->id,
+                    'type' => 'object',
+                    'name' => $model->child->name
+                ]);
             }
             
-            $currentMemberships = $membershipSets->pluck('id')->unique()->toArray();
+            // Batch check memberships for all items
+            $membershipDetails = [];
+            $allMemberships = collect();
+            
+            foreach ($itemsToCheck as $item) {
+                $span = Span::find($item['id']);
+                if ($span) {
+                    $memberships = $span->getContainingSets()->where('owner_id', $user->id);
+                    $membershipDetails[$item['type'] . '_' . $item['id']] = $memberships->pluck('id')->toArray();
+                    $allMemberships = $allMemberships->merge($memberships);
+                }
+            }
+            
+            $currentMemberships = $allMemberships->pluck('id')->unique()->toArray();
         }
 
         // Prepare the item summary and options
@@ -368,9 +369,6 @@ class SetsController extends Controller
                 ]
             ];
         } elseif ($model instanceof Connection) {
-            // Load the connection with its relationships
-            $model->load(['parent', 'child', 'type', 'connectionSpan']);
-            
             $itemSummary = [
                 'type' => 'connection',
                 'name' => $model->connectionSpan?->name ?? 'Connection',

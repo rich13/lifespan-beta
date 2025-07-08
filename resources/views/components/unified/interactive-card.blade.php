@@ -32,6 +32,11 @@
             }
         }
     }
+
+    $creator = null;
+    if ($span->type_id === 'thing' && !empty($span->metadata['creator'])) {
+        $creator = \App\Models\Span::find($span->metadata['creator']);
+    }
 @endphp
 
 @if($span)
@@ -54,13 +59,13 @@
                 {{ $span->name }}
             </a>
 
-            @if($span->type_id === 'thing' && $span->getCreator())
+            @if($span->type_id === 'thing' && $creator)
                 <!-- Creator for things -->
                 <button type="button" class="btn btn-outline-light text-dark inactive" disabled>by</button>
-                <a href="{{ route('spans.show', $span->getCreator()) }}" 
-                   class="btn btn-{{ $span->getCreator()->type_id }}">
-                    <x-icon type="{{ $span->getCreator()->type_id }}" category="span" class="me-1" />
-                    {{ $span->getCreator()->name }}
+                <a href="{{ route('spans.show', $creator) }}"
+                   class="btn btn-{{ $creator->type_id }}">
+                    <x-icon type="{{ $creator->type_id }}" category="span" class="me-1" />
+                    {{ $creator->name }}
                 </a>
             @endif
 

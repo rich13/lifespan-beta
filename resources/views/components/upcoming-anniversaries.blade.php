@@ -248,7 +248,10 @@
                                 @endif
                             @elseif($event['type'] === 'album_anniversary')
                                 @php
-                                    $artist = $event['span']->getCreator();
+                                    $artist = null;
+                                    if ($event['span']->type_id === 'thing' && !empty($event['span']->metadata['creator'])) {
+                                        $artist = \App\Models\Span::find($event['span']->metadata['creator']);
+                                    }
                                 @endphp
                                 @if($event['days_until'] === 0)
                                     <!-- Album anniversary today -->
