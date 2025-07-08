@@ -24,6 +24,10 @@ class Kernel extends HttpKernel
         \App\Http\Middleware\ForceHttpsInProduction::class,
         \App\Http\Middleware\RequestResponseLogger::class,
         \App\Http\Middleware\DatabaseConnectionLogger::class,
+        // Sentry middleware for error tracking
+        \Sentry\Laravel\Http\SetRequestMiddleware::class,
+        \Sentry\Laravel\Http\SetRequestIpMiddleware::class,
+        \Sentry\Laravel\Http\FlushEventsMiddleware::class,
     ];
 
     /**

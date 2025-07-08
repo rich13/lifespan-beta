@@ -192,8 +192,8 @@ Route::get('/error', function(Request $request) {
 Route::post('/sentry-test', function() {
     try {
         if (app()->bound('sentry')) {
-            // Send a test event to Sentry
-            app('sentry')->captureMessage('Test event from ' . app()->environment(), 'info');
+            // Send a test event to Sentry with proper Severity object
+            app('sentry')->captureMessage('Test event from ' . app()->environment(), \Sentry\Severity::info());
             
             return response()->json([
                 'status' => 'success',
@@ -410,6 +410,9 @@ Route::middleware('web')->group(function () {
         Route::delete('/sets/{set}/remove-item', [\App\Http\Controllers\SetsController::class, 'removeItem'])->name('sets.remove-item');
         // Sets modal routes
         Route::post('/sets/{set}/items', [\App\Http\Controllers\SetsController::class, 'toggleItem'])->name('sets.toggle-item');
+        
+        // AI YAML Generator for authenticated users (for modal use)
+        Route::post('/ai-yaml-generator/generate', [\App\Http\Controllers\AiYamlController::class, 'generatePersonYaml'])->name('ai-yaml-generator.generate');
 
         // Admin routes
         Route::middleware('admin')->prefix('admin')->name('admin.')->group(function () {
@@ -672,6 +675,16 @@ Route::middleware('web')->group(function () {
                     ->name('index');
                 Route::get('/stats', [App\Http\Controllers\Admin\SystemHistoryController::class, 'stats'])
                     ->name('stats');
+            });
+
+            // Slack Notifications
+            Route::prefix('slack-notifications')->name('slack-notifications.')->group(function () {
+                Route::get('/', [App\Http\Controllers\Admin\SlackNotificationController::class, 'index'])
+                    ->name('index');
+                Route::post('/test', [App\Http\Controllers\Admin\SlackNotificationController::class, 'test'])
+                    ->name('test');
+                Route::get('/status', [App\Http\Controllers\Admin\SlackNotificationController::class, 'status'])
+                    ->name('status');
             });
 
 
