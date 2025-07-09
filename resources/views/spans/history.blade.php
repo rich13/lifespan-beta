@@ -7,21 +7,15 @@
 @section('page_title')
 <x-breadcrumb :items="[
         [
-            'text' => 'Spans',
-            'url' => route('spans.index'),
-            'icon' => 'view',
-            'icon_category' => 'action'
+            'text' => 'History',
+            'icon' => $span->type_id,
+            'icon_category' => 'span'
         ],
         [
             'text' => $span->getDisplayTitle(),
             'url' => route('spans.show', $span),
             'icon' => 'view',
             'icon_category' => 'action'
-        ],
-        [
-            'text' => 'History',
-            'icon' => $span->type_id,
-            'icon_category' => 'span'
         ]
     ]" />
 @endsection

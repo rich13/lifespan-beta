@@ -379,10 +379,12 @@ Route::middleware('web')->group(function () {
 
         // New POST route for creating a new span from YAML
         Route::post('/yaml-create', [\App\Http\Controllers\SpanController::class, 'createFromYaml'])->name('spans.yaml-create');
+    });
 
-        // Span version history
-        Route::get('/{span}/history', [\App\Http\Controllers\SpanController::class, 'history'])->name('spans.history');
-        Route::get('/{span}/history/{version}', [\App\Http\Controllers\SpanController::class, 'showVersion'])->name('spans.history.version');
+    // Span version history (using /history/:span to avoid conflicts with connection routes)
+    Route::middleware('span.access')->group(function () {
+        Route::get('/history/{span}', [\App\Http\Controllers\SpanController::class, 'history'])->name('spans.history');
+        Route::get('/history/{span}/{version}', [\App\Http\Controllers\SpanController::class, 'showVersion'])->name('spans.history.version');
     });
 
     // Sets routes with access control
