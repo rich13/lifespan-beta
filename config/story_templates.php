@@ -17,6 +17,7 @@ return [
             ],
             'age' => [
                 'template' => '{subject} {is_verb} {age} years old.',
+                'deceased_template' => '{subject} lived to the age of {age}.',
                 'data_methods' => [
                     'subject' => 'getPronoun',
                     'is_verb' => 'getIsVerb',

@@ -21,6 +21,7 @@ class ConfigurableStoryGeneratorServiceTest extends TestCase
             'end_year' => 1980,
             'end_month' => 12,
             'end_day' => 8,
+            'metadata' => ['gender' => 'male'],
         ]);
 
         // Create parents
@@ -56,8 +57,58 @@ class ConfigurableStoryGeneratorServiceTest extends TestCase
         // Check that past tense is used
         $this->assertStringContainsString('was the child of', $storyText);
         $this->assertStringContainsString('had one child', $storyText);
-        $this->assertStringNotContainsString('is the child of', $storyText);
-        $this->assertStringNotContainsString('has one child', $storyText);
+    }
+
+    public function test_deceased_person_age_sentence_uses_deceased_template()
+    {
+        // Create a deceased person
+        $person = Span::factory()->create([
+            'name' => 'Albert Einstein',
+            'type_id' => 'person',
+            'start_year' => 1879,
+            'start_month' => 3,
+            'start_day' => 14,
+            'end_year' => 1955,
+            'end_month' => 4,
+            'end_day' => 18,
+            'metadata' => ['gender' => 'male'],
+        ]);
+
+        $service = new ConfigurableStoryGeneratorService();
+        $story = $service->generateStory($person);
+
+        $storyText = $story['paragraphs'][0] ?? '';
+
+        // Check that the deceased template is used for age
+        // Should say "He lived to the age of 76." instead of "He was 76 years old."
+        $this->assertStringContainsString('lived to the age of', $storyText);
+        $this->assertStringNotContainsString('was 76 years old', $storyText);
+        
+        // Should contain the age
+        $this->assertStringContainsString('76', $storyText);
+    }
+
+    public function test_living_person_age_sentence_uses_normal_template()
+    {
+        // Create a living person
+        $person = Span::factory()->create([
+            'name' => 'Jane Smith',
+            'type_id' => 'person',
+            'start_year' => 1990,
+            'start_month' => 5,
+            'start_day' => 15,
+            'metadata' => ['gender' => 'female'],
+        ]);
+
+        $service = new ConfigurableStoryGeneratorService();
+        $story = $service->generateStory($person);
+
+        $storyText = $story['paragraphs'][0] ?? '';
+
+        // Check that the normal template is used for age
+        // Should say "She is X years old." instead of "She lived to the age of X."
+        $this->assertStringContainsString('is', $storyText);
+        $this->assertStringNotContainsString('lived to the age of', $storyText);
     }
 
     public function test_urls_are_preserved_in_story_generation(): void

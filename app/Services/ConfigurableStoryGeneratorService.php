@@ -93,7 +93,7 @@ class ConfigurableStoryGeneratorService
                 $sentenceDebug['has_required_data'] = $hasRequiredData;
                 
                 if ($hasRequiredData) {
-                    $selectedTemplate = $this->selectTemplate($sentenceConfig, $data);
+                    $selectedTemplate = $this->selectTemplate($sentenceConfig, $data, $span);
                     $sentenceDebug['selected_template'] = $selectedTemplate;
                     
                     $sentence = $this->replacePlaceholders($selectedTemplate, $data);
@@ -192,7 +192,7 @@ class ConfigurableStoryGeneratorService
             return null;
         }
 
-        $template = $this->selectTemplate($sentenceConfig, $data);
+        $template = $this->selectTemplate($sentenceConfig, $data, $span);
         
         return $this->replacePlaceholders($template, $data);
     }
@@ -249,7 +249,7 @@ class ConfigurableStoryGeneratorService
     /**
      * Select the appropriate template based on data
      */
-    protected function selectTemplate(array $sentenceConfig, array $data): string
+    protected function selectTemplate(array $sentenceConfig, array $data, Span $span): string
     {
         // Check for single/empty templates first
         if (isset($sentenceConfig['empty_template']) && $this->isEmptyData($data)) {
@@ -258,6 +258,11 @@ class ConfigurableStoryGeneratorService
         
         if (isset($sentenceConfig['single_template']) && $this->isSingleData($data)) {
             return $sentenceConfig['single_template'];
+        }
+        
+        // Check for deceased template (for age sentences when person is dead)
+        if (isset($sentenceConfig['deceased_template']) && $this->shouldUseDeceasedTemplate($data, $span)) {
+            return $sentenceConfig['deceased_template'];
         }
         
         // Check for fallback template
@@ -1264,6 +1269,18 @@ class ConfigurableStoryGeneratorService
         // Check for any missing data that would make the template awkward
         $missingData = $this->getMissingData($data);
         return !empty($missingData);
+    }
+
+    /**
+     * Check if we should use the deceased template for age sentences
+     */
+    protected function shouldUseDeceasedTemplate(array $data, Span $span): bool
+    {
+        // For age sentences, we should use the deceased template if the person is dead
+        // We can determine this by checking if the span has an end date and is not ongoing
+        return $span->type_id === 'person' && 
+               $span->end_year !== null && 
+               !$span->is_ongoing;
     }
 
     /**
