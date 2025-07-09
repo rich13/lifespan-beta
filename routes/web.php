@@ -361,9 +361,20 @@ Route::middleware('web')->group(function () {
 
         // Public routes with span access control
         Route::middleware('span.access')->group(function () {
+            // Primary route structure - handle both span show and connections
             Route::get('/', [SpanController::class, 'index'])->name('spans.index');
-            Route::get('/{span}', [SpanController::class, 'show'])->name('spans.show');
+            Route::get('/{subject}', [SpanController::class, 'show'])->name('spans.show');
+            
+            // Specific span routes (must come before connection routes to avoid conflicts)
             Route::get('/{span}/story', [SpanController::class, 'story'])->name('spans.story');
+            
+            // Connection routes
+            Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])->name('spans.connections');
+            Route::get('/{subject}/{predicate}/{object}', [SpanController::class, 'showConnection'])->name('spans.connection');
+            
+            // Legacy connection type routes
+            Route::get('/{span}/connection_types', [SpanController::class, 'connectionTypes'])->name('spans.connection-types.index');
+            Route::get('/{span}/connection_types/{connectionType}', [SpanController::class, 'connectionsByType'])->name('spans.connection-types.show');
         });
 
         // New POST route for creating a new span from YAML

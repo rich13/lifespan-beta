@@ -405,6 +405,30 @@ class Span extends Model
     }
 
     /**
+     * Resolve the model for route model binding.
+     * Supports both UUID and slug resolution.
+     */
+    public function resolveRouteBinding($value, $field = null)
+    {
+        // If no field is specified, try to resolve by both UUID and slug
+        if ($field === null) {
+            // First check if the value looks like a UUID
+            if (Str::isUuid($value)) {
+                $span = static::where('id', $value)->first();
+                if ($span) {
+                    return $span;
+                }
+            }
+            
+            // If not a UUID or not found by UUID, try to find by slug
+            return static::where('slug', $value)->first();
+        }
+        
+        // If a specific field is provided, use the default behavior
+        return parent::resolveRouteBinding($value, $field);
+    }
+
+    /**
      * Load capabilities specific to this span's type
      */
     protected function loadTypeCapabilities()
@@ -696,7 +720,7 @@ class Span extends Model
         }
 
         $cacheKey = "containing_album_{$this->id}";
-        return \Cache::remember($cacheKey, 300, function () {
+        return \Cache::remember($cacheKey, 604800, function () {
             return $this->connectionsAsObject()
                 ->whereHas('type', function ($query) {
                     $query->where('type', 'contains');
@@ -1357,7 +1381,7 @@ class Span extends Model
     {
         $user = auth()->user();
         $cacheKey = "containing_sets_{$this->id}_" . ($user?->id ?? 'guest');
-        return \Cache::remember($cacheKey, 300, function () {
+        return \Cache::remember($cacheKey, 604800, function () {
             return $this->connectionsAsObject()
                 ->whereHas('type', function ($query) {
                     $query->where('type', 'contains');
@@ -1380,7 +1404,7 @@ class Span extends Model
             return false;
         }
         $cacheKey = "in_set_{$this->id}_{$set->id}";
-        return \Cache::remember($cacheKey, 300, function () use ($set) {
+        return \Cache::remember($cacheKey, 604800, function () use ($set) {
             return $this->connectionsAsObject()
                 ->where('parent_id', $set->id)
                 ->whereHas('type', function ($query) {
@@ -1400,7 +1424,7 @@ class Span extends Model
         }
         $user = auth()->user();
         $cacheKey = "set_contents_{$this->id}_" . ($user?->id ?? 'guest');
-        return \Cache::remember($cacheKey, 300, function () {
+        return \Cache::remember($cacheKey, 604800, function () {
             return $this->connectionsAsSubject()
                 ->whereHas('type', function ($query) {
                     $query->where('type', 'contains');
@@ -1485,7 +1509,7 @@ class Span extends Model
             return false;
         }
         $cacheKey = "contains_item_{$this->id}_{$item->id}";
-        return \Cache::remember($cacheKey, 300, function () use ($item) {
+        return \Cache::remember($cacheKey, 604800, function () use ($item) {
             return $this->connectionsAsSubject()
                 ->where('child_id', $item->id)
                 ->whereHas('type', function ($query) {
