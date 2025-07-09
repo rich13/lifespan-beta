@@ -37,8 +37,8 @@ class SpanController extends Controller
      */
     public function __construct(YamlSpanService $yamlService)
     {
-        // Require auth for all routes except show, index, search, and desertIslandDiscs
-        $this->middleware('auth')->except(['show', 'index', 'search', 'desertIslandDiscs']);
+        // Require auth for all routes except show, index, search, desertIslandDiscs, connectionTypes, connectionsByType, showConnection, and listConnections
+        $this->middleware('auth')->except(['show', 'index', 'search', 'desertIslandDiscs', 'connectionTypes', 'connectionsByType', 'showConnection', 'listConnections']);
         $this->yamlService = $yamlService;
     }
 
@@ -411,51 +411,52 @@ class SpanController extends Controller
     /**
      * Display the specified span.
      */
-    public function show(Request $request, Span $span): View|\Illuminate\Http\RedirectResponse
+    public function show(Request $request, Span $subject): View|\Illuminate\Http\RedirectResponse
     {
         try {
             // Basic debug info
             \Illuminate\Support\Facades\Log::info('Span Show Request', [
                 'route_param' => $request->segment(2),
-                'span_id' => $span->id,
-                'span_type' => $span->type_id,
+                'span_id' => $subject->id,
+                'span_type' => $subject->type_id,
                 'is_uuid' => Str::isUuid($request->segment(2)),
-                'slug' => $span->slug
+                'slug' => $subject->slug
             ]);
             
             // If we're accessing via UUID and a slug exists, redirect to the slug URL
             $routeParam = $request->segment(2); // Get the actual URL segment
             
-            if (Str::isUuid($routeParam) && $span->slug) {
+            if (Str::isUuid($routeParam) && $subject->slug) {
                 \Illuminate\Support\Facades\Log::info('Redirecting to slug URL', [
                     'from' => $routeParam,
-                    'to' => $span->slug
+                    'to' => $subject->slug
                 ]);
                 
                 return redirect()
-                    ->route('spans.show', ['span' => $span->slug], 301)
+                    ->route('spans.show', ['subject' => $subject->slug], 301)
                     ->with('status', session('status')); // Preserve flash message
             }
 
             // Check if the span is private and the user is not authenticated
-            if ($span->access_level !== 'public' && !Auth::check()) {
+            if ($subject->access_level !== 'public' && !Auth::check()) {
                 return redirect()->route('login');
             }
 
             // Check if this is a person and they have a Desert Island Discs set
             $desertIslandDiscsSet = null;
-            if ($span->type_id === 'person') {
+            if ($subject->type_id === 'person') {
                 try {
-                    $desertIslandDiscsSet = Span::getDesertIslandDiscsSet($span);
+                    $desertIslandDiscsSet = Span::getDesertIslandDiscsSet($subject);
                 } catch (\Exception $e) {
                     // Log the error but don't fail the page
                     Log::warning('Failed to get Desert Island Discs set for person', [
-                        'person_id' => $span->id,
+                        'person_id' => $subject->id,
                         'error' => $e->getMessage()
                     ]);
                 }
             }
 
+            $span = $subject; // For view compatibility
             return view('spans.show', compact('span', 'desertIslandDiscsSet'));
         } catch (\Exception $e) {
             // Log the error
@@ -1912,5 +1913,157 @@ class SpanController extends Controller
         ]);
 
         return view('desert-island-discs.index', compact('sets'));
+    }
+
+    /**
+     * Display all connection types for a span.
+     */
+    public function connectionTypes(Request $request, Span $span): View
+    {
+        // Get all connection types that have connections with this span
+        $connectionTypes = ConnectionType::whereHas('connections', function($query) use ($span) {
+            $query->where('parent_id', $span->id)
+                  ->orWhere('child_id', $span->id);
+        })->withCount(['connections' => function($query) use ($span) {
+            $query->where('parent_id', $span->id)
+                  ->orWhere('child_id', $span->id);
+        }])->orderBy('type')->get();
+
+        return view('spans.connection-types.index', compact('span', 'connectionTypes'));
+    }
+
+    /**
+     * Display connections of a specific type for a span.
+     */
+    public function connectionsByType(Request $request, Span $span, ConnectionType $connectionType): View
+    {
+        // Get connections of this type involving the span
+        $connections = Connection::where('type_id', $connectionType->type)
+            ->where(function($query) use ($span) {
+                $query->where('parent_id', $span->id)
+                      ->orWhere('child_id', $span->id);
+            })
+            ->with(['subject', 'object', 'connectionSpan'])
+            ->orderBy('created_at', 'desc')
+            ->paginate(20);
+
+        // Transform connections to show the other span and relationship direction
+        $connections->getCollection()->transform(function($connection) use ($span) {
+            $isParent = $connection->parent_id === $span->id;
+            $otherSpan = $isParent ? $connection->object : $connection->subject;
+            $predicate = $isParent ? $connection->type->forward_predicate : $connection->type->inverse_predicate;
+            
+            $connection->other_span = $otherSpan;
+            $connection->is_parent = $isParent;
+            $connection->predicate = $predicate;
+            
+            return $connection;
+        });
+
+        return view('spans.connection-types.show', compact('span', 'connectionType', 'connections'));
+    }
+
+    /**
+     * Display a specific connection between a subject and object of a particular type.
+     */
+    public function showConnection(Request $request, Span $subject, string $predicate, Span $object): View
+    {
+        // Find the connection type based on the predicate
+        $predicateWithSpaces = str_replace('-', ' ', $predicate);
+        $connectionType = ConnectionType::where('forward_predicate', $predicateWithSpaces)
+            ->orWhere('inverse_predicate', $predicateWithSpaces)
+            ->first();
+
+        if (!$connectionType) {
+            abort(404, 'Connection type not found');
+        }
+
+        // Find the connection between the subject and object
+        $connection = Connection::where('type_id', $connectionType->type)
+            ->where(function($query) use ($subject, $object) {
+                $query->where(function($q) use ($subject, $object) {
+                    $q->where('parent_id', $subject->id)
+                      ->where('child_id', $object->id);
+                })->orWhere(function($q) use ($subject, $object) {
+                    $q->where('parent_id', $object->id)
+                      ->where('child_id', $subject->id);
+                });
+            })
+            ->first();
+
+        if (!$connection) {
+            abort(404, 'Connection not found');
+        }
+
+        // Get the connection span (the span that represents this connection)
+        $connectionSpan = $connection->connectionSpan;
+        if (!$connectionSpan) {
+            abort(404, 'Connection span not found');
+        }
+
+        // Check if the connection span is private and the user is not authenticated
+        if ($connectionSpan->access_level !== 'public' && !Auth::check()) {
+            return redirect()->route('login');
+        }
+
+        // Check if this is a person and they have a Desert Island Discs set
+        $desertIslandDiscsSet = null;
+        if ($connectionSpan->type_id === 'person') {
+            try {
+                $desertIslandDiscsSet = Span::getDesertIslandDiscsSet($connectionSpan);
+            } catch (\Exception $e) {
+                // Log the error but don't fail the page
+                Log::warning('Failed to get Desert Island Discs set for person', [
+                    'person_id' => $connectionSpan->id,
+                    'error' => $e->getMessage()
+                ]);
+            }
+        }
+
+        // Use the same view as the span show page, showing the connection span
+        $span = $connectionSpan; // For view compatibility
+        return view('spans.show', compact('span', 'desertIslandDiscsSet', 'subject', 'object', 'connectionType'));
+    }
+
+    /**
+     * Display all connections of a specific type for a subject.
+     */
+    public function listConnections(Request $request, Span $subject, string $predicate): View|\Illuminate\Http\RedirectResponse
+    {
+        // Find the connection type based on the predicate
+        $predicateWithSpaces = str_replace('-', ' ', $predicate);
+        $connectionType = ConnectionType::where('forward_predicate', $predicateWithSpaces)
+            ->orWhere('inverse_predicate', $predicateWithSpaces)
+            ->first();
+
+        if (!$connectionType) {
+            // If the predicate is not a valid connection type, redirect to the span show page
+            return redirect()->route('spans.show', $subject);
+        }
+
+        // Get all connections of this type involving the subject
+        $connections = Connection::where('type_id', $connectionType->type)
+            ->where(function($query) use ($subject) {
+                $query->where('parent_id', $subject->id)
+                      ->orWhere('child_id', $subject->id);
+            })
+            ->with(['subject', 'object', 'connectionSpan'])
+            ->orderBy('created_at', 'desc')
+            ->paginate(20);
+
+        // Transform connections to show the other span and relationship direction
+        $connections->getCollection()->transform(function($connection) use ($subject, $connectionType) {
+            $isParent = $connection->parent_id === $subject->id;
+            $otherSpan = $isParent ? $connection->object : $connection->subject;
+            $predicate = $isParent ? $connectionType->forward_predicate : $connectionType->inverse_predicate;
+            
+            $connection->other_span = $otherSpan;
+            $connection->is_parent = $isParent;
+            $connection->predicate = $predicate;
+            
+            return $connection;
+        });
+
+        return view('spans.connections', compact('subject', 'connectionType', 'connections', 'predicate'));
     }
 }
