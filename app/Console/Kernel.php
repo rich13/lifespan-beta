@@ -13,6 +13,13 @@ class Kernel extends ConsoleKernel
     protected function schedule(Schedule $schedule): void
     {
         // $schedule->command('inspire')->hourly();
+        
+        // Warm Desert Island Discs cache daily at 2 AM
+        $schedule->command('cache:warm-desert-island-discs')
+            ->daily()
+            ->at('02:00')
+            ->withoutOverlapping()
+            ->runInBackground();
     }
 
     /**
@@ -27,6 +34,7 @@ class Kernel extends ConsoleKernel
         $this->commands = [
             Commands\ImportYaml::class,
             Commands\DatabaseCreateCommand::class,
+            Commands\WarmDesertIslandDiscsCache::class,
         ];
     }
 }

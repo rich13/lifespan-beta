@@ -49,7 +49,7 @@
                 @php
                     $cacheKey = 'desert_island_discs_set_card_' . $set->id . '_' . ($set->updated_at ?? '0');
                 @endphp
-                {!! \Cache::remember($cacheKey, 300, function() use ($set) {
+                {!! \Cache::remember($cacheKey, 604800, function() use ($set) {
                     return view('components.spans.partials.desert-island-discs-set-card', ['set' => $set])->render();
                 }) !!}
             @endforeach
