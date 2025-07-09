@@ -67,7 +67,7 @@
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <h2 class="card-title h5 mb-0">Permissions</h2>
-                        <a href="{{ route('admin.spans.permissions', $span) }}" 
+                        <a href="{{ route('admin.spans.permissions.edit', $span) }}" 
                            class="btn btn-sm btn-outline-primary">Manage Permissions</a>
                     </div>
                     <dl class="row mb-0">
@@ -141,12 +141,16 @@
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <h2 class="card-title h5 mb-0">Group Members</h2>
-                        <a href="{{ route('admin.spans.access', $span) }}" 
+                        <a href="{{ route('admin.spans.access.edit', $span) }}" 
                            class="btn btn-sm btn-outline-primary">Manage Access</a>
                     </div>
-                    @if($span->groupMembers->count() > 0)
+                    {{-- TODO: Implement group members display after group support is added --}}
+                    @php
+                        $groupMembers = $span->groupMembers ?? collect();
+                    @endphp
+                    @if($groupMembers->count() > 0)
                         <ul class="list-unstyled mb-0">
-                            @foreach($span->groupMembers as $member)
+                            @foreach($groupMembers as $member)
                                 <li class="mb-2">
                                     <a href="{{ route('admin.users.show', $member) }}" 
                                        class="text-decoration-none">

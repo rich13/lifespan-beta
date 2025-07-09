@@ -208,9 +208,9 @@
                     <button type="submit" class="btn btn-primary">Save Changes</button>
                     
                     <div>
-                        <a href="{{ route('admin.spans.permissions', $span) }}" 
+                        <a href="{{ route('admin.spans.permissions.edit', $span) }}" 
                            class="btn btn-outline-primary">Manage Permissions</a>
-                        <a href="{{ route('admin.spans.access', $span) }}" 
+                        <a href="{{ route('admin.spans.access.edit', $span) }}" 
                            class="btn btn-outline-primary">Manage Access</a>
                     </div>
                 </div>

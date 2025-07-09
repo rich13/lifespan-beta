@@ -60,7 +60,7 @@
             <div class="mt-4 pt-3 border-top">
                 <small class="text-muted">
                     <i class="bi bi-magic me-1"></i>
-                    Yes, this was automagically generated. There are bugs... <i class="bi bi-bug text-danger"></i>
+                    Yes, this was automagically generated. There is grammar bugs... <i class="bi bi-bug text-danger"></i>
                 </small>
             </div>
         @endif
