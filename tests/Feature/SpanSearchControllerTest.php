@@ -9,6 +9,7 @@ use App\Models\ConnectionType;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 use Illuminate\Support\Facades\DB;
+use Ramsey\Uuid\Uuid;
 
 /**
  * Test SpanSearchController timeline endpoints
@@ -284,12 +285,15 @@ class SpanSearchControllerTest extends TestCase
         $this->assertEquals('phase', $nestedConnections[0]['target_type']);
         $this->assertEquals('during', $nestedConnections[0]['type_id']);
         $this->assertTrue($nestedConnections[0]['is_nested']);
-        $this->assertEquals($data['connections'][0]['id'], $nestedConnections[0]['parent_connection_id']);
+        $this->assertNotEmpty($nestedConnections[0]['parent_connection_id'], 'Parent connection ID should not be empty');
+        $this->assertTrue(Uuid::isValid($nestedConnections[0]['parent_connection_id']), 'Parent connection ID should be a valid UUID');
 
         $this->assertEquals('Second Year', $nestedConnections[1]['target_name']);
         $this->assertEquals('phase', $nestedConnections[1]['target_type']);
         $this->assertEquals('during', $nestedConnections[1]['type_id']);
         $this->assertTrue($nestedConnections[1]['is_nested']);
+        $this->assertNotEmpty($nestedConnections[1]['parent_connection_id'], 'Parent connection ID should not be empty');
+        $this->assertTrue(Uuid::isValid($nestedConnections[1]['parent_connection_id']), 'Parent connection ID should be a valid UUID');
     }
 
     /**

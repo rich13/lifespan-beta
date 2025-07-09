@@ -173,12 +173,12 @@ class SpanViewTest extends TestCase
         ]);
 
         // Access via UUID should redirect to slug
-        $response = $this->get(route('spans.show', ['span' => $span->id]));
+        $response = $this->get(route('spans.show', ['subject' => $span->id]));
         $response->assertStatus(301);
-        $response->assertRedirect(route('spans.show', ['span' => $span->slug]));
+        $response->assertRedirect(route('spans.show', ['subject' => $span->slug]));
 
         // Following the redirect should work
-        $response = $this->get(route('spans.show', ['span' => $span->slug]));
+        $response = $this->get(route('spans.show', ['subject' => $span->slug]));
         $response->assertStatus(200);
         $response->assertViewIs('spans.show');
     }
@@ -199,7 +199,7 @@ class SpanViewTest extends TestCase
         ]);
 
         // Access via slug should work directly without redirect
-        $response = $this->get(route('spans.show', ['span' => $span->slug]));
+        $response = $this->get(route('spans.show', ['subject' => $span->slug]));
         $response->assertStatus(200);
         $response->assertViewIs('spans.show');
     }
@@ -210,7 +210,7 @@ class SpanViewTest extends TestCase
     public function test_invalid_slug_returns_404(): void
     {
         // Try to access a non-existent slug
-        $response = $this->get(route('spans.show', ['span' => 'non-existent-slug']));
+        $response = $this->get(route('spans.show', ['subject' => 'non-existent-slug']));
         $response->assertStatus(404);
     }
 

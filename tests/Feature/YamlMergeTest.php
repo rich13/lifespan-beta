@@ -19,8 +19,11 @@ class YamlMergeTest extends TestCase
         // Create a user
         $user = User::factory()->create();
         
-        // Create an existing span
-        $existingSpan = Span::create([
+        // Act as the user first
+        $this->actingAs($user);
+        
+        // Create an existing span using factory
+        $existingSpan = Span::factory()->create([
             'name' => 'John Doe',
             'type_id' => 'person',
             'state' => 'placeholder',
@@ -30,10 +33,22 @@ class YamlMergeTest extends TestCase
             'start_day' => 1,
             'owner_id' => $user->id,
             'updater_id' => $user->id,
+            'access_level' => 'private',
         ]);
 
-        // Act as the user
-        $this->actingAs($user);
+        // Verify the span was created correctly
+        $this->assertEquals($user->id, $existingSpan->owner_id, 'Span should be owned by the test user');
+        
+        // Debug: Check span properties
+        $this->assertEquals('private', $existingSpan->access_level, 'Span should be private by default');
+        $this->assertEquals($user->id, $existingSpan->owner_id, 'Span owner should match user');
+        
+        // Debug: Check policy directly
+        $policy = app(\App\Policies\SpanPolicy::class);
+        $canUpdate = $policy->update($user, $existingSpan);
+        $this->assertTrue($canUpdate, 'Policy should allow owner to update private span');
+        
+        $this->assertTrue(auth()->user()->can('update', $existingSpan), 'User should have update permission for the span');
 
         // Create YAML content
         $yamlContent = "name: 'John Doe'
@@ -67,6 +82,9 @@ sources:
         $foundSpan = $yamlSpanService->findExistingSpan($data['name'], $data['type']);
         
         if ($foundSpan) {
+            // Debug: Check if user has permission to update the span
+            $this->assertTrue(auth()->user()->can('update', $foundSpan), 'User should have update permission for the span');
+            
             // The span should be found, so let's check if the view has the merge section
             $response->assertSee('Existing Span Detected');
             $response->assertSee('John Doe');
@@ -81,8 +99,11 @@ sources:
         // Create a user
         $user = User::factory()->create();
         
-        // Create an existing span
-        $existingSpan = Span::create([
+        // Act as the user first
+        $this->actingAs($user);
+        
+        // Create an existing span using factory
+        $existingSpan = Span::factory()->create([
             'name' => 'John Doe',
             'type_id' => 'person',
             'state' => 'placeholder',
@@ -92,10 +113,8 @@ sources:
             'start_day' => 1,
             'owner_id' => $user->id,
             'updater_id' => $user->id,
+            'access_level' => 'private',
         ]);
-
-        // Act as the user
-        $this->actingAs($user);
 
         // Create YAML content with new data
         $yamlContent = "name: 'John Doe'
@@ -151,8 +170,11 @@ sources:
         // Create a user
         $user = User::factory()->create();
         
-        // Create an existing span with connections
-        $existingSpan = Span::create([
+        // Act as the user first
+        $this->actingAs($user);
+        
+        // Create an existing span with connections using factory
+        $existingSpan = Span::factory()->create([
             'name' => 'John Doe',
             'type_id' => 'person',
             'state' => 'complete',
@@ -161,10 +183,11 @@ sources:
             'start_day' => 1,
             'owner_id' => $user->id,
             'updater_id' => $user->id,
+            'access_level' => 'private',
         ]);
 
-        // Create another span for connection
-        $parentSpan = Span::create([
+        // Create another span for connection using factory
+        $parentSpan = Span::factory()->create([
             'name' => 'Jane Doe',
             'type_id' => 'person',
             'state' => 'complete',
@@ -181,8 +204,8 @@ sources:
             $this->fail('Family connection type not found in database');
         }
         
-        // Create a connection span first
-        $connectionSpan = \App\Models\Span::create([
+        // Create a connection span first using factory
+        $connectionSpan = Span::factory()->create([
             'name' => "Family connection between {$existingSpan->name} and {$parentSpan->name}",
             'type_id' => 'connection',
             'state' => 'placeholder',

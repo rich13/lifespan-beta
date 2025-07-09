@@ -21,8 +21,29 @@ class SimpleDesertIslandDiscsImportTest extends TestCase
     {
         parent::setUp();
         
+        // Clean up any existing data that might interfere with tests
+        Span::where('name', 'LIKE', '%John Smith%')->delete();
+        Span::where('name', 'LIKE', '%Charles Dickens%')->delete();
+        Span::where('name', 'LIKE', '%A Tale of Two Cities%')->delete();
+        Span::where('name', 'LIKE', '%The Beatles%')->delete();
+        Span::where('name', 'LIKE', '%Hey Jude%')->delete();
+        Span::where('name', 'LIKE', '%Desert Island Discs%')->delete();
+        
         $this->admin = User::factory()->create(['is_admin' => true]);
         // No need to create connection types here; rely on seeders
+    }
+
+    protected function tearDown(): void
+    {
+        // Clean up test data after each test
+        Span::where('name', 'LIKE', '%John Smith%')->delete();
+        Span::where('name', 'LIKE', '%Charles Dickens%')->delete();
+        Span::where('name', 'LIKE', '%A Tale of Two Cities%')->delete();
+        Span::where('name', 'LIKE', '%The Beatles%')->delete();
+        Span::where('name', 'LIKE', '%Hey Jude%')->delete();
+        Span::where('name', 'LIKE', '%Desert Island Discs%')->delete();
+        
+        parent::tearDown();
     }
 
     public function test_admin_can_access_simple_did_import_page()
