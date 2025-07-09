@@ -28,7 +28,9 @@
 @if($parentConnections->isNotEmpty() || $childConnections->isNotEmpty())
     <div class="card mb-4">
         <div class="card-body">
-            <h2 class="card-title h5 mb-3">Connections <small class="text-muted">(will become contextual)</small></h2>
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2 class="card-title h5 mb-0">Connections <small class="text-muted">(will become contextual)</small></h2>
+            </div>
             
             @if($parentConnections->isNotEmpty())
             <h3 class="h6 mb-2"><i class="bi bi-box-arrow-in-right me-2"></i>From this span</h3>

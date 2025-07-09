@@ -7,20 +7,53 @@
 --}}
 
 @section('page_title')
-    <x-breadcrumb :items="[
-        [
-            'text' => 'Spans',
-            'url' => route('spans.index'),
-            'icon' => 'view',
-            'icon_category' => 'action'
-        ],
-        [
-            'text' => $span->getDisplayTitle(),
-            'url' => route('spans.show', $span),
-            'icon' => $span->type_id,
-            'icon_category' => 'span'
-        ]
-    ]" />
+    @php
+        $breadcrumbItems = [
+            [
+                'text' => 'Spans',
+                'url' => route('spans.index'),
+                'icon' => 'view',
+                'icon_category' => 'action'
+            ]
+        ];
+
+        // If we have connection context from the controller, use it
+        if (isset($connectionType) && isset($subject) && isset($object)) {
+            // Add subject to breadcrumb
+            $breadcrumbItems[] = [
+                'text' => $subject->getDisplayTitle(),
+                'url' => route('spans.show', $subject),
+                'icon' => $subject->type_id,
+                'icon_category' => 'span'
+            ];
+            
+            // Add predicate to breadcrumb
+            $breadcrumbItems[] = [
+                'text' => $connectionType->forward_predicate,
+                'url' => route('spans.connections', ['subject' => $subject, 'predicate' => str_replace(' ', '-', $connectionType->forward_predicate)]),
+                'icon' => $connectionType->type_id,
+                'icon_category' => 'connection'
+            ];
+            
+            // Add object to breadcrumb
+            $breadcrumbItems[] = [
+                'text' => $object->getDisplayTitle(),
+                'url' => route('spans.show', $object),
+                'icon' => $object->type_id,
+                'icon_category' => 'span'
+            ];
+        } else {
+            // Regular span - just add the span itself
+            $breadcrumbItems[] = [
+                'text' => $span->getDisplayTitle(),
+                'url' => route('spans.show', $span),
+                'icon' => $span->type_id,
+                'icon_category' => 'span'
+            ];
+        }
+    @endphp
+    
+    <x-breadcrumb :items="$breadcrumbItems" />
 @endsection
 
 @section('page_tools')

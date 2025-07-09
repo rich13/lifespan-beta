@@ -38,7 +38,7 @@
     <div class="btn-group btn-group-sm" role="group">
         <!-- Connection type icon button -->
         @if($connection->connectionSpan)
-            <a href="{{ route('spans.show', $connection->connectionSpan) }}" 
+            <a href="{{ route('spans.connection', ['subject' => $connection->parent, 'predicate' => str_replace(' ', '-', $connection->type->forward_predicate), 'object' => $connection->child]) }}" 
                class="btn btn-outline-{{ $connection->type_id }}" 
                style="min-width: 40px;"
                title="View connection details"
@@ -67,9 +67,10 @@
         </a>
         
         <!-- Predicate -->
-        <button type="button" class="btn btn-{{ $connection->type_id }}">
+        <a href="{{ route('spans.connections', ['subject' => $connection->parent, 'predicate' => str_replace(' ', '-', $connection->type->forward_predicate)]) }}" 
+           class="btn btn-{{ $connection->type_id }}">
             {{ $connection->type->forward_predicate }}
-        </button>
+        </a>
         
         <!-- Object span name -->
         @if($connection->child)
