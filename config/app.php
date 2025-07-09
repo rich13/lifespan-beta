@@ -113,6 +113,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Testing Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Configuration options specific to the testing environment.
+    |
+    */
+
+    'enable_versioning_in_tests' => env('ENABLE_VERSIONING_IN_TESTS', true),
+    'test_user_id' => env('TEST_USER_ID', 1),
+
+    /*
+    |--------------------------------------------------------------------------
     | Encryption Key
     |--------------------------------------------------------------------------
     |

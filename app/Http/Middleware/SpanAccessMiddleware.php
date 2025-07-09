@@ -82,8 +82,8 @@ class SpanAccessMiddleware
             return abort(403, 'This span is private.');
         }
 
-        // For connection type routes (same logic as show route)
-        if (in_array($routeName, ['spans.connection-types.index', 'spans.connection-types.show', 'spans.connection', 'spans.connections'])) {
+        // For connection type routes and history routes (same logic as show route)
+        if (in_array($routeName, ['spans.connection-types.index', 'spans.connection-types.show', 'spans.connection', 'spans.connections', 'spans.history', 'spans.history.version'])) {
             // For the specific connection route, we need to check both subject and object
             if ($routeName === 'spans.connection') {
                 $subject = $request->route('subject');

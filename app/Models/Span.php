@@ -1554,4 +1554,111 @@ class Span extends Model
     {
         return $this->access_level === 'shared' || $this->access_level === 'group';
     }
+
+    /**
+     * Get effective permissions for this span
+     */
+    public function getEffectivePermissions(): array
+    {
+        if ($this->permission_mode === 'inherit' && $this->parent) {
+            return $this->parent->getEffectivePermissions();
+        }
+
+        // For now, return basic permissions based on access level
+        $permissions = [
+            'owner_read' => true,
+            'owner_write' => true,
+            'owner_execute' => true,
+            'group_read' => $this->access_level === 'shared' || $this->access_level === 'public',
+            'group_write' => $this->access_level === 'shared',
+            'group_execute' => $this->access_level === 'shared',
+            'others_read' => $this->access_level === 'public',
+            'others_write' => false,
+            'others_execute' => false,
+        ];
+
+        return $permissions;
+    }
+
+    /**
+     * Get a human-readable string representation of permissions
+     */
+    public function getPermissionsString(): string
+    {
+        $permissions = $this->getEffectivePermissions();
+        
+        $parts = [];
+        if ($permissions['owner_read']) $parts[] = 'owner:r';
+        if ($permissions['owner_write']) $parts[] = 'owner:w';
+        if ($permissions['owner_execute']) $parts[] = 'owner:x';
+        if ($permissions['group_read']) $parts[] = 'group:r';
+        if ($permissions['group_write']) $parts[] = 'group:w';
+        if ($permissions['group_execute']) $parts[] = 'group:x';
+        if ($permissions['others_read']) $parts[] = 'others:r';
+        if ($permissions['others_write']) $parts[] = 'others:w';
+        if ($permissions['others_execute']) $parts[] = 'others:x';
+
+        return implode(', ', $parts) ?: 'no permissions';
+    }
+
+    /**
+     * Set this span to use its own permissions
+     */
+    public function useOwnPermissions(?int $permissions = null): void
+    {
+        $this->permission_mode = 'own';
+        
+        if ($permissions !== null) {
+            // Convert numeric permissions to access level
+            if ($permissions & 0004) { // others read
+                $this->access_level = 'public';
+            } elseif ($permissions & 0040) { // group read
+                $this->access_level = 'shared';
+            } else {
+                $this->access_level = 'private';
+            }
+        }
+        
+        $this->save();
+    }
+
+    /**
+     * Set this span to inherit permissions from its parent
+     */
+    public function inheritPermissions(): void
+    {
+        if (!$this->parent_id) {
+            throw new \InvalidArgumentException('Cannot inherit permissions without a parent');
+        }
+        
+        $this->permission_mode = 'inherit';
+        $this->save();
+    }
+
+    /**
+     * Make this span public
+     */
+    public function makePublic(): void
+    {
+        $this->access_level = 'public';
+        $this->save();
+    }
+
+    /**
+     * Grant permission to a user for this span
+     */
+    public function grantPermission(User $user, string $permissionType): void
+    {
+        // Remove any existing permission of this type for this user
+        $this->permissions()
+            ->where('user_id', $user->id)
+            ->where('permission_type', $permissionType)
+            ->delete();
+
+        // Create new permission
+        $this->permissions()->create([
+            'user_id' => $user->id,
+            'permission_type' => $permissionType
+        ]);
+    }
 } 

@@ -22,7 +22,7 @@ trait Versionable
     {
         static::created(function ($model) {
             // Skip versioning in testing environment unless explicitly enabled
-            if (app()->environment('testing') && !config('app.enable_versioning_in_tests', false)) {
+            if (app()->environment('testing') && !config('app.enable_versioning_in_tests', true)) {
                 return;
             }
             
@@ -36,7 +36,7 @@ trait Versionable
 
         static::updated(function ($model) {
             // Skip versioning in testing environment unless explicitly enabled
-            if (app()->environment('testing') && !config('app.enable_versioning_in_tests', false)) {
+            if (app()->environment('testing') && !config('app.enable_versioning_in_tests', true)) {
                 return;
             }
             
