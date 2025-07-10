@@ -6,7 +6,7 @@ use App\Http\Controllers\FamilyController;
 use App\Http\Controllers\Auth\EmailFirstAuthController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\SpanController as AdminSpanController;
-use App\Http\Controllers\Admin\SpanPermissionsController;
+
 use App\Http\Controllers\Admin\SpanAccessController;
 use App\Http\Controllers\Admin\SpanAccessManagerController;
 use App\Http\Controllers\Admin\UserController;
@@ -248,6 +248,7 @@ Route::middleware('web')->group(function () {
         
         // Protected routes
         Route::middleware('auth')->group(function () {
+            Route::get('/shared-with-me', [SpanController::class, 'sharedWithMe'])->name('spans.shared-with-me');
             Route::get('/create', [SpanController::class, 'create'])->name('spans.create');
             Route::post('/', [SpanController::class, 'store'])->name('spans.store');
             Route::get('/{span}/edit', [SpanController::class, 'edit'])->name('spans.edit');
@@ -558,13 +559,7 @@ Route::middleware('web')->group(function () {
             Route::delete('/spans/{span}', [AdminSpanController::class, 'destroy'])
                 ->name('spans.destroy');
             
-            // Span Permissions
-            Route::get('/spans/{span}/permissions', [SpanPermissionsController::class, 'edit'])
-                ->name('spans.permissions.edit');
-            Route::put('/spans/{span}/permissions', [SpanPermissionsController::class, 'update'])
-                ->name('spans.permissions.update');
-            Route::put('/spans/{span}/permissions/mode', [SpanPermissionsController::class, 'updateMode'])
-                ->name('spans.permissions.mode');
+            // Span Permissions (Legacy - removed in favor of new group-based system)
                 
             // Span Access
             Route::get('/spans/{span}/access', [SpanAccessController::class, 'edit'])
@@ -579,8 +574,14 @@ Route::middleware('web')->group(function () {
                 ->name('span-access.index');
             Route::post('/span-access/{spanId}/make-public', [SpanAccessManagerController::class, 'makePublic'])
                 ->name('span-access.make-public');
+            Route::post('/span-access/{spanId}/make-private', [SpanAccessManagerController::class, 'makePrivate'])
+                ->name('span-access.make-private');
             Route::post('/span-access/make-public-bulk', [SpanAccessManagerController::class, 'makePublicBulk'])
                 ->name('span-access.make-public-bulk');
+            Route::post('/span-access/make-private-bulk', [SpanAccessManagerController::class, 'makePrivateBulk'])
+                ->name('span-access.make-private-bulk');
+            Route::post('/span-access/share-with-groups-bulk', [SpanAccessManagerController::class, 'shareWithGroupsBulk'])
+                ->name('span-access.share-with-groups-bulk');
             
             // Access level update API
             Route::put('/spans/{span}/access-level', function (Request $request, $span) {
@@ -612,6 +613,27 @@ Route::middleware('web')->group(function () {
                 ->name('users.generate-invitation-codes');
             Route::delete('/users/invitation-codes', [UserController::class, 'deleteAllInvitationCodes'])
                 ->name('users.delete-all-invitation-codes');
+
+            // Group Management
+            Route::resource('groups', \App\Http\Controllers\Admin\GroupController::class);
+            Route::post('/groups/{group}/members', [\App\Http\Controllers\Admin\GroupController::class, 'addMember'])
+                ->name('groups.add-member');
+            Route::delete('/groups/{group}/members/{user}', [\App\Http\Controllers\Admin\GroupController::class, 'removeMember'])
+                ->name('groups.remove-member');
+
+            // Span Permissions Management
+            Route::get('/spans/{span}/permissions', [\App\Http\Controllers\Admin\SpanPermissionController::class, 'show'])
+                ->name('spans.permissions.show');
+            Route::post('/spans/{span}/permissions/user', [\App\Http\Controllers\Admin\SpanPermissionController::class, 'grantUserPermission'])
+                ->name('spans.permissions.grant-user');
+            Route::post('/spans/{span}/permissions/group', [\App\Http\Controllers\Admin\SpanPermissionController::class, 'grantGroupPermission'])
+                ->name('spans.permissions.grant-group');
+            Route::delete('/spans/{span}/permissions/user/{user}/{permissionType}', [\App\Http\Controllers\Admin\SpanPermissionController::class, 'revokeUserPermission'])
+                ->name('spans.permissions.revoke-user');
+            Route::delete('/spans/{span}/permissions/group/{group}/{permissionType}', [\App\Http\Controllers\Admin\SpanPermissionController::class, 'revokeGroupPermission'])
+                ->name('spans.permissions.revoke-group');
+            Route::put('/spans/{span}/permissions/bulk', [\App\Http\Controllers\Admin\SpanPermissionController::class, 'bulkUpdate'])
+                ->name('spans.permissions.bulk-update');
 
             // Admin Connection Management (with different prefix to avoid conflicts)
             Route::prefix('admin-connections')->name('connections.')->group(function () {

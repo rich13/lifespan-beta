@@ -38,8 +38,15 @@ class SpanSearchController extends Controller
                     ->orWhere('owner_id', $user->id)
                     ->orWhere(function ($q) use ($user) {
                         $q->where('access_level', 'shared')
-                            ->whereHas('permissions', function ($q) use ($user) {
-                                $q->where('user_id', $user->id);
+                            ->whereHas('spanPermissions', function ($q) use ($user) {
+                                $q->where(function($subQ) use ($user) {
+                                    $subQ->where('user_id', $user->id)
+                                         ->orWhereHas('group', function($groupQ) use ($user) {
+                                             $groupQ->whereHas('users', function($userQ) use ($user) {
+                                                 $userQ->where('users.id', $user->id);
+                                             });
+                                         });
+                                });
                             });
                     });
             });
@@ -187,8 +194,8 @@ class SpanSearchController extends Controller
         $cacheKey = "timeline_{$span->id}_" . ($user?->id ?? 'guest');
         
         return Cache::remember($cacheKey, 300, function () use ($span) {
-            // Optimized query with eager loading and joins
-            $connections = $span->connectionsAsSubject()
+            // Optimized query with eager loading and joins - with access control
+            $connections = $span->connectionsAsSubjectWithAccess()
                 ->with([
                     'child:id,name,type_id,start_year,end_year',
                     'connectionSpan:id,start_year,start_month,start_day,end_year,end_month,end_day',
@@ -246,7 +253,7 @@ class SpanSearchController extends Controller
      */
     private function getNestedConnections(Span $connectionSpan): array
     {
-        return $connectionSpan->connectionsAsObject()
+        return $connectionSpan->connectionsAsObjectWithAccess()
             ->where('type_id', 'during')
             ->with([
                 'parent:id,name,type_id',
@@ -299,8 +306,8 @@ class SpanSearchController extends Controller
         $cacheKey = "timeline_object_{$span->id}_" . ($user?->id ?? 'guest');
         
         return Cache::remember($cacheKey, 300, function () use ($span) {
-            // Optimized query with eager loading and joins
-            $connections = $span->connectionsAsObject()
+            // Optimized query with eager loading and joins - with access control
+            $connections = $span->connectionsAsObjectWithAccess()
                 ->where('type_id', '!=', 'during')
                 ->with([
                     'parent:id,name,type_id,start_year,end_year',
@@ -362,8 +369,8 @@ class SpanSearchController extends Controller
         $cacheKey = "timeline_during_{$span->id}_" . ($user?->id ?? 'guest');
         
         return Cache::remember($cacheKey, 300, function () use ($span) {
-            // Optimized query with eager loading and joins
-            $connections = $span->connectionsAsObject()
+            // Optimized query with eager loading and joins - with access control
+            $connections = $span->connectionsAsObjectWithAccess()
                 ->where('type_id', 'during')
                 ->with([
                     'parent:id,name,type_id,start_year,end_year',

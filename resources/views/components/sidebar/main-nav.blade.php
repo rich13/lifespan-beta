@@ -28,6 +28,11 @@
         </a>
     </li>
     <li class="nav-item">
+        <a class="nav-link {{ request()->routeIs('spans.shared-with-me') ? 'active' : '' }}" href="{{ route('spans.shared-with-me') }}">
+            <i class="bi bi-share me-1"></i> <span>Shared</span>
+        </a>
+    </li>
+    <li class="nav-item">
         <a class="nav-link {{ request()->routeIs('spans.types') ? 'active' : '' }}" href="{{ route('spans.types') }}">
             <i class="bi bi-collection me-1"></i> <span>Types</span>
         </a>

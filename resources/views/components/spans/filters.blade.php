@@ -221,7 +221,7 @@
                            for="state_placeholder"
                            data-bs-toggle="tooltip" 
                            data-bs-placement="bottom" 
-                           title="Show only placeholder spans (incomplete data)">
+                           title="Show only placeholder spans (collaborative - help needed)">
                         <x-icon type="placeholder" category="status" />
                     </label>
 

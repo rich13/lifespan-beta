@@ -109,7 +109,7 @@ class AdminRoutesTest extends TestCase
             ->get("/admin/spans/{$this->span->id}/permissions");
 
         $response->assertStatus(200);
-        $response->assertViewIs('admin.spans.permissions.edit');
+        $response->assertViewIs('admin.spans.permissions');
     }
 
     public function test_users_index_requires_admin(): void

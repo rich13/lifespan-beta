@@ -18,11 +18,13 @@ use App\Models\SpanType;
 use App\Models\ConnectionType;
 use App\Services\YamlSpanService;
 use App\Services\ConfigurableStoryGeneratorService;
+use App\Services\RouteReservationService;
 use InvalidArgumentException;
 use App\Models\Connection;
 use App\Models\ConnectionType as ConnectionTypeModel;
 use App\Services\WikipediaOnThisDayService;
 use App\Models\ConnectionVersion;
+use Illuminate\Auth\Access\AuthorizationException;
 
 /**
  * Handle span viewing and management
@@ -31,15 +33,17 @@ use App\Models\ConnectionVersion;
 class SpanController extends Controller
 {
     protected $yamlService;
+    protected $routeReservationService;
 
     /**
      * Create a new controller instance.
      */
-    public function __construct(YamlSpanService $yamlService)
+    public function __construct(YamlSpanService $yamlService, RouteReservationService $routeReservationService)
     {
         // Require auth for all routes except show, index, search, desertIslandDiscs, connectionTypes, connectionsByType, showConnection, and listConnections
         $this->middleware('auth')->except(['show', 'index', 'search', 'desertIslandDiscs', 'connectionTypes', 'connectionsByType', 'showConnection', 'listConnections']);
         $this->yamlService = $yamlService;
+        $this->routeReservationService = $routeReservationService;
     }
 
 
@@ -192,12 +196,12 @@ class SpanController extends Controller
             
             // Return error page
             if (app()->environment('production')) {
-                return response()->view('errors.500', [], 500);
+                return view('errors.500');
             } else {
-                return response()->view('errors.500', [
+                return view('errors.500', [
                     'error' => $e->getMessage(),
                     'trace' => $e->getTraceAsString()
-                ], 500);
+                ]);
             }
         }
     }
@@ -250,7 +254,19 @@ class SpanController extends Controller
         $validated = $request->validate([
             'id' => 'nullable|uuid|unique:spans,id',  // Allow UUID to be provided
             'name' => 'required|string|max:255',
-            'slug' => 'nullable|string|max:255|regex:/^[a-z0-9-]+$/|unique:spans,slug',
+            'slug' => [
+                'nullable',
+                'string',
+                'max:255',
+                'regex:/^[a-z0-9-]+$/',
+                'unique:spans,slug',
+                function ($attribute, $value, $fail) {
+                    if (!$this->validateSlugNotReserved($value)) {
+                        $reservedNames = $this->routeReservationService->getReservedNamesForDisplay();
+                        $fail("The slug '{$value}' conflicts with a reserved route name. Reserved names include: " . implode(', ', $reservedNames));
+                    }
+                }
+            ],
             'type_id' => 'required|string|exists:span_types,type_id',
             'state' => 'required|in:draft,placeholder,complete',
             'start_year' => $startYearRule,
@@ -442,6 +458,11 @@ class SpanController extends Controller
                 return redirect()->route('login');
             }
 
+            // Authorize access using the SpanPolicy
+            if (Auth::check()) {
+                $this->authorize('view', $subject);
+            }
+
             // Check if this is a person and they have a Desert Island Discs set
             $desertIslandDiscsSet = null;
             if ($subject->type_id === 'person') {
@@ -458,6 +479,9 @@ class SpanController extends Controller
 
             $span = $subject; // For view compatibility
             return view('spans.show', compact('span', 'desertIslandDiscsSet'));
+        } catch (AuthorizationException $e) {
+            // Return a 403 forbidden view
+            return view('errors.403');
         } catch (\Exception $e) {
             // Log the error
             \Illuminate\Support\Facades\Log::error('Error in spans show', [
@@ -465,15 +489,14 @@ class SpanController extends Controller
                 'trace' => $e->getTraceAsString(),
                 'route_param' => $request->segment(2)
             ]);
-            
             // Return error page
             if (app()->environment('production')) {
-                return response()->view('errors.500', [], 500);
+                return view('errors.500');
             } else {
-                return response()->view('errors.500', [
+                return view('errors.500', [
                     'error' => $e->getMessage(),
                     'trace' => $e->getTraceAsString()
-                ], 500);
+                ]);
             }
         }
     }
@@ -561,7 +584,19 @@ class SpanController extends Controller
             // Custom validation for date patterns
             $validator = Validator::make($request->all(), [
                 'name' => 'sometimes|required|string|max:255',
-                'slug' => 'nullable|string|max:255|regex:/^[a-z0-9-]+$/|unique:spans,slug,' . $span->id,
+                'slug' => [
+                    'nullable',
+                    'string',
+                    'max:255',
+                    'regex:/^[a-z0-9-]+$/',
+                    'unique:spans,slug,' . $span->id,
+                    function ($attribute, $value, $fail) {
+                        if (!$this->validateSlugNotReserved($value)) {
+                            $reservedNames = $this->routeReservationService->getReservedNamesForDisplay();
+                            $fail("The slug '{$value}' conflicts with a reserved route name. Reserved names include: " . implode(', ', $reservedNames));
+                        }
+                    }
+                ],
                 'type_id' => 'sometimes|required|string|exists:span_types,type_id',
                 'description' => 'nullable|string',
                 'notes' => 'nullable|string',
@@ -980,7 +1015,7 @@ class SpanController extends Controller
                     ->orWhere('owner_id', $user->id)
                     ->orWhere(function ($q) use ($user) {
                         $q->where('access_level', 'shared')
-                            ->whereHas('permissions', function ($q) use ($user) {
+                            ->whereHas('spanPermissions', function ($q) use ($user) {
                                 $q->where('user_id', $user->id);
                             });
                     });
@@ -1937,11 +1972,63 @@ class SpanController extends Controller
      */
     public function connectionsByType(Request $request, Span $span, ConnectionType $connectionType): View
     {
-        // Get connections of this type involving the span
+        // Get connections of this type involving the span with access control
+        $user = auth()->user();
         $connections = Connection::where('type_id', $connectionType->type)
             ->where(function($query) use ($span) {
                 $query->where('parent_id', $span->id)
                       ->orWhere('child_id', $span->id);
+            })
+            ->where(function($query) use ($user) {
+                if (!$user) {
+                    // Guest users can only see connections involving public spans
+                    $query->whereHas('subject', function($q) {
+                        $q->where('access_level', 'public');
+                    })->whereHas('object', function($q) {
+                        $q->where('access_level', 'public');
+                    });
+                } elseif (!$user->is_admin) {
+                    // Regular users can see connections involving spans they have permission to view
+                    $query->where(function($subQ) use ($user) {
+                        $subQ->whereHas('subject', function($q) use ($user) {
+                            $q->where(function($spanQ) use ($user) {
+                                $spanQ->where('access_level', 'public')
+                                    ->orWhere('owner_id', $user->id)
+                                    ->orWhereHas('spanPermissions', function($permQ) use ($user) {
+                                        $permQ->where('user_id', $user->id)
+                                              ->whereIn('permission_type', ['view', 'edit']);
+                                    })
+                                    ->orWhereHas('spanPermissions', function($permQ) use ($user) {
+                                        $permQ->whereNotNull('group_id')
+                                              ->whereIn('permission_type', ['view', 'edit'])
+                                              ->whereHas('group', function($groupQ) use ($user) {
+                                                  $groupQ->whereHas('users', function($userQ) use ($user) {
+                                                      $userQ->where('user_id', $user->id);
+                                                  });
+                                              });
+                                    });
+                            });
+                        })->whereHas('object', function($q) use ($user) {
+                            $q->where(function($spanQ) use ($user) {
+                                $spanQ->where('access_level', 'public')
+                                    ->orWhere('owner_id', $user->id)
+                                    ->orWhereHas('spanPermissions', function($permQ) use ($user) {
+                                        $permQ->where('user_id', $user->id)
+                                              ->whereIn('permission_type', ['view', 'edit']);
+                                    })
+                                    ->orWhereHas('spanPermissions', function($permQ) use ($user) {
+                                        $permQ->whereNotNull('group_id')
+                                              ->whereIn('permission_type', ['view', 'edit'])
+                                              ->whereHas('group', function($groupQ) use ($user) {
+                                                  $groupQ->whereHas('users', function($userQ) use ($user) {
+                                                      $userQ->where('user_id', $user->id);
+                                                  });
+                                              });
+                                    });
+                            });
+                        });
+                    });
+                }
             })
             ->with(['subject', 'object', 'connectionSpan'])
             ->orderBy('created_at', 'desc')
@@ -2041,11 +2128,63 @@ class SpanController extends Controller
             return redirect()->route('spans.show', $subject);
         }
 
-        // Get all connections of this type involving the subject
+        // Get all connections of this type involving the subject with access control
+        $user = auth()->user();
         $connections = Connection::where('type_id', $connectionType->type)
             ->where(function($query) use ($subject) {
                 $query->where('parent_id', $subject->id)
                       ->orWhere('child_id', $subject->id);
+            })
+            ->where(function($query) use ($user) {
+                if (!$user) {
+                    // Guest users can only see connections involving public spans
+                    $query->whereHas('subject', function($q) {
+                        $q->where('access_level', 'public');
+                    })->whereHas('object', function($q) {
+                        $q->where('access_level', 'public');
+                    });
+                } elseif (!$user->is_admin) {
+                    // Regular users can see connections involving spans they have permission to view
+                    $query->where(function($subQ) use ($user) {
+                        $subQ->whereHas('subject', function($q) use ($user) {
+                            $q->where(function($spanQ) use ($user) {
+                                $spanQ->where('access_level', 'public')
+                                    ->orWhere('owner_id', $user->id)
+                                    ->orWhereHas('spanPermissions', function($permQ) use ($user) {
+                                        $permQ->where('user_id', $user->id)
+                                              ->whereIn('permission_type', ['view', 'edit']);
+                                    })
+                                    ->orWhereHas('spanPermissions', function($permQ) use ($user) {
+                                        $permQ->whereNotNull('group_id')
+                                              ->whereIn('permission_type', ['view', 'edit'])
+                                              ->whereHas('group', function($groupQ) use ($user) {
+                                                  $groupQ->whereHas('users', function($userQ) use ($user) {
+                                                      $userQ->where('user_id', $user->id);
+                                                  });
+                                              });
+                                    });
+                            });
+                        })->whereHas('object', function($q) use ($user) {
+                            $q->where(function($spanQ) use ($user) {
+                                $spanQ->where('access_level', 'public')
+                                    ->orWhere('owner_id', $user->id)
+                                    ->orWhereHas('spanPermissions', function($permQ) use ($user) {
+                                        $permQ->where('user_id', $user->id)
+                                              ->whereIn('permission_type', ['view', 'edit']);
+                                    })
+                                    ->orWhereHas('spanPermissions', function($permQ) use ($user) {
+                                        $permQ->whereNotNull('group_id')
+                                              ->whereIn('permission_type', ['view', 'edit'])
+                                              ->whereHas('group', function($groupQ) use ($user) {
+                                                  $groupQ->whereHas('users', function($userQ) use ($user) {
+                                                      $userQ->where('user_id', $user->id);
+                                                  });
+                                              });
+                                    });
+                            });
+                        });
+                    });
+                }
             })
             ->with(['subject', 'object', 'connectionSpan'])
             ->orderBy('created_at', 'desc')
@@ -2065,5 +2204,60 @@ class SpanController extends Controller
         });
 
         return view('spans.connections', compact('subject', 'connectionType', 'connections', 'predicate'));
+    }
+
+    /**
+     * Show spans shared with the current user via group memberships
+     */
+    public function sharedWithMe(Request $request): View
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return redirect()->route('login');
+        }
+
+        // Get all groups the user is a member of
+        $groups = $user->groups()->with('spanPermissions.span.owner', 'spanPermissions.span.type')->orderBy('name')->get();
+
+        // For each group, get all spans shared with that group (excluding public and own spans)
+        $groupsWithSpans = $groups->map(function ($group) use ($user) {
+            // Get all span IDs this group has view permission for
+            $spanIds = $group->spanPermissions()
+                ->where('permission_type', 'view')
+                ->pluck('span_id')
+                ->unique();
+
+            // Fetch the spans, excluding public and user's own
+            $spans = Span::with(['owner', 'type'])
+                ->whereIn('id', $spanIds)
+                ->where('access_level', '!=', 'public')
+                ->where('owner_id', '!=', $user->id)
+                ->orderBy('name')
+                ->get();
+
+            return [
+                'group' => $group,
+                'spans' => $spans,
+            ];
+        });
+
+        // Get all span types for filtering (if needed in the view)
+        $spanTypes = SpanType::where('type_id', '!=', 'connection')
+            ->orderBy('name')
+            ->get();
+
+        return view('spans.shared-with-me', compact('groupsWithSpans', 'spanTypes'));
+    }
+
+    /**
+     * Validate that a slug doesn't conflict with reserved route names
+     */
+    private function validateSlugNotReserved($slug): bool
+    {
+        if (empty($slug)) {
+            return true; // Empty slugs are auto-generated, so they're fine
+        }
+        
+        return !$this->routeReservationService->isReserved($slug);
     }
 }

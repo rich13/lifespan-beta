@@ -19,7 +19,11 @@ class UserController extends Controller
 
     public function index(): View
     {
-        $users = User::with('personalSpan')->paginate(20);
+        $users = User::with('personalSpan')
+            ->leftJoin('spans', 'users.personal_span_id', '=', 'spans.id')
+            ->orderBy('spans.name')
+            ->select('users.*')
+            ->paginate(30);
         $invitationCodes = \App\Models\InvitationCode::orderBy('created_at', 'desc')->get();
         $unusedCodes = $invitationCodes->where('used', false)->count();
         $usedCodes = $invitationCodes->where('used', true)->count();

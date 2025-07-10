@@ -567,7 +567,7 @@ $(document).ready(function() {
                     <h3 class="h6 mb-3">Connections & Events</h3>
                     @php
                         // Get connections where this span is the subject (parent) and has temporal information
-                        $spanConnections = $span->connectionsAsSubject()
+                        $spanConnections = $span->connectionsAsSubjectWithAccess()
                             ->whereNotNull('connection_span_id')
                             ->whereHas('connectionSpan', function($query) {
                                 $query->whereNotNull('start_year'); // Only connections with dates

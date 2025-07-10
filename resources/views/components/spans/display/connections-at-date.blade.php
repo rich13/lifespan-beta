@@ -2,7 +2,7 @@
 
 @php
     // Get connections where this span is the subject (parent) and has temporal information
-    $connections = $span->connectionsAsSubject()
+    $connections = $span->connectionsAsSubjectWithAccess()
         ->whereNotNull('connection_span_id')
         ->whereHas('connectionSpan', function($query) use ($date) {
             $query->where('start_year', '<=', $date->year)

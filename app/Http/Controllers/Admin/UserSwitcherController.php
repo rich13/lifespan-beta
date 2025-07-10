@@ -117,9 +117,7 @@ class UserSwitcherController extends Controller
         \Log::info('UserSwitcher: Getting user list');
         
         // Get all users except the system user
-        $users = User::where('email', '!=', 'system@lifespan.app')
-            ->orderBy('email')
-            ->get();
+        $users = User::where('email', '!=', 'system@lifespan.app')->with('personalSpan')->get()->sortBy('name');
         
         \Log::info('UserSwitcher: Found ' . $users->count() . ' users');
         

@@ -272,4 +272,43 @@ class User extends Authenticatable
     {
         return $this->hasMany(Span::class, 'updater_id');
     }
+
+    /**
+     * Get all groups that this user is a member of.
+     */
+    public function groups(): BelongsToMany
+    {
+        return $this->belongsToMany(Group::class, 'group_user')
+            ->withTimestamps();
+    }
+
+    /**
+     * Get all groups that this user owns.
+     */
+    public function ownedGroups(): HasMany
+    {
+        return $this->hasMany(Group::class, 'owner_id');
+    }
+
+    /**
+     * Check if this user is a member of a specific group.
+     */
+    public function isMemberOf(Group $group): bool
+    {
+        return $this->groups()->where('group_id', $group->id)->exists();
+    }
+
+    /**
+     * Get all spans that this user can access through group memberships.
+     */
+    public function getGroupAccessibleSpans()
+    {
+        return Span::whereHas('permissions', function ($query) {
+            $query->whereHas('group', function ($groupQuery) {
+                $groupQuery->whereHas('users', function ($userQuery) {
+                    $userQuery->where('user_id', $this->id);
+                });
+            });
+        });
+    }
 }

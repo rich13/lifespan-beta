@@ -665,7 +665,7 @@
                 // Check if we should show completion modal (exactly 8 connections and haven't shown it yet)
                 $totalConnections = 0;
                 if ($personalSpan) {
-                    $userConnectionsAsSubject = $personalSpan->connectionsAsSubject()
+                    $userConnectionsAsSubject = $personalSpan->connectionsAsSubjectWithAccess()
                         ->whereNotNull('connection_span_id')
                         ->whereHas('connectionSpan', function($query) {
                             $query->whereNotNull('start_year');
@@ -673,7 +673,7 @@
                         ->where('child_id', '!=', $personalSpan->id)
                         ->count();
                     
-                    $userConnectionsAsObject = $personalSpan->connectionsAsObject()
+                    $userConnectionsAsObject = $personalSpan->connectionsAsObjectWithAccess()
                         ->whereNotNull('connection_span_id')
                         ->whereHas('connectionSpan', function($query) {
                             $query->whereNotNull('start_year');
@@ -855,6 +855,52 @@
                         </div>
                     </div>
                 @endif
+            </div>
+
+            <!-- Recently Created by You Card -->
+            <div class="mb-4">
+                @php
+                    // Get recently created spans by the current user
+                    $recentlyCreatedSpans = \App\Models\Span::where('owner_id', auth()->id())
+                        ->where('state', '!=', 'placeholder')
+                        ->where('type_id', '!=', 'connection')
+                        ->orderBy('created_at', 'desc')
+                        ->limit(5)
+                        ->get();
+                @endphp
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="h6 mb-0">
+                            <i class="bi bi-plus-circle text-success me-2"></i>
+                            Recently Created by You
+                        </h3>
+                    </div>
+                    <div class="card-body">
+                        @if($recentlyCreatedSpans->isEmpty())
+                            <p class="text-center text-muted my-3">No spans created yet.</p>
+                            <div class="text-center">
+                                <a href="{{ route('spans.create') }}" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-plus-circle me-1"></i>Create Your First Span
+                                </a>
+                            </div>
+                        @else
+                            <div class="spans-list">
+                                @foreach($recentlyCreatedSpans as $span)
+                                    <x-spans.display.interactive-card :span="$span" />
+                                @endforeach
+                            </div>
+                            
+                            @if($recentlyCreatedSpans->count() >= 5)
+                                <div class="text-center mt-3">
+                                    <a href="{{ route('spans.index') }}" class="btn btn-sm btn-outline-secondary">
+                                        View all your spans
+                                    </a>
+                                </div>
+                            @endif
+                        @endif
+                    </div>
+                </div>
             </div>
 
             <!-- Starred Set Card -->

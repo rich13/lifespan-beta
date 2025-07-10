@@ -10,9 +10,9 @@
                 <option value="draft" {{ old('state', $span->state) == 'draft' ? 'selected' : '' }}>
                     Draft (work in progress)
                 </option>
-                <option value="placeholder" {{ old('state', $span->state) == 'placeholder' ? 'selected' : '' }}>
-                    Placeholder (date unknown)
-                </option>
+                                                    <option value="placeholder" {{ old('state', $span->state) == 'placeholder' ? 'selected' : '' }}>
+                                        Placeholder (collaborative - help needed)
+                                    </option>
                 <option value="complete" {{ old('state', $span->state) == 'complete' ? 'selected' : '' }}>
                     Complete (ready for viewing)
                 </option>

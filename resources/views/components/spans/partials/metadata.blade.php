@@ -11,18 +11,18 @@
                 @endforeach
 
                 @if($span->type_id === 'person')
-                    @foreach($span->connections as $connection)
+                    @foreach($span->connectionsAsObjectWithAccess() as $connection)
                         @if($connection->type_id === 'birth_place')
                             <dt class="col-sm-3">Birth Place</dt>
                             <dd class="col-sm-9">
-                                <x-spans.display.micro-card :span="$connection->object" />
+                                <x-spans.display.micro-card :span="$connection->parent" />
                             </dd>
                         @endif
                         
                         @if($connection->type_id === 'death_place')
                             <dt class="col-sm-3">Death Place</dt>
                             <dd class="col-sm-9">
-                                <x-spans.display.micro-card :span="$connection->object" />
+                                <x-spans.display.micro-card :span="$connection->parent" />
                             </dd>
                         @endif
                     @endforeach

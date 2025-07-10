@@ -138,8 +138,9 @@
                 @auth
                     @if($span->type_id === 'person')
                         <x-spans.display.compare-card :span="$span" />
+                        <x-spans.display.reflect-card :span="$span" />
                     @endif
-                    <x-spans.display.reflect-card :span="$span" />
+                    
                 @endauth
                 @if($span->type_id === 'person')
                     <x-spans.partials.family-relationships :span="$span" />

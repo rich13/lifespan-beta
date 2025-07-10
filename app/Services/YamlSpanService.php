@@ -2879,6 +2879,18 @@ class YamlSpanService
                 ];
             }
 
+            // Validate slug against reserved route names
+            if (isset($data['slug']) && !empty($data['slug'])) {
+                $reservedNames = $this->getReservedRouteNames();
+                
+                if (in_array(strtolower($data['slug']), array_map('strtolower', $reservedNames))) {
+                    return [
+                        'success' => false,
+                        'message' => "The slug '{$data['slug']}' conflicts with a reserved route name. Please choose a different slug."
+                    ];
+                }
+            }
+            
             // Create the new span
             $span = Span::create([
                 'name' => $data['name'],
@@ -3231,5 +3243,13 @@ class YamlSpanService
                 'message' => 'Failed to update span: ' . $e->getMessage()
             ];
         }
+    }
+
+    /**
+     * Get reserved route names that cannot be used as span slugs
+     */
+    private function getReservedRouteNames(): array
+    {
+        return app(\App\Services\RouteReservationService::class)->getReservedRouteNames();
     }
 } 
