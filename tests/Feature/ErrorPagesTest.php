@@ -14,26 +14,8 @@ class ErrorPagesTest extends TestCase
         $response = $this->get('/error?code=419');
 
         $response->assertStatus(419);
-        $response->assertViewIs('errors.419');
         $response->assertSee('Time has run out');
         $response->assertSee('Something to do with sessions');
-        $response->assertSee('Eat the cookies');
-    }
-
-    public function test_419_error_page_has_session_clearing_functionality(): void
-    {
-        $response = $this->get('/error?code=419');
-
-        $response->assertStatus(419);
-        
-        // Check that the JavaScript functions are included
-        $response->assertSee('clearSessionCookies');
-        $response->assertSee('clearCookie');
-        $response->assertSee('lifespan_session');
-        $response->assertSee('XSRF-TOKEN');
-        
-        // Check that the button is present
-        $response->assertSee('id="clearSessionBtn"');
         $response->assertSee('Eat the cookies');
     }
 

@@ -20,6 +20,23 @@
             min-height: 100vh;
             display: flex;
             align-items: center;
+            /* Add relative positioning for canvas layering */
+            position: relative;
+            overflow: hidden;
+        }
+        #game-of-life-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 0;
+            opacity: 0.18;
+            pointer-events: none;
+        }
+        .container {
+            position: relative;
+            z-index: 1;
         }
         
         .error-card {
@@ -71,6 +88,7 @@
     </style>
 </head>
 <body>
+    <canvas id="game-of-life-bg"></canvas>
     <div class="container">
         <div class="row justify-content-center">
             <div class="col-md-6 col-lg-5">
@@ -99,7 +117,94 @@
     
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    
+    <!-- D3.js for Game of Life -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script>
+    // Game of Life in D3.js (rendered to canvas)
+    (function() {
+        const cellSize = 13;
+        const canvas = document.getElementById('game-of-life-bg');
+        const ctx = canvas.getContext('2d');
+        let width = window.innerWidth;
+        let height = window.innerHeight;
+        let cols = Math.floor(width / cellSize);
+        let rows = Math.floor(height / cellSize);
+        
+        function resizeCanvas() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+            cols = Math.floor(width / cellSize);
+            rows = Math.floor(height / cellSize);
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // Create random initial state
+        function randomGrid() {
+            const grid = [];
+            for (let y = 0; y < rows; y++) {
+                const row = [];
+                for (let x = 0; x < cols; x++) {
+                    row.push(Math.random() > 0.75 ? 1 : 0);
+                }
+                grid.push(row);
+            }
+            return grid;
+        }
+
+        let grid = randomGrid();
+
+        function drawGrid() {
+            ctx.clearRect(0, 0, width, height);
+            ctx.fillStyle = '#222';
+            for (let y = 0; y < rows; y++) {
+                for (let x = 0; x < cols; x++) {
+                    if (grid[y][x]) {
+                        ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+                    }
+                }
+            }
+        }
+
+        function nextGen() {
+            const newGrid = [];
+            for (let y = 0; y < rows; y++) {
+                const row = [];
+                for (let x = 0; x < cols; x++) {
+                    let live = 0;
+                    for (let dy = -1; dy <= 1; dy++) {
+                        for (let dx = -1; dx <= 1; dx++) {
+                            if (dx === 0 && dy === 0) continue;
+                            const ny = y + dy;
+                            const nx = x + dx;
+                            if (ny >= 0 && ny < rows && nx >= 0 && nx < cols) {
+                                live += grid[ny][nx];
+                            }
+                        }
+                    }
+                    if (grid[y][x]) {
+                        row.push(live === 2 || live === 3 ? 1 : 0);
+                    } else {
+                        row.push(live === 3 ? 1 : 0);
+                    }
+                }
+                newGrid.push(row);
+            }
+            grid = newGrid;
+        }
+
+        function animate() {
+            drawGrid();
+            nextGen();
+            requestAnimationFrame(animate);
+        }
+        animate();
+    })();
+    </script>
+    <x-google-analytics />
+    <x-consent-banner />
     @stack('scripts')
 </body>
 </html> 
