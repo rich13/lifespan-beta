@@ -19,20 +19,10 @@ class SpanPolicy
     /**
      * Determine whether the user can view the model.
      */
-    public function view(?User $user, Span $span): bool
+    public function view(User $user, Span $span): bool
     {
         // Public spans can be viewed by anyone
         if ($span->access_level === 'public') {
-            return true;
-        }
-
-        // Must be authenticated to view non-public spans
-        if (!$user) {
-            return false;
-        }
-
-        // Admin can view all spans
-        if ($user->is_admin) {
             return true;
         }
 
@@ -41,15 +31,21 @@ class SpanPolicy
             return true;
         }
 
-        // For shared spans, check if user has view permission
-        if ($span->access_level === 'shared') {
-            return $span->permissions()
-                ->where('user_id', $user->id)
-                ->where('permission_type', 'view')
-                ->exists();
+        // Check for user-based permissions
+        if ($span->hasPermission($user, 'view')) {
+            return true;
         }
 
-        return false;
+        // Check for group-based permissions
+        return $span->spanPermissions()
+            ->where('permission_type', 'view')
+            ->whereNotNull('group_id')
+            ->whereHas('group', function ($query) use ($user) {
+                $query->whereHas('users', function ($userQuery) use ($user) {
+                    $userQuery->where('user_id', $user->id);
+                });
+            })
+            ->exists();
     }
 
     /**
@@ -65,25 +61,26 @@ class SpanPolicy
      */
     public function update(User $user, Span $span): bool
     {
-        // Admin can edit all spans
-        if ($user->is_admin) {
-            return true;
-        }
-
-        // Owner can always edit
+        // Owner can always update
         if ($span->owner_id === $user->id) {
             return true;
         }
 
-        // For shared spans, check if user has edit permission
-        if ($span->access_level === 'shared') {
-            return $span->permissions()
-                ->where('user_id', $user->id)
-                ->where('permission_type', 'edit')
-                ->exists();
+        // Check for user-based permissions
+        if ($span->hasPermission($user, 'edit')) {
+            return true;
         }
 
-        return false;
+        // Check for group-based permissions
+        return $span->spanPermissions()
+            ->where('permission_type', 'edit')
+            ->whereNotNull('group_id')
+            ->whereHas('group', function ($query) use ($user) {
+                $query->whereHas('users', function ($userQuery) use ($user) {
+                    $userQuery->where('user_id', $user->id);
+                });
+            })
+            ->exists();
     }
 
     /**

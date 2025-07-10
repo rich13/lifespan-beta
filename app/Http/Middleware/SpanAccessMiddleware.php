@@ -72,9 +72,24 @@ class SpanAccessMiddleware
 
             // For shared spans, check permissions
             if ($span->access_level === 'shared') {
-                if ($span->permissions()->where('user_id', $user->id)->exists()) {
+                // Check for user-based permissions
+                if ($span->spanPermissions()->where('user_id', $user->id)->exists()) {
                     return $next($request);
                 }
+                
+                // Check for group-based permissions
+                if ($span->spanPermissions()
+                    ->where('permission_type', 'view')
+                    ->whereNotNull('group_id')
+                    ->whereHas('group', function ($query) use ($user) {
+                        $query->whereHas('users', function ($userQuery) use ($user) {
+                            $userQuery->where('user_id', $user->id);
+                        });
+                    })
+                    ->exists()) {
+                    return $next($request);
+                }
+                
                 return abort(403, 'You do not have permission to view this span.');
             }
 
@@ -113,11 +128,33 @@ class SpanAccessMiddleware
                 // Check if user can access both spans
                 $canAccessSubject = $subject->access_level === 'public' || 
                                   $subject->owner_id === $user->id ||
-                                  ($subject->access_level === 'shared' && $subject->permissions()->where('user_id', $user->id)->exists());
+                                  ($subject->access_level === 'shared' && (
+                                      $subject->spanPermissions()->where('user_id', $user->id)->exists() ||
+                                      $subject->spanPermissions()
+                                          ->where('permission_type', 'view')
+                                          ->whereNotNull('group_id')
+                                          ->whereHas('group', function ($query) use ($user) {
+                                              $query->whereHas('users', function ($userQuery) use ($user) {
+                                                  $userQuery->where('user_id', $user->id);
+                                              });
+                                          })
+                                          ->exists()
+                                  ));
                 
                 $canAccessObject = $object->access_level === 'public' || 
                                  $object->owner_id === $user->id ||
-                                 ($object->access_level === 'shared' && $object->permissions()->where('user_id', $user->id)->exists());
+                                 ($object->access_level === 'shared' && (
+                                     $object->spanPermissions()->where('user_id', $user->id)->exists() ||
+                                     $object->spanPermissions()
+                                         ->where('permission_type', 'view')
+                                         ->whereNotNull('group_id')
+                                         ->whereHas('group', function ($query) use ($user) {
+                                             $query->whereHas('users', function ($userQuery) use ($user) {
+                                                 $userQuery->where('user_id', $user->id);
+                                             });
+                                         })
+                                         ->exists()
+                                 ));
                 
                 if (!$canAccessSubject || !$canAccessObject) {
                     return abort(403, 'You do not have permission to view this connection.');
@@ -163,9 +200,24 @@ class SpanAccessMiddleware
 
                 // For shared spans, check permissions
                 if ($subject->access_level === 'shared') {
-                    if ($subject->permissions()->where('user_id', $user->id)->exists()) {
+                    // Check for user-based permissions
+                    if ($subject->spanPermissions()->where('user_id', $user->id)->exists()) {
                         return $next($request);
                     }
+                    
+                    // Check for group-based permissions
+                    if ($subject->spanPermissions()
+                        ->where('permission_type', 'view')
+                        ->whereNotNull('group_id')
+                        ->whereHas('group', function ($query) use ($user) {
+                            $query->whereHas('users', function ($userQuery) use ($user) {
+                                $userQuery->where('user_id', $user->id);
+                            });
+                        })
+                        ->exists()) {
+                        return $next($request);
+                    }
+                    
                     return abort(403, 'You do not have permission to view this span.');
                 }
 
@@ -209,9 +261,24 @@ class SpanAccessMiddleware
 
             // For shared spans, check permissions
             if ($span->access_level === 'shared') {
-                if ($span->permissions()->where('user_id', $user->id)->exists()) {
+                // Check for user-based permissions
+                if ($span->spanPermissions()->where('user_id', $user->id)->exists()) {
                     return $next($request);
                 }
+                
+                // Check for group-based permissions
+                if ($span->spanPermissions()
+                    ->where('permission_type', 'view')
+                    ->whereNotNull('group_id')
+                    ->whereHas('group', function ($query) use ($user) {
+                        $query->whereHas('users', function ($userQuery) use ($user) {
+                            $userQuery->where('user_id', $user->id);
+                        });
+                    })
+                    ->exists()) {
+                    return $next($request);
+                }
+                
                 return abort(403, 'You do not have permission to view this span.');
             }
 

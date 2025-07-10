@@ -201,7 +201,13 @@ class Span extends Model
                 $slug = $baseSlug;
                 $counter = 1;
 
-                while (static::where('slug', $slug)->where('id', '!=', $span->id)->exists()) {
+                // Check for reserved route names and database uniqueness
+                $reservedNames = static::getReservedRouteNames();
+
+                while (
+                    static::where('slug', $slug)->where('id', '!=', $span->id)->exists() ||
+                    in_array(strtolower($slug), array_map('strtolower', $reservedNames))
+                ) {
                     $slug = $baseSlug . '-' . ++$counter;
                 }
 
@@ -323,7 +329,18 @@ class Span extends Model
 
         // Clear timeline caches when spans are updated or deleted
         static::saved(function ($span) {
-            $span->clearTimelineCaches();
+            // Check if access level or permissions have changed
+            $accessLevelChanged = $span->wasChanged('access_level');
+            $permissionsChanged = $span->wasChanged('permission_mode');
+            
+            if ($accessLevelChanged || $permissionsChanged) {
+                // Use comprehensive cache clearing for access control changes
+                $span->clearAllTimelineCaches();
+            } else {
+                // Use basic cache clearing for other changes
+                $span->clearTimelineCaches();
+            }
+            
             $span->clearSetCaches($span);
         });
 
@@ -375,7 +392,14 @@ class Span extends Model
                     
                     $slug = $baseSlug;
                     $counter = 1;
-                    while (static::where('slug', $slug)->where('id', '!=', $span->id)->exists()) {
+                    
+                    // Check for reserved route names and database uniqueness
+                    $reservedNames = static::getReservedRouteNames();
+                    
+                    while (
+                        static::where('slug', $slug)->where('id', '!=', $span->id)->exists() ||
+                        in_array(strtolower($slug), array_map('strtolower', $reservedNames))
+                    ) {
                         $slug = $baseSlug . '-' . $counter++;
                     }
                     $span->slug = $slug;
@@ -930,7 +954,7 @@ class Span extends Model
     /**
      * Get all permissions for this span
      */
-    public function permissions(): HasMany
+    public function spanPermissions(): HasMany
     {
         return $this->hasMany(SpanPermission::class);
     }
@@ -958,6 +982,100 @@ class Span extends Model
     {
         return $this->hasMany(Connection::class, 'parent_id')
             ->orWhere('child_id', $this->id);
+    }
+
+    /**
+     * Get connections where this span is the subject (parent) - with access control
+     */
+    public function connectionsAsSubjectWithAccess(?User $user = null): HasMany
+    {
+        $user = $user ?? auth()->user();
+        
+        $query = $this->hasMany(Connection::class, 'parent_id');
+        
+        if (!$user) {
+            // Guest users can only see connections to public spans
+            return $query->whereHas('child', function ($q) {
+                $q->where('access_level', 'public');
+            });
+        }
+        
+        // Admins can see all connections
+        if ($user->is_admin) {
+            return $query;
+        }
+        
+        // Regular users can see connections to spans they have permission to view
+        return $query->whereHas('child', function ($q) use ($user) {
+            $q->where(function ($subQ) use ($user) {
+                // Public spans
+                $subQ->where('access_level', 'public')
+                    // Owner's spans
+                    ->orWhere('owner_id', $user->id)
+                    // Spans with explicit user permissions
+                    ->orWhereHas('spanPermissions', function ($permQ) use ($user) {
+                        $permQ->where('user_id', $user->id)
+                              ->whereIn('permission_type', ['view', 'edit']);
+                    })
+                    // Spans with group permissions
+                    ->orWhereHas('spanPermissions', function ($permQ) use ($user) {
+                        $permQ->whereNotNull('group_id')
+                              ->whereIn('permission_type', ['view', 'edit'])
+                              ->whereHas('group', function ($groupQ) use ($user) {
+                                  $groupQ->whereHas('users', function ($userQ) use ($user) {
+                                      $userQ->where('user_id', $user->id);
+                                  });
+                              });
+                    });
+            });
+        });
+    }
+
+    /**
+     * Get connections where this span is the object (child) - with access control
+     */
+    public function connectionsAsObjectWithAccess(?User $user = null): HasMany
+    {
+        $user = $user ?? auth()->user();
+        
+        $query = $this->hasMany(Connection::class, 'child_id');
+        
+        if (!$user) {
+            // Guest users can only see connections from public spans
+            return $query->whereHas('parent', function ($q) {
+                $q->where('access_level', 'public');
+            });
+        }
+        
+        // Admins can see all connections
+        if ($user->is_admin) {
+            return $query;
+        }
+        
+        // Regular users can see connections from spans they have permission to view
+        return $query->whereHas('parent', function ($q) use ($user) {
+            $q->where(function ($subQ) use ($user) {
+                // Public spans
+                $subQ->where('access_level', 'public')
+                    // Owner's spans
+                    ->orWhere('owner_id', $user->id)
+                    // Spans with explicit user permissions
+                    ->orWhereHas('spanPermissions', function ($permQ) use ($user) {
+                        $permQ->where('user_id', $user->id)
+                              ->whereIn('permission_type', ['view', 'edit']);
+                    })
+                    // Spans with group permissions
+                    ->orWhereHas('spanPermissions', function ($permQ) use ($user) {
+                        $permQ->whereNotNull('group_id')
+                              ->whereIn('permission_type', ['view', 'edit'])
+                              ->whereHas('group', function ($groupQ) use ($user) {
+                                  $groupQ->whereHas('users', function ($userQ) use ($user) {
+                                      $userQ->where('user_id', $user->id);
+                                  });
+                              });
+                    });
+            });
+        });
     }
 
     /**
@@ -1016,6 +1134,62 @@ class Span extends Model
             Cache::forget("timeline_object_{$this->id}_{$currentUserId}");
             Cache::forget("timeline_during_{$this->id}_{$currentUserId}");
         }
+    }
+
+    /**
+     * Clear all timeline caches for this span and all connected spans
+     * This is more comprehensive and should be used when access permissions change
+     */
+    public function clearAllTimelineCaches(): void
+    {
+        // Clear caches for this span
+        $this->clearTimelineCaches();
+        
+        // Clear caches for all spans connected to this span
+        // This ensures that when access permissions change, all related timelines are updated
+        
+        // Get all spans that have connections to/from this span
+        $connectedSpanIds = collect();
+        
+        // Spans that this span connects to (as subject)
+        $this->connectionsAsSubject()->pluck('child_id')->each(function ($childId) use ($connectedSpanIds) {
+            $connectedSpanIds->push($childId);
+        });
+        
+        // Spans that connect to this span (as object)
+        $this->connectionsAsObject()->pluck('parent_id')->each(function ($parentId) use ($connectedSpanIds) {
+            $connectedSpanIds->push($parentId);
+        });
+        
+        // Connection spans
+        $this->connectionsAsSubject()->pluck('connection_span_id')->each(function ($connectionSpanId) use ($connectedSpanIds) {
+            if ($connectionSpanId) {
+                $connectedSpanIds->push($connectionSpanId);
+            }
+        });
+        
+        $this->connectionsAsObject()->pluck('connection_span_id')->each(function ($connectionSpanId) use ($connectedSpanIds) {
+            if ($connectionSpanId) {
+                $connectedSpanIds->push($connectionSpanId);
+            }
+        });
+        
+        // Clear caches for all connected spans
+        $connectedSpanIds->unique()->each(function ($spanId) {
+            if ($spanId && $spanId !== $this->id) {
+                // Clear guest caches
+                Cache::forget("timeline_{$spanId}_guest");
+                Cache::forget("timeline_object_{$spanId}_guest");
+                Cache::forget("timeline_during_{$spanId}_guest");
+                
+                // Clear caches for all users (1-1000)
+                for ($userId = 1; $userId <= 1000; $userId++) {
+                    Cache::forget("timeline_{$spanId}_{$userId}");
+                    Cache::forget("timeline_object_{$spanId}_{$userId}");
+                    Cache::forget("timeline_during_{$spanId}_{$userId}");
+                }
+            }
+        });
     }
 
 
@@ -1352,26 +1526,69 @@ class Span extends Model
     }
 
     /**
-     * Check if a user has a specific permission on this span
+     * Check if a user has permission to perform an action on this span
+     * 
+     * @param User|null $user The user to check permissions for
+     * @param string $permission The permission to check ('view' or 'edit')
+     * @return bool True if the user has the requested permission
+     * 
+     * Permission logic:
+     * - Admins can do anything
+     * - Span owners can always view and edit their own spans
+     * - Personal spans: Only editable by owner/admin, but viewable by group members
+     * - Non-personal spans: Fully editable and viewable by group members
+     * 
+     * Permission hierarchy:
+     * - 'edit' permission includes 'view' permission
+     * - 'view' permission does not include 'edit' permission
      */
     public function hasPermission($user, string $permission): bool
     {
         if (!$user) {
             return false;
         }
+        
         // Admins can do anything
         if (isset($user->is_admin) && $user->is_admin) {
             return true;
         }
+        
         // Owner can always view and edit
         if ($this->owner_id === $user->id) {
             return true;
         }
-        // Check explicit permissions
-        return $this->permissions()
+        
+        // Define permission hierarchy - higher permissions include lower ones
+        $permissionHierarchy = [
+            'edit' => ['edit'],
+            'view' => ['view', 'edit']  // 'edit' permission includes 'view'
+        ];
+        
+        // Get all permissions that grant the requested permission
+        $grantingPermissions = $permissionHierarchy[$permission] ?? [$permission];
+        
+        // Check explicit user permissions
+        $hasUserPermission = $this->spanPermissions()
             ->where('user_id', $user->id)
-            ->where('permission_type', $permission)
+            ->whereIn('permission_type', $grantingPermissions)
             ->exists();
+            
+        if ($hasUserPermission) {
+            return true;
+        }
+        
+        // Check group permissions
+        $hasGroupPermission = $this->spanPermissions()
+            ->whereIn('permission_type', $grantingPermissions)
+            ->whereNotNull('group_id')
+            ->whereHas('group', function ($query) use ($user) {
+                $query->whereHas('users', function ($userQuery) use ($user) {
+                    $userQuery->where('user_id', $user->id);
+                });
+            })
+            ->exists();
+            
+        return $hasGroupPermission;
     }
 
     /**
@@ -1642,6 +1859,9 @@ class Span extends Model
     {
         $this->access_level = 'public';
         $this->save();
+        
+        // Clear all timeline caches since access level has changed
+        $this->clearAllTimelineCaches();
     }
 
     /**
@@ -1649,16 +1869,81 @@ class Span extends Model
      */
     public function grantPermission(User $user, string $permissionType): void
     {
-        // Remove any existing permission of this type for this user
-        $this->permissions()
+        // Remove any existing permissions for this user on this span
+        $this->spanPermissions()
             ->where('user_id', $user->id)
+            ->delete();
+
+        // Create new permission
+        $this->spanPermissions()->create([
+            'user_id' => $user->id,
+            'permission_type' => $permissionType
+        ]);
+
+        // Clear all timeline caches since access permissions have changed
+        $this->clearAllTimelineCaches();
+    }
+
+    /**
+     * Grant permission to a group for this span
+     */
+    public function grantGroupPermission(Group $group, string $permissionType): void
+    {
+        // Remove any existing permission of this type for this group
+        $this->spanPermissions()
+            ->where('group_id', $group->id)
             ->where('permission_type', $permissionType)
             ->delete();
 
         // Create new permission
-        $this->permissions()->create([
-            'user_id' => $user->id,
+        $this->spanPermissions()->create([
+            'group_id' => $group->id,
             'permission_type' => $permissionType
         ]);
+
+        // Update access level to shared since the span is now accessible to group members
+        if ($this->access_level === 'private') {
+            $this->access_level = 'shared';
+            $this->save();
+        }
+
+        // Clear all timeline caches since access permissions have changed
+        $this->clearAllTimelineCaches();
     }
-} 
+
+    /**
+     * Revoke permission from a user for this span
+     */
+    public function revokePermission(User $user, string $permissionType): void
+    {
+        $this->spanPermissions()
+            ->where('user_id', $user->id)
+            ->where('permission_type', $permissionType)
+            ->delete();
+
+        // Clear all timeline caches since access permissions have changed
+        $this->clearAllTimelineCaches();
+    }
+
+    /**
+     * Revoke permission from a group for this span
+     */
+    public function revokeGroupPermission(Group $group, string $permissionType): void
+    {
+        $this->spanPermissions()
+            ->where('group_id', $group->id)
+            ->where('permission_type', $permissionType)
+            ->delete();
+
+        // Clear all timeline caches since access permissions have changed
+        $this->clearAllTimelineCaches();
+    }
+
+    /**
+     * Get reserved route names that cannot be used as span slugs
+     */
+    private static function getReservedRouteNames(): array
+    {
+        return app(\App\Services\RouteReservationService::class)->getReservedRouteNames();
+    }
+}

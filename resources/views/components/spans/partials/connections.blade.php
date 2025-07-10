@@ -1,9 +1,9 @@
 @props(['span', 'parentConnections' => null, 'childConnections' => null])
 
 @php
-    // If connections weren't passed in, fetch them
+    // If connections weren't passed in, fetch them with access control
     if (!$parentConnections) {
-        $parentConnections = $span->connectionsAsSubject()
+        $parentConnections = $span->connectionsAsSubjectWithAccess()
             ->whereNotNull('connection_span_id')
             ->whereHas('connectionSpan')
             ->with(['connectionSpan', 'child', 'type'])
@@ -14,7 +14,7 @@
     }
 
     if (!$childConnections) {
-        $childConnections = $span->connectionsAsObject()
+        $childConnections = $span->connectionsAsObjectWithAccess()
             ->whereNotNull('connection_span_id')
             ->whereHas('connectionSpan')
             ->with(['connectionSpan', 'parent', 'type'])

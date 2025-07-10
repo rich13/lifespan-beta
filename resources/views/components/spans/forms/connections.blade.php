@@ -10,7 +10,7 @@
         </div>
 
         @php
-            $parentConnections = $span->connectionsAsSubject()
+            $parentConnections = $span->connectionsAsSubjectWithAccess()
                 ->whereNotNull('connection_span_id')
                 ->whereHas('connectionSpan')
                 ->with(['connectionSpan', 'child', 'type'])
@@ -24,7 +24,7 @@
                     ];
                 });
 
-            $childConnections = $span->connectionsAsObject()
+            $childConnections = $span->connectionsAsObjectWithAccess()
                 ->whereNotNull('connection_span_id')
                 ->whereHas('connectionSpan')
                 ->with(['connectionSpan', 'parent', 'type'])

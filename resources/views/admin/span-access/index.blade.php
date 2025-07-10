@@ -1,14 +1,14 @@
 @extends('layouts.app')
 
 @section('page_title')
-    Manage Span Access
+    Span Access Management
 @endsection
 
 @section('page_filters')
     <x-spans.filters 
         :route="route('admin.span-access.index')"
         :selected-types="request('types') ? explode(',', request('types')) : []"
-        :show-search="false"
+        :show-search="true"
         :show-type-filters="true"
         :show-permission-mode="false"
         :show-visibility="true"
@@ -18,207 +18,539 @@
 
 @section('content')
 <style>
-    /* Fix pagination styling */
-    .pagination {
-        margin-bottom: 0;
+    .access-badge {
+        font-size: 0.75rem;
+        font-weight: 500;
     }
-    .pagination .page-link {
-        padding: 0.25rem 0.5rem;
-        font-size: 0.875rem;
+    .span-card {
+        transition: all 0.2s ease;
+        border-left: 4px solid transparent;
     }
-    .pagination .page-item .page-link svg {
-        width: 12px;
-        height: 12px;
+    .span-card:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .span-card.private { border-left-color: #dc3545; }
+    .span-card.shared { border-left-color: #ffc107; }
+    .span-card.public { border-left-color: #198754; }
+    .permission-indicator {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 4px;
+    }
+    .permission-indicator.user { background-color: #0d6efd; }
+    .permission-indicator.group { background-color: #fd7e14; }
+    .stats-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+    .stats-card.private { background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%); }
+    .stats-card.shared { background: linear-gradient(135deg, #ffa726 0%, #ff7043 100%); }
+    .stats-card.public { background: linear-gradient(135deg, #66bb6a 0%, #43a047 100%); }
+    .quick-action-btn {
+        transition: all 0.2s ease;
+    }
+    .quick-action-btn:hover {
+        transform: scale(1.05);
     }
 </style>
 
 <div class="py-4">
-    <div class="row">
-        <div class="col-12 d-flex justify-content-between align-items-center mb-4">
-            <div>
-                <a href="{{ route('admin.dashboard') }}" class="btn btn-outline-secondary">Back to Dashboard</a>
+    <!-- Header with Stats -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <h1 class="h3 mb-0">Span Access Management</h1>
+                    <p class="text-muted mb-0">Manage access levels and permissions for all spans</p>
+                </div>
+                <div>
+                    <a href="{{ route('admin.dashboard') }}" class="btn btn-outline-secondary">
+                        <i class="bi bi-arrow-left"></i> Back to Dashboard
+                    </a>
+                </div>
             </div>
-            <div>
-                <form id="bulkActionForm" action="{{ route('admin.span-access.make-public-bulk') }}" method="POST" class="d-none">
-                    @csrf
-                    <input type="hidden" name="span_ids" id="bulkSpanIds" value="">
-                    @if(request('types'))
-                        <input type="hidden" name="types" value="{{ request('types') }}">
-                        @foreach(explode(',', request('types')) as $type)
-                            @if(request($type . '_subtype'))
-                                <input type="hidden" name="{{ $type }}_subtype" value="{{ request($type . '_subtype') }}">
-                            @endif
-                        @endforeach
-                    @endif
-                    @if(request('visibility'))
-                        <input type="hidden" name="visibility" value="{{ request('visibility') }}">
-                    @endif
-                    @if(request('private_page'))
-                        <input type="hidden" name="private_page" value="{{ request('private_page') }}">
-                    @endif
-                    @if(request('public_page'))
-                        <input type="hidden" name="public_page" value="{{ request('public_page') }}">
-                    @endif
-                </form>
-                <button type="button" id="makeSelectedPublic" class="btn btn-success" disabled>
-                    Make Selected Public (<span id="selectedCount">0</span>)
-                </button>
+        </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card stats-card private">
+                <div class="card-body text-center">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h3 class="mb-0">{{ $stats['private'] ?? 0 }}</h3>
+                            <small>Private Spans</small>
+                        </div>
+                        <i class="bi bi-lock-fill fs-1 opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stats-card shared">
+                <div class="card-body text-center">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h3 class="mb-0">{{ $stats['shared'] ?? 0 }}</h3>
+                            <small>Shared Spans</small>
+                        </div>
+                        <i class="bi bi-people-fill fs-1 opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stats-card public">
+                <div class="card-body text-center">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h3 class="mb-0">{{ $stats['public'] ?? 0 }}</h3>
+                            <small>Public Spans</small>
+                        </div>
+                        <i class="bi bi-globe fs-1 opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stats-card">
+                <div class="card-body text-center">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h3 class="mb-0">{{ $stats['total'] ?? 0 }}</h3>
+                            <small>Total Spans</small>
+                        </div>
+                        <i class="bi bi-collection fs-1 opacity-75"></i>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
     @if (session('status'))
-        <div class="alert alert-success">
-            {{ session('status') }}
+        <div class="alert alert-success alert-dismissible fade show">
+            <i class="bi bi-check-circle"></i> {{ session('status') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
     @endif
 
     @if (session('error'))
-        <div class="alert alert-danger">
-            {{ session('error') }}
+        <div class="alert alert-danger alert-dismissible fade show">
+            <i class="bi bi-exclamation-triangle"></i> {{ session('error') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
     @endif
 
-    <!-- Spans Tables -->
-    <div class="row">
-        <!-- Private/Shared Spans -->
-        <div class="col-md-6">
-            <div class="card h-100">
-                <div class="card-header bg-secondary text-white">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h5 class="card-title mb-0">Private/Shared Spans</h5>
-                        <div class="form-check">
-                            <input type="checkbox" class="form-check-input select-all" data-target="private" id="selectAllPrivate">
-                            <label class="form-check-label text-white" for="selectAllPrivate">Select All</label>
+    <!-- Quick Actions -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-lightning"></i> Quick Actions
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <button type="button" class="btn btn-outline-primary w-100 quick-action-btn" data-bs-toggle="modal" data-bs-target="#bulkPublicModal">
+                                <i class="bi bi-globe"></i> Make Selected Public
+                            </button>
+                        </div>
+                        <div class="col-md-3">
+                            <button type="button" class="btn btn-outline-secondary w-100 quick-action-btn" data-bs-toggle="modal" data-bs-target="#bulkPrivateModal">
+                                <i class="bi bi-lock"></i> Make Selected Private
+                            </button>
+                        </div>
+                        <div class="col-md-3">
+                            <button type="button" class="btn btn-outline-warning w-100 quick-action-btn" data-bs-toggle="modal" data-bs-target="#bulkGroupModal">
+                                <i class="bi bi-people"></i> Share with Groups
+                            </button>
+                        </div>
+                        <div class="col-md-3">
+                            <a href="{{ route('admin.groups.index') }}" class="btn btn-outline-info w-100 quick-action-btn">
+                                <i class="bi bi-gear"></i> Manage Groups
+                            </a>
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content Tabs -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <ul class="nav nav-tabs card-header-tabs" id="accessTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="all-tab" data-bs-toggle="tab" data-bs-target="#all" type="button" role="tab">
+                                <i class="bi bi-collection"></i> All Spans
+                                <span class="badge bg-secondary ms-1">{{ $allSpans->total() }}</span>
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="private-tab" data-bs-toggle="tab" data-bs-target="#private" type="button" role="tab">
+                                <i class="bi bi-lock"></i> Private
+                                <span class="badge bg-danger ms-1">{{ $privateSpans->total() }}</span>
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="shared-tab" data-bs-toggle="tab" data-bs-target="#shared" type="button" role="tab">
+                                <i class="bi bi-people"></i> Shared
+                                <span class="badge bg-warning ms-1">{{ $sharedSpans->total() }}</span>
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="public-tab" data-bs-toggle="tab" data-bs-target="#public" type="button" role="tab">
+                                <i class="bi bi-globe"></i> Public
+                                <span class="badge bg-success ms-1">{{ $publicSpans->total() }}</span>
+                            </button>
+                        </li>
+                    </ul>
+                </div>
                 <div class="card-body">
-                    @if($privateSharedSpans->count() > 0)
-                        <div class="table-responsive">
-                            <table class="table table-striped">
-                                <thead>
-                                    <tr>
-                                        <th style="width: 40px;"></th>
-                                        <th>Span</th>
-                                        <th>Owner</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach($privateSharedSpans as $span)
-                                        <tr>
-                                            <td>
-                                                <input type="checkbox" class="form-check-input span-checkbox" value="{{ $span->id }}" data-section="private">
-                                            </td>
-                                            <td>
-                                                <x-spans.display.micro-card :span="$span" />
-                                            </td>
-                                            <td>
-                                                <a href="{{ route('admin.users.show', $span->owner_id) }}">
-                                                    {{ $span->owner->email }}
-                                                </a>
-                                            </td>
-                                            <td>
-                                                <div class="btn-group">
-                                                    <a href="{{ route('admin.spans.access.edit', $span) }}" class="btn btn-sm btn-outline-secondary">
-                                                        Edit
-                                                    </a>
-                                                    <form action="{{ route('admin.span-access.make-public', $span->id) }}" method="POST" class="d-inline">
-                                                        @csrf
-                                                        @if(request('types'))
-                                                            <input type="hidden" name="types" value="{{ request('types') }}">
-                                                            @foreach(explode(',', request('types')) as $type)
-                                                                @if(request($type . '_subtype'))
-                                                                    <input type="hidden" name="{{ $type }}_subtype" value="{{ request($type . '_subtype') }}">
-                                                                @endif
-                                                            @endforeach
-                                                        @endif
-                                                        @if(request('visibility'))
-                                                            <input type="hidden" name="visibility" value="{{ request('visibility') }}">
-                                                        @endif
-                                                        @if(request('private_page'))
-                                                            <input type="hidden" name="private_page" value="{{ request('private_page') }}">
-                                                        @endif
-                                                        @if(request('public_page'))
-                                                            <input type="hidden" name="public_page" value="{{ request('public_page') }}">
-                                                        @endif
-                                                        <button type="submit" class="btn btn-sm btn-success">
-                                                            Make Public
-                                                        </button>
-                                                    </form>
+                    <div class="tab-content" id="accessTabsContent">
+                        <!-- All Spans Tab -->
+                        <div class="tab-pane fade show active" id="all" role="tabpanel">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5 class="mb-0">All Spans</h5>
+                                <div class="form-check">
+                                    <input type="checkbox" class="form-check-input" id="selectAllSpans">
+                                    <label class="form-check-label" for="selectAllSpans">Select All</label>
+                                </div>
+                            </div>
+                            <div class="row" id="allSpansContainer">
+                                @foreach($allSpans as $span)
+                                    <div class="col-md-6 col-lg-4 mb-3">
+                                        <div class="card span-card {{ $span->access_level }}">
+                                            <div class="card-body">
+                                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                                    <div class="form-check">
+                                                        <input type="checkbox" class="form-check-input span-checkbox" value="{{ $span->id }}" data-access-level="{{ $span->access_level }}">
+                                                    </div>
+                                                    <span class="access-badge badge bg-{{ $span->access_level === 'public' ? 'success' : ($span->access_level === 'shared' ? 'warning' : 'danger') }}">
+                                                        {{ ucfirst($span->access_level) }}
+                                                    </span>
                                                 </div>
-                                            </td>
-                                        </tr>
-                                    @endforeach
-                                </tbody>
-                            </table>
+                                                <x-spans.display.micro-card :span="$span" />
+                                                <div class="mt-2">
+                                                    <small class="text-muted">
+                                                        <i class="bi bi-person"></i> {{ $span->owner->name }}
+                                                    </small>
+                                                    
+                                                    @if($span->access_level === 'shared')
+                                                        <div class="mt-1">
+                                                            @php
+                                                                $userPermissions = $span->spanPermissions()->whereNotNull('user_id')->count();
+                                                                $groupPermissionsCount = $span->spanPermissions()->whereNotNull('group_id')->count();
+                                                            @endphp
+                                                            @if($userPermissions > 0)
+                                                                <span class="permission-indicator user"></span>
+                                                                <small class="text-muted">{{ $userPermissions }} user{{ $userPermissions !== 1 ? 's' : '' }}</small>
+                                                            @endif
+                                                            @if($groupPermissionsCount > 0)
+                                                                <span class="permission-indicator group"></span>
+                                                                <small class="text-muted">{{ $groupPermissionsCount }} group{{ $groupPermissionsCount !== 1 ? 's' : '' }}</small>
+                                                            @endif
+                                                        </div>
+                                                    @endif
+                                                </div>
+                                                <div class="mt-3">
+                                                    <div class="btn-group w-100" role="group">
+                                                        <a href="{{ route('admin.spans.access.edit', $span) }}" class="btn btn-sm btn-outline-primary">
+                                                            <i class="bi bi-gear"></i> Manage
+                                                        </a>
+                                                        <a href="{{ route('spans.show', $span) }}" class="btn btn-sm btn-outline-secondary">
+                                                            <i class="bi bi-eye"></i> View
+                                                        </a>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                            
+                            <!-- Pagination -->
+                            <div class="d-flex justify-content-center mt-4">
+                                <x-pagination :paginator="$allSpans->onEachSide(1)->appends(request()->except('all_page'))" :showInfo="true" itemName="spans" />
+                            </div>
                         </div>
-                        
-                        <!-- Pagination -->
-                        <div class="d-flex justify-content-center mt-4">
-                            <x-pagination :paginator="$privateSharedSpans->onEachSide(1)->appends(request()->except('private_page'))" :showInfo="false" itemName="spans" />
+
+                        <!-- Private Spans Tab -->
+                        <div class="tab-pane fade" id="private" role="tabpanel">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5 class="mb-0">Private Spans</h5>
+                                <div class="form-check">
+                                    <input type="checkbox" class="form-check-input" id="selectAllPrivate">
+                                    <label class="form-check-label" for="selectAllPrivate">Select All</label>
+                                </div>
+                            </div>
+                            <div class="row" id="privateSpansContainer">
+                                @foreach($privateSpans as $span)
+                                    <div class="col-md-6 col-lg-4 mb-3">
+                                        <div class="card span-card private">
+                                            <div class="card-body">
+                                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                                    <div class="form-check">
+                                                        <input type="checkbox" class="form-check-input span-checkbox" value="{{ $span->id }}" data-access-level="private">
+                                                    </div>
+                                                    <span class="access-badge badge bg-danger">Private</span>
+                                                </div>
+                                                <x-spans.display.micro-card :span="$span" />
+                                                <div class="mt-2">
+                                                    <small class="text-muted">
+                                                        <i class="bi bi-person"></i> {{ $span->owner->name }}
+                                                    </small>
+                                                </div>
+                                                <div class="mt-3">
+                                                    <div class="btn-group w-100" role="group">
+                                                        <a href="{{ route('admin.spans.access.edit', $span) }}" class="btn btn-sm btn-outline-primary">
+                                                            <i class="bi bi-gear"></i> Manage
+                                                        </a>
+                                                        <a href="{{ route('spans.show', $span) }}" class="btn btn-sm btn-outline-secondary">
+                                                            <i class="bi bi-eye"></i> View
+                                                        </a>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                            
+                            <!-- Pagination -->
+                            <div class="d-flex justify-content-center mt-4">
+                                <x-pagination :paginator="$privateSpans->onEachSide(1)->appends(request()->except('private_page'))" :showInfo="true" itemName="spans" />
+                            </div>
                         </div>
-                    @else
-                        <div class="alert alert-info">
-                            No private or shared spans found matching your criteria.
+
+                        <!-- Shared Spans Tab -->
+                        <div class="tab-pane fade" id="shared" role="tabpanel">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5 class="mb-0">Shared Spans</h5>
+                                <div class="form-check">
+                                    <input type="checkbox" class="form-check-input" id="selectAllShared">
+                                    <label class="form-check-label" for="selectAllShared">Select All</label>
+                                </div>
+                            </div>
+                            <div class="row" id="sharedSpansContainer">
+                                @foreach($sharedSpans as $span)
+                                    <div class="col-md-6 col-lg-4 mb-3">
+                                        <div class="card span-card shared">
+                                            <div class="card-body">
+                                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                                    <div class="form-check">
+                                                        <input type="checkbox" class="form-check-input span-checkbox" value="{{ $span->id }}" data-access-level="shared">
+                                                    </div>
+                                                    <span class="access-badge badge bg-warning">Shared</span>
+                                                </div>
+                                                <x-spans.display.micro-card :span="$span" />
+                                                <div class="mt-2">
+                                                    <small class="text-muted">
+                                                        <i class="bi bi-person"></i> {{ $span->owner->name }}
+                                                    </small>
+                                                    
+                                                    @php
+                                                        $groupPermissions = $span->spanPermissions()->whereNotNull('group_id')->with('group')->get();
+                                                    @endphp
+                                                    @if($groupPermissions->count() > 0)
+                                                        <div class="mt-1">
+                                                            <small class="text-muted">Groups:</small>
+                                                            <div class="mt-1">
+                                                                @foreach($groupPermissions as $permission)
+                                                                    <span class="badge bg-info me-1 mb-1" title="{{ $permission->group->name }}">
+                                                                        <i class="bi bi-people"></i> {{ $permission->group->name }}
+                                                                    </span>
+                                                                @endforeach
+                                                            </div>
+                                                        </div>
+                                                    @endif
+                                                    
+                                                    <div class="mt-1">
+                                                        @php
+                                                            $userPermissions = $span->spanPermissions()->whereNotNull('user_id')->count();
+                                                            $groupPermissionsCount = $span->spanPermissions()->whereNotNull('group_id')->count();
+                                                        @endphp
+                                                        @if($userPermissions > 0)
+                                                            <span class="permission-indicator user"></span>
+                                                            <small class="text-muted">{{ $userPermissions }} user{{ $userPermissions !== 1 ? 's' : '' }}</small>
+                                                        @endif
+                                                        @if($groupPermissionsCount > 0)
+                                                            <span class="permission-indicator group"></span>
+                                                            <small class="text-muted">{{ $groupPermissionsCount }} group{{ $groupPermissionsCount !== 1 ? 's' : '' }}</small>
+                                                        @endif
+                                                    </div>
+                                                </div>
+                                                <div class="mt-3">
+                                                    <div class="btn-group w-100" role="group">
+                                                        <a href="{{ route('admin.spans.access.edit', $span) }}" class="btn btn-sm btn-outline-primary">
+                                                            <i class="bi bi-gear"></i> Manage
+                                                        </a>
+                                                        <a href="{{ route('spans.show', $span) }}" class="btn btn-sm btn-outline-secondary">
+                                                            <i class="bi bi-eye"></i> View
+                                                        </a>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                            
+                            <!-- Pagination -->
+                            <div class="d-flex justify-content-center mt-4">
+                                <x-pagination :paginator="$sharedSpans->onEachSide(1)->appends(request()->except('shared_page'))" :showInfo="true" itemName="spans" />
+                            </div>
                         </div>
-                    @endif
+
+                        <!-- Public Spans Tab -->
+                        <div class="tab-pane fade" id="public" role="tabpanel">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5 class="mb-0">Public Spans</h5>
+                                <div class="form-check">
+                                    <input type="checkbox" class="form-check-input" id="selectAllPublic">
+                                    <label class="form-check-label" for="selectAllPublic">Select All</label>
+                                </div>
+                            </div>
+                            <div class="row" id="publicSpansContainer">
+                                @foreach($publicSpans as $span)
+                                    <div class="col-md-6 col-lg-4 mb-3">
+                                        <div class="card span-card public">
+                                            <div class="card-body">
+                                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                                    <div class="form-check">
+                                                        <input type="checkbox" class="form-check-input span-checkbox" value="{{ $span->id }}" data-access-level="public">
+                                                    </div>
+                                                    <span class="access-badge badge bg-success">Public</span>
+                                                </div>
+                                                <x-spans.display.micro-card :span="$span" />
+                                                <div class="mt-2">
+                                                    <small class="text-muted">
+                                                        <i class="bi bi-person"></i> {{ $span->owner->name }}
+                                                    </small>
+                                                </div>
+                                                <div class="mt-3">
+                                                    <div class="btn-group w-100" role="group">
+                                                        <a href="{{ route('admin.spans.access.edit', $span) }}" class="btn btn-sm btn-outline-primary">
+                                                            <i class="bi bi-gear"></i> Manage
+                                                        </a>
+                                                        <a href="{{ route('spans.show', $span) }}" class="btn btn-sm btn-outline-secondary">
+                                                            <i class="bi bi-eye"></i> View
+                                                        </a>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                            
+                            <!-- Pagination -->
+                            <div class="d-flex justify-content-center mt-4">
+                                <x-pagination :paginator="$publicSpans->onEachSide(1)->appends(request()->except('public_page'))" :showInfo="true" itemName="spans" />
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
+    </div>
+</div>
 
-        <!-- Public Spans -->
-        <div class="col-md-6">
-            <div class="card h-100">
-                <div class="card-header bg-success text-white">
-                    <h5 class="card-title mb-0">Public Spans</h5>
+<!-- Bulk Action Modals -->
+<!-- Make Public Modal -->
+<div class="modal fade" id="bulkPublicModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Make Selected Spans Public</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to make <span id="publicCount">0</span> selected span(s) public?</p>
+                <p class="text-muted small">This will make the spans visible to all users.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form action="{{ route('admin.span-access.make-public-bulk') }}" method="POST" id="bulkPublicForm">
+                    @csrf
+                    <input type="hidden" name="span_ids" id="bulkPublicSpanIds">
+                    <button type="submit" class="btn btn-success">Make Public</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Make Private Modal -->
+<div class="modal fade" id="bulkPrivateModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Make Selected Spans Private</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to make <span id="privateCount">0</span> selected span(s) private?</p>
+                <p class="text-muted small">This will remove all shared permissions and make the spans visible only to their owners.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form action="{{ route('admin.span-access.make-private-bulk') }}" method="POST" id="bulkPrivateForm">
+                    @csrf
+                    <input type="hidden" name="span_ids" id="bulkPrivateSpanIds">
+                    <button type="submit" class="btn btn-danger">Make Private</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Share with Groups Modal -->
+<div class="modal fade" id="bulkGroupModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Share Selected Spans with Groups</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Share <span id="groupCount">0</span> selected span(s) with groups:</p>
+                
+                <div class="mb-3">
+                    <label class="form-label">Select Groups</label>
+                    <select class="form-select" id="bulkGroupSelect" multiple>
+                        @foreach($groups ?? [] as $group)
+                            <option value="{{ $group->id }}">{{ $group->name }} ({{ $group->users->count() }} members)</option>
+                        @endforeach
+                    </select>
                 </div>
-                <div class="card-body">
-                    @if($publicSpans->count() > 0)
-                        <div class="table-responsive">
-                            <table class="table table-striped">
-                                <thead>
-                                    <tr>
-                                        <th>Span</th>
-                                        <th>Owner</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach($publicSpans as $span)
-                                        <tr>
-                                            <td>
-                                                <x-spans.display.micro-card :span="$span" />
-                                            </td>
-                                            <td>
-                                                <a href="{{ route('admin.users.show', $span->owner_id) }}">
-                                                    {{ $span->owner->email }}
-                                                </a>
-                                            </td>
-                                            <td>
-                                                <div class="btn-group">
-                                                    <a href="{{ route('admin.spans.access.edit', $span) }}" class="btn btn-sm btn-outline-secondary">
-                                                        Edit
-                                                    </a>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    @endforeach
-                                </tbody>
-                            </table>
-                        </div>
-                        
-                        <!-- Pagination -->
-                        <div class="d-flex justify-content-center mt-4">
-                            <x-pagination :paginator="$publicSpans->onEachSide(1)->appends(request()->except('public_page'))" :showInfo="false" itemName="spans" />
-                        </div>
-                    @else
-                        <div class="alert alert-info">
-                            No public spans found matching your criteria.
-                        </div>
-                    @endif
+                
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i>
+                    <strong>Permission rules:</strong>
+                    <ul class="mb-0 mt-2">
+                        <li>Personal spans: Group members can view but not edit</li>
+                        <li>Non-personal spans: Group members can view and edit</li>
+                    </ul>
                 </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form action="{{ route('admin.span-access.share-with-groups-bulk') }}" method="POST" id="bulkGroupForm">
+                    @csrf
+                    <input type="hidden" name="span_ids" id="bulkGroupSpanIds">
+                    <input type="hidden" name="group_ids" id="bulkGroupIds">
+                    <input type="hidden" name="permission_type" id="bulkPermissionTypeInput">
+                    <button type="submit" class="btn btn-warning">Share with Groups</button>
+                </form>
             </div>
         </div>
     </div>
@@ -226,87 +558,77 @@
 
 @section('scripts')
 <script>
-console.log('Starting span access management script');
-
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('DOM Content Loaded');
-    
-    const bulkActionForm = document.getElementById('bulkActionForm');
-    const bulkSpanIds = document.getElementById('bulkSpanIds');
-    const makeSelectedPublicBtn = document.getElementById('makeSelectedPublic');
-    const selectedCountSpan = document.getElementById('selectedCount');
-    const checkboxes = document.querySelectorAll('.span-checkbox');
-    const selectAllCheckboxes = document.querySelectorAll('.select-all');
-
-    console.log('Elements found:', {
-        bulkActionForm: !!bulkActionForm,
-        bulkSpanIds: !!bulkSpanIds,
-        makeSelectedPublicBtn: !!makeSelectedPublicBtn,
-        selectedCountSpan: !!selectedCountSpan,
-        checkboxesCount: checkboxes.length,
-        selectAllCheckboxesCount: selectAllCheckboxes.length
+    // Initialize Bootstrap tooltips
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
     });
 
+    // Checkbox management
+    const spanCheckboxes = document.querySelectorAll('.span-checkbox');
+    const selectAllCheckboxes = document.querySelectorAll('#selectAllSpans, #selectAllPrivate, #selectAllShared, #selectAllPublic');
+    
     // Handle individual checkbox changes
-    checkboxes.forEach(checkbox => {
-        checkbox.addEventListener('change', function() {
-            console.log('Checkbox changed:', this.checked, 'value:', this.value);
-            updateSelectedSpans();
-        });
+    spanCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', updateSelectedCounts);
     });
 
     // Handle "Select All" checkbox changes
     selectAllCheckboxes.forEach(selectAll => {
         selectAll.addEventListener('change', function() {
-            console.log('Select All changed:', this.checked, 'target:', this.dataset.target);
-            const section = this.dataset.target;
-            const sectionCheckboxes = document.querySelectorAll(`.span-checkbox[data-section="${section}"]`);
-            console.log('Found section checkboxes:', sectionCheckboxes.length);
-            sectionCheckboxes.forEach(cb => {
+            const container = this.closest('.tab-pane');
+            const checkboxes = container.querySelectorAll('.span-checkbox');
+            checkboxes.forEach(cb => {
                 cb.checked = this.checked;
             });
-            updateSelectedSpans();
+            updateSelectedCounts();
         });
     });
 
-    // Update selected spans and button state
-    function updateSelectedSpans() {
+    // Update counts and form values
+    function updateSelectedCounts() {
         const checkedBoxes = document.querySelectorAll('.span-checkbox:checked');
-        console.log('Number of checked boxes:', checkedBoxes.length);
-        
         const selectedIds = Array.from(checkedBoxes).map(cb => cb.value);
-        console.log('Selected IDs:', selectedIds);
         
-        const count = selectedIds.length;
-        bulkSpanIds.value = selectedIds.join(',');
-        makeSelectedPublicBtn.disabled = count === 0;
-        selectedCountSpan.textContent = count;
+        // Update modal counts
+        document.getElementById('publicCount').textContent = selectedIds.length;
+        document.getElementById('privateCount').textContent = selectedIds.length;
+        document.getElementById('groupCount').textContent = selectedIds.length;
         
-        console.log('Updated UI:', {
-            count,
-            buttonDisabled: makeSelectedPublicBtn.disabled,
-            hiddenFieldValue: bulkSpanIds.value
+        // Update form hidden fields
+        document.getElementById('bulkPublicSpanIds').value = selectedIds.join(',');
+        document.getElementById('bulkPrivateSpanIds').value = selectedIds.join(',');
+        document.getElementById('bulkGroupSpanIds').value = selectedIds.join(',');
+        
+        // Update button states
+        const quickActionBtns = document.querySelectorAll('.quick-action-btn');
+        quickActionBtns.forEach(btn => {
+            if (btn.textContent.includes('Selected')) {
+                btn.disabled = selectedIds.length === 0;
+            }
         });
     }
 
-    // Handle bulk action button click
-    makeSelectedPublicBtn.addEventListener('click', function() {
-        const count = document.querySelectorAll('.span-checkbox:checked').length;
-        console.log('Bulk action clicked, count:', count);
-        if (count > 0) {
-            if (confirm(`Are you sure you want to make ${count} span${count !== 1 ? 's' : ''} public?`)) {
-                console.log('Submitting form with IDs:', bulkSpanIds.value);
-                bulkActionForm.submit();
-            }
+    // Bulk group sharing form handling
+    document.getElementById('bulkGroupForm').addEventListener('submit', function(e) {
+        const groupSelect = document.getElementById('bulkGroupSelect');
+        
+        if (groupSelect.selectedOptions.length === 0) {
+            e.preventDefault();
+            alert('Please select at least one group.');
+            return;
         }
+        
+        const selectedGroups = Array.from(groupSelect.selectedOptions).map(option => option.value);
+        document.getElementById('bulkGroupIds').value = selectedGroups.join(',');
+        // Permission type will be determined automatically by the backend based on span type
+        document.getElementById('bulkPermissionTypeInput').value = 'auto';
     });
 
-    // Initialize the count
-    console.log('Initializing count');
-    updateSelectedSpans();
+    // Initialize counts
+    updateSelectedCounts();
 });
-
-console.log('Span access management script loaded');
 </script>
 @endsection
 

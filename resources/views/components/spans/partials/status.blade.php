@@ -97,7 +97,7 @@
                     data-bs-toggle="tooltip" 
                     data-bs-placement="top" 
                     data-bs-custom-class="tooltip-mini"
-                    data-bs-title="{{ $span->state === 'complete' ? 'This span is complete with all information' : ($span->state === 'draft' ? 'This span is a draft and may need more information' : 'This span is a placeholder and needs more details') }}">
+                    data-bs-title="{{ $span->state === 'complete' ? 'This span is complete with all information' : ($span->state === 'draft' ? 'This span is a draft and may need more information' : 'This span is a placeholder - help us complete it!') }}">
                 <i class="bi bi-{{ $span->state === 'complete' ? 'check-circle' : ($span->state === 'draft' ? 'pencil' : 'question-circle') }} me-1"></i>
                 {{ ucfirst($span->state) }}
             </button>
