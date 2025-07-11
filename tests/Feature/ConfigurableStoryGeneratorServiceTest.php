@@ -90,13 +90,16 @@ class ConfigurableStoryGeneratorServiceTest extends TestCase
 
     public function test_living_person_age_sentence_uses_normal_template()
     {
-        // Create a living person
+        // Create a living person (explicitly set no end date)
         $person = Span::factory()->create([
             'name' => 'Jane Smith',
             'type_id' => 'person',
             'start_year' => 1990,
             'start_month' => 5,
             'start_day' => 15,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
             'metadata' => ['gender' => 'female'],
         ]);
 
