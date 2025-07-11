@@ -10,7 +10,7 @@
         <div class="col-12 d-flex justify-content-end mb-4">
             <div>
                 <a href="{{ route('admin.spans.show', $span) }}" class="btn btn-outline-secondary">View Span</a>
-                <a href="{{ route('admin.spans.permissions.edit', $span) }}" class="btn btn-outline-secondary">Manage Permissions</a>
+                <a href="{{ route('admin.spans.permissions.show', $span) }}" class="btn btn-outline-secondary">Manage Permissions</a>
                 <a href="{{ route('admin.spans.access.edit', $span) }}" class="btn btn-outline-secondary">Manage Access</a>
                 <a href="{{ route('admin.spans.index') }}" class="btn btn-outline-secondary">Back to List</a>
             </div>
@@ -208,7 +208,7 @@
                     <button type="submit" class="btn btn-primary">Save Changes</button>
                     
                     <div>
-                        <a href="{{ route('admin.spans.permissions.edit', $span) }}" 
+                        <a href="{{ route('admin.spans.permissions.show', $span) }}" 
                            class="btn btn-outline-primary">Manage Permissions</a>
                         <a href="{{ route('admin.spans.access.edit', $span) }}" 
                            class="btn btn-outline-primary">Manage Access</a>

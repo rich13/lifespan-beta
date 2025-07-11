@@ -10,7 +10,7 @@
         <div class="col-12 d-flex justify-content-end mb-4">
             <div>
                 <a href="{{ route('admin.spans.edit', $span) }}" class="btn btn-primary">Edit Span</a>
-                <a href="{{ route('admin.spans.permissions.edit', $span) }}" class="btn btn-outline-secondary">Manage Permissions</a>
+                <a href="{{ route('admin.spans.permissions.show', $span) }}" class="btn btn-outline-secondary">Manage Permissions</a>
                 <a href="{{ route('admin.spans.access.edit', $span) }}" class="btn btn-outline-secondary">Manage Access</a>
                 <a href="{{ route('admin.spans.index') }}" class="btn btn-outline-secondary">Back to List</a>
             </div>
@@ -67,7 +67,7 @@
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <h2 class="card-title h5 mb-0">Permissions</h2>
-                        <a href="{{ route('admin.spans.permissions.edit', $span) }}" 
+                        <a href="{{ route('admin.spans.permissions.show', $span) }}" 
                            class="btn btn-sm btn-outline-primary">Manage Permissions</a>
                     </div>
                     <dl class="row mb-0">

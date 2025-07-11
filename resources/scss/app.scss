@@ -19,6 +19,11 @@
 // LIFESPAN CUSTOM COLOR THEME
 // ============================================================================
 
+// Utility classes
+.border-dashed {
+  border-style: dashed !important;
+}
+
 // Lifespan semantic color system with background and text colors for proper contrast
 $lifespan-colors: (
   // Span Types

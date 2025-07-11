@@ -53,12 +53,12 @@ use Illuminate\Support\Facades\Session;
                     @else
                         <div class="fw-bold">{{ Auth::user()->name }}</div>
                     @endif
-                    <div class="small text-muted">{{ Auth::user()->email }}</div>
                 </div>
                 
                 <!-- Menu Items -->
-                <a href="{{ route('profile.edit') }}" class="d-block p-2 text-decoration-none text-dark rounded hover-bg-light">
-                    <i class="bi bi-person me-2"></i>Your Account
+                
+                <a href="{{ route('settings.index') }}" class="d-block p-2 text-decoration-none text-dark rounded hover-bg-light">
+                    <i class="bi bi-gear me-2"></i>Settings
                 </a>
                 
                 @if(Auth::user()->is_admin)
