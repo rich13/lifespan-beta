@@ -85,10 +85,10 @@ class SpanAccessManagerController extends Controller
         $sharedQuery->where('access_level', 'shared');
         
         // Get the results with pagination
-        $allSpans = $allQuery->orderBy('name')->paginate(24, ['*'], 'all_page');
-        $publicSpans = $publicQuery->orderBy('name')->paginate(24, ['*'], 'public_page');
-        $privateSpans = $privateQuery->orderBy('name')->paginate(24, ['*'], 'private_page');
-        $sharedSpans = $sharedQuery->orderBy('name')->paginate(24, ['*'], 'shared_page');
+        $allSpans = $allQuery->orderBy('name')->paginate(500, ['*'], 'all_page');
+        $publicSpans = $publicQuery->orderBy('name')->paginate(500, ['*'], 'public_page');
+        $privateSpans = $privateQuery->orderBy('name')->paginate(500, ['*'], 'private_page');
+        $sharedSpans = $sharedQuery->orderBy('name')->paginate(500, ['*'], 'shared_page');
         
         // Calculate statistics using fresh queries to avoid filter interference
         $statsQuery = Span::with(['owner', 'spanPermissions'])
@@ -248,15 +248,24 @@ class SpanAccessManagerController extends Controller
             ->update(['access_level' => 'public']);
 
         // Remove all permissions for these spans and clear caches
-        Span::whereIn('id', $spanIds)
+        $spansToUpdate = Span::whereIn('id', $spanIds)
             ->where('is_personal_span', false)
             ->where('state', '!=', 'placeholder')
             ->whereIn('access_level', ['private', 'shared'])
-            ->get()
-            ->each(function($span) {
+            ->get();
+        
+        // Batch process cache clearing for better performance
+        if ($spansToUpdate->count() > 50) {
+            // For large batches, use bulk cache clearing
+            $spanIdsToClear = $spansToUpdate->pluck('id')->toArray();
+            $this->bulkClearTimelineCaches($spanIdsToClear);
+        } else {
+            // For smaller batches, use individual cache clearing
+            $spansToUpdate->each(function($span) {
                 $span->spanPermissions()->delete();
                 $span->clearAllTimelineCaches();
             });
+        }
 
         // Get count of skipped placeholders
         $placeholderCount = Span::whereIn('id', $spanIds)
@@ -299,14 +308,23 @@ class SpanAccessManagerController extends Controller
             ->update(['access_level' => 'private']);
 
         // Remove all permissions for these spans and clear caches
-        Span::whereIn('id', $spanIds)
+        $spansToUpdate = Span::whereIn('id', $spanIds)
             ->where('is_personal_span', false)
             ->where('state', '!=', 'placeholder')
-            ->get()
-            ->each(function($span) {
+            ->get();
+        
+        // Batch process cache clearing for better performance
+        if ($spansToUpdate->count() > 50) {
+            // For large batches, use bulk cache clearing
+            $spanIdsToClear = $spansToUpdate->pluck('id')->toArray();
+            $this->bulkClearTimelineCaches($spanIdsToClear);
+        } else {
+            // For smaller batches, use individual cache clearing
+            $spansToUpdate->each(function($span) {
                 $span->spanPermissions()->delete();
                 $span->clearAllTimelineCaches();
             });
+        }
 
         // Get count of skipped placeholders
         $placeholderCount = Span::whereIn('id', $spanIds)
@@ -387,5 +405,39 @@ class SpanAccessManagerController extends Controller
 
         return redirect()->route('admin.span-access.index', $queryParams)
             ->with('status', "{$count} spans have been shared with " . count($groupIds) . " group(s). Personal spans: view only, non-personal spans: full edit access.");
+    }
+
+    /**
+     * Bulk clear timeline caches for multiple spans
+     * This is more efficient than clearing caches individually for large batches
+     */
+    private function bulkClearTimelineCaches(array $spanIds): void
+    {
+        // For large batches, use a more efficient cache clearing strategy
+        // Instead of clearing individual caches, we can clear broader patterns
+        
+        // Clear all timeline caches at once if using Redis or file cache
+        if (config('cache.default') === 'redis' || config('cache.default') === 'file') {
+            \Cache::flush();
+            return;
+        }
+        
+        // For database cache, clear in batches
+        $chunks = array_chunk($spanIds, 100);
+        foreach ($chunks as $chunk) {
+            foreach ($chunk as $spanId) {
+                // Clear guest caches
+                \Cache::forget("timeline_{$spanId}_guest");
+                \Cache::forget("timeline_object_{$spanId}_guest");
+                \Cache::forget("timeline_during_{$spanId}_guest");
+                
+                // Clear caches for all users (1-1000)
+                for ($userId = 1; $userId <= 1000; $userId++) {
+                    \Cache::forget("timeline_{$spanId}_{$userId}");
+                    \Cache::forget("timeline_object_{$spanId}_{$userId}");
+                    \Cache::forget("timeline_during_{$spanId}_{$userId}");
+                }
+            }
+        }
     }
 } 
