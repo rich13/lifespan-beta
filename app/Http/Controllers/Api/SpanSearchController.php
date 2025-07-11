@@ -90,9 +90,41 @@ class SpanSearchController extends Controller
             $spans->whereJsonContains('metadata->subtype', $subtype);
         }
 
+        // Add owner restriction if specified
+        $ownerId = $request->get('owner_id');
+        if ($ownerId) {
+            $spans->where('owner_id', $ownerId);
+        }
+
         // Search by name
         if ($query) {
             $spans->where('name', 'ilike', "%{$query}%");
+        }
+
+        // Apply temporal filtering if specified
+        $temporalRelation = $request->get('temporal_relation');
+        $temporalSpanId = $request->get('temporal_span_id');
+        
+        if ($temporalRelation && $temporalSpanId) {
+            $temporalSpan = Span::find($temporalSpanId);
+            if ($temporalSpan) {
+                // Use the temporal method from the Span model
+                $temporalSpans = $temporalSpan->getTemporalSpans($temporalRelation, [
+                    'type_id' => $type,
+                    'subtype' => $subtype,
+                    'owner_id' => $ownerId,
+                    'limit' => 100 // Get more results for temporal filtering
+                ], $user);
+                
+                // Get the IDs of temporal spans and filter the main query
+                $temporalSpanIds = $temporalSpans->pluck('id');
+                if ($temporalSpanIds->isNotEmpty()) {
+                    $spans->whereIn('id', $temporalSpanIds);
+                } else {
+                    // No temporal matches, return empty results
+                    $spans->whereRaw('1 = 0');
+                }
+            }
         }
 
         // Get existing results with type information (including placeholders)
@@ -177,6 +209,53 @@ class SpanSearchController extends Controller
             'state' => $span->state,
             'metadata' => $span->metadata
         ]);
+    }
+
+    /**
+     * Get spans with a specific temporal relationship to the given span
+     */
+    public function temporal(Span $span, Request $request)
+    {
+        $user = Auth::user();
+        $isPublic = $span->isPublic();
+        $hasPermission = $span->hasPermission($user, 'view');
+
+        // Check access permissions
+        if (!$isPublic && (!$user || !$hasPermission)) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        $relation = $request->get('relation', 'during');
+        $filters = $request->only(['type_id', 'subtype', 'owner_id', 'state', 'limit', 'order_by', 'order_direction']);
+
+        // Cache key includes user ID and filters for proper caching
+        $cacheKey = "temporal_{$span->id}_{$relation}_" . ($user?->id ?? 'guest') . "_" . md5(serialize($filters));
+        
+        return Cache::remember($cacheKey, 300, function () use ($span, $relation, $filters, $user) {
+            $temporalSpans = $span->getTemporalSpans($relation, $filters, $user);
+            
+            return response()->json([
+                'span_id' => $span->id,
+                'span_name' => $span->name,
+                'relation' => $relation,
+                'spans' => $temporalSpans->map(function ($temporalSpan) {
+                    return [
+                        'id' => $temporalSpan->id,
+                        'name' => $temporalSpan->name,
+                        'type_id' => $temporalSpan->type_id,
+                        'subtype' => $temporalSpan->subtype,
+                        'start_year' => $temporalSpan->start_year,
+                        'start_month' => $temporalSpan->start_month,
+                        'start_day' => $temporalSpan->start_day,
+                        'end_year' => $temporalSpan->end_year,
+                        'end_month' => $temporalSpan->end_month,
+                        'end_day' => $temporalSpan->end_day,
+                        'description' => $temporalSpan->description,
+                        'metadata' => $temporalSpan->metadata,
+                    ];
+                })
+            ]);
+        });
     }
 
     /**

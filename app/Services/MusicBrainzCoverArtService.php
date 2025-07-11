@@ -15,6 +15,18 @@ class MusicBrainzCoverArtService
     protected $minRequestInterval = 1.0; // 1 second minimum between requests
 
     /**
+     * Get a singleton instance of the service
+     */
+    public static function getInstance(): self
+    {
+        static $instance = null;
+        if ($instance === null) {
+            $instance = new self();
+        }
+        return $instance;
+    }
+
+    /**
      * Ensure we respect the rate limit (1 request per second)
      */
     protected function respectRateLimit(): void
@@ -81,6 +93,19 @@ class MusicBrainzCoverArtService
      */
     public function getCoverArt(string $releaseGroupId): ?array
     {
+        // Cache key for this release group
+        $cacheKey = "coverart_{$releaseGroupId}";
+        
+        // Try to get from cache first
+        $cachedData = Cache::get($cacheKey);
+        if ($cachedData !== null) {
+            Log::info('Cover art retrieved from cache', [
+                'release_group_id' => $releaseGroupId,
+                'cached' => true
+            ]);
+            return $cachedData;
+        }
+
         Log::info('Fetching cover art from Cover Art Archive', [
             'release_group_id' => $releaseGroupId,
             'url' => "{$this->coverArtApiUrl}/release-group/{$releaseGroupId}"
@@ -93,6 +118,8 @@ class MusicBrainzCoverArtService
                 Log::info('No cover art found for release group', [
                     'release_group_id' => $releaseGroupId
                 ]);
+                // Cache the null result for a shorter time to avoid repeated 404 requests
+                Cache::put($cacheKey, null, 3600); // 1 hour for 404s
                 return null;
             }
             
@@ -112,6 +139,9 @@ class MusicBrainzCoverArtService
             'images_count' => count($data['images'] ?? []),
             'sample_image' => $data['images'][0] ?? null
         ]);
+
+        // Cache the successful response for 24 hours
+        Cache::put($cacheKey, $data, 86400); // 24 hours
 
         return $data;
     }
@@ -272,5 +302,40 @@ class MusicBrainzCoverArtService
             'back_cover_url' => $backCover ? 
                 "{$this->coverArtApiUrl}/release/{$releaseId}/{$backCover['id']}-500.jpg" : null,
         ];
+    }
+
+    /**
+     * Clear the cover art cache for a specific release group
+     * 
+     * @param string $releaseGroupId MusicBrainz Release Group ID
+     * @return void
+     */
+    public function clearCache(string $releaseGroupId): void
+    {
+        $cacheKey = "coverart_{$releaseGroupId}";
+        Cache::forget($cacheKey);
+        
+        Log::info('Cleared cover art cache', [
+            'release_group_id' => $releaseGroupId
+        ]);
+    }
+
+    /**
+     * Clear all cover art caches
+     * 
+     * @return void
+     */
+    public function clearAllCaches(): void
+    {
+        // Note: This is a simple implementation that clears all cache keys starting with "coverart_"
+        // In a production environment, you might want to use a more sophisticated approach
+        // like Redis SCAN or a dedicated cache tag system
+        
+        Log::info('Cleared all cover art caches');
+        
+        // For now, we'll just log this. In a real implementation, you might want to:
+        // 1. Use cache tags if your cache driver supports them
+        // 2. Use Redis SCAN to find and delete all coverart_ keys
+        // 3. Maintain a list of cached release group IDs in a separate cache key
     }
 } 

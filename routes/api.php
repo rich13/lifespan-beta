@@ -33,6 +33,9 @@ Route::get('/spans/{span}', [SpanSearchController::class, 'timeline']);
 Route::get('/spans/{span}/object-connections', [SpanSearchController::class, 'timelineObjectConnections']);
 Route::get('/spans/{span}/during-connections', [SpanSearchController::class, 'timelineDuringConnections']);
 
+// Temporal relationship API
+Route::get('/spans/{span}/temporal', [SpanSearchController::class, 'temporal']);
+
 // Residence timeline API
 
 

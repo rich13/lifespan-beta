@@ -690,7 +690,7 @@ class Span extends Model
             return null;
         }
 
-        $coverArtService = new \App\Services\MusicBrainzCoverArtService();
+        $coverArtService = \App\Services\MusicBrainzCoverArtService::getInstance();
         return $coverArtService->getFrontCoverUrl($this->music_brainz_id, '500');
     }
 
@@ -703,7 +703,7 @@ class Span extends Model
             return null;
         }
 
-        $coverArtService = new \App\Services\MusicBrainzCoverArtService();
+        $coverArtService = \App\Services\MusicBrainzCoverArtService::getInstance();
         return $coverArtService->getFrontCoverUrl($this->music_brainz_id, '1200');
     }
 
@@ -716,7 +716,7 @@ class Span extends Model
             return null;
         }
 
-        $coverArtService = new \App\Services\MusicBrainzCoverArtService();
+        $coverArtService = \App\Services\MusicBrainzCoverArtService::getInstance();
         return $coverArtService->getFrontCoverUrl($this->music_brainz_id, '250');
     }
 
@@ -729,8 +729,21 @@ class Span extends Model
             return false;
         }
 
-        $coverArtService = new \App\Services\MusicBrainzCoverArtService();
+        $coverArtService = \App\Services\MusicBrainzCoverArtService::getInstance();
         return $coverArtService->hasCoverArt($this->music_brainz_id);
+    }
+
+    /**
+     * Clear the cover art cache for this album
+     */
+    public function clearCoverArtCache(): void
+    {
+        if ($this->subtype !== 'album' || !$this->music_brainz_id) {
+            return;
+        }
+
+        $coverArtService = \App\Services\MusicBrainzCoverArtService::getInstance();
+        $coverArtService->clearCache($this->music_brainz_id);
     }
 
     /**
@@ -1106,6 +1119,308 @@ class Span extends Model
                     ->select('spans.*', 'connections.parent_id as pivot_parent_id', 'connections.child_id as pivot_child_id')
                     ->where('connections.type_id', 'relationship')
             );
+    }
+
+    /**
+     * Get spans that have a specific temporal relationship with this span
+     * 
+     * @param string $relation The temporal relation ('during', 'before', 'after', 'overlaps', etc.)
+     * @param array $filters Additional filters to apply
+     * @param User|null $user User for access control
+     * @return \Illuminate\Database\Eloquent\Collection
+     */
+    public function getTemporalSpans(string $relation, array $filters = [], ?User $user = null): \Illuminate\Database\Eloquent\Collection
+    {
+        $user = $user ?? auth()->user();
+
+        // Get this span's expanded date range
+        [$refStart, $refStartEnd] = $this->getStartDateRange();
+        [$refEnd, $refEndEnd] = $this->getEndDateRange();
+        $refStart = $refStart ?? $this->getExpandedStartDate();
+        $refEnd = $refEndEnd ?? $this->getExpandedEndDate();
+
+        $query = Span::query();
+
+        // Exclude this span from results
+        $query->where('id', '!=', $this->id);
+
+        // Apply temporal relationship logic using precision-aware comparison
+        $query->where(function ($q) use ($relation, $refStart, $refEnd, $refStartEnd) {
+            switch ($relation) {
+                case 'during':
+                    // Spans whose expanded range is fully within this span's expanded range
+                    $q->where(function ($subQ) use ($refStart, $refEnd, $refStartEnd) {
+                        $subQ->where(function ($spanQ) use ($refStart) {
+                            $spanQ->whereRaw('(
+                                (start_year, COALESCE(start_month, 1), COALESCE(start_day, 1)) >= (?, ?, ?)
+                            )', [
+                                $refStart?->year ?? 0,
+                                $refStart?->month ?? 1,
+                                $refStart?->day ?? 1
+                            ]);
+                        });
+                        if ($refEnd) {
+                            $subQ->where(function ($spanQ) use ($refEnd) {
+                                $spanQ->whereRaw('(
+                                    (end_year, COALESCE(end_month, 12), COALESCE(end_day, 31)) <= (?, ?, ?)
+                                )', [
+                                    $refEnd->year,
+                                    $refEnd->month,
+                                    $refEnd->day
+                                ]);
+                            });
+                        } else {
+                            // If reference span is ongoing, spans must have an end date AND start after or on the ongoing span's start date
+                            $subQ->whereNotNull('end_year')
+                                 ->where(function ($ongoingQ) use ($refStart) {
+                                     $ongoingQ->whereRaw('(
+                                         (start_year, COALESCE(start_month, 1), COALESCE(start_day, 1)) >= (?, ?, ?)
+                                     )', [
+                                         $refStart->year,
+                                         $refStart->month,
+                                         $refStart->day
+                                     ]);
+                                 });
+                        }
+                    });
+                    break;
+                case 'before':
+                    // Spans whose expanded end is before this span's expanded start
+                    $q->where(function ($spanQ) use ($refStart) {
+                        $spanQ->whereRaw('(
+                            (end_year, COALESCE(end_month, 12), COALESCE(end_day, 31)) < (?, ?, ?)
+                        )', [
+                            $refStart?->year ?? 0,
+                            $refStart?->month ?? 1,
+                            $refStart?->day ?? 1
+                        ]);
+                    });
+                    break;
+                case 'after':
+                    // Spans whose expanded start is after this span's expanded end
+                    if ($refEnd) {
+                        $q->where(function ($spanQ) use ($refEnd) {
+                            $spanQ->whereRaw('(
+                                (start_year, COALESCE(start_month, 1), COALESCE(start_day, 1)) > (?, ?, ?)
+                            )', [
+                                $refEnd->year,
+                                $refEnd->month,
+                                $refEnd->day
+                            ]);
+                        });
+                    } else {
+                        // Ongoing reference span: nothing can be after
+                        $q->whereRaw('1 = 0');
+                    }
+                    break;
+                default:
+                    throw new \InvalidArgumentException("Unknown temporal relation: {$relation}");
+            }
+        });
+
+        // Apply access control
+        $this->applyAccessControl($query, $user);
+
+        // Apply additional filters
+        $this->applyFilters($query, $filters);
+
+        return $query->get();
+    }
+
+    /**
+     * Apply temporal relationship logic to a query
+     * 
+     * @param \Illuminate\Database\Eloquent\Builder $query
+     * @param string $relation
+     */
+    protected function applyTemporalRelation(\Illuminate\Database\Eloquent\Builder $query, string $relation): void
+    {
+        switch ($relation) {
+            case 'during':
+                // Spans that occur completely within this span's time period
+                $query->where(function ($q) {
+                    // Start date must be >= this span's start
+                    $q->where(function ($startQ) {
+                        $startQ->where('start_year', '>', $this->start_year)
+                              ->orWhere(function ($yearQ) {
+                                  $yearQ->where('start_year', '=', $this->start_year);
+                                  if ($this->start_month) {
+                                      $yearQ->where(function ($monthQ) {
+                                          $monthQ->where('start_month', '>', $this->start_month)
+                                                ->orWhere(function ($dayQ) {
+                                                    $dayQ->where('start_month', '=', $this->start_month);
+                                                    if ($this->start_day) {
+                                                        $dayQ->where('start_day', '>=', $this->start_day);
+                                                    }
+                                                });
+                                      });
+                                  }
+                              });
+                    });
+                    
+                    // End date must be <= this span's end (if this span has an end)
+                    if ($this->end_year) {
+                        $q->where(function ($endQ) {
+                            $endQ->where('end_year', '<', $this->end_year)
+                                 ->orWhere(function ($yearQ) {
+                                     $yearQ->where('end_year', '=', $this->end_year);
+                                     if ($this->end_month) {
+                                         $yearQ->where(function ($monthQ) {
+                                             $monthQ->where('end_month', '<', $this->end_month)
+                                                   ->orWhere(function ($dayQ) {
+                                                       $dayQ->where('end_month', '=', $this->end_month);
+                                                       if ($this->end_day) {
+                                                           $dayQ->where('end_day', '<=', $this->end_day);
+                                                       }
+                                                   });
+                                         });
+                                     }
+                                 });
+                        });
+                    } else {
+                        // This span is ongoing, so any span with an end date is during
+                        $q->whereNotNull('end_year');
+                    }
+                });
+                break;
+                
+            case 'before':
+                // Spans that end before this span starts
+                $query->where(function ($q) {
+                    $q->where('end_year', '<', $this->start_year)
+                      ->orWhere(function ($yearQ) {
+                          $yearQ->where('end_year', '=', $this->start_year);
+                          if ($this->start_month) {
+                              $yearQ->where(function ($monthQ) {
+                                  $monthQ->where('end_month', '<', $this->start_month)
+                                        ->orWhere(function ($dayQ) {
+                                            $dayQ->where('end_month', '=', $this->start_month);
+                                            if ($this->start_day) {
+                                                $dayQ->where('end_day', '<', $this->start_day);
+                                            }
+                                        });
+                              });
+                          }
+                      });
+                });
+                break;
+                
+            case 'after':
+                // Spans that start after this span ends
+                if ($this->end_year) {
+                    $query->where(function ($q) {
+                        $q->where('start_year', '>', $this->end_year)
+                          ->orWhere(function ($yearQ) {
+                              $yearQ->where('start_year', '=', $this->end_year);
+                              if ($this->end_month) {
+                                  $yearQ->where(function ($monthQ) {
+                                      $monthQ->where('start_month', '>', $this->end_month)
+                                            ->orWhere(function ($dayQ) {
+                                                $dayQ->where('start_month', '=', $this->end_month);
+                                                if ($this->end_day) {
+                                                    $dayQ->where('start_day', '>', $this->end_day);
+                                                }
+                                            });
+                                  });
+                              }
+                          });
+                    });
+                } else {
+                    // This span is ongoing, so no spans can be after it
+                    $query->whereRaw('1 = 0');
+                }
+                break;
+                
+            default:
+                throw new \InvalidArgumentException("Unknown temporal relation: {$relation}");
+        }
+        
+        // Exclude this span from results
+        $query->where('id', '!=', $this->id);
+    }
+
+    /**
+     * Apply access control to a query
+     * 
+     * @param \Illuminate\Database\Eloquent\Builder $query
+     * @param User|null $user
+     */
+    protected function applyAccessControl(\Illuminate\Database\Eloquent\Builder $query, ?User $user): void
+    {
+        if (!$user) {
+            // Guest users can only see public spans
+            $query->where('access_level', 'public');
+            return;
+        }
+        
+        // Admins can see all spans
+        if ($user->is_admin) {
+            return;
+        }
+        
+        // Regular users can see public spans, their own spans, and spans they have permission to view
+        $query->where(function ($q) use ($user) {
+            $q->where('access_level', 'public')
+              ->orWhere('owner_id', $user->id)
+              ->orWhereHas('spanPermissions', function ($permQ) use ($user) {
+                  $permQ->where('user_id', $user->id)
+                        ->whereIn('permission_type', ['view', 'edit']);
+              })
+              ->orWhereHas('spanPermissions', function ($permQ) use ($user) {
+                  $permQ->whereNotNull('group_id')
+                        ->whereIn('permission_type', ['view', 'edit'])
+                        ->whereHas('group', function ($groupQ) use ($user) {
+                            $groupQ->whereHas('users', function ($userQuery) use ($user) {
+                                $userQuery->where('user_id', $user->id);
+                            });
+                        });
+              });
+        });
+    }
+
+    /**
+     * Apply additional filters to a query
+     * 
+     * @param \Illuminate\Database\Eloquent\Builder $query
+     * @param array $filters
+     */
+    protected function applyFilters(\Illuminate\Database\Eloquent\Builder $query, array $filters): void
+    {
+        // Type filter
+        if (isset($filters['type_id'])) {
+            $query->where('type_id', $filters['type_id']);
+        }
+        
+        // Subtype filter
+        if (isset($filters['subtype'])) {
+            $query->whereJsonContains('metadata->subtype', $filters['subtype']);
+        }
+        
+        // Owner filter
+        if (isset($filters['owner_id'])) {
+            $query->where('owner_id', $filters['owner_id']);
+        }
+        
+        // State filter
+        if (isset($filters['state'])) {
+            $query->where('state', $filters['state']);
+        }
+        
+        // Limit
+        if (isset($filters['limit'])) {
+            $query->limit($filters['limit']);
+        }
+        
+        // Order by
+        if (isset($filters['order_by'])) {
+            $direction = $filters['order_direction'] ?? 'asc';
+            $query->orderBy($filters['order_by'], $direction);
+        } else {
+            // Default ordering by start date
+            $query->orderBy('start_year', 'asc')
+                  ->orderBy('start_month', 'asc')
+                  ->orderBy('start_day', 'asc');
+        }
     }
 
     /**
@@ -1945,5 +2260,95 @@ class Span extends Model
     private static function getReservedRouteNames(): array
     {
         return app(\App\Services\RouteReservationService::class)->getReservedRouteNames();
+    }
+
+    /**
+     * Get the expanded start date as a Carbon object (based on precision)
+     */
+    public function getExpandedStartDate(): ?\Carbon\Carbon
+    {
+        if (!$this->start_year) return null;
+        $year = $this->start_year;
+        $month = $this->start_month ?? 1;
+        $day = $this->start_day ?? 1;
+        return \Carbon\Carbon::create($year, $month, $day, 0, 0, 0);
+    }
+
+    /**
+     * Get the expanded end date as a Carbon object (based on precision)
+     * If no end date, returns null (ongoing)
+     */
+    public function getExpandedEndDate(): ?\Carbon\Carbon
+    {
+        if (!$this->end_year) return null;
+        $year = $this->end_year;
+        $month = $this->end_month ?? 12;
+        // If month precision, use last day of month
+        if ($this->end_month && !$this->end_day) {
+            $day = \Carbon\Carbon::create($year, $month, 1)->endOfMonth()->day;
+        } else {
+            $day = $this->end_day ?? 31;
+        }
+        return \Carbon\Carbon::create($year, $month, $day, 23, 59, 59);
+    }
+
+    /**
+     * Get the expanded start date range (for precision-aware comparison)
+     */
+    public function getStartDateRange(): array
+    {
+        if (!$this->start_year) return [null, null];
+        $year = $this->start_year;
+        $month = $this->start_month;
+        $day = $this->start_day;
+        if ($this->start_precision === 'year' || (!$month && !$day)) {
+            // Whole year
+            return [
+                \Carbon\Carbon::create($year, 1, 1, 0, 0, 0),
+                \Carbon\Carbon::create($year, 12, 31, 23, 59, 59)
+            ];
+        } elseif ($this->start_precision === 'month' || (!$day)) {
+            // Whole month
+            return [
+                \Carbon\Carbon::create($year, $month, 1, 0, 0, 0),
+                \Carbon\Carbon::create($year, $month, \Carbon\Carbon::create($year, $month, 1)->endOfMonth()->day, 23, 59, 59)
+            ];
+        } else {
+            // Exact day
+            return [
+                \Carbon\Carbon::create($year, $month, $day, 0, 0, 0),
+                \Carbon\Carbon::create($year, $month, $day, 23, 59, 59)
+            ];
+        }
+    }
+
+    /**
+     * Get the expanded end date range (for precision-aware comparison)
+     */
+    public function getEndDateRange(): array
+    {
+        if (!$this->end_year) return [null, null];
+        $year = $this->end_year;
+        $month = $this->end_month;
+        $day = $this->end_day;
+        if ($this->end_precision === 'year' || (!$month && !$day)) {
+            // Whole year
+            return [
+                \Carbon\Carbon::create($year, 1, 1, 0, 0, 0),
+                \Carbon\Carbon::create($year, 12, 31, 23, 59, 59)
+            ];
+        } elseif ($this->end_precision === 'month' || (!$day)) {
+            // Whole month
+            return [
+                \Carbon\Carbon::create($year, $month, 1, 0, 0, 0),
+                \Carbon\Carbon::create($year, $month, \Carbon\Carbon::create($year, $month, 1)->endOfMonth()->day, 23, 59, 59)
+            ];
+        } else {
+            // Exact day
+            return [
+                \Carbon\Carbon::create($year, $month, $day, 0, 0, 0),
+                \Carbon\Carbon::create($year, $month, $day, 23, 59, 59)
+            ];
+        }
     }
 }
