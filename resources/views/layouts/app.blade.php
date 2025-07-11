@@ -197,6 +197,41 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
                 position: relative;
             }
             
+            /* Mobile Navigation Styles */
+            .offcanvas-body .sidebar-brand {
+                display: none; /* Hide brand in offcanvas since it's in the header */
+            }
+            
+            .offcanvas-body .nav-link {
+                color: rgba(255, 255, 255, 0.8) !important;
+                padding: 0.75rem 1rem;
+                border-radius: 0;
+            }
+            
+            .offcanvas-body .nav-link:hover,
+            .offcanvas-body .nav-link.active {
+                color: #fff !important;
+                background-color: rgba(255, 255, 255, 0.1);
+            }
+            
+            .offcanvas-body .sidebar-divider {
+                border-color: rgba(255, 255, 255, 0.2);
+                margin: 0.5rem 1rem;
+            }
+            
+            .offcanvas-body .sidebar-footer {
+                border-color: rgba(255, 255, 255, 0.2) !important;
+                margin-top: auto;
+            }
+            
+            .offcanvas-body .sidebar-footer a {
+                color: rgba(255, 255, 255, 0.8) !important;
+            }
+            
+            .offcanvas-body .sidebar-footer a:hover {
+                color: #fff !important;
+            }
+            
             /* Remove any gaps from Bootstrap row/col system */
             .row {
                 margin: 0;
@@ -260,6 +295,10 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
                         <!-- Top Navigation Bar -->
                         <div class="bg-light border-bottom shadow-sm" style="height: 56px;">
                             <div class="d-flex align-items-center h-100 px-3">
+                                <!-- Mobile Menu Button -->
+                                <button class="btn btn-link text-dark d-md-none me-2 p-0" type="button" data-bs-toggle="offcanvas" data-bs-target="#mobileNav" aria-controls="mobileNav">
+                                    <i class="bi bi-list fs-4"></i>
+                                </button>
                                 <x-topnav.page-title />
                                 <x-topnav.page-filters />
                                 <x-topnav.page-tools />
@@ -298,6 +337,23 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
                 </div>
             @endauth
         </div>
+        
+        @auth
+        <!-- Mobile Navigation Offcanvas -->
+        <div class="offcanvas offcanvas-start" tabindex="-1" id="mobileNav" aria-labelledby="mobileNavLabel">
+            <div class="offcanvas-header bg-dark text-white">
+                <h5 class="offcanvas-title" id="mobileNavLabel">
+                    <i class="bi bi-bar-chart-steps me-1"></i> Lifespan
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+            </div>
+            <div class="offcanvas-body bg-dark p-0">
+                <x-sidebar.main-nav />
+                <x-sidebar.admin-nav />
+                <x-sidebar.footer />
+            </div>
+        </div>
+        @endauth
         
         <!-- Modals -->
         @stack('modals')

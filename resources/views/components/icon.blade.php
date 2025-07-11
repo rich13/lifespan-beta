@@ -51,6 +51,7 @@
             'book' => 'book',
             'album' => 'disc',
             'track' => 'music-note-beamed',
+            'photo' => 'image',
             // Organisation subtypes
             'broadcaster' => 'broadcast',
             'educational' => 'mortarboard',
