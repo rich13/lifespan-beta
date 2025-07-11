@@ -18,7 +18,7 @@ return [
     |
     */
 
-    'default' => env('LOG_CHANNEL', 'stack'),
+    'default' => env('LOG_CHANNEL', 'testing'),
 
     /*
     |--------------------------------------------------------------------------
@@ -191,15 +191,11 @@ return [
         ],
 
         'testing' => [
-            'driver' => 'stack',
-            'channels' => ['stderr', 'testingFile'],
-            'ignore_exceptions' => false,
-        ],
-        
-        'testingFile' => [
-            'driver' => 'single',
+            'driver' => 'daily',
             'path' => storage_path('logs/testing.log'),
             'level' => env('LOG_LEVEL', 'debug'),
+            'days' => 14,
+            'replace_placeholders' => true,
         ],
 
         'connections' => [
