@@ -28,12 +28,10 @@ Route::middleware('auth:sanctum')->group(function () {
 // Span search API
 Route::get('/spans/search', [SpanSearchController::class, 'search']);
 
-// Timeline APIs - moved to cleaner structure
-Route::middleware(['auth'])->group(function () {
-    Route::get('/spans/{span}', [SpanSearchController::class, 'timeline']);
-    Route::get('/spans/{span}/object-connections', [SpanSearchController::class, 'timelineObjectConnections']);
-    Route::get('/spans/{span}/during-connections', [SpanSearchController::class, 'timelineDuringConnections']);
-});
+// Timeline APIs - allow unauthenticated access, let the controller handle access control
+Route::get('/spans/{span}', [SpanSearchController::class, 'timeline']);
+Route::get('/spans/{span}/object-connections', [SpanSearchController::class, 'timelineObjectConnections']);
+Route::get('/spans/{span}/during-connections', [SpanSearchController::class, 'timelineDuringConnections']);
 
 // Residence timeline API
 

@@ -90,6 +90,7 @@ class ApiAccessControlTest extends TestCase
         $response->assertStatus(403);
         
         // Guest cannot see private span
+        auth()->logout();
         $response = $this->getJson("/api/spans/{$this->privateSpan->id}");
         $response->assertStatus(403);
     }
@@ -122,9 +123,10 @@ class ApiAccessControlTest extends TestCase
         $response->assertStatus(200);
         $response->assertJson(['span' => ['id' => $this->sharedSpan->id]]);
         
-        // Guest can see shared span (API endpoint might not have strict access control)
+        // Guest cannot see shared span (correct access control behavior)
+        auth()->logout();
         $response = $this->getJson("/api/spans/{$this->sharedSpan->id}");
-        $response->assertStatus(200);
+        $response->assertStatus(403);
     }
 
     /** @test */
@@ -175,6 +177,7 @@ class ApiAccessControlTest extends TestCase
         $response->assertStatus(403);
         
         // Guest cannot see personal span
+        auth()->logout();
         $response = $this->getJson("/api/spans/{$this->personalSpan->id}");
         $response->assertStatus(403);
     }
@@ -224,6 +227,7 @@ class ApiAccessControlTest extends TestCase
         $response->assertStatus(403);
         
         // Guest sees only public spans
+        auth()->logout();
         $response = $this->getJson("/api/spans/{$this->privateSpan->id}");
         $response->assertStatus(403);
         
@@ -252,6 +256,7 @@ class ApiAccessControlTest extends TestCase
         $response->assertStatus(403);
         
         // But can see timeline for public span
+        auth()->logout();
         $response = $this->getJson("/api/spans/{$this->publicSpan->id}");
         $response->assertStatus(200);
     }

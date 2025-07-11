@@ -184,9 +184,12 @@ class SpanSearchController extends Controller
      */
     public function timeline(Span $span)
     {
-        // Check access permissions
         $user = Auth::user();
-        if (!$span->isPublic() && (!$user || !$span->hasPermission($user, 'view'))) {
+        $isPublic = $span->isPublic();
+        $hasPermission = $span->hasPermission($user, 'view');
+
+        // Check access permissions
+        if (!$isPublic && (!$user || !$hasPermission)) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
