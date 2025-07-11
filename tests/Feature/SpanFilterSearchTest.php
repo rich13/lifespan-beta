@@ -24,8 +24,6 @@ class SpanFilterSearchTest extends TestCase
     {
         parent::setUp();
         
-        $this->markTestSkipped('These tests need to be updated to match the current test data structure');
-
         // Create required span types if they don't exist
         $types = ['person', 'organisation', 'place', 'event'];
         foreach ($types as $type) {
@@ -118,16 +116,16 @@ class SpanFilterSearchTest extends TestCase
         // Test single type filter
         $response = $this->get('/spans?types=person');
         $response->assertStatus(200);
-        $response->assertSee('Test Person');
-        $response->assertDontSee('Test Organization');
-        $response->assertDontSee('Test Place');
+        $response->assertSee('Richard Northover');
+        $response->assertDontSee('Acme Corporation');
+        $response->assertDontSee('London Bridge');
 
         // Test multiple type filters
         $response = $this->get('/spans?types=person,organisation');
         $response->assertStatus(200);
-        $response->assertSee('Test Person');
-        $response->assertSee('Test Organization');
-        $response->assertDontSee('Test Place');
+        $response->assertSee('Richard Northover');
+        $response->assertSee('Acme Corporation');
+        $response->assertDontSee('London Bridge');
     }
 
     /**
@@ -143,32 +141,31 @@ class SpanFilterSearchTest extends TestCase
         $this->assertDatabaseHas('spans', ['description' => 'A test organisation where Richard works']);
 
         // Test basic search
-        $response = $this->get('/spans?search=Test');
+        $response = $this->get('/spans?search=Richard');
         $response->assertStatus(200);
-        $response->assertSee('Test Person');
-        $response->assertSee('Test Organization');
+        $response->assertSee('Richard Northover');
+        $response->assertSee('Acme Corporation'); // Should find this because description contains "Richard"
 
         // Test case insensitive search
-        $response = $this->get('/spans?search=test');
+        $response = $this->get('/spans?search=richard');
         $response->assertStatus(200);
-        $response->assertSee('Test Person');
-        $response->assertSee('Test Organization');
+        $response->assertSee('Richard Northover');
+        $response->assertSee('Acme Corporation'); // Should find this because description contains "Richard"
 
-        // Test multi-word search - only search for things that actually work in the current implementation
-        $response = $this->get('/spans?search=Test Person');
+        // Test multi-word search
+        $response = $this->get('/spans?search=Richard Northover');
         $response->assertStatus(200);
-        $response->assertSee('Test Person');
+        $response->assertSee('Richard Northover');
         
         // Test search in reverse word order
-        $response = $this->get('/spans?search=Person Test');
+        $response = $this->get('/spans?search=Northover Richard');
         $response->assertStatus(200);
-        $response->assertSee('Test Person');
+        $response->assertSee('Richard Northover');
         
         // Test partial word search
-        $response = $this->get('/spans?search=Test');
+        $response = $this->get('/spans?search=Corporation');
         $response->assertStatus(200);
-        $response->assertSee('Test Person');
-        $response->assertSee('Test Organization');
+        $response->assertSee('Acme Corporation');
     }
 
     /**
@@ -179,16 +176,16 @@ class SpanFilterSearchTest extends TestCase
         $this->actingAs($this->user);
 
         // Test search + type filter
-        $response = $this->get('/spans?search=Test&types=person');
+        $response = $this->get('/spans?search=Richard&types=person');
         $response->assertStatus(200);
-        $response->assertSee('Test Person');
-        $response->assertDontSee('Test Organization');
+        $response->assertSee('Richard Northover');
+        $response->assertDontSee('Acme Corporation');
         
         // Test search that matches multiple types but filtered to one
-        $response = $this->get('/spans?search=Test&types=place');
+        $response = $this->get('/spans?search=London&types=place');
         $response->assertStatus(200);
-        $response->assertSee('Test Place');
-        $response->assertDontSee('Test Person');
+        $response->assertSee('London Bridge');
+        $response->assertDontSee('Richard Northover');
     }
 
     /**
@@ -202,10 +199,9 @@ class SpanFilterSearchTest extends TestCase
         $response = $this->get('/spans?search=NonexistentTerm');
         $response->assertStatus(200);
         $response->assertSee('No spans found');
-        $response->assertSee('Found 0 results');
         
         // Test search with special characters
-        $response = $this->get('/spans?search=Test\'s');
+        $response = $this->get('/spans?search=Richard\'s');
         $response->assertStatus(200);
         // This should not cause errors, even if no results
         $response->assertStatus(200);

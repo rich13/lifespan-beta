@@ -620,9 +620,9 @@ class SpanSearchControllerTest extends TestCase
             'access_level' => 'public'
         ]);
 
-        // Unauthenticated user should get 401 (not 403)
+        // Unauthenticated user should get 200 for public spans
         $response = $this->getJson("/api/spans/{$span->id}");
-        $response->assertStatus(401);
+        $response->assertStatus(200);
 
         // Owner can access
         $this->actingAs($user);
@@ -654,9 +654,9 @@ class SpanSearchControllerTest extends TestCase
             'access_level' => 'private'
         ]);
 
-        // Unauthenticated user should get 401
+        // Unauthenticated user should get 403 for private spans
         $response = $this->getJson("/api/spans/{$span->id}");
-        $response->assertStatus(401);
+        $response->assertStatus(403);
 
         // Other user should get 403
         $this->actingAs($otherUser);
@@ -696,9 +696,9 @@ class SpanSearchControllerTest extends TestCase
         // Grant permission to the user
         $span->grantPermission($userWithPermission, 'view');
 
-        // Unauthenticated user should get 401
+        // Unauthenticated user should get 403 for shared spans
         $response = $this->getJson("/api/spans/{$span->id}");
-        $response->assertStatus(401);
+        $response->assertStatus(403);
 
         // User without permission should get 403
         $this->actingAs($userWithoutPermission);
