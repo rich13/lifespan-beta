@@ -70,21 +70,20 @@ function initializeCombinedTimeline_{{ str_replace('-', '_', $span->id) }}() {
                 .map(conn => conn.target_id)
         )];
         
-        // Check if we need to add the current user's span
+        // ALWAYS include the current user's span at the top if it exists and is different from current span
+        // This ensures the user's span is always visible, regardless of connections
         const allSubjectIds = new Set(subjects);
-        const needsUserSpan = currentUserSpanId && 
-                             currentUserSpanId !== spanId && 
-                             !allSubjectIds.has(currentUserSpanId);
+        const shouldIncludeUserSpan = currentUserSpanId && currentUserSpanId !== spanId;
         
-        if (needsUserSpan) {
+        if (shouldIncludeUserSpan) {
             allSubjectIds.add(currentUserSpanId);
         }
         
         // Prepare timeline data array - we'll build it in the desired order
         let timelineData = [];
         
-        // Add user's span first if it exists and is different from current span
-        if (needsUserSpan) {
+        // ALWAYS add user's span first if it exists and is different from current span
+        if (shouldIncludeUserSpan) {
             timelineData.push({
                 id: currentUserSpanId,
                 name: 'You',
@@ -129,8 +128,8 @@ function initializeCombinedTimeline_{{ str_replace('-', '_', $span->id) }}() {
                 })
             );
             
-            // If we need to fetch user's timeline data, add it to the promises
-            if (needsUserSpan) {
+            // ALWAYS fetch user's timeline data if we're including it
+            if (shouldIncludeUserSpan) {
                 subjectPromises.unshift(
                     Promise.all([
                         fetch(`/api/spans/${currentUserSpanId}`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }).then(response => response.json()),
@@ -156,7 +155,7 @@ function initializeCombinedTimeline_{{ str_replace('-', '_', $span->id) }}() {
                     const validSubjects = subjectData.filter(subject => subject !== null);
                     
                     // Update the timeline data with fetched data
-                    if (needsUserSpan) {
+                    if (shouldIncludeUserSpan) {
                         const userData = validSubjects.find(subject => subject.id === currentUserSpanId);
                         if (userData) {
                             timelineData[0] = userData; // Update the user's entry with fetched data
