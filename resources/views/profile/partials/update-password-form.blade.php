@@ -1,6 +1,8 @@
+@props(['action' => route('profile.password.update')])
+
 <section>
     
-    <form method="post" action="{{ route('profile.password.update') }}">
+    <form method="post" action="{{ $action }}">
         @csrf
         @method('put')
 

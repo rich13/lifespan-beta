@@ -1,10 +1,12 @@
+@props(['action' => route('profile.destroy')])
+
 <section>
     <h2 class="card-title h5">Delete Account</h2>
     <p class="text-muted small mb-4">
         Once your account is deleted, all of its resources and data will be permanently deleted.
     </p>
 
-    <form method="post" action="{{ route('profile.destroy') }}" onsubmit="return confirm('Are you sure you want to delete your account? This action cannot be undone.');">
+    <form method="post" action="{{ $action }}" onsubmit="return confirm('Are you sure you want to delete your account? This action cannot be undone.');">
         @csrf
         @method('delete')
 

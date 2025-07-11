@@ -1,10 +1,12 @@
+@props(['action' => route('profile.update')])
+
 <section>
     
     <form id="send-verification" method="post" action="{{ route('verification.send') }}">
         @csrf
     </form>
 
-    <form method="post" action="{{ route('profile.update') }}">
+    <form method="post" action="{{ $action }}">
         @csrf
         @method('patch')
 
