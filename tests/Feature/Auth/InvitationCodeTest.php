@@ -109,7 +109,7 @@ class InvitationCodeTest extends TestCase
             'email' => 'test@example.com',
             'password' => 'password',
             'password_confirmation' => 'password',
-            'invitation_code' => 'lifespan',
+            'invitation_code' => 'lifespan-beta-5b18a03898a7e8dac3582ef4b58508c4',
             'birth_year' => 1990,
             'birth_month' => 1,
             'birth_day' => 1,

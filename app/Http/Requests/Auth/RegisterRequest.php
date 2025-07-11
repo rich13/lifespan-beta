@@ -46,7 +46,7 @@ class RegisterRequest extends FormRequest
             'birth_month' => ['required', 'integer', 'min:1', 'max:12'],
             'birth_day' => ['required', 'integer', 'min:1', 'max:31'],
             'invitation_code' => ['required', 'string', function ($attribute, $value, $fail) {
-                if ($value !== 'lifespan' && !InvitationCode::where('code', $value)->where('used', false)->exists()) {
+                if ($value !== 'lifespan-beta-5b18a03898a7e8dac3582ef4b58508c4' && !InvitationCode::where('code', $value)->where('used', false)->exists()) {
                     Log::warning('Invalid invitation code used', [
                         'code' => $value
                     ]);
@@ -78,7 +78,7 @@ class RegisterRequest extends FormRequest
             'invitation_code' => $this->invitation_code
         ]);
 
-        if ($this->invitation_code !== 'lifespan') {
+        if ($this->invitation_code !== 'lifespan-beta-5b18a03898a7e8dac3582ef4b58508c4') {
             $code = InvitationCode::where('code', $this->invitation_code)
                 ->where('used', false)
                 ->first();
@@ -103,7 +103,7 @@ class RegisterRequest extends FormRequest
                 'used_by' => $this->email,
             ]);
         } else {
-            Log::info('Using universal invitation code: lifespan');
+            Log::info('Using universal invitation code: lifespan-beta-5b18a03898a7e8dac3582ef4b58508c4');
         }
 
         $user = User::create([
