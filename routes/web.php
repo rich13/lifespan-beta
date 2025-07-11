@@ -428,6 +428,19 @@ Route::middleware('web')->group(function () {
         // AI YAML Generator for authenticated users (for modal use)
         Route::post('/ai-yaml-generator/generate', [\App\Http\Controllers\AiYamlController::class, 'generatePersonYaml'])->name('ai-yaml-generator.generate');
 
+        // Settings routes
+        Route::prefix('settings')->name('settings.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\SettingsController::class, 'index'])->name('index');
+            Route::get('/import', [\App\Http\Controllers\SettingsController::class, 'import'])->name('import');
+            Route::get('/notifications', [\App\Http\Controllers\SettingsController::class, 'notifications'])->name('notifications');
+            Route::get('/groups', [\App\Http\Controllers\SettingsController::class, 'groups'])->name('groups');
+            Route::get('/spans', [\App\Http\Controllers\SettingsController::class, 'spans'])->name('spans');
+            Route::get('/account', [\App\Http\Controllers\SettingsController::class, 'account'])->name('account');
+            Route::patch('/account/profile', [\App\Http\Controllers\SettingsController::class, 'updateProfile'])->name('account.profile.update');
+            Route::put('/account/password', [\App\Http\Controllers\SettingsController::class, 'updatePassword'])->name('account.password.update');
+            Route::delete('/account', [\App\Http\Controllers\SettingsController::class, 'destroy'])->name('account.destroy');
+        });
+
         // Admin routes
         Route::middleware('admin')->prefix('admin')->name('admin.')->group(function () {
             // Dashboard
