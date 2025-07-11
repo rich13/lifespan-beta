@@ -225,56 +225,81 @@
                                     <label class="form-check-label" for="selectAllSpans">Select All</label>
                                 </div>
                             </div>
-                            <div class="row" id="allSpansContainer">
-                                @foreach($allSpans as $span)
-                                    <div class="col-md-6 col-lg-4 mb-3">
-                                        <div class="card span-card {{ $span->access_level }}">
-                                            <div class="card-body">
-                                                <div class="d-flex justify-content-between align-items-start mb-2">
+                            
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th width="40"></th>
+                                            <th>Name</th>
+                                            <th>Type</th>
+                                            <th>Access Level</th>
+                                            <th>Owner</th>
+                                            <th>Permissions</th>
+                                            <th width="150">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="allSpansContainer">
+                                        @foreach($allSpans as $span)
+                                            <tr class="span-row {{ $span->access_level }}">
+                                                <td>
                                                     <div class="form-check">
                                                         <input type="checkbox" class="form-check-input span-checkbox" value="{{ $span->id }}" data-access-level="{{ $span->access_level }}">
                                                     </div>
+                                                </td>
+                                                <td>
+                                                    <div>
+                                                        <strong>{{ $span->name }}</strong>
+                                                        @if($span->description)
+                                                            <br><small class="text-muted">{{ Str::limit($span->description, 50) }}</small>
+                                                        @endif
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <span class="badge bg-secondary">{{ $span->type->name ?? $span->type_id }}</span>
+                                                </td>
+                                                <td>
                                                     <span class="access-badge badge bg-{{ $span->access_level === 'public' ? 'success' : ($span->access_level === 'shared' ? 'warning' : 'danger') }}">
                                                         {{ ucfirst($span->access_level) }}
                                                     </span>
-                                                </div>
-                                                <x-spans.display.micro-card :span="$span" />
-                                                <div class="mt-2">
+                                                </td>
+                                                <td>
                                                     <small class="text-muted">
                                                         <i class="bi bi-person"></i> {{ $span->owner->name }}
                                                     </small>
-                                                    
+                                                </td>
+                                                <td>
                                                     @if($span->access_level === 'shared')
-                                                        <div class="mt-1">
-                                                            @php
-                                                                $userPermissions = $span->spanPermissions()->whereNotNull('user_id')->count();
-                                                                $groupPermissionsCount = $span->spanPermissions()->whereNotNull('group_id')->count();
-                                                            @endphp
-                                                            @if($userPermissions > 0)
-                                                                <span class="permission-indicator user"></span>
-                                                                <small class="text-muted">{{ $userPermissions }} user{{ $userPermissions !== 1 ? 's' : '' }}</small>
-                                                            @endif
-                                                            @if($groupPermissionsCount > 0)
-                                                                <span class="permission-indicator group"></span>
-                                                                <small class="text-muted">{{ $groupPermissionsCount }} group{{ $groupPermissionsCount !== 1 ? 's' : '' }}</small>
-                                                            @endif
-                                                        </div>
+                                                        @php
+                                                            $userPermissions = $span->spanPermissions()->whereNotNull('user_id')->count();
+                                                            $groupPermissionsCount = $span->spanPermissions()->whereNotNull('group_id')->count();
+                                                        @endphp
+                                                        @if($userPermissions > 0)
+                                                            <span class="permission-indicator user"></span>
+                                                            <small class="text-muted">{{ $userPermissions }} user{{ $userPermissions !== 1 ? 's' : '' }}</small>
+                                                        @endif
+                                                        @if($groupPermissionsCount > 0)
+                                                            <span class="permission-indicator group"></span>
+                                                            <small class="text-muted">{{ $groupPermissionsCount }} group{{ $groupPermissionsCount !== 1 ? 's' : '' }}</small>
+                                                        @endif
+                                                    @else
+                                                        <small class="text-muted">-</small>
                                                     @endif
-                                                </div>
-                                                <div class="mt-3">
-                                                    <div class="btn-group w-100" role="group">
-                                                        <a href="{{ route('admin.spans.access.edit', $span) }}" class="btn btn-sm btn-outline-primary">
-                                                            <i class="bi bi-gear"></i> Manage
+                                                </td>
+                                                <td>
+                                                    <div class="btn-group btn-group-sm" role="group">
+                                                        <a href="{{ route('admin.spans.access.edit', $span) }}" class="btn btn-outline-primary" title="Manage Access">
+                                                            <i class="bi bi-gear"></i>
                                                         </a>
-                                                        <a href="{{ route('spans.show', $span) }}" class="btn btn-sm btn-outline-secondary">
-                                                            <i class="bi bi-eye"></i> View
+                                                        <a href="{{ route('spans.show', $span) }}" class="btn btn-outline-secondary" title="View Span">
+                                                            <i class="bi bi-eye"></i>
                                                         </a>
                                                     </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                @endforeach
+                                                </td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
                             </div>
                             
                             <!-- Pagination -->
@@ -292,37 +317,64 @@
                                     <label class="form-check-label" for="selectAllPrivate">Select All</label>
                                 </div>
                             </div>
-                            <div class="row" id="privateSpansContainer">
-                                @foreach($privateSpans as $span)
-                                    <div class="col-md-6 col-lg-4 mb-3">
-                                        <div class="card span-card private">
-                                            <div class="card-body">
-                                                <div class="d-flex justify-content-between align-items-start mb-2">
+                            
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th width="40"></th>
+                                            <th>Name</th>
+                                            <th>Type</th>
+                                            <th>Access Level</th>
+                                            <th>Owner</th>
+                                            <th>Permissions</th>
+                                            <th width="150">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="privateSpansContainer">
+                                        @foreach($privateSpans as $span)
+                                            <tr class="span-row private">
+                                                <td>
                                                     <div class="form-check">
                                                         <input type="checkbox" class="form-check-input span-checkbox" value="{{ $span->id }}" data-access-level="private">
                                                     </div>
+                                                </td>
+                                                <td>
+                                                    <div>
+                                                        <strong>{{ $span->name }}</strong>
+                                                        @if($span->description)
+                                                            <br><small class="text-muted">{{ Str::limit($span->description, 50) }}</small>
+                                                        @endif
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <span class="badge bg-secondary">{{ $span->type->name ?? $span->type_id }}</span>
+                                                </td>
+                                                <td>
                                                     <span class="access-badge badge bg-danger">Private</span>
-                                                </div>
-                                                <x-spans.display.micro-card :span="$span" />
-                                                <div class="mt-2">
+                                                </td>
+                                                <td>
                                                     <small class="text-muted">
                                                         <i class="bi bi-person"></i> {{ $span->owner->name }}
                                                     </small>
-                                                </div>
-                                                <div class="mt-3">
-                                                    <div class="btn-group w-100" role="group">
-                                                        <a href="{{ route('admin.spans.access.edit', $span) }}" class="btn btn-sm btn-outline-primary">
-                                                            <i class="bi bi-gear"></i> Manage
+                                                </td>
+                                                <td>
+                                                    <small class="text-muted">-</small>
+                                                </td>
+                                                <td>
+                                                    <div class="btn-group btn-group-sm" role="group">
+                                                        <a href="{{ route('admin.spans.access.edit', $span) }}" class="btn btn-outline-primary" title="Manage Access">
+                                                            <i class="bi bi-gear"></i>
                                                         </a>
-                                                        <a href="{{ route('spans.show', $span) }}" class="btn btn-sm btn-outline-secondary">
-                                                            <i class="bi bi-eye"></i> View
+                                                        <a href="{{ route('spans.show', $span) }}" class="btn btn-outline-secondary" title="View Span">
+                                                            <i class="bi bi-eye"></i>
                                                         </a>
                                                     </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                @endforeach
+                                                </td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
                             </div>
                             
                             <!-- Pagination -->
@@ -340,44 +392,53 @@
                                     <label class="form-check-label" for="selectAllShared">Select All</label>
                                 </div>
                             </div>
-                            <div class="row" id="sharedSpansContainer">
-                                @foreach($sharedSpans as $span)
-                                    <div class="col-md-6 col-lg-4 mb-3">
-                                        <div class="card span-card shared">
-                                            <div class="card-body">
-                                                <div class="d-flex justify-content-between align-items-start mb-2">
+                            
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th width="40"></th>
+                                            <th>Name</th>
+                                            <th>Type</th>
+                                            <th>Access Level</th>
+                                            <th>Owner</th>
+                                            <th>Permissions</th>
+                                            <th width="150">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="sharedSpansContainer">
+                                        @foreach($sharedSpans as $span)
+                                            <tr class="span-row shared">
+                                                <td>
                                                     <div class="form-check">
                                                         <input type="checkbox" class="form-check-input span-checkbox" value="{{ $span->id }}" data-access-level="shared">
                                                     </div>
+                                                </td>
+                                                <td>
+                                                    <div>
+                                                        <strong>{{ $span->name }}</strong>
+                                                        @if($span->description)
+                                                            <br><small class="text-muted">{{ Str::limit($span->description, 50) }}</small>
+                                                        @endif
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <span class="badge bg-secondary">{{ $span->type->name ?? $span->type_id }}</span>
+                                                </td>
+                                                <td>
                                                     <span class="access-badge badge bg-warning">Shared</span>
-                                                </div>
-                                                <x-spans.display.micro-card :span="$span" />
-                                                <div class="mt-2">
+                                                </td>
+                                                <td>
                                                     <small class="text-muted">
                                                         <i class="bi bi-person"></i> {{ $span->owner->name }}
                                                     </small>
-                                                    
+                                                </td>
+                                                <td>
                                                     @php
-                                                        $groupPermissions = $span->spanPermissions()->whereNotNull('group_id')->with('group')->get();
+                                                        $userPermissions = $span->spanPermissions()->whereNotNull('user_id')->count();
+                                                        $groupPermissionsCount = $span->spanPermissions()->whereNotNull('group_id')->count();
                                                     @endphp
-                                                    @if($groupPermissions->count() > 0)
-                                                        <div class="mt-1">
-                                                            <small class="text-muted">Groups:</small>
-                                                            <div class="mt-1">
-                                                                @foreach($groupPermissions as $permission)
-                                                                    <span class="badge bg-info me-1 mb-1" title="{{ $permission->group->name }}">
-                                                                        <i class="bi bi-people"></i> {{ $permission->group->name }}
-                                                                    </span>
-                                                                @endforeach
-                                                            </div>
-                                                        </div>
-                                                    @endif
-                                                    
-                                                    <div class="mt-1">
-                                                        @php
-                                                            $userPermissions = $span->spanPermissions()->whereNotNull('user_id')->count();
-                                                            $groupPermissionsCount = $span->spanPermissions()->whereNotNull('group_id')->count();
-                                                        @endphp
+                                                    <div>
                                                         @if($userPermissions > 0)
                                                             <span class="permission-indicator user"></span>
                                                             <small class="text-muted">{{ $userPermissions }} user{{ $userPermissions !== 1 ? 's' : '' }}</small>
@@ -387,21 +448,21 @@
                                                             <small class="text-muted">{{ $groupPermissionsCount }} group{{ $groupPermissionsCount !== 1 ? 's' : '' }}</small>
                                                         @endif
                                                     </div>
-                                                </div>
-                                                <div class="mt-3">
-                                                    <div class="btn-group w-100" role="group">
-                                                        <a href="{{ route('admin.spans.access.edit', $span) }}" class="btn btn-sm btn-outline-primary">
-                                                            <i class="bi bi-gear"></i> Manage
+                                                </td>
+                                                <td>
+                                                    <div class="btn-group btn-group-sm" role="group">
+                                                        <a href="{{ route('admin.spans.access.edit', $span) }}" class="btn btn-outline-primary" title="Manage Access">
+                                                            <i class="bi bi-gear"></i>
                                                         </a>
-                                                        <a href="{{ route('spans.show', $span) }}" class="btn btn-sm btn-outline-secondary">
-                                                            <i class="bi bi-eye"></i> View
+                                                        <a href="{{ route('spans.show', $span) }}" class="btn btn-outline-secondary" title="View Span">
+                                                            <i class="bi bi-eye"></i>
                                                         </a>
                                                     </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                @endforeach
+                                                </td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
                             </div>
                             
                             <!-- Pagination -->
@@ -419,37 +480,64 @@
                                     <label class="form-check-label" for="selectAllPublic">Select All</label>
                                 </div>
                             </div>
-                            <div class="row" id="publicSpansContainer">
-                                @foreach($publicSpans as $span)
-                                    <div class="col-md-6 col-lg-4 mb-3">
-                                        <div class="card span-card public">
-                                            <div class="card-body">
-                                                <div class="d-flex justify-content-between align-items-start mb-2">
+                            
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th width="40"></th>
+                                            <th>Name</th>
+                                            <th>Type</th>
+                                            <th>Access Level</th>
+                                            <th>Owner</th>
+                                            <th>Permissions</th>
+                                            <th width="150">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="publicSpansContainer">
+                                        @foreach($publicSpans as $span)
+                                            <tr class="span-row public">
+                                                <td>
                                                     <div class="form-check">
                                                         <input type="checkbox" class="form-check-input span-checkbox" value="{{ $span->id }}" data-access-level="public">
                                                     </div>
+                                                </td>
+                                                <td>
+                                                    <div>
+                                                        <strong>{{ $span->name }}</strong>
+                                                        @if($span->description)
+                                                            <br><small class="text-muted">{{ Str::limit($span->description, 50) }}</small>
+                                                        @endif
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <span class="badge bg-secondary">{{ $span->type->name ?? $span->type_id }}</span>
+                                                </td>
+                                                <td>
                                                     <span class="access-badge badge bg-success">Public</span>
-                                                </div>
-                                                <x-spans.display.micro-card :span="$span" />
-                                                <div class="mt-2">
+                                                </td>
+                                                <td>
                                                     <small class="text-muted">
                                                         <i class="bi bi-person"></i> {{ $span->owner->name }}
                                                     </small>
-                                                </div>
-                                                <div class="mt-3">
-                                                    <div class="btn-group w-100" role="group">
-                                                        <a href="{{ route('admin.spans.access.edit', $span) }}" class="btn btn-sm btn-outline-primary">
-                                                            <i class="bi bi-gear"></i> Manage
+                                                </td>
+                                                <td>
+                                                    <small class="text-muted">-</small>
+                                                </td>
+                                                <td>
+                                                    <div class="btn-group btn-group-sm" role="group">
+                                                        <a href="{{ route('admin.spans.access.edit', $span) }}" class="btn btn-outline-primary" title="Manage Access">
+                                                            <i class="bi bi-gear"></i>
                                                         </a>
-                                                        <a href="{{ route('spans.show', $span) }}" class="btn btn-sm btn-outline-secondary">
-                                                            <i class="bi bi-eye"></i> View
+                                                        <a href="{{ route('spans.show', $span) }}" class="btn btn-outline-secondary" title="View Span">
+                                                            <i class="bi bi-eye"></i>
                                                         </a>
                                                     </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                @endforeach
+                                                </td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
                             </div>
                             
                             <!-- Pagination -->
