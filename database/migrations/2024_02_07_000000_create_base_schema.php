@@ -404,7 +404,7 @@ return new class extends Migration
         Schema::create('span_permissions', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->foreignUuid('span_id')->constrained()->cascadeOnDelete();
-            $table->foreignUuid('user_id')->constrained()->cascadeOnDelete();
+            $table->foreignUuid('user_id')->nullable()->constrained()->cascadeOnDelete();
             $table->uuid('group_id')->nullable(); // For future expansion
             $table->enum('permission_type', ['view', 'edit']);
             $table->timestamps();
