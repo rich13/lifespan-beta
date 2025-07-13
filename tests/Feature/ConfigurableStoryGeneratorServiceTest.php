@@ -138,4 +138,96 @@ class ConfigurableStoryGeneratorServiceTest extends TestCase
         $this->assertStringNotContainsString('beta. lifespan. dev', $storyText);
         $this->assertStringNotContainsString('localhost:8000. spans', $storyText);
     }
+
+    public function test_track_story_generation_with_artist_from_album(): void
+    {
+        // Create an artist
+        $artist = Span::factory()->create([
+            'name' => 'Foo Fighters',
+            'type_id' => 'band',
+        ]);
+
+        // Create an album
+        $album = Span::factory()->create([
+            'name' => 'The Colour and the Shape',
+            'type_id' => 'thing',
+            'metadata' => ['subtype' => 'album'],
+            'start_year' => 1997,
+        ]);
+
+        // Create a track
+        $track = Span::factory()->create([
+            'name' => 'Everlong',
+            'type_id' => 'thing',
+            'metadata' => ['subtype' => 'track', 'duration' => '4:10'],
+            'start_year' => 1997,
+        ]);
+
+        // Connect artist to album
+        Connection::factory()->create([
+            'parent_id' => $artist->id,
+            'child_id' => $album->id,
+            'type_id' => 'created',
+        ]);
+
+        // Connect track to album
+        Connection::factory()->create([
+            'parent_id' => $album->id,
+            'child_id' => $track->id,
+            'type_id' => 'contains',
+        ]);
+
+        $service = new ConfigurableStoryGeneratorService();
+        $story = $service->generateStory($track);
+
+        $storyText = $story['paragraphs'][0] ?? '';
+
+        // Should include release date
+        $this->assertStringContainsString('It was released on', $storyText);
+        $this->assertStringContainsString('1997', $storyText);
+        
+        // Should include album
+        $this->assertStringContainsString('It appears on', $storyText);
+        $this->assertStringContainsString('The Colour and the Shape', $storyText);
+        
+        // Should include artist (from album)
+        $this->assertStringContainsString('is a track by', $storyText);
+        $this->assertStringContainsString('Foo Fighters', $storyText);
+    }
+
+    public function test_track_story_generation_with_direct_artist(): void
+    {
+        // Create an artist
+        $artist = Span::factory()->create([
+            'name' => 'Dave Grohl',
+            'type_id' => 'person',
+        ]);
+
+        // Create a track
+        $track = Span::factory()->create([
+            'name' => 'Everlong',
+            'type_id' => 'thing',
+            'metadata' => ['subtype' => 'track', 'duration' => '4:10'],
+            'start_year' => 1997,
+        ]);
+
+        // Connect artist directly to track
+        Connection::factory()->create([
+            'parent_id' => $artist->id,
+            'child_id' => $track->id,
+            'type_id' => 'created',
+        ]);
+
+        $service = new ConfigurableStoryGeneratorService();
+        $story = $service->generateStory($track);
+
+        $storyText = $story['paragraphs'][0] ?? '';
+
+        // Should include artist directly
+        $this->assertStringContainsString('is a track by', $storyText);
+        $this->assertStringContainsString('Dave Grohl', $storyText);
+        
+        // Should not include album (since no album connection)
+        $this->assertStringNotContainsString('It appears on', $storyText);
+    }
 } 

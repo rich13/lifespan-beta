@@ -22,10 +22,20 @@ class ConfigurableStoryGeneratorService
     public function generateStory(Span $span): array
     {
         $spanType = $span->type_id;
+        $spanSubtype = $span->metadata['subtype'] ?? null;
         $debug = [];
         
-        if (!isset($this->templates[$spanType])) {
-            $debug['error'] = "No templates found for span type: {$spanType}";
+        // First try to find templates for the specific subtype
+        $templateKey = $spanSubtype ? "{$spanType}_{$spanSubtype}" : $spanType;
+        $template = $this->templates[$templateKey] ?? null;
+        
+        // If no subtype-specific template found, fall back to type-based template
+        if (!$template) {
+            $template = $this->templates[$spanType] ?? null;
+        }
+        
+        if (!$template) {
+            $debug['error'] = "No templates found for span type: {$spanType}" . ($spanSubtype ? " subtype: {$spanSubtype}" : "");
             $debug['used_fallback'] = true;
             $fallbackSentence = $this->generateFallbackSentence($span);
             return [
@@ -36,12 +46,12 @@ class ConfigurableStoryGeneratorService
             ];
         }
 
-        $template = $this->templates[$spanType];
         $debug['templates_found'] = count($template['sentences']);
+        $debug['template_key'] = $templateKey;
         
         // Check if we have a story template
         if (!isset($template['story_template'])) {
-            $debug['error'] = "No story template found for span type: {$spanType}";
+            $debug['error'] = "No story template found for span type: {$spanType}" . ($spanSubtype ? " subtype: {$spanSubtype}" : "");
             $debug['used_fallback'] = true;
             $fallbackSentence = $this->generateFallbackSentence($span);
             return [
@@ -373,6 +383,16 @@ class ConfigurableStoryGeneratorService
             'hasDiscography' => $this->getDiscography($span)->isNotEmpty(),
             'hasRoles' => $this->getPastRoles($span)->isNotEmpty(),
             'hasCurrentRole' => $this->getCurrentRole($span) !== null,
+            'hasCreator' => $this->getCreator($span) !== null,
+            'hasTracks' => $this->getTracks($span)->isNotEmpty(),
+            'hasAlbum' => $this->getAlbum($span) !== null,
+            'hasArtists' => ($span->type_id === 'thing' && ($span->metadata['subtype'] ?? null) === 'track')
+                ? ($this->getArtists($span)->isNotEmpty() || ($this->getAlbum($span) !== null && $this->getArtists($span)->isNotEmpty()))
+                : $this->getArtists($span)->isNotEmpty(),
+            'hasDuration' => $this->getDuration($span) !== null,
+            'hasTrackArtist' => $this->hasTrackArtist($span),
+            'hasTrackReleaseDate' => $this->hasTrackReleaseDate($span),
+            'hasTrackAlbum' => $this->hasTrackAlbum($span),
             default => false,
         };
     }
@@ -426,12 +446,23 @@ class ConfigurableStoryGeneratorService
             'getTenseVerb' => $this->getTenseVerb($span),
             'getIsVerb' => $this->getIsVerb($span),
             'getHasVerb' => $this->getHasVerb($span),
+            'getHaveVerb' => $this->getHaveVerb($span),
             'getWasVerb' => $this->getWasVerb($span),
             'getHadVerb' => $this->getHadVerb($span),
             'getAlbumCount' => $this->getDiscography($span)->count(),
-            'getLatestAlbum' => $this->getDiscography($span)->sortByDesc('date')->first()['thing'] ?? null,
-            'getFirstAlbum' => $this->getDiscography($span)->first()['thing'] ?? null,
+            'getLatestAlbum' => ($latestAlbum = $this->getDiscography($span)->sortByDesc('date')->first()) ? $this->makeSpanLink($latestAlbum['thing'], $latestAlbum['thing_span'] ?? null) : null,
+            'getFirstAlbum' => ($firstAlbum = $this->getDiscography($span)->first()) ? $this->makeSpanLink($firstAlbum['thing'], $firstAlbum['thing_span'] ?? null) : null,
+            'getHumanReadableReleaseDate' => $this->getHumanReadableReleaseDate($span),
+            'getCreator' => $this->getCreator($span),
+            'getTrackCount' => $this->getTracks($span)->count(),
+            'getAlbum' => $this->getAlbum($span),
+            'getArtistNames' => $this->getArtistNames($span),
+            'getFirstArtistName' => $this->getFirstArtistName($span),
+            'getDuration' => $this->getDuration($span),
             'getAge' => $this->getAge($span),
+            'getTrackArtist' => $this->getTrackArtist($span),
+            'getTrackReleaseDate' => $this->getTrackReleaseDate($span),
+            'getTrackAlbum' => $this->getTrackAlbum($span),
             default => null,
         };
 
@@ -1174,6 +1205,11 @@ class ConfigurableStoryGeneratorService
         return $span->is_ongoing ? 'has' : 'had';
     }
 
+    protected function getHaveVerb(Span $span): string
+    {
+        return $span->is_ongoing ? 'have' : 'had';
+    }
+
     protected function getWasVerb(Span $span): string
     {
         return $span->is_ongoing ? 'is' : 'was';
@@ -1209,6 +1245,7 @@ class ConfigurableStoryGeneratorService
             ->map(function ($connection) {
                 return [
                     'thing' => $connection->child->name,
+                    'thing_span' => $connection->child,
                     'date' => $connection->connectionSpan?->formatted_start_date,
                 ];
             });
@@ -1547,32 +1584,294 @@ class ConfigurableStoryGeneratorService
             return null;
         }
 
-        // Use current date or end date if available
-        $endYear = $span->end_year ?? (int)date('Y');
-        $endMonth = $span->end_month ?? (int)date('n');
-        $endDay = $span->end_day ?? (int)date('j');
-
         $startYear = $span->start_year;
-        $startMonth = $span->start_month ?? 1;
-        $startDay = $span->start_day ?? 1;
-
-        // Calculate age in years as a float
-        $start = mktime(0, 0, 0, $startMonth, $startDay, $startYear);
-        $end = mktime(0, 0, 0, $endMonth, $endDay, $endYear);
-        $ageYears = ($end - $start) / (365.25 * 24 * 60 * 60);
-
-        // Round to nearest 0.25
-        $rounded = round($ageYears * 4) / 4;
-        $whole = floor($rounded);
-        $fraction = $rounded - $whole;
-        $fractionSymbol = '';
-        if (abs($fraction - 0.25) < 0.01) {
-            $fractionSymbol = '¼';
-        } elseif (abs($fraction - 0.5) < 0.01) {
-            $fractionSymbol = '½';
-        } elseif (abs($fraction - 0.75) < 0.01) {
-            $fractionSymbol = '¾';
+        // Use end_year for deceased people, current year for living
+        if ($span->end_year !== null && !$span->is_ongoing) {
+            $endYear = $span->end_year;
+        } else {
+            $endYear = date('Y');
         }
-        return $whole . $fractionSymbol;
+        $age = $endYear - $startYear;
+
+        if ($age === 0) {
+            return 'less than a year old';
+        } elseif ($age === 1) {
+            return '1 year old';
+        } else {
+            return "{$age} years old";
+        }
+    }
+
+    /**
+     * Get human-readable release date for albums/things
+     */
+    protected function getHumanReadableReleaseDate(Span $span): string
+    {
+        return $this->formatHumanReadableDate($span->start_year, $span->start_month, $span->start_day);
+    }
+
+    /**
+     * Get creator for albums/things
+     */
+    protected function getCreator(Span $span): ?string
+    {
+        $creatorConnection = $span->connectionsAsObject()
+            ->where('type_id', 'created')
+            ->whereHas('parent', function ($query) {
+                $query->where('type_id', 'band');
+            })
+            ->with(['parent'])
+            ->first();
+
+        if ($creatorConnection && $creatorConnection->parent) {
+            return $this->makeSpanLink($creatorConnection->parent->name, $creatorConnection->parent);
+        }
+
+        return null;
+    }
+
+    /**
+     * Get tracks for albums/things
+     */
+    protected function getTracks(Span $span): Collection
+    {
+        return $span->connectionsAsSubject()
+            ->where('type_id', 'contains')
+            ->whereHas('child', function ($query) {
+                $query->where('type_id', 'thing');
+            })
+            ->with(['child'])
+            ->get()
+            ->map(function ($connection) {
+                return [
+                    'track' => $connection->child->name,
+                    'track_span' => $connection->child,
+                ];
+            });
+    }
+
+    /**
+     * Get album for tracks
+     */
+    protected function getAlbum(Span $span): ?string
+    {
+        $albumConnection = $span->connectionsAsObject()
+            ->where('type_id', 'contains')
+            ->whereHas('parent', function ($query) {
+                $query->where('type_id', 'thing');
+            })
+            ->with(['parent'])
+            ->first();
+
+        if ($albumConnection && $albumConnection->parent) {
+            return $this->makeSpanLink($albumConnection->parent->name, $albumConnection->parent);
+        }
+
+        return null;
+    }
+
+    /**
+     * Get artists for tracks
+     */
+    protected function getArtists(Span $span): Collection
+    {
+        $artists = collect();
+        
+        // First, try to get artists directly from the track
+        $directArtists = $span->connectionsAsObject()
+            ->where('type_id', 'created')
+            ->whereHas('parent', function ($query) {
+                $query->whereIn('type_id', ['person', 'band']);
+            })
+            ->with(['parent'])
+            ->get()
+            ->map(function ($connection) {
+                return [
+                    'artist' => $connection->parent->name,
+                    'artist_span' => $connection->parent,
+                ];
+            });
+        
+        $artists = $artists->merge($directArtists);
+        
+        // If no direct artists found, try to get artists from the album
+        if ($artists->isEmpty()) {
+            $albumConnection = $span->connectionsAsObject()
+                ->where('type_id', 'contains')
+                ->whereHas('parent', function ($query) {
+                    $query->where('type_id', 'thing');
+                })
+                ->with(['parent'])
+                ->first();
+            
+            if ($albumConnection && $albumConnection->parent) {
+                $albumArtists = $albumConnection->parent->connectionsAsObject()
+                    ->where('type_id', 'created')
+                    ->whereHas('parent', function ($query) {
+                        $query->whereIn('type_id', ['person', 'band']);
+                    })
+                    ->with(['parent'])
+                    ->get()
+                    ->map(function ($connection) {
+                        return [
+                            'artist' => $connection->parent->name,
+                            'artist_span' => $connection->parent,
+                        ];
+                    });
+                
+                $artists = $artists->merge($albumArtists);
+            }
+        }
+        
+        return $artists;
+    }
+
+    /**
+     * Get artist names for tracks
+     */
+    protected function getArtistNames(Span $span): string
+    {
+        $artists = $this->getArtists($span);
+        
+        if ($artists->isEmpty()) {
+            return '';
+        }
+
+        $artistNames = $artists->map(function ($artist) {
+            return $this->makeSpanLink($artist['artist'], $artist['artist_span']);
+        });
+
+        return $this->formatList($artistNames->toArray());
+    }
+
+    /**
+     * Get first artist name for tracks
+     */
+    protected function getFirstArtistName(Span $span): ?string
+    {
+        $firstArtist = $this->getArtists($span)->first();
+        
+        if ($firstArtist) {
+            return $this->makeSpanLink($firstArtist['artist'], $firstArtist['artist_span']);
+        }
+
+        return null;
+    }
+
+    /**
+     * Get duration for tracks
+     */
+    protected function getDuration(Span $span): ?string
+    {
+        $duration = $span->getMeta('duration');
+        
+        if (!$duration) {
+            return null;
+        }
+
+        // Format duration (assuming it's stored in seconds or as a formatted string)
+        if (is_numeric($duration)) {
+            $minutes = floor($duration / 60);
+            $seconds = $duration % 60;
+            return "{$minutes}:{$seconds}";
+        }
+
+        return $duration;
+    }
+
+    /**
+     * Get the artist for a track (fallback to album's artist)
+     */
+    protected function getTrackArtist(Span $span): ?string
+    {
+        // Try direct artist (person or band via 'created')
+        $directArtist = $span->connectionsAsObject()
+            ->where('type_id', 'created')
+            ->whereHas('parent', function ($query) {
+                $query->whereIn('type_id', ['person', 'band']);
+            })
+            ->with(['parent'])
+            ->first();
+        if ($directArtist && $directArtist->parent) {
+            return $this->makeSpanLink($directArtist->parent->name, $directArtist->parent);
+        }
+        // Fallback: get album, then its artist
+        $albumConnection = $span->connectionsAsObject()
+            ->where('type_id', 'contains')
+            ->whereHas('parent', function ($query) {
+                $query->where('type_id', 'thing');
+            })
+            ->with(['parent'])
+            ->first();
+        if ($albumConnection && $albumConnection->parent) {
+            $album = $albumConnection->parent;
+            $albumArtist = $album->connectionsAsObject()
+                ->where('type_id', 'created')
+                ->whereHas('parent', function ($query) {
+                    $query->whereIn('type_id', ['person', 'band']);
+                })
+                ->with(['parent'])
+                ->first();
+            if ($albumArtist && $albumArtist->parent) {
+                return $this->makeSpanLink($albumArtist->parent->name, $albumArtist->parent);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Get the release date for a track (fallback to album's release date)
+     */
+    protected function getTrackReleaseDate(Span $span): ?string
+    {
+        // Try track's own date
+        $date = $this->getHumanReadableReleaseDate($span);
+        if ($date) {
+            return $date;
+        }
+        // Fallback: get album, then its date
+        $albumConnection = $span->connectionsAsObject()
+            ->where('type_id', 'contains')
+            ->whereHas('parent', function ($query) {
+                $query->where('type_id', 'thing');
+            })
+            ->with(['parent'])
+            ->first();
+        if ($albumConnection && $albumConnection->parent) {
+            return $this->getHumanReadableReleaseDate($albumConnection->parent);
+        }
+        return null;
+    }
+
+    /**
+     * Get the album for a track
+     */
+    protected function getTrackAlbum(Span $span): ?string
+    {
+        $albumConnection = $span->connectionsAsObject()
+            ->where('type_id', 'contains')
+            ->whereHas('parent', function ($query) {
+                $query->where('type_id', 'thing');
+            })
+            ->with(['parent'])
+            ->first();
+        if ($albumConnection && $albumConnection->parent) {
+            return $this->makeSpanLink($albumConnection->parent->name, $albumConnection->parent);
+        }
+        return null;
+    }
+
+    // --- Conditions for track story sentences ---
+    protected function hasTrackArtist(Span $span): bool
+    {
+        return $this->getTrackArtist($span) !== null;
+    }
+    protected function hasTrackReleaseDate(Span $span): bool
+    {
+        return $this->getTrackReleaseDate($span) !== null;
+    }
+    protected function hasTrackAlbum(Span $span): bool
+    {
+        return $this->getTrackAlbum($span) !== null;
     }
 } 

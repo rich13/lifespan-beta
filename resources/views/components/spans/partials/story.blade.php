@@ -17,7 +17,8 @@
     <div class="card-body">
         <h2 class="card-title h5 mb-3">
             <a href="{{ route('spans.story', $span) }}" class="text-decoration-none">
-            <i class="bi bi-book me-2"></i>Story
+                <i class="bi bi-book me-2"></i>Story
+            </a>
         </h2>
         
         @if(isset($story['error']))
@@ -55,6 +56,23 @@
                     <p class="lead mb-4">{!! $cleanParagraph !!}</p>
                 @endforeach
             </div>
+            
+            <!-- Debug Information (only in development) -->
+            {{-- @if(app()->environment('local', 'development') && isset($story['debug']))
+                <div class="mt-3 p-2 bg-light border rounded">
+                    <small class="text-muted">
+                        <strong>Debug:</strong> 
+                        @if(isset($story['debug']['error']))
+                            Error: {{ $story['debug']['error'] }}
+                        @elseif(isset($story['debug']['used_fallback']))
+                            Used fallback template
+                        @else
+                            Templates: {{ $story['debug']['templates_found'] ?? 'Unknown' }}, 
+                            Sentences: {{ $story['debug']['total_sentences_generated'] ?? 'Unknown' }}
+                        @endif
+                    </small>
+                </div>
+            @endif --}}
             
             <!-- Story metadata -->
             <div class="mt-4 pt-3 border-top">

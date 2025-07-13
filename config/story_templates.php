@@ -188,12 +188,69 @@ return [
                 'single_template' => 'They {have_verb} released one album: {album}.',
                 'empty_template' => 'They {have_verb} not released any albums yet.',
                 'data_methods' => [
-                    'have_verb' => 'getHasVerb',
+                    'have_verb' => 'getHaveVerb',
                     'album_count' => 'getAlbumCount',
                     'latest_album' => 'getLatestAlbum',
                     'album' => 'getFirstAlbum',
                 ],
                 'condition' => 'hasDiscography',
+            ],
+        ],
+    ],
+    'thing_album' => [
+        'story_template' => '{release_date}{creator}{tracks}',
+        'sentences' => [
+            'release_date' => [
+                'template' => '{name} was released in {release_date}.',
+                'data_methods' => [
+                    'name' => 'getName',
+                    'release_date' => 'getHumanReadableReleaseDate',
+                ],
+                'condition' => 'hasStartYear',
+            ],
+            'creator' => [
+                'template' => 'It was created by {creator}.',
+                'single_template' => 'It was created by {creator}.',
+                'data_methods' => [
+                    'creator' => 'getCreator',
+                ],
+                'condition' => 'hasCreator',
+            ],
+            'tracks' => [
+                'template' => 'It contains {track_count} tracks.',
+                'single_template' => 'It contains one track.',
+                'empty_template' => 'It has no tracks.',
+                'data_methods' => [
+                    'track_count' => 'getTrackCount',
+                ],
+                'condition' => 'hasTracks',
+            ],
+        ],
+    ],
+    'thing_track' => [
+        'story_template' => '{track_artist_sentence}{track_release_date_sentence}{track_album_sentence}',
+        'sentences' => [
+            'track_artist_sentence' => [
+                'template' => '{name} is a track by {track_artist}.',
+                'data_methods' => [
+                    'name' => 'getName',
+                    'track_artist' => 'getTrackArtist',
+                ],
+                'condition' => 'hasTrackArtist',
+            ],
+            'track_release_date_sentence' => [
+                'template' => 'It was released on {track_release_date}.',
+                'data_methods' => [
+                    'track_release_date' => 'getTrackReleaseDate',
+                ],
+                'condition' => 'hasTrackReleaseDate',
+            ],
+            'track_album_sentence' => [
+                'template' => 'It appears on {track_album}.',
+                'data_methods' => [
+                    'track_album' => 'getTrackAlbum',
+                ],
+                'condition' => 'hasTrackAlbum',
             ],
         ],
     ],
