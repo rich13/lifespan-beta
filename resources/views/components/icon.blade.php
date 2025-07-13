@@ -62,6 +62,8 @@
             'creative' => 'palette',
             // Person categories
             'musicians' => 'music-note',
+            'public_figure' => 'person-badge',
+            'private_individual' => 'person',
             default => 'tag'
         },
         'status' => match($type) {

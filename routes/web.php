@@ -581,6 +581,32 @@ Route::middleware('web')->group(function () {
             Route::delete('/spans/{span}', [AdminSpanController::class, 'destroy'])
                 ->name('spans.destroy');
             
+            // Person Subtype Management
+            Route::get('/spans/person-subtypes', [AdminSpanController::class, 'managePersonSubtypes'])
+                ->name('spans.manage-person-subtypes');
+            Route::post('/spans/person-subtypes', [AdminSpanController::class, 'updatePersonSubtypes'])
+                ->name('spans.update-person-subtypes');
+            
+            // Public Figure Connection Fixer
+            Route::get('/tools/fix-public-figure-connections', [\App\Http\Controllers\Admin\ToolsController::class, 'fixPublicFigureConnections'])
+                ->name('tools.fix-public-figure-connections');
+            Route::post('/tools/fix-public-figure-connections', [\App\Http\Controllers\Admin\ToolsController::class, 'fixPublicFigureConnectionsAction'])
+                ->name('tools.fix-public-figure-connections-action');
+            
+            // Batch processing for public figure connections
+            Route::post('/tools/fix-public-figure-connections/batch/start', [\App\Http\Controllers\Admin\ToolsController::class, 'startBatchFixPublicFigureConnections'])
+                ->name('tools.fix-public-figure-connections-batch-start');
+            Route::post('/tools/fix-public-figure-connections/batch/process', [\App\Http\Controllers\Admin\ToolsController::class, 'processBatchFixPublicFigureConnections'])
+                ->name('tools.fix-public-figure-connections-batch-process');
+            Route::get('/tools/fix-public-figure-connections/batch/status', [\App\Http\Controllers\Admin\ToolsController::class, 'getBatchFixPublicFigureConnectionsStatus'])
+                ->name('tools.fix-public-figure-connections-batch-status');
+            
+            // Private Individual Connection Fixer
+            Route::get('/tools/fix-private-individual-connections', [\App\Http\Controllers\Admin\ToolsController::class, 'fixPrivateIndividualConnections'])
+                ->name('tools.fix-private-individual-connections');
+            Route::post('/tools/fix-private-individual-connections', [\App\Http\Controllers\Admin\ToolsController::class, 'fixPrivateIndividualConnectionsAction'])
+                ->name('tools.fix-private-individual-connections-action');
+            
             // Span Permissions (Legacy - removed in favor of new group-based system)
                 
             // Span Access
@@ -703,6 +729,12 @@ Route::middleware('web')->group(function () {
             // New route for prewarming Wikipedia cache
             Route::match(['GET', 'POST'], '/tools/prewarm-wikipedia-cache', [App\Http\Controllers\Admin\ToolsController::class, 'prewarmWikipediaCache'])
                 ->name('tools.prewarm-wikipedia-cache');
+            
+            // Person Subtype Management
+            Route::get('/tools/manage-person-subtypes', [App\Http\Controllers\Admin\ToolsController::class, 'managePersonSubtypes'])
+                ->name('tools.manage-person-subtypes');
+            Route::post('/tools/manage-person-subtypes', [App\Http\Controllers\Admin\ToolsController::class, 'updatePersonSubtypes'])
+                ->name('tools.update-person-subtypes');
 
             // Data Export
             Route::prefix('data-export')->name('data-export.')->group(function () {

@@ -20,6 +20,10 @@
             // Always show musicians filter when person type is selected
             $personCategories['musicians'] = 'Musicians';
         }
+        
+        // Add person subtypes
+        $personCategories['public_figure'] = 'Public Figures';
+        $personCategories['private_individual'] = 'Private Individuals';
     }
     
     // Get actual subtypes that exist in the database for each span type
@@ -71,21 +75,21 @@
                         <x-icon type="{{ $spanType->type_id }}" category="span" />
                     </label>
 
-                    <!-- Dynamic Person Categories -->
+                    <!-- Dynamic Person Subtypes -->
                     @if($spanType->type_id === 'person' && in_array('person', $selectedTypes) && !empty($personCategories))
-                        @foreach($personCategories as $category => $label)
-                            <input type="checkbox" class="btn-check person-category-checkbox" 
-                                   id="filter_person_{{ $category }}" 
-                                   name="person_category" 
-                                   value="{{ $category }}" 
-                                   {{ in_array($category, request('person_category') ? explode(',', request('person_category')) : []) ? 'checked' : '' }} 
+                        @foreach($personCategories as $subtype => $label)
+                            <input type="checkbox" class="btn-check person-subtype-checkbox" 
+                                   id="filter_person_{{ $subtype }}" 
+                                   name="person_subtype" 
+                                   value="{{ $subtype }}" 
+                                   {{ in_array($subtype, request('person_subtype') ? explode(',', request('person_subtype')) : []) ? 'checked' : '' }} 
                                    autocomplete="off">
-                            <label class="btn btn-sm {{ in_array($category, request('person_category') ? explode(',', request('person_category')) : []) ? 'btn-secondary' : 'bg-light text-dark' }}" 
-                                   for="filter_person_{{ $category }}" 
+                            <label class="btn btn-sm {{ in_array($subtype, request('person_subtype') ? explode(',', request('person_subtype')) : []) ? 'btn-secondary' : 'bg-light text-dark' }}" 
+                                   for="filter_person_{{ $subtype }}" 
                                    data-bs-toggle="tooltip" 
                                    data-bs-placement="bottom" 
                                    title="Filter by {{ $label }} people">
-                                <x-icon type="{{ $category }}" category="subtype" class="me-1" />
+                                <x-icon type="{{ $subtype }}" category="subtype" class="me-1" />
                             </label>
                         @endforeach
                     @endif
@@ -387,19 +391,19 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
 
-        // Handle person category filter checkboxes
-        const personCategoryCheckboxes = filterForm.querySelectorAll('.person-category-checkbox');
-        personCategoryCheckboxes.forEach(checkbox => {
+        // Handle person subtype filter checkboxes
+        const personSubtypeCheckboxes = filterForm.querySelectorAll('.person-subtype-checkbox');
+        personSubtypeCheckboxes.forEach(checkbox => {
             checkbox.addEventListener('change', () => {
-                // Get all checked person category checkboxes and join their values with commas
-                const checkedCategories = Array.from(personCategoryCheckboxes)
+                // Get all checked person subtype checkboxes and join their values with commas
+                const checkedSubtypes = Array.from(personSubtypeCheckboxes)
                     .filter(cb => cb.checked)
                     .map(cb => cb.value)
                     .join(',');
                 
-                // Update the person_category input value
-                if (checkedCategories) {
-                    checkbox.value = checkedCategories;
+                // Update the person_subtype input value
+                if (checkedSubtypes) {
+                    checkbox.value = checkedSubtypes;
                 }
                 
                 filterForm.submit();

@@ -25,6 +25,11 @@ use Illuminate\Support\Facades\Auth;
             </a>
         </li>
         <li class="nav-item">
+            <a class="nav-link {{ request()->routeIs('admin.spans.manage-person-subtypes') ? 'active' : '' }}" href="{{ route('admin.spans.manage-person-subtypes') }}">
+                <i class="bi bi-person-badge me-1"></i> <span>Person Subtypes</span>
+            </a>
+        </li>
+        <li class="nav-item">
             <a class="nav-link {{ request()->routeIs('admin.span-access.*') ? 'active' : '' }}" href="{{ route('admin.span-access.index') }}">
                 <i class="bi bi-shield-check me-1"></i> <span>Access Control</span>
             </a>

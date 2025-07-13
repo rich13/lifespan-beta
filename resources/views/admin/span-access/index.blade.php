@@ -236,6 +236,7 @@
                                             <th>Access Level</th>
                                             <th>Owner</th>
                                             <th>Permissions</th>
+                                            <th>Connections</th>
                                             <th width="150">Actions</th>
                                         </tr>
                                     </thead>
@@ -249,7 +250,7 @@
                                                 </td>
                                                 <td>
                                                     <div>
-                                                        <strong>{{ $span->name }}</strong>
+                                                        <strong><a href="{{ route('spans.show', $span) }}">{{ $span->name }}</a></strong>
                                                         @if($span->description)
                                                             <br><small class="text-muted">{{ Str::limit($span->description, 50) }}</small>
                                                         @endif
@@ -282,6 +283,26 @@
                                                             <span class="permission-indicator group"></span>
                                                             <small class="text-muted">{{ $groupPermissionsCount }} group{{ $groupPermissionsCount !== 1 ? 's' : '' }}</small>
                                                         @endif
+                                                    @else
+                                                        <small class="text-muted">-</small>
+                                                    @endif
+                                                </td>
+                                                <td>
+                                                    @if(isset($span->connection_counts))
+                                                        <div class="d-flex gap-1">
+                                                            @if($span->connection_counts['public'] > 0)
+                                                                <span class="badge bg-success" title="Public connections">{{ $span->connection_counts['public'] }}</span>
+                                                            @endif
+                                                            @if($span->connection_counts['shared'] > 0)
+                                                                <span class="badge bg-warning" title="Shared connections">{{ $span->connection_counts['shared'] }}</span>
+                                                            @endif
+                                                            @if($span->connection_counts['private'] > 0)
+                                                                <span class="badge bg-danger" title="Private connections">{{ $span->connection_counts['private'] }}</span>
+                                                            @endif
+                                                            @if(array_sum($span->connection_counts) === 0)
+                                                                <small class="text-muted">-</small>
+                                                            @endif
+                                                        </div>
                                                     @else
                                                         <small class="text-muted">-</small>
                                                     @endif
@@ -328,6 +349,7 @@
                                             <th>Access Level</th>
                                             <th>Owner</th>
                                             <th>Permissions</th>
+                                            <th>Connections</th>
                                             <th width="150">Actions</th>
                                         </tr>
                                     </thead>
@@ -341,7 +363,7 @@
                                                 </td>
                                                 <td>
                                                     <div>
-                                                        <strong>{{ $span->name }}</strong>
+                                                        <strong><a href="{{ route('spans.show', $span) }}">{{ $span->name }}</a></strong>
                                                         @if($span->description)
                                                             <br><small class="text-muted">{{ Str::limit($span->description, 50) }}</small>
                                                         @endif
@@ -360,6 +382,26 @@
                                                 </td>
                                                 <td>
                                                     <small class="text-muted">-</small>
+                                                </td>
+                                                <td>
+                                                    @if(isset($span->connection_counts))
+                                                        <div class="d-flex gap-1">
+                                                            @if($span->connection_counts['public'] > 0)
+                                                                <span class="badge bg-success" title="Public connections">{{ $span->connection_counts['public'] }}</span>
+                                                            @endif
+                                                            @if($span->connection_counts['shared'] > 0)
+                                                                <span class="badge bg-warning" title="Shared connections">{{ $span->connection_counts['shared'] }}</span>
+                                                            @endif
+                                                            @if($span->connection_counts['private'] > 0)
+                                                                <span class="badge bg-danger" title="Private connections">{{ $span->connection_counts['private'] }}</span>
+                                                            @endif
+                                                            @if(array_sum($span->connection_counts) === 0)
+                                                                <small class="text-muted">-</small>
+                                                            @endif
+                                                        </div>
+                                                    @else
+                                                        <small class="text-muted">-</small>
+                                                    @endif
                                                 </td>
                                                 <td>
                                                     <div class="btn-group btn-group-sm" role="group">
@@ -403,6 +445,7 @@
                                             <th>Access Level</th>
                                             <th>Owner</th>
                                             <th>Permissions</th>
+                                            <th>Connections</th>
                                             <th width="150">Actions</th>
                                         </tr>
                                     </thead>
@@ -416,7 +459,7 @@
                                                 </td>
                                                 <td>
                                                     <div>
-                                                        <strong>{{ $span->name }}</strong>
+                                                        <strong><a href="{{ route('spans.show', $span) }}">{{ $span->name }}</a></strong>
                                                         @if($span->description)
                                                             <br><small class="text-muted">{{ Str::limit($span->description, 50) }}</small>
                                                         @endif
@@ -448,6 +491,26 @@
                                                             <small class="text-muted">{{ $groupPermissionsCount }} group{{ $groupPermissionsCount !== 1 ? 's' : '' }}</small>
                                                         @endif
                                                     </div>
+                                                </td>
+                                                <td>
+                                                    @if(isset($span->connection_counts))
+                                                        <div class="d-flex gap-1">
+                                                            @if($span->connection_counts['public'] > 0)
+                                                                <span class="badge bg-success" title="Public connections">{{ $span->connection_counts['public'] }}</span>
+                                                            @endif
+                                                            @if($span->connection_counts['shared'] > 0)
+                                                                <span class="badge bg-warning" title="Shared connections">{{ $span->connection_counts['shared'] }}</span>
+                                                            @endif
+                                                            @if($span->connection_counts['private'] > 0)
+                                                                <span class="badge bg-danger" title="Private connections">{{ $span->connection_counts['private'] }}</span>
+                                                            @endif
+                                                            @if(array_sum($span->connection_counts) === 0)
+                                                                <small class="text-muted">-</small>
+                                                            @endif
+                                                        </div>
+                                                    @else
+                                                        <small class="text-muted">-</small>
+                                                    @endif
                                                 </td>
                                                 <td>
                                                     <div class="btn-group btn-group-sm" role="group">
@@ -491,6 +554,7 @@
                                             <th>Access Level</th>
                                             <th>Owner</th>
                                             <th>Permissions</th>
+                                            <th>Connections</th>
                                             <th width="150">Actions</th>
                                         </tr>
                                     </thead>
@@ -504,7 +568,7 @@
                                                 </td>
                                                 <td>
                                                     <div>
-                                                        <strong>{{ $span->name }}</strong>
+                                                        <strong><a href="{{ route('spans.show', $span) }}">{{ $span->name }}</a></strong>
                                                         @if($span->description)
                                                             <br><small class="text-muted">{{ Str::limit($span->description, 50) }}</small>
                                                         @endif
@@ -523,6 +587,26 @@
                                                 </td>
                                                 <td>
                                                     <small class="text-muted">-</small>
+                                                </td>
+                                                <td>
+                                                    @if(isset($span->connection_counts))
+                                                        <div class="d-flex gap-1">
+                                                            @if($span->connection_counts['public'] > 0)
+                                                                <span class="badge bg-success" title="Public connections">{{ $span->connection_counts['public'] }}</span>
+                                                            @endif
+                                                            @if($span->connection_counts['shared'] > 0)
+                                                                <span class="badge bg-warning" title="Shared connections">{{ $span->connection_counts['shared'] }}</span>
+                                                            @endif
+                                                            @if($span->connection_counts['private'] > 0)
+                                                                <span class="badge bg-danger" title="Private connections">{{ $span->connection_counts['private'] }}</span>
+                                                            @endif
+                                                            @if(array_sum($span->connection_counts) === 0)
+                                                                <small class="text-muted">-</small>
+                                                            @endif
+                                                        </div>
+                                                    @else
+                                                        <small class="text-muted">-</small>
+                                                    @endif
                                                 </td>
                                                 <td>
                                                     <div class="btn-group btn-group-sm" role="group">

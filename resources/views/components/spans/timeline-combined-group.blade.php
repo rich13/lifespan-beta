@@ -63,10 +63,16 @@ function initializeCombinedTimeline_{{ str_replace('-', '_', $span->id) }}() {
         fetch(`/api/spans/${spanId}/during-connections`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }).then(response => response.json())
     ])
     .then(([currentSpanData, objectConnectionsData, duringConnectionsData]) => {
-        // Extract unique subjects from the object connections, excluding connection spans
+        // Extract unique subjects from the object connections, excluding connection spans and photos
         const subjects = [...new Set(
             objectConnectionsData.connections
-                .filter(conn => conn.target_type !== 'connection') // Exclude connections to connection spans
+                .filter(conn => {
+                    // Exclude connections to connection spans
+                    if (conn.target_type === 'connection') return false;
+                    // Exclude "created" connections to photos
+                    if (conn.type_id === 'created' && conn.target_type === 'thing' && conn.target_metadata?.subtype === 'photo') return false;
+                    return true;
+                })
                 .map(conn => conn.target_id)
         )];
         
@@ -353,7 +359,13 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
         // Add connections for this timeline
         if (timeline.timeline.connections) {
             timeline.timeline.connections
-                .filter(connection => connection.target_type !== 'connection') // Exclude connections to connection spans
+                .filter(connection => {
+                    // Exclude connections to connection spans
+                    if (connection.target_type === 'connection') return false;
+                    // Exclude "created" connections to photos
+                    if (connection.type_id === 'created' && connection.target_type === 'thing' && connection.target_metadata?.subtype === 'photo') return false;
+                    return true;
+                })
                 .forEach(connection => {
                 const connectionType = connection.type_id;
                 
@@ -603,7 +615,13 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
             timelineData.forEach(timeline => {
                 if (timeline.timeline.connections) {
                     timeline.timeline.connections
-                        .filter(otherConnection => otherConnection.target_type !== 'connection') // Exclude connections to connection spans
+                        .filter(otherConnection => {
+                            // Exclude connections to connection spans
+                            if (otherConnection.target_type === 'connection') return false;
+                            // Exclude "created" connections to photos
+                            if (otherConnection.type_id === 'created' && otherConnection.target_type === 'thing' && otherConnection.target_metadata?.subtype === 'photo') return false;
+                            return true;
+                        })
                         .forEach(otherConnection => {
                         const otherStart = otherConnection.start_year;
                         const otherEnd = otherConnection.end_year || new Date().getFullYear();
@@ -653,7 +671,13 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
                 // Add subspans if any
                 if (timeline.timeline.connections) {
                     timeline.timeline.connections
-                        .filter(otherConnection => otherConnection.target_type !== 'connection') // Exclude connections to connection spans
+                        .filter(otherConnection => {
+                            // Exclude connections to connection spans
+                            if (otherConnection.target_type === 'connection') return false;
+                            // Exclude "created" connections to photos
+                            if (otherConnection.type_id === 'created' && otherConnection.target_type === 'thing' && otherConnection.target_metadata?.subtype === 'photo') return false;
+                            return true;
+                        })
                         .forEach(otherConnection => {
                         if (timelineSpan && timelineSpan.start_year) {
                             const otherStart = otherConnection.start_year - timelineSpan.start_year;
@@ -792,7 +816,13 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
             
             if (timeline.timeline.connections) {
                 timeline.timeline.connections
-                    .filter(otherConnection => otherConnection.target_type !== 'connection') // Exclude connections to connection spans
+                    .filter(otherConnection => {
+                        // Exclude connections to connection spans
+                        if (otherConnection.target_type === 'connection') return false;
+                        // Exclude "created" connections to photos
+                        if (otherConnection.type_id === 'created' && otherConnection.target_type === 'thing' && otherConnection.target_metadata?.subtype === 'photo') return false;
+                        return true;
+                    })
                     .forEach(otherConnection => {
                     const otherStart = otherConnection.start_year;
                     const otherEnd = otherConnection.end_year || new Date().getFullYear();

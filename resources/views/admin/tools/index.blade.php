@@ -140,6 +140,69 @@
                 </div>
             </div>
         </div>
+
+        <!-- Person Subtype Management -->
+        <div class="col-lg-3 col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-person-badge"></i>
+                        Person Subtypes
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">Categorize people as public figures or private individuals.</p>
+                    
+                    <div class="d-grid">
+                        <a href="{{ route('admin.tools.manage-person-subtypes') }}" class="btn btn-info btn-sm">
+                            <i class="bi bi-person-badge me-1"></i>Manage Subtypes
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Public Figure Connection Fixer -->
+        <div class="col-lg-3 col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-link-45deg"></i>
+                        Fix Public Figure Connections
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">Ensure all connections for public figures are public for proper timeline rendering.</p>
+                    
+                    <div class="d-grid">
+                        <a href="{{ route('admin.tools.fix-public-figure-connections') }}" class="btn btn-warning btn-sm">
+                            <i class="bi bi-link-45deg me-1"></i>Fix Connections
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Private Individual Connection Fixer -->
+        <div class="col-lg-3 col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-shield-lock"></i>
+                        Fix Private Individual Connections
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">Set all connections for private individuals to private by default for privacy baseline.</p>
+                    
+                    <div class="d-grid">
+                        <a href="{{ route('admin.tools.fix-private-individual-connections') }}" class="btn btn-info btn-sm">
+                            <i class="bi bi-shield-lock me-1"></i>Fix Connections
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Row 2: Span Management Tools -->
