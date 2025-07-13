@@ -4,12 +4,10 @@ namespace Tests\Feature;
 
 use App\Models\Span;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class SetsModalTest extends TestCase
 {
-    use RefreshDatabase;
 
     private User $user;
     private Span $testSpan;

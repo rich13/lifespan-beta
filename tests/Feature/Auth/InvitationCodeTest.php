@@ -5,12 +5,10 @@ namespace Tests\Feature\Auth;
 use App\Models\InvitationCode;
 use App\Models\User;
 use App\Models\Span;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class InvitationCodeTest extends TestCase
 {
-    use RefreshDatabase;
 
     public function test_registration_requires_invitation_code(): void
     {

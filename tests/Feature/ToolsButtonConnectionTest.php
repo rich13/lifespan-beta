@@ -6,12 +6,10 @@ use App\Models\Connection;
 use App\Models\ConnectionType;
 use App\Models\Span;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class ToolsButtonConnectionTest extends TestCase
 {
-    use RefreshDatabase;
 
     private User $user;
     private Connection $connection;

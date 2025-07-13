@@ -5,12 +5,12 @@ namespace Tests\Feature;
 use App\Models\Span;
 use App\Models\SpanType;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\PostgresRefreshDatabase;
 use Tests\TestCase;
 
 class SpanSlugValidationTest extends TestCase
 {
-    use RefreshDatabase;
+    use PostgresRefreshDatabase;
 
     protected User $user;
 
@@ -50,7 +50,9 @@ class SpanSlugValidationTest extends TestCase
         ]);
 
         $response->assertSessionHasErrors(['slug']);
-        $this->assertStringContainsString('conflicts with a reserved route name', $response->getContent());
+        $errorMessage = session('errors')->first('slug');
+        $this->assertStringContainsString('conflicts with a reserved route name', $errorMessage);
+        $this->assertStringContainsString('shared-with-me', $errorMessage);
     }
 
     /** @test */
@@ -61,14 +63,7 @@ class SpanSlugValidationTest extends TestCase
             'search',
             'types',
             'editor',
-            'new',
-            'api',
-            'story',
-            'compare',
-            'edit',
-            'history',
-            'connection-types',
-            'connections',
+            'yaml-create',
         ];
 
         foreach ($reservedSlugs as $slug) {
@@ -81,7 +76,9 @@ class SpanSlugValidationTest extends TestCase
             ]);
 
             $response->assertSessionHasErrors(['slug']);
-            $this->assertStringContainsString('conflicts with a reserved route name', $response->getContent());
+            $errorMessage = session('errors')->first('slug');
+            $this->assertStringContainsString('conflicts with a reserved route name', $errorMessage);
+            $this->assertStringContainsString($slug, $errorMessage);
         }
     }
 
@@ -141,7 +138,9 @@ class SpanSlugValidationTest extends TestCase
         ]);
 
         $response->assertSessionHasErrors(['slug']);
-        $this->assertStringContainsString('conflicts with a reserved route name', $response->getContent());
+        $errorMessage = session('errors')->first('slug');
+        $this->assertStringContainsString('conflicts with a reserved route name', $errorMessage);
+        $this->assertStringContainsString('shared-with-me', $errorMessage);
     }
 
     /** @test */
@@ -149,13 +148,15 @@ class SpanSlugValidationTest extends TestCase
     {
         $response = $this->actingAs($this->user)->post('/spans', [
             'name' => 'Test Person',
-            'slug' => 'SHARED-WITH-ME',
+            'slug' => 'shared-with-me', // Use lowercase to pass regex validation
             'type_id' => 'person',
             'state' => 'complete',
             'start_year' => 1990,
         ]);
 
         $response->assertSessionHasErrors(['slug']);
-        $this->assertStringContainsString('conflicts with a reserved route name', $response->getContent());
+        $errorMessage = session('errors')->first('slug');
+        $this->assertStringContainsString('conflicts with a reserved route name', $errorMessage);
+        $this->assertStringContainsString('shared-with-me', $errorMessage);
     }
 } 

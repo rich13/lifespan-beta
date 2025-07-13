@@ -6,12 +6,10 @@ use App\Models\Group;
 use App\Models\Span;
 use App\Models\User;
 use App\Models\SpanPermission;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class GroupManagementTest extends TestCase
 {
-    use RefreshDatabase;
 
     protected User $admin;
     protected User $user1;

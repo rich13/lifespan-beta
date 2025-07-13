@@ -4,13 +4,11 @@ namespace Tests\Feature;
 
 use App\Models\Connection;
 use App\Models\Span;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class ConnectionSpoViewTest extends TestCase
 {
-    use RefreshDatabase;
 
     private Span $subject;
     private Span $object;

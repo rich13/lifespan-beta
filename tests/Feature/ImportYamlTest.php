@@ -6,14 +6,12 @@ use App\Models\User;
 use App\Models\Span;
 use App\Models\Connection;
 use App\Services\Import\SpanImporterFactory;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 use Symfony\Component\Yaml\Yaml;
 use Illuminate\Support\Facades\DB;
 
 class ImportYamlTest extends TestCase
 {
-    use RefreshDatabase;
 
     protected User $user;
     protected string $testYamlPath;

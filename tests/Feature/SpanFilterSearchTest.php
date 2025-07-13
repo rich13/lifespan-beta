@@ -107,15 +107,27 @@ class SpanFilterSearchTest extends TestCase
     {
         $this->actingAs($this->user);
 
-        // Debug: Check that test data exists
-        $this->assertDatabaseHas('spans', ['name' => 'Richard Northover']);
-        $this->assertDatabaseHas('spans', ['name' => 'Acme Corporation']);
-        $this->assertDatabaseHas('spans', ['name' => 'London Bridge']);
-        $this->assertDatabaseHas('spans', ['name' => 'Company Picnic']);
-
         // Test single type filter
         $response = $this->get('/spans?types=person');
         $response->assertStatus(200);
+        
+        // Debug: Check what's actually in the response
+        if (!$response->getContent()) {
+            $this->fail('Response content is empty');
+        }
+        
+        // Debug: Check if the span exists in the database
+        $span = Span::where('name', 'Richard Northover')->first();
+        if (!$span) {
+            $this->fail('Richard Northover span not found in database');
+        }
+        
+        // Debug: Check what's actually in the response content
+        $content = $response->getContent();
+        if (strpos($content, 'Richard Northover') === false) {
+            $this->fail('Richard Northover not found in response. Response content: ' . substr($content, 0, 1000));
+        }
+        
         $response->assertSee('Richard Northover');
         $response->assertDontSee('Acme Corporation');
         $response->assertDontSee('London Bridge');

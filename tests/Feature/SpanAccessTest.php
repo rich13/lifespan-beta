@@ -6,13 +6,11 @@ use App\Models\User;
 use App\Models\Span;
 use App\Models\SpanPermission;
 use Tests\TestCase;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class SpanAccessTest extends TestCase
 {
-    use RefreshDatabase;
 
     protected function setUp(): void
     {

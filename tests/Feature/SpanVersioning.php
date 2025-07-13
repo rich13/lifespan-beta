@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\Span;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\CreatesApplication;
 use Tests\PostgresRefreshDatabase;
 

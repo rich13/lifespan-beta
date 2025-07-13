@@ -6,11 +6,9 @@ use App\Models\User;
 use App\Models\Span;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class SpanManagementTest extends TestCase
 {
-    use RefreshDatabase;
 
     protected function setUp(): void
     {

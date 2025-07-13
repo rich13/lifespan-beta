@@ -8,11 +8,9 @@ use App\Models\Span;
 use App\Models\Connection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class MusicBrainzArtistTypeTest extends TestCase
 {
-    use RefreshDatabase;
 
     protected function setUp(): void
     {

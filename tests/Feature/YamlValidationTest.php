@@ -4,12 +4,10 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use App\Services\YamlValidationService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class YamlValidationTest extends TestCase
 {
-    use RefreshDatabase;
 
     public function test_virtual_incoming_connection_fields_are_ignored()
     {

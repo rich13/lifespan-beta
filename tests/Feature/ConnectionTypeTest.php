@@ -4,12 +4,10 @@ namespace Tests\Feature;
 
 use App\Models\ConnectionType;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class ConnectionTypeTest extends TestCase
 {
-    use RefreshDatabase;
 
     protected function setUp(): void
     {

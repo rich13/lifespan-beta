@@ -5,11 +5,9 @@ namespace Tests\Feature;
 use App\Models\Span;
 use App\Models\User;
 use Tests\TestCase;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class SpanRoutesTest extends TestCase
 {
-    use RefreshDatabase;
 
     private User $user;
     private Span $span;

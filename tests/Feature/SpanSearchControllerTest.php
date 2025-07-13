@@ -6,7 +6,6 @@ use App\Models\Span;
 use App\Models\User;
 use App\Models\Connection;
 use App\Models\ConnectionType;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 use Illuminate\Support\Facades\DB;
 use Ramsey\Uuid\Uuid;
@@ -17,7 +16,6 @@ use Ramsey\Uuid\Uuid;
  */
 class SpanSearchControllerTest extends TestCase
 {
-    use RefreshDatabase;
 
     protected function setUp(): void
     {

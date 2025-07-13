@@ -6,11 +6,9 @@ use Tests\TestCase;
 use App\Services\MusicBrainzImportService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class MusicBrainzRateLimitTest extends TestCase
 {
-    use RefreshDatabase;
 
     protected function setUp(): void
     {

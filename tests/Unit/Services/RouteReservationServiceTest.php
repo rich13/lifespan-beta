@@ -3,12 +3,10 @@
 namespace Tests\Unit\Services;
 
 use App\Services\RouteReservationService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class RouteReservationServiceTest extends TestCase
 {
-    use RefreshDatabase;
 
     protected RouteReservationService $service;
 

@@ -6,13 +6,11 @@ use Tests\TestCase;
 use App\Models\User;
 use App\Models\Span;
 use App\Models\SpanType;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
 class DataExportImportTest extends TestCase
 {
-    use RefreshDatabase;
 
     protected User $admin;
     protected User $user;

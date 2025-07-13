@@ -4,12 +4,10 @@ namespace Tests\Unit\Models;
 
 use App\Models\Connection;
 use App\Models\Span;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class ConnectionTest extends TestCase
 {
-    use RefreshDatabase;
 
     private Span $subject;
     private Span $object;

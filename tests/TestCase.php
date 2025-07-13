@@ -3,18 +3,16 @@
 namespace Tests;
 
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Artisan;
-use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Exception;
 
 abstract class TestCase extends BaseTestCase
 {
-    use CreatesApplication, DatabaseTransactions;
+    use CreatesApplication, PostgresRefreshDatabase;
 
     /**
      * The name of the test database.
@@ -63,6 +61,8 @@ abstract class TestCase extends BaseTestCase
         // Validate test environment after everything is set up
         $this->validateTestEnvironment();
     }
+
+
 
     /**
      * Force testing environment variables
@@ -165,7 +165,7 @@ abstract class TestCase extends BaseTestCase
     {
         $uses = parent::setUpTraits();
 
-        if (isset($uses[RefreshDatabase::class]) || isset($uses[DatabaseTransactions::class])) {
+        if (isset($uses[PostgresRefreshDatabase::class])) {
             $this->setupDatabase();
         }
 

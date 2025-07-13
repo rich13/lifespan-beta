@@ -5,11 +5,9 @@ namespace Tests\Unit;
 use App\Models\Span;
 use App\Models\User;
 use Tests\TestCase;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class TemporalSpanTest extends TestCase
 {
-    use RefreshDatabase;
 
     protected User $user;
     protected Span $referenceSpan;

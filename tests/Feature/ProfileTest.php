@@ -4,13 +4,11 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use App\Models\Span;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 use Illuminate\Support\Facades\Log;
 
 class ProfileTest extends TestCase
 {
-    use RefreshDatabase;
 
     protected function createUserWithPersonalSpan(bool $isAdmin = false): User
     {

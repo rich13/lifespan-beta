@@ -6,12 +6,10 @@ use App\Models\Span;
 use App\Models\User;
 use App\Models\SpanType;
 use App\Services\ConfigurableStoryGeneratorService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class ConfigurableStoryGeneratorTest extends TestCase
 {
-    use RefreshDatabase;
 
     protected function setUp(): void
     {

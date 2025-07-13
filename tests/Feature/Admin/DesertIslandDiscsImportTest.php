@@ -6,13 +6,11 @@ use App\Models\User;
 use App\Models\Span;
 use App\Models\Connection;
 use App\Models\SpanType;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 use Illuminate\Support\Facades\Http;
 
 class DesertIslandDiscsImportTest extends TestCase
 {
-    use RefreshDatabase;
 
     protected User $user;
     protected Span $artist;

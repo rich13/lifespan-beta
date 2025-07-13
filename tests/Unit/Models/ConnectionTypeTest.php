@@ -3,12 +3,10 @@
 namespace Tests\Unit\Models;
 
 use App\Models\ConnectionType;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class ConnectionTypeTest extends TestCase
 {
-    use RefreshDatabase;
 
     private ConnectionType $type;
 

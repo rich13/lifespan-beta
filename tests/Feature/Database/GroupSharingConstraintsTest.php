@@ -6,13 +6,11 @@ use App\Models\Group;
 use App\Models\Span;
 use App\Models\User;
 use App\Models\SpanPermission;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 use Illuminate\Database\QueryException;
 
 class GroupSharingConstraintsTest extends TestCase
 {
-    use RefreshDatabase;
 
     protected User $user;
     protected Group $group;

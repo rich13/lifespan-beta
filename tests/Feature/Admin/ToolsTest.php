@@ -7,11 +7,9 @@ use App\Models\User;
 use App\Models\Span;
 use App\Models\Connection;
 use App\Models\ConnectionType;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class ToolsTest extends TestCase
 {
-    use RefreshDatabase;
 
     protected User $admin;
 

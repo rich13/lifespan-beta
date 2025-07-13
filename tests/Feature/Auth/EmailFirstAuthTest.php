@@ -4,11 +4,9 @@ namespace Tests\Feature\Auth;
 
 use App\Models\User;
 use Tests\TestCase;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class EmailFirstAuthTest extends TestCase
 {
-    use RefreshDatabase;
 
     public function test_email_form_can_be_rendered()
     {

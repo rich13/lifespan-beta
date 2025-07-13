@@ -7,14 +7,12 @@ use App\Models\ConnectionType;
 use App\Models\Span;
 use App\Models\User;
 use App\Services\FamilyTreeService;
-use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Tests\TestCase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class FamilyTreeServiceTest extends TestCase
 {
-    use DatabaseTransactions;
 
     private FamilyTreeService $service;
     private User $user;

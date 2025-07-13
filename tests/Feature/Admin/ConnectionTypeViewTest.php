@@ -4,13 +4,11 @@ namespace Tests\Feature\Admin;
 
 use App\Models\ConnectionType;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class ConnectionTypeViewTest extends TestCase
 {
-    use RefreshDatabase;
 
     private User $admin;
 

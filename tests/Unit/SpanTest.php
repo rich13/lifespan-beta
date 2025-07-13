@@ -5,11 +5,9 @@ namespace Tests\Unit;
 use App\Models\Span;
 use App\Models\User;
 use Tests\TestCase;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class SpanTest extends TestCase
 {
-    use RefreshDatabase;
 
     public function test_span_dates_are_properly_formatted()
     {

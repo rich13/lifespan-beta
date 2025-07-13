@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\Span;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -16,7 +15,6 @@ use Illuminate\Support\Facades\Log;
  */
 class SpanViewTest extends TestCase
 {
-    use RefreshDatabase;
 
     protected function setUp(): void
     {

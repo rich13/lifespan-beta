@@ -7,13 +7,11 @@ use App\Models\User;
 use App\Models\Span;
 use App\Models\Connection;
 use App\Models\ConnectionType;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Testing\WithFaker;
 use Illuminate\Support\Str;
 
 class SimpleDesertIslandDiscsImportTest extends TestCase
 {
-    use RefreshDatabase;
 
     protected User $admin;
 

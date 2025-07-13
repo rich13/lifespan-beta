@@ -6,12 +6,10 @@ use App\Models\Connection;
 use App\Models\Span;
 use App\Services\Temporal\TemporalService;
 use App\Services\Temporal\PrecisionValidator;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class TemporalServiceTest extends TestCase
 {
-    use RefreshDatabase;
 
     private TemporalService $service;
     private PrecisionValidator $precisionValidator;

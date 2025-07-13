@@ -6,7 +6,6 @@ use App\Models\Connection;
 use App\Models\ConnectionType;
 use App\Models\Span;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
@@ -16,7 +15,6 @@ use Tests\TestCase;
  */
 class SpanEditorConnectionTest extends TestCase
 {
-    use RefreshDatabase;
 
     private User $user;
     private Span $sourceSpan;

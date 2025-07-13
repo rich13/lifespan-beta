@@ -8,12 +8,10 @@ use App\Models\Span;
 use App\Services\Connection\ConnectionConstraintService;
 use App\Services\Temporal\TemporalService;
 use App\Services\Temporal\PrecisionValidator;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class ConnectionConstraintServiceTest extends TestCase
 {
-    use RefreshDatabase;
 
     private ConnectionConstraintService $service;
     private PrecisionValidator $precisionValidator;

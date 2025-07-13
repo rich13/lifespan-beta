@@ -3,11 +3,9 @@
 namespace Tests\Feature;
 
 use Tests\TestCase;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class ErrorPagesTest extends TestCase
 {
-    use RefreshDatabase;
 
     public function test_419_error_page_loads_correctly(): void
     {

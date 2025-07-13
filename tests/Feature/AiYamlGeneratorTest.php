@@ -4,12 +4,10 @@ namespace Tests\Feature;
 
 use App\Models\Span;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class AiYamlGeneratorTest extends TestCase
 {
-    use RefreshDatabase;
 
     public function test_get_placeholder_spans_returns_only_person_spans()
     {

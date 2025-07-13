@@ -5,11 +5,9 @@ namespace Tests\Feature\Admin;
 use App\Models\User;
 use App\Models\Span;
 use Tests\TestCase;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class AdminRoutesTest extends TestCase
 {
-    use RefreshDatabase;
 
     private User $admin;
     private User $user;

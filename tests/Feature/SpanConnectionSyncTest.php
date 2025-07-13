@@ -4,14 +4,12 @@ namespace Tests\Feature;
 
 use App\Models\Span;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 use Illuminate\Support\Facades\DB;
 use App\Models\Connection;
 
 class SpanConnectionSyncTest extends TestCase
 {
-    use RefreshDatabase;
 
     protected function setUp(): void
     {
