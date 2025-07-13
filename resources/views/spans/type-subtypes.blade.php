@@ -71,6 +71,9 @@
     @if($subtypes->count() > 0)
         <div class="row">
             @foreach($subtypes as $subtype)
+                @if(empty($subtype->subtype))
+                    @continue
+                @endif
                 <div class="col-md-6 col-lg-4 mb-4">
                     <div class="card h-100">
                         <div class="card-header">

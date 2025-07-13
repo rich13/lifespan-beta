@@ -2351,4 +2351,23 @@ class Span extends Model
             ];
         }
     }
+
+    /**
+     * Get all subtypes for a given span type with counts
+     * 
+     * @param string $type The span type ID
+     * @return \Illuminate\Support\Collection Collection of objects with subtype and count properties
+     */
+    public static function getSubtypesForType(string $type): \Illuminate\Support\Collection
+    {
+        return collect(\Illuminate\Support\Facades\DB::select("
+            SELECT DISTINCT TRIM(metadata->>'subtype') AS subtype, COUNT(*) as count 
+            FROM spans 
+            WHERE type_id = ? 
+            AND metadata->>'subtype' IS NOT NULL 
+            AND TRIM(metadata->>'subtype') != '' 
+            GROUP BY TRIM(metadata->>'subtype') 
+            ORDER BY subtype
+        ", [$type]));
+    }
 }
