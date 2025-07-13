@@ -439,6 +439,15 @@ Route::middleware('web')->group(function () {
             Route::patch('/account/profile', [\App\Http\Controllers\SettingsController::class, 'updateProfile'])->name('account.profile.update');
             Route::put('/account/password', [\App\Http\Controllers\SettingsController::class, 'updatePassword'])->name('account.password.update');
             Route::delete('/account', [\App\Http\Controllers\SettingsController::class, 'destroy'])->name('account.destroy');
+            
+            // Flickr Import routes
+            Route::prefix('import/flickr')->name('import.flickr.')->group(function () {
+                Route::get('/', [\App\Http\Controllers\FlickrImportController::class, 'index'])->name('index');
+                Route::post('/store-credentials', [\App\Http\Controllers\FlickrImportController::class, 'storeCredentials'])->name('store-credentials');
+                Route::post('/test-connection', [\App\Http\Controllers\FlickrImportController::class, 'testConnection'])->name('test-connection');
+                Route::post('/import-photos', [\App\Http\Controllers\FlickrImportController::class, 'importPhotos'])->name('import-photos');
+                Route::get('/get-imported-photos', [\App\Http\Controllers\FlickrImportController::class, 'getImportedPhotos'])->name('get-imported-photos');
+            });
         });
 
         // Admin routes

@@ -81,6 +81,7 @@ class User extends Authenticatable
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
         'is_admin' => 'boolean',
+        'metadata' => 'array',
     ];
 
     /**
@@ -310,5 +311,33 @@ class User extends Authenticatable
                 });
             });
         });
+    }
+
+    /**
+     * Get a specific metadata value with dot notation support
+     *
+     * @param string $key Dot notation key (e.g., 'flickr.user_id')
+     * @param mixed $default Default value if key doesn't exist
+     * @return mixed
+     */
+    public function getMeta(string $key, mixed $default = null): mixed
+    {
+        return data_get($this->metadata, $key, $default);
+    }
+
+    /**
+     * Set a specific metadata value with dot notation support
+     *
+     * @param string $key Dot notation key
+     * @param mixed $value Value to set
+     * @return self
+     */
+    public function setMeta(string $key, mixed $value): self
+    {
+        $metadata = $this->metadata ?? [];
+        data_set($metadata, $key, $value);
+        $this->metadata = $metadata;
+
+        return $this;
     }
 }

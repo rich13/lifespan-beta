@@ -1621,12 +1621,9 @@ class SpanController extends Controller
                 }
             }
 
-            // Get unique subtypes with counts
-            $subtypes = $query->selectRaw('metadata->>\'subtype\' as subtype, COUNT(*) as count')
-                ->groupBy('metadata->subtype')
-                ->orderBy('subtype')
-                ->get();
-
+            // Get unique subtypes with counts using the Span model method
+            $subtypes = Span::getSubtypesForType($type);
+            
             // Collect example spans for each subtype
             $subtypeExamples = [];
 
@@ -1635,10 +1632,7 @@ class SpanController extends Controller
                 $exampleQuery = Span::query()
                     ->where('type_id', $type)
                     ->where('metadata->subtype', $subtype->subtype)
-                    ->whereIn('state', ['complete', 'draft', 'placeholder'])
-                    ->orderByRaw('COALESCE(start_year, 9999)')
-                    ->orderByRaw('COALESCE(start_month, 12)')
-                    ->orderByRaw('COALESCE(start_day, 31)');
+                    ->whereIn('state', ['complete', 'draft', 'placeholder']);
 
                 // Apply same access filtering
                 if (!Auth::check()) {
@@ -1662,7 +1656,12 @@ class SpanController extends Controller
                     }
                 }
 
-                $subtypeExamples[$subtype->subtype] = $exampleQuery->limit(3)->get();
+                $subtypeExamples[$subtype->subtype] = $exampleQuery
+                    ->orderByRaw('COALESCE(start_year, 9999)')
+                    ->orderByRaw('COALESCE(start_month, 12)')
+                    ->orderByRaw('COALESCE(start_day, 31)')
+                    ->limit(3)
+                    ->get();
             }
 
             return view('spans.type-subtypes', compact('spanType', 'subtypes', 'subtypeExamples'));
