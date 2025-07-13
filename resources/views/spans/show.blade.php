@@ -128,6 +128,9 @@
                 <div class="row">
                     <div class="col-12">
                         <x-spans.partials.story :span="$span" />
+                        @if($span->type_id === 'band')
+                            @includeIf('components.spans.cards.band-discography', ['span' => $span])
+                        @endif
                     </div>
                 </div>
                 <x-spans.partials.connections :span="$span" />

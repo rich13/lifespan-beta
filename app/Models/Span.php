@@ -1107,6 +1107,36 @@ class Span extends Model
     }
 
     /**
+     * Get connection counts by access level for this span
+     * 
+     * @return array Array with 'public', 'shared', 'private' counts
+     */
+    public function getConnectionCountsByAccessLevel(): array
+    {
+        // Get all connections where this span is involved (as subject or object)
+        $subjectConnections = \App\Models\Connection::where('parent_id', $this->id)->get();
+        $objectConnections = \App\Models\Connection::where('child_id', $this->id)->get();
+        $allConnections = $subjectConnections->merge($objectConnections);
+        
+        $counts = [
+            'public' => 0,
+            'shared' => 0,
+            'private' => 0
+        ];
+        
+        foreach ($allConnections as $connection) {
+            if ($connection->connectionSpan) {
+                $accessLevel = $connection->connectionSpan->access_level;
+                if (isset($counts[$accessLevel])) {
+                    $counts[$accessLevel]++;
+                }
+            }
+        }
+        
+        return $counts;
+    }
+
+    /**
      * Get relationship connections for this span
      */
     public function relationships()
@@ -2369,5 +2399,67 @@ class Span extends Model
             GROUP BY TRIM(metadata->>'subtype') 
             ORDER BY subtype
         ", [$type]));
+    }
+
+    /**
+     * Check if this person is a public figure
+     */
+    public function isPublicFigure(): bool
+    {
+        return $this->type_id === 'person' && $this->getMeta('subtype') === 'public_figure';
+    }
+
+    /**
+     * Check if this person is a private individual
+     */
+    public function isPrivateIndividual(): bool
+    {
+        return $this->type_id === 'person' && $this->getMeta('subtype') === 'private_individual';
+    }
+
+    /**
+     * Get the person subtype (public_figure or private_individual)
+     */
+    public function getPersonSubtype(): ?string
+    {
+        if ($this->type_id !== 'person') {
+            return null;
+        }
+        return $this->getMeta('subtype');
+    }
+
+    /**
+     * Set the person subtype
+     */
+    public function setPersonSubtype(string $subtype): self
+    {
+        if ($this->type_id !== 'person') {
+            throw new \InvalidArgumentException('Can only set person subtype on person spans');
+        }
+        
+        if (!in_array($subtype, ['public_figure', 'private_individual'])) {
+            throw new \InvalidArgumentException('Person subtype must be public_figure or private_individual');
+        }
+        
+        $this->setMeta('subtype', $subtype);
+        return $this;
+    }
+
+    /**
+     * Scope to get only public figures
+     */
+    public function scopePublicFigures($query)
+    {
+        return $query->where('type_id', 'person')
+                    ->whereJsonContains('metadata->subtype', 'public_figure');
+    }
+
+    /**
+     * Scope to get only private individuals
+     */
+    public function scopePrivateIndividuals($query)
+    {
+        return $query->where('type_id', 'person')
+                    ->whereJsonContains('metadata->subtype', 'private_individual');
     }
 }
