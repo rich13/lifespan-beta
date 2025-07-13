@@ -2941,9 +2941,16 @@ class YamlSpanService
      */
     public function findExistingSpan(string $name, string $type): ?Span
     {
-        return Span::where('name', $name)
+        $span = Span::where('name', $name)
             ->where('type_id', $type)
             ->first();
+            
+        // Only return the span if the current user has permission to update it
+        if ($span && auth()->check() && auth()->user()->can('update', $span)) {
+            return $span;
+        }
+        
+        return null;
     }
 
     /**
