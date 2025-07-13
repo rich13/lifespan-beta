@@ -263,9 +263,11 @@
                 <div class="mt-4">
                     @if($reflectionType === 'person_older')
                         {{-- Show connections for the person at the reflection date --}}
-                        <x-spans.display.connections-at-date 
-                            :span="$span" 
-                            :date="$reflectionDateObj" />
+                        @if(!$isReflectionBeforePersonBirth)
+                            <x-spans.display.connections-at-date 
+                                :span="$span" 
+                                :date="$reflectionDateObj" />
+                        @endif
                         
                         {{-- Show user's age at that time --}}
                         @if(isset($duration))
@@ -288,15 +290,32 @@
                         {{-- Show person's age at that time --}}
                         @if($reflectionType === 'person_younger')
                             @php
-                                // Calculate the person's age as of the reflection date, not their current age
-                                $personAgeAtReflection = \App\Helpers\DateDurationCalculator::calculateDuration(
-                                    (object)['year' => $personBirthDate->year, 'month' => $personBirthDate->month, 'day' => $personBirthDate->day],
-                                    (object)['year' => $reflectionDate->year, 'month' => $reflectionDate->month, 'day' => $reflectionDate->day]
-                                );
+                                // Check if reflection date is before person's birth
+                                $isReflectionBeforePersonBirth = $reflectionDate->lt($personBirthDate);
+                                
+                                if (!$isReflectionBeforePersonBirth) {
+                                    // Calculate the person's age as of the reflection date, not their current age
+                                    $personAgeAtReflection = \App\Helpers\DateDurationCalculator::calculateDuration(
+                                        (object)['year' => $personBirthDate->year, 'month' => $personBirthDate->month, 'day' => $personBirthDate->day],
+                                        (object)['year' => $reflectionDate->year, 'month' => $reflectionDate->month, 'day' => $reflectionDate->day]
+                                    );
+                                } else {
+                                    // Calculate time before person's birth
+                                    $timeBeforePersonBirth = \App\Helpers\DateDurationCalculator::calculateDuration(
+                                        (object)['year' => $reflectionDate->year, 'month' => $reflectionDate->month, 'day' => $reflectionDate->day],
+                                        (object)['year' => $personBirthDate->year, 'month' => $personBirthDate->month, 'day' => $personBirthDate->day]
+                                    );
+                                }
                             @endphp
-                            <p class="text-muted mb-2">
-                                This is when {{ $span->name }} {{ $isReflectionAgeInPast ? 'was' : 'will be' }} {{ $personAgeAtReflection['years'] ?? 0 }} years, {{ $personAgeAtReflection['months'] ?? 0 }} months, and {{ $personAgeAtReflection['days'] ?? 0 }} days old.
-                            </p>
+                            @if(!$isReflectionBeforePersonBirth)
+                                <p class="text-muted mb-2">
+                                    This is when {{ $span->name }} {{ $isReflectionAgeInPast ? 'was' : 'will be' }} {{ $personAgeAtReflection['years'] ?? 0 }} years, {{ $personAgeAtReflection['months'] ?? 0 }} months, and {{ $personAgeAtReflection['days'] ?? 0 }} days old.
+                                </p>
+                            @else
+                                <p class="text-muted mb-2">
+                                    This is {{ $timeBeforePersonBirth['years'] ?? 0 }} years, {{ $timeBeforePersonBirth['months'] ?? 0 }} months, and {{ $timeBeforePersonBirth['days'] ?? 0 }} days before {{ $span->name }} was born.
+                                </p>
+                            @endif
                         @elseif($reflectionType === 'person_younger_dead')
                             <p class="text-muted mb-2">
                                 This is when {{ $span->name }} {{ $isReflectionAgeInPast ? 'was' : 'would have been' }} {{ $personAgeAtDeath['years'] ?? 0 }} years, {{ $personAgeAtDeath['months'] ?? 0 }} months, and {{ $personAgeAtDeath['days'] ?? 0 }} days old.
@@ -304,9 +323,11 @@
                         @endif
                         
                         {{-- Show connections for the person at the reflection date --}}
-                        <x-spans.display.connections-at-date 
-                            :span="$span" 
-                            :date="$reflectionDateObj" />
+                        @if(!$isReflectionBeforePersonBirth)
+                            <x-spans.display.connections-at-date 
+                                :span="$span" 
+                                :date="$reflectionDateObj" />
+                        @endif
                     @endif
                 </div>
             @endif
