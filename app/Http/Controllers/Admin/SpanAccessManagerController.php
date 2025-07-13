@@ -37,11 +37,30 @@ class SpanAccessManagerController extends Controller
             $types = explode(',', $request->types);
             $baseQuery->whereIn('type_id', $types);
 
-            // Apply subtype filters if any
+            // Apply person subtype filters (for person type)
+            if (in_array('person', $types) && $request->filled('person_subtype')) {
+                $personSubtypes = explode(',', $request->input('person_subtype'));
+                $baseQuery->where(function($q) use ($personSubtypes) {
+                    foreach ($personSubtypes as $subtype) {
+                        if ($subtype === 'musicians') {
+                            // Handle musicians filter (this would need to be implemented based on your musician detection logic)
+                            // For now, we'll skip this as it requires additional logic
+                        } else {
+                            // Handle person subtypes (public_figure, private_individual)
+                            $q->orWhere(function($subQ) use ($subtype) {
+                                $subQ->where('type_id', 'person')
+                                     ->whereRaw("metadata->>'subtype' = ?", [$subtype]);
+                            });
+                        }
+                    }
+                });
+            }
+
+            // Apply subtype filters for other types
             foreach ($types as $type) {
-                if ($request->filled($type . '_subtype')) {
+                if ($type !== 'person' && $request->filled($type . '_subtype')) {
                     $subtypes = explode(',', $request->input($type . '_subtype'));
-                    $baseQuery->orWhere(function($q) use ($type, $subtypes) {
+                    $baseQuery->where(function($q) use ($type, $subtypes) {
                         $q->where('type_id', $type)
                           ->whereIn(DB::raw("metadata->>'subtype'"), $subtypes);
                     });
@@ -89,6 +108,20 @@ class SpanAccessManagerController extends Controller
         $publicSpans = $publicQuery->orderBy('name')->paginate(500, ['*'], 'public_page');
         $privateSpans = $privateQuery->orderBy('name')->paginate(500, ['*'], 'private_page');
         $sharedSpans = $sharedQuery->orderBy('name')->paginate(500, ['*'], 'shared_page');
+        
+        // Add connection counts to each span
+        $allSpans->getCollection()->each(function ($span) {
+            $span->connection_counts = $span->getConnectionCountsByAccessLevel();
+        });
+        $publicSpans->getCollection()->each(function ($span) {
+            $span->connection_counts = $span->getConnectionCountsByAccessLevel();
+        });
+        $privateSpans->getCollection()->each(function ($span) {
+            $span->connection_counts = $span->getConnectionCountsByAccessLevel();
+        });
+        $sharedSpans->getCollection()->each(function ($span) {
+            $span->connection_counts = $span->getConnectionCountsByAccessLevel();
+        });
         
         // Calculate statistics using fresh queries to avoid filter interference
         $statsQuery = Span::with(['owner', 'spanPermissions'])
@@ -139,11 +172,16 @@ class SpanAccessManagerController extends Controller
         // Preserve all query parameters when redirecting
         $queryParams = $request->only(['types', 'visibility', 'search', 'all_page', 'private_page', 'public_page', 'shared_page']);
         
+        // Also preserve person subtype filters
+        if ($request->filled('person_subtype')) {
+            $queryParams['person_subtype'] = $request->input('person_subtype');
+        }
+        
         // Also preserve any subtype filters
         if ($request->filled('types')) {
             $types = explode(',', $request->types);
             foreach ($types as $type) {
-                if ($request->filled($type . '_subtype')) {
+                if ($type !== 'person' && $request->filled($type . '_subtype')) {
                     $queryParams[$type . '_subtype'] = $request->input($type . '_subtype');
                 }
             }
@@ -172,11 +210,16 @@ class SpanAccessManagerController extends Controller
         // Preserve all query parameters when redirecting
         $queryParams = $request->only(['types', 'visibility', 'search', 'all_page', 'private_page', 'public_page', 'shared_page']);
         
+        // Also preserve person subtype filters
+        if ($request->filled('person_subtype')) {
+            $queryParams['person_subtype'] = $request->input('person_subtype');
+        }
+        
         // Also preserve any subtype filters
         if ($request->filled('types')) {
             $types = explode(',', $request->types);
             foreach ($types as $type) {
-                if ($request->filled($type . '_subtype')) {
+                if ($type !== 'person' && $request->filled($type . '_subtype')) {
                     $queryParams[$type . '_subtype'] = $request->input($type . '_subtype');
                 }
             }
@@ -216,11 +259,16 @@ class SpanAccessManagerController extends Controller
         // Preserve all query parameters when redirecting
         $queryParams = $request->only(['types', 'visibility', 'search', 'all_page', 'private_page', 'public_page', 'shared_page']);
         
+        // Also preserve person subtype filters
+        if ($request->filled('person_subtype')) {
+            $queryParams['person_subtype'] = $request->input('person_subtype');
+        }
+        
         // Also preserve any subtype filters
         if ($request->filled('types')) {
             $types = explode(',', $request->types);
             foreach ($types as $type) {
-                if ($request->filled($type . '_subtype')) {
+                if ($type !== 'person' && $request->filled($type . '_subtype')) {
                     $queryParams[$type . '_subtype'] = $request->input($type . '_subtype');
                 }
             }
@@ -275,11 +323,16 @@ class SpanAccessManagerController extends Controller
         // Preserve all query parameters when redirecting
         $queryParams = $request->only(['types', 'visibility', 'search', 'all_page', 'private_page', 'public_page', 'shared_page']);
         
+        // Also preserve person subtype filters
+        if ($request->filled('person_subtype')) {
+            $queryParams['person_subtype'] = $request->input('person_subtype');
+        }
+        
         // Also preserve any subtype filters
         if ($request->filled('types')) {
             $types = explode(',', $request->types);
             foreach ($types as $type) {
-                if ($request->filled($type . '_subtype')) {
+                if ($type !== 'person' && $request->filled($type . '_subtype')) {
                     $queryParams[$type . '_subtype'] = $request->input($type . '_subtype');
                 }
             }
@@ -334,11 +387,16 @@ class SpanAccessManagerController extends Controller
         // Preserve all query parameters when redirecting
         $queryParams = $request->only(['types', 'visibility', 'search', 'all_page', 'private_page', 'public_page', 'shared_page']);
         
+        // Also preserve person subtype filters
+        if ($request->filled('person_subtype')) {
+            $queryParams['person_subtype'] = $request->input('person_subtype');
+        }
+        
         // Also preserve any subtype filters
         if ($request->filled('types')) {
             $types = explode(',', $request->types);
             foreach ($types as $type) {
-                if ($request->filled($type . '_subtype')) {
+                if ($type !== 'person' && $request->filled($type . '_subtype')) {
                     $queryParams[$type . '_subtype'] = $request->input($type . '_subtype');
                 }
             }
@@ -393,11 +451,16 @@ class SpanAccessManagerController extends Controller
         // Preserve all query parameters when redirecting
         $queryParams = $request->only(['types', 'visibility', 'search', 'all_page', 'private_page', 'public_page', 'shared_page']);
         
+        // Also preserve person subtype filters
+        if ($request->filled('person_subtype')) {
+            $queryParams['person_subtype'] = $request->input('person_subtype');
+        }
+        
         // Also preserve any subtype filters
         if ($request->filled('types')) {
             $types = explode(',', $request->types);
             foreach ($types as $type) {
-                if ($request->filled($type . '_subtype')) {
+                if ($type !== 'person' && $request->filled($type . '_subtype')) {
                     $queryParams[$type . '_subtype'] = $request->input($type . '_subtype');
                 }
             }

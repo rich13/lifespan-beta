@@ -155,6 +155,9 @@ class ProfileController extends Controller
         Span::where('owner_id', $user->id)->update(['owner_id' => $systemUser->id]);
         Span::where('updater_id', $user->id)->update(['updater_id' => $systemUser->id]);
 
+        // Update span_versions to reference system user instead of the user being deleted
+        \DB::table('span_versions')->where('changed_by', $user->id)->update(['changed_by' => $systemUser->id]);
+
         Auth::logout();
 
         // Now we can safely delete the user

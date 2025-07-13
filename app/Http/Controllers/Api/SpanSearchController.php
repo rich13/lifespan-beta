@@ -72,16 +72,14 @@ class SpanSearchController extends Controller
             $spans->where('access_level', 'public');
         }
 
-        // Add type restriction if specified
-        if ($type) {
-            $spans->where('type_id', $type);
-        }
-        
-        // Support multiple types (comma-separated)
+        // Support multiple types (comma-separated) - takes precedence over single type
         $types = $request->get('types');
         if ($types) {
             $typeArray = explode(',', $types);
             $spans->whereIn('type_id', $typeArray);
+        } elseif ($type) {
+            // Add type restriction if specified (only if no multiple types)
+            $spans->where('type_id', $type);
         }
 
         // Add subtype restriction if specified
@@ -279,7 +277,7 @@ class SpanSearchController extends Controller
             // Optimized query with eager loading and joins - with access control
             $connections = $span->connectionsAsSubjectWithAccess()
                 ->with([
-                    'child:id,name,type_id,start_year,end_year',
+                    'child:id,name,type_id,start_year,end_year,metadata',
                     'connectionSpan:id,start_year,start_month,start_day,end_year,end_month,end_day',
                     'type:type,forward_predicate'
                 ])
@@ -296,6 +294,7 @@ class SpanSearchController extends Controller
                         'target_name' => $connection->child->name,
                         'target_id' => $connection->child->id,
                         'target_type' => $connection->child->type_id,
+                        'target_metadata' => $connection->child->metadata ?? [],
                         'start_year' => $connectionSpan ? $connectionSpan->start_year : null,
                         'start_month' => $connectionSpan ? $connectionSpan->start_month : null,
                         'start_day' => $connectionSpan ? $connectionSpan->start_day : null,
@@ -338,7 +337,7 @@ class SpanSearchController extends Controller
         return $connectionSpan->connectionsAsObjectWithAccess()
             ->where('type_id', 'during')
             ->with([
-                'parent:id,name,type_id',
+                'parent:id,name,type_id,metadata',
                 'connectionSpan:id,start_year,start_month,start_day,end_year,end_month,end_day',
                 'type:type,inverse_predicate'
             ])
@@ -355,6 +354,7 @@ class SpanSearchController extends Controller
                     'target_name' => $duringConnection->parent->name,
                     'target_id' => $duringConnection->parent->id,
                     'target_type' => $duringConnection->parent->type_id,
+                    'target_metadata' => $duringConnection->parent->metadata ?? [],
                     'start_year' => $duringConnectionSpan ? $duringConnectionSpan->start_year : null,
                     'start_month' => $duringConnectionSpan ? $duringConnectionSpan->start_month : null,
                     'start_day' => $duringConnectionSpan ? $duringConnectionSpan->start_day : null,
@@ -392,7 +392,7 @@ class SpanSearchController extends Controller
             $connections = $span->connectionsAsObjectWithAccess()
                 ->where('type_id', '!=', 'during')
                 ->with([
-                    'parent:id,name,type_id,start_year,end_year',
+                    'parent:id,name,type_id,start_year,end_year,metadata',
                     'connectionSpan:id,start_year,start_month,start_day,end_year,end_month,end_day',
                     'type:type,inverse_predicate'
                 ])
@@ -409,6 +409,7 @@ class SpanSearchController extends Controller
                         'target_name' => $connection->parent->name,
                         'target_id' => $connection->parent->id,
                         'target_type' => $connection->parent->type_id,
+                        'target_metadata' => $connection->parent->metadata ?? [],
                         'start_year' => $connectionSpan ? $connectionSpan->start_year : null,
                         'start_month' => $connectionSpan ? $connectionSpan->start_month : null,
                         'start_day' => $connectionSpan ? $connectionSpan->start_day : null,
@@ -455,7 +456,7 @@ class SpanSearchController extends Controller
             $connections = $span->connectionsAsObjectWithAccess()
                 ->where('type_id', 'during')
                 ->with([
-                    'parent:id,name,type_id,start_year,end_year',
+                    'parent:id,name,type_id,start_year,end_year,metadata',
                     'connectionSpan:id,start_year,start_month,start_day,end_year,end_month,end_day',
                     'type:type,inverse_predicate'
                 ])
@@ -472,6 +473,7 @@ class SpanSearchController extends Controller
                         'target_name' => $connection->parent->name,
                         'target_id' => $connection->parent->id,
                         'target_type' => $connection->parent->type_id,
+                        'target_metadata' => $connection->parent->metadata ?? [],
                         'start_year' => $connectionSpan ? $connectionSpan->start_year : null,
                         'start_month' => $connectionSpan ? $connectionSpan->start_month : null,
                         'start_day' => $connectionSpan ? $connectionSpan->start_day : null,

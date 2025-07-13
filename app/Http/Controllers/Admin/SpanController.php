@@ -128,4 +128,70 @@ class SpanController extends Controller
         return redirect()->route('admin.spans.index')
             ->with('status', 'Span deleted successfully');
     }
+
+    /**
+     * Show the person subtype management page
+     */
+    public function managePersonSubtypes(): View
+    {
+        $people = Span::where('type_id', 'person')
+            ->with(['owner', 'updater'])
+            ->select('spans.*')
+            ->selectRaw("metadata->>'subtype' as subtype")
+            ->selectRaw('EXISTS(SELECT 1 FROM users WHERE users.personal_span_id = spans.id) as is_personal_span')
+            ->orderBy('name')
+            ->paginate(100);
+
+        $subtypeCounts = Span::where('type_id', 'person')
+            ->selectRaw("metadata->>'subtype' as subtype, COUNT(*) as count")
+            ->groupBy(DB::raw("metadata->>'subtype'"))
+            ->pluck('count', 'subtype')
+            ->toArray();
+
+        return view('admin.spans.manage-person-subtypes', compact('people', 'subtypeCounts'));
+    }
+
+    /**
+     * Update person subtypes in bulk
+     */
+    public function updatePersonSubtypes(Request $request)
+    {
+        $validated = $request->validate([
+            'updates' => 'required|array',
+            'updates.*.span_id' => 'required|string|exists:spans,id',
+            'updates.*.subtype' => 'required|string|in:public_figure,private_individual',
+        ]);
+
+        $updated = 0;
+        $errors = [];
+
+        foreach ($validated['updates'] as $update) {
+            try {
+                $span = Span::find($update['span_id']);
+                
+                // Update the subtype in metadata
+                $metadata = $span->metadata ?? [];
+                $metadata['subtype'] = $update['subtype'];
+                $span->metadata = $metadata;
+                
+                // If changing to public_figure, also set access_level to public
+                if ($update['subtype'] === 'public_figure' && $span->access_level === 'private') {
+                    $span->access_level = 'public';
+                }
+                
+                $span->save();
+                $updated++;
+            } catch (\Exception $e) {
+                $errors[] = "Failed to update {$span->name}: " . $e->getMessage();
+            }
+        }
+
+        $message = "Updated {$updated} people successfully.";
+        if (!empty($errors)) {
+            $message .= " Errors: " . implode(', ', $errors);
+        }
+
+        return redirect()->route('admin.spans.manage-person-subtypes')
+            ->with('status', $message);
+    }
 } 

@@ -793,4 +793,612 @@ class ToolsController extends Controller
         }
         return $count;
     }
+
+    /**
+     * Show the person subtype management page
+     */
+    public function managePersonSubtypes(Request $request)
+    {
+        $query = Span::where('type_id', 'person')
+            ->with(['owner', 'updater'])
+            ->select('spans.*')
+            ->selectRaw("metadata->>'subtype' as subtype")
+            ->selectRaw('EXISTS(SELECT 1 FROM users WHERE users.personal_span_id = spans.id) as is_personal_span');
+
+        // Apply subtype filter
+        if ($request->filled('filter_subtype')) {
+            $subtypeFilter = $request->filter_subtype;
+            if ($subtypeFilter === 'uncategorized') {
+                $query->whereRaw("metadata->>'subtype' IS NULL OR metadata->>'subtype' = ''");
+            } else {
+                $query->whereRaw("metadata->>'subtype' = ?", [$subtypeFilter]);
+            }
+        }
+
+        // Apply access level filter
+        if ($request->filled('filter_access')) {
+            $query->where('access_level', $request->filter_access);
+        }
+
+        $people = $query->orderBy('name')->paginate(50)->appends($request->query());
+
+        $subtypeCounts = Span::where('type_id', 'person')
+            ->selectRaw("metadata->>'subtype' as subtype, COUNT(*) as count")
+            ->groupBy(DB::raw("metadata->>'subtype'"))
+            ->pluck('count', 'subtype')
+            ->toArray();
+
+        return view('admin.tools.manage-person-subtypes', compact('people', 'subtypeCounts'));
+    }
+
+    /**
+     * Update person subtypes in bulk
+     */
+    public function updatePersonSubtypes(Request $request)
+    {
+        $validated = $request->validate([
+            'selected_subtypes' => 'required|string',
+        ]);
+
+        $selectedSubtypes = json_decode($validated['selected_subtypes'], true);
+        
+        if (!is_array($selectedSubtypes)) {
+            return redirect()->route('admin.tools.manage-person-subtypes')
+                ->with('status', 'Invalid data format.');
+        }
+
+        $updated = 0;
+        $errors = [];
+
+        foreach ($selectedSubtypes as $spanId => $subtype) {
+            try {
+                $span = Span::find($spanId);
+                
+                if (!$span) {
+                    $errors[] = "Span with ID {$spanId} not found.";
+                    continue;
+                }
+                
+                // Validate subtype
+                if (!in_array($subtype, ['public_figure', 'private_individual'])) {
+                    $errors[] = "Invalid subtype '{$subtype}' for {$span->name}.";
+                    continue;
+                }
+                
+                // Update the subtype in metadata
+                $metadata = $span->metadata ?? [];
+                $metadata['subtype'] = $subtype;
+                $span->metadata = $metadata;
+                
+                // If changing to public_figure, also set access_level to public
+                if ($subtype === 'public_figure' && $span->access_level === 'private') {
+                    $span->access_level = 'public';
+                }
+                
+                $span->save();
+                
+                // If this is now a public figure, ensure all its connections are public
+                if ($subtype === 'public_figure') {
+                    $this->makePublicFigureConnectionsPublic($span);
+                }
+                
+                $updated++;
+            } catch (\Exception $e) {
+                $errors[] = "Failed to update {$span->name}: " . $e->getMessage();
+            }
+        }
+
+        $message = "Updated {$updated} people successfully.";
+        if (!empty($errors)) {
+            $message .= " Errors: " . implode(', ', $errors);
+        }
+
+        return redirect()->route('admin.tools.manage-person-subtypes')
+            ->with('status', $message);
+    }
+    
+    /**
+     * Show the public figure connection fixer page
+     */
+    public function fixPublicFigureConnections(Request $request)
+    {
+        // Get all public figures
+        $publicFigures = Span::where('type_id', 'person')
+            ->whereRaw("metadata->>'subtype' = 'public_figure'")
+            ->with(['owner', 'updater'])
+            ->orderBy('name')
+            ->get();
+        
+        $stats = [
+            'total_public_figures' => $publicFigures->count(),
+            'public_figures_with_private_connections' => 0,
+            'total_private_connections' => 0,
+            'fixed_connections' => 0
+        ];
+        
+        // Count public figures with private connections
+        foreach ($publicFigures as $figure) {
+            $privateConnections = $this->getPrivateConnectionsForSpan($figure);
+            if ($privateConnections->count() > 0) {
+                $stats['public_figures_with_private_connections']++;
+                $stats['total_private_connections'] += $privateConnections->count();
+            }
+        }
+        
+        return view('admin.tools.fix-public-figure-connections', compact('publicFigures', 'stats'));
+    }
+    
+    /**
+     * Fix public figure connections (make them public)
+     */
+    public function fixPublicFigureConnectionsAction(Request $request)
+    {
+        $validated = $request->validate([
+            'figure_ids' => 'required|string',
+            'batch_size' => 'nullable|integer|min:1|max:100'
+        ]);
+        
+        $figureIds = explode(',', $validated['figure_ids']);
+        $batchSize = $validated['batch_size'] ?? 10; // Default batch size of 10
+        $totalFigures = count($figureIds);
+        $processedFigures = 0;
+        $fixedConnections = 0;
+        $errors = [];
+        
+        // Process in batches
+        $batches = array_chunk($figureIds, $batchSize);
+        
+        foreach ($batches as $batchIndex => $batch) {
+            $batchNumber = $batchIndex + 1;
+            $totalBatches = count($batches);
+            
+            Log::info("Processing batch {$batchNumber}/{$totalBatches} for public figure connections", [
+                'batch_size' => count($batch),
+                'total_figures' => $totalFigures,
+                'processed_so_far' => $processedFigures
+            ]);
+            
+            foreach ($batch as $figureId) {
+                try {
+                    $figure = Span::find($figureId);
+                    
+                    if (!$figure) {
+                        $errors[] = "Public figure with ID {$figureId} not found.";
+                        continue;
+                    }
+                    
+                    // Verify this is actually a public figure
+                    $metadata = $figure->metadata ?? [];
+                    $subtype = $metadata['subtype'] ?? null;
+                    
+                    if ($subtype !== 'public_figure') {
+                        $errors[] = "Span '{$figure->name}' is not a public figure.";
+                        continue;
+                    }
+                    
+                    // Make the figure public if it isn't already
+                    if ($figure->access_level !== 'public') {
+                        $figure->access_level = 'public';
+                        $figure->save();
+                    }
+                    
+                    // Get all connections for this figure
+                    $subjectConnections = \App\Models\Connection::where('parent_id', $figure->id)->get();
+                    $objectConnections = \App\Models\Connection::where('child_id', $figure->id)->get();
+                    $allConnections = $subjectConnections->merge($objectConnections);
+                    
+                    foreach ($allConnections as $connection) {
+                        if ($connection->connectionSpan && $connection->connectionSpan->access_level !== 'public') {
+                            $connection->connectionSpan->access_level = 'public';
+                            $connection->connectionSpan->saveQuietly();
+                            $connection->connectionSpan->clearAllTimelineCaches();
+                            $fixedConnections++;
+                        }
+                    }
+                    
+                    // Clear timeline caches for the figure
+                    $figure->clearAllTimelineCaches();
+                    $processedFigures++;
+                    
+                } catch (\Exception $e) {
+                    $errors[] = "Failed to fix connections for {$figure->name}: " . $e->getMessage();
+                }
+            }
+            
+            // Add a small delay between batches to prevent overwhelming the system
+            if ($batchIndex < count($batches) - 1) {
+                usleep(100000); // 0.1 second delay
+            }
+        }
+        
+        $message = "Fixed {$fixedConnections} private connections for {$processedFigures} public figures (processed in " . count($batches) . " batches).";
+        if (!empty($errors)) {
+            $message .= " Errors: " . implode(', ', $errors);
+        }
+        
+        return redirect()->route('admin.tools.fix-public-figure-connections')
+            ->with('status', $message);
+    }
+    
+    /**
+     * Start batch processing of public figure connections
+     */
+    public function startBatchFixPublicFigureConnections(Request $request)
+    {
+        $validated = $request->validate([
+            'figure_ids' => 'required|string',
+            'batch_size' => 'nullable|integer|min:1|max:100'
+        ]);
+        
+        $figureIds = explode(',', $validated['figure_ids']);
+        $batchSize = $validated['batch_size'] ?? 10;
+        
+        // Store batch information in session for progress tracking
+        session([
+            'batch_fix_public_figures' => [
+                'figure_ids' => $figureIds,
+                'batch_size' => $batchSize,
+                'total_figures' => count($figureIds),
+                'total_batches' => ceil(count($figureIds) / $batchSize),
+                'current_batch' => 0,
+                'processed_figures' => 0,
+                'fixed_connections' => 0,
+                'errors' => [],
+                'started_at' => now(),
+                'status' => 'running'
+            ]
+        ]);
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Batch processing started',
+            'total_figures' => count($figureIds),
+            'total_batches' => ceil(count($figureIds) / $batchSize),
+            'batch_size' => $batchSize
+        ]);
+    }
+    
+    /**
+     * Process next batch of public figure connections
+     */
+    public function processBatchFixPublicFigureConnections(Request $request)
+    {
+        $batchInfo = session('batch_fix_public_figures');
+        
+        if (!$batchInfo || $batchInfo['status'] !== 'running') {
+            return response()->json([
+                'success' => false,
+                'message' => 'No batch processing in progress'
+            ]);
+        }
+        
+        $figureIds = $batchInfo['figure_ids'];
+        $batchSize = $batchInfo['batch_size'];
+        $currentBatch = $batchInfo['current_batch'];
+        $totalBatches = $batchInfo['total_batches'];
+        
+        // Get current batch of figure IDs
+        $batches = array_chunk($figureIds, $batchSize);
+        
+        $currentBatchIds = $batches[$currentBatch];
+        $batchFixedConnections = 0;
+        $batchErrors = [];
+        
+        // Process current batch
+        foreach ($currentBatchIds as $figureId) {
+            try {
+                $figure = Span::find($figureId);
+                
+                if (!$figure) {
+                    $batchErrors[] = "Public figure with ID {$figureId} not found.";
+                    continue;
+                }
+                
+                // Verify this is actually a public figure
+                $metadata = $figure->metadata ?? [];
+                $subtype = $metadata['subtype'] ?? null;
+                
+                if ($subtype !== 'public_figure') {
+                    $batchErrors[] = "Span '{$figure->name}' is not a public figure.";
+                    continue;
+                }
+                
+                // Make the figure public if it isn't already
+                if ($figure->access_level !== 'public') {
+                    $figure->access_level = 'public';
+                    $figure->save();
+                }
+                
+                // Get all connections for this figure
+                $subjectConnections = \App\Models\Connection::where('parent_id', $figure->id)->get();
+                $objectConnections = \App\Models\Connection::where('child_id', $figure->id)->get();
+                $allConnections = $subjectConnections->merge($objectConnections);
+                
+                foreach ($allConnections as $connection) {
+                    if ($connection->connectionSpan && $connection->connectionSpan->access_level !== 'public') {
+                        $connection->connectionSpan->access_level = 'public';
+                        $connection->connectionSpan->saveQuietly();
+                        $connection->connectionSpan->clearAllTimelineCaches();
+                        $batchFixedConnections++;
+                    }
+                }
+                
+                // Clear timeline caches for the figure
+                $figure->clearAllTimelineCaches();
+                $batchInfo['processed_figures']++;
+                
+            } catch (\Exception $e) {
+                $batchErrors[] = "Failed to fix connections for {$figure->name}: " . $e->getMessage();
+            }
+        }
+        
+        // Update batch info
+        $batchInfo['current_batch']++;
+        $batchInfo['fixed_connections'] += $batchFixedConnections;
+        $batchInfo['errors'] = array_merge($batchInfo['errors'], $batchErrors);
+        
+        // Check if all batches have been processed
+        if ($batchInfo['processed_figures'] >= $batchInfo['total_figures']) {
+            // All batches processed
+            $batchInfo['status'] = 'completed';
+            session(['batch_fix_public_figures' => $batchInfo]);
+            
+            return response()->json([
+                'success' => true,
+                'completed' => true,
+                'message' => 'Batch processing completed',
+                'total_fixed_connections' => $batchInfo['fixed_connections'],
+                'total_processed_figures' => $batchInfo['processed_figures'],
+                'errors' => $batchInfo['errors']
+            ]);
+        }
+        
+        session(['batch_fix_public_figures' => $batchInfo]);
+        
+        return response()->json([
+            'success' => true,
+            'completed' => false,
+            'current_batch' => $batchInfo['current_batch'],
+            'total_batches' => $totalBatches,
+            'processed_figures' => $batchInfo['processed_figures'],
+            'total_figures' => $batchInfo['total_figures'],
+            'batch_fixed_connections' => $batchFixedConnections,
+            'total_fixed_connections' => $batchInfo['fixed_connections'],
+            'batch_errors' => $batchErrors,
+            'progress_percentage' => round(($batchInfo['current_batch'] / $totalBatches) * 100, 1)
+        ]);
+    }
+    
+    /**
+     * Get batch processing status
+     */
+    public function getBatchFixPublicFigureConnectionsStatus(Request $request)
+    {
+        $batchInfo = session('batch_fix_public_figures');
+        
+        if (!$batchInfo) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No batch processing in progress'
+            ]);
+        }
+        
+        return response()->json([
+            'success' => true,
+            'status' => $batchInfo['status'],
+            'current_batch' => $batchInfo['current_batch'],
+            'total_batches' => $batchInfo['total_batches'],
+            'processed_figures' => $batchInfo['processed_figures'],
+            'total_figures' => $batchInfo['total_figures'],
+            'fixed_connections' => $batchInfo['fixed_connections'],
+            'errors' => $batchInfo['errors'],
+            'started_at' => $batchInfo['started_at'],
+            'progress_percentage' => $batchInfo['status'] === 'completed' ? 100 : round(($batchInfo['current_batch'] / $batchInfo['total_batches']) * 100, 1)
+        ]);
+    }
+    
+    /**
+     * Show the private individual connection fixer page
+     */
+    public function fixPrivateIndividualConnections(Request $request)
+    {
+        // Get all private individuals
+        $privateIndividuals = Span::where('type_id', 'person')
+            ->whereRaw("metadata->>'subtype' = 'private_individual'")
+            ->with(['owner', 'updater'])
+            ->orderBy('name')
+            ->get();
+        
+        $stats = [
+            'total_private_individuals' => $privateIndividuals->count(),
+            'private_individuals_with_public_connections' => 0,
+            'total_public_connections' => 0,
+            'fixed_connections' => 0
+        ];
+        
+        // Count private individuals with public connections
+        foreach ($privateIndividuals as $individual) {
+            $publicConnections = $this->getPublicConnectionsForSpan($individual);
+            if ($publicConnections->count() > 0) {
+                $stats['private_individuals_with_public_connections']++;
+                $stats['total_public_connections'] += $publicConnections->count();
+            }
+        }
+        
+        return view('admin.tools.fix-private-individual-connections', compact('privateIndividuals', 'stats'));
+    }
+    
+    /**
+     * Fix private individual connections (make them private)
+     */
+    public function fixPrivateIndividualConnectionsAction(Request $request)
+    {
+        $validated = $request->validate([
+            'individual_ids' => 'required|string',
+            'batch_size' => 'nullable|integer|min:1|max:100'
+        ]);
+        
+        $individualIds = explode(',', $validated['individual_ids']);
+        $batchSize = $validated['batch_size'] ?? 10; // Default batch size of 10
+        $totalIndividuals = count($individualIds);
+        $processedIndividuals = 0;
+        $fixedConnections = 0;
+        $errors = [];
+        
+        // Process in batches
+        $batches = array_chunk($individualIds, $batchSize);
+        
+        foreach ($batches as $batchIndex => $batch) {
+            $batchNumber = $batchIndex + 1;
+            $totalBatches = count($batches);
+            
+            Log::info("Processing batch {$batchNumber}/{$totalBatches} for private individual connections", [
+                'batch_size' => count($batch),
+                'total_individuals' => $totalIndividuals,
+                'processed_so_far' => $processedIndividuals
+            ]);
+            
+            foreach ($batch as $individualId) {
+                try {
+                    $individual = Span::find($individualId);
+                    
+                    if (!$individual) {
+                        $errors[] = "Private individual with ID {$individualId} not found.";
+                        continue;
+                    }
+                    
+                    // Verify this is actually a private individual
+                    $metadata = $individual->metadata ?? [];
+                    $subtype = $metadata['subtype'] ?? null;
+                    
+                    if ($subtype !== 'private_individual') {
+                        $errors[] = "Span '{$individual->name}' is not a private individual.";
+                        continue;
+                    }
+                    
+                    // Make the individual private if it isn't already
+                    if ($individual->access_level !== 'private') {
+                        $individual->access_level = 'private';
+                        $individual->save();
+                    }
+                    
+                    // Get all connections for this individual
+                    $subjectConnections = \App\Models\Connection::where('parent_id', $individual->id)->get();
+                    $objectConnections = \App\Models\Connection::where('child_id', $individual->id)->get();
+                    $allConnections = $subjectConnections->merge($objectConnections);
+                    
+                    foreach ($allConnections as $connection) {
+                        if ($connection->connectionSpan && $connection->connectionSpan->access_level !== 'private') {
+                            $connection->connectionSpan->access_level = 'private';
+                            $connection->connectionSpan->saveQuietly();
+                            $connection->connectionSpan->clearAllTimelineCaches();
+                            $fixedConnections++;
+                        }
+                    }
+                    
+                    // Clear timeline caches for the individual
+                    $individual->clearAllTimelineCaches();
+                    $processedIndividuals++;
+                    
+                } catch (\Exception $e) {
+                    $errors[] = "Failed to fix connections for {$individual->name}: " . $e->getMessage();
+                }
+            }
+            
+            // Add a small delay between batches to prevent overwhelming the system
+            if ($batchIndex < count($batches) - 1) {
+                usleep(100000); // 0.1 second delay
+            }
+        }
+        
+        $message = "Fixed {$fixedConnections} public connections for {$processedIndividuals} private individuals (processed in " . count($batches) . " batches).";
+        if (!empty($errors)) {
+            $message .= " Errors: " . implode(', ', $errors);
+        }
+        
+        return redirect()->route('admin.tools.fix-private-individual-connections')
+            ->with('status', $message);
+    }
+    
+    /**
+     * Get public connections for a span
+     */
+    public function getPublicConnectionsForSpan(Span $span): \Illuminate\Support\Collection
+    {
+        $subjectConnections = \App\Models\Connection::where('parent_id', $span->id)
+            ->whereHas('connectionSpan', function($q) {
+                $q->where('access_level', 'public');
+            })
+            ->get();
+            
+        $objectConnections = \App\Models\Connection::where('child_id', $span->id)
+            ->whereHas('connectionSpan', function($q) {
+                $q->where('access_level', 'public');
+            })
+            ->get();
+            
+        return $subjectConnections->merge($objectConnections);
+    }
+    
+    /**
+     * Get private connections for a span
+     */
+    public function getPrivateConnectionsForSpan(Span $span): \Illuminate\Support\Collection
+    {
+        $subjectConnections = \App\Models\Connection::where('parent_id', $span->id)
+            ->whereHas('connectionSpan', function($q) {
+                $q->where('access_level', '!=', 'public');
+            })
+            ->get();
+            
+        $objectConnections = \App\Models\Connection::where('child_id', $span->id)
+            ->whereHas('connectionSpan', function($q) {
+                $q->where('access_level', '!=', 'public');
+            })
+            ->get();
+            
+        return $subjectConnections->merge($objectConnections);
+    }
+    
+    /**
+     * Make all connections for a public figure public
+     */
+    private function makePublicFigureConnectionsPublic(Span $span): void
+    {
+        // Get all connections where this span is the subject (parent)
+        $subjectConnections = \App\Models\Connection::where('parent_id', $span->id)->get();
+        
+        // Get all connections where this span is the object (child)
+        $objectConnections = \App\Models\Connection::where('child_id', $span->id)->get();
+        
+        $allConnections = $subjectConnections->merge($objectConnections);
+        
+        foreach ($allConnections as $connection) {
+            // Get the connection span (the span that represents this connection)
+            if ($connection->connectionSpan) {
+                $connectionSpan = $connection->connectionSpan;
+                
+                // If the connection span is not public, make it public
+                if ($connectionSpan->access_level !== 'public') {
+                    Log::info('Making public figure connection public', [
+                        'public_figure_id' => $span->id,
+                        'public_figure_name' => $span->name,
+                        'connection_id' => $connection->id,
+                        'connection_span_id' => $connectionSpan->id,
+                        'old_access_level' => $connectionSpan->access_level,
+                        'new_access_level' => 'public'
+                    ]);
+                    
+                    $connectionSpan->access_level = 'public';
+                    $connectionSpan->saveQuietly(); // Save without triggering observers
+                    
+                    // Clear timeline caches for the connection span
+                    $connectionSpan->clearAllTimelineCaches();
+                }
+            }
+        }
+        
+        // Clear timeline caches for the public figure
+        $span->clearAllTimelineCaches();
+    }
 } 

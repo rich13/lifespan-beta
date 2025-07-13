@@ -86,11 +86,28 @@ class SpanController extends Controller
                         if ($userSpan) {
                             $relationshipService = app(\App\Services\PersonRelationshipService::class);
                             
-                            // Get all people in the requested categories
+                            // Separate relationship-based categories from subtype-based categories
+                            $relationshipCategories = array_intersect($personCategories, ['musicians']);
+                            $subtypeCategories = array_intersect($personCategories, ['public_figure', 'private_individual']);
+                            
                             $categoryPeople = collect();
-                            foreach ($personCategories as $category) {
+                            
+                            // Handle relationship-based categories (like musicians)
+                            foreach ($relationshipCategories as $category) {
                                 $people = $relationshipService->getPeopleByCategory($category, $userSpan);
                                 $categoryPeople = $categoryPeople->merge($people);
+                            }
+                            
+                            // Handle subtype-based categories
+                            if (!empty($subtypeCategories)) {
+                                $subtypeQuery = Span::where('type_id', 'person');
+                                $subtypeQuery->where(function($q) use ($subtypeCategories) {
+                                    foreach ($subtypeCategories as $subtype) {
+                                        $q->orWhereRaw("metadata->>'subtype' = ?", [$subtype]);
+                                    }
+                                });
+                                $subtypePeople = $subtypeQuery->get();
+                                $categoryPeople = $categoryPeople->merge($subtypePeople);
                             }
                             
                             // Filter to only show people in the selected categories
