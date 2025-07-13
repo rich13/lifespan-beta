@@ -40,25 +40,17 @@
                     <div class="card-body">
                         <p class="text-muted">Configure how data is imported into your account.</p>
                         
-                        <div class="alert alert-info">
-                            <i class="bi bi-info-circle me-2"></i>
-                            <strong>Coming Soon:</strong> Import settings configuration will be available here.
-                        </div>
-                        
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <div class="card h-100">
                                     <div class="card-body">
                                         <h6 class="card-title">
-                                            <i class="bi bi-file-earmark-text me-2"></i>File Import
+                                            <i class="bi bi-camera me-2"></i>Flickr Import
                                         </h6>
-                                        <p class="card-text text-muted">Configure default settings for file imports.</p>
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" id="autoProcess" disabled>
-                                            <label class="form-check-label text-muted" for="autoProcess">
-                                                Auto-process imported files
-                                            </label>
-                                        </div>
+                                        <p class="card-text text-muted">Import photos from your Flickr account as thing spans with subjects.</p>
+                                        <a href="{{ route('settings.import.flickr.index') }}" class="btn btn-outline-primary btn-sm">
+                                            <i class="bi bi-arrow-right me-1"></i>Configure Flickr Import
+                                        </a>
                                     </div>
                                 </div>
                             </div>
@@ -67,19 +59,18 @@
                                 <div class="card h-100">
                                     <div class="card-body">
                                         <h6 class="card-title">
-                                            <i class="bi bi-database me-2"></i>Data Sources
+                                            <i class="bi bi-info-circle me-2"></i>More Importers
                                         </h6>
-                                        <p class="card-text text-muted">Manage connections to external data sources.</p>
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" id="enableAPIs" disabled>
-                                            <label class="form-check-label text-muted" for="enableAPIs">
-                                                Enable external API connections
-                                            </label>
-                                        </div>
+                                        <p class="card-text text-muted">Additional import options will be available here soon.</p>
+                                        <button class="btn btn-outline-secondary btn-sm" disabled>
+                                            <i class="bi bi-clock me-1"></i>Coming Soon
+                                        </button>
                                     </div>
                                 </div>
                             </div>
                         </div>
+                        
+
                     </div>
                 </div>
             </div>

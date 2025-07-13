@@ -44,6 +44,8 @@
             'ownership' => 'key-fill',
             'has_role' => 'person-badge',
             'at_organisation' => 'building',
+            'subject_of' => 'camera',
+            'located' => 'geo-alt',
             default => 'link-45deg'
         },
         'subtype' => match($type) {

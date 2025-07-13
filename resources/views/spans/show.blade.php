@@ -135,6 +135,12 @@
 
             <div class="col-md-4">
                 <!-- Sidebar Content -->
+                
+                <!-- Photo Display Card -->
+                @if($span->type_id === 'thing' && isset($span->metadata['subtype']) && $span->metadata['subtype'] === 'photo')
+                    <x-spans.display.photo-card :span="$span" />
+                @endif
+                
                 @auth
                     @if($span->type_id === 'person')
                         <x-spans.display.compare-card :span="$span" />

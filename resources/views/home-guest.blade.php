@@ -431,10 +431,10 @@
                         <div class="card-body">
                             <div class="card-content-top">
                                 <h3 class="card-title">Card A</h3>
-                                <p class="card-text">Secondary carousel card</p>
+                                <p class="card-text">Something</p>
                             </div>
                             <div class="card-content-bottom">
-                                <p class="card-text mb-0">Example content</p>
+                                <p class="card-text mb-0">1920 - 2007</p>
                             </div>
                         </div>
                     </div>
@@ -446,10 +446,10 @@
                         <div class="card-body">
                             <div class="card-content-top">
                                 <h3 class="card-title">Card B</h3>
-                                <p class="card-text">Secondary carousel card</p>
+                                <p class="card-text">Something</p>
                             </div>
                             <div class="card-content-bottom">
-                                <p class="card-text mb-0">Example content</p>
+                                <p class="card-text mb-0">1920 - 2007</p>
                             </div>
                         </div>
                     </div>
@@ -461,10 +461,10 @@
                         <div class="card-body">
                             <div class="card-content-top">
                                 <h3 class="card-title">Card C</h3>
-                                <p class="card-text">Secondary carousel card</p>
+                                <p class="card-text">Something</p>
                             </div>
                             <div class="card-content-bottom">
-                                <p class="card-text mb-0">Example content</p>
+                                <p class="card-text mb-0">1920 - 2007</p>
                             </div>
                         </div>
                     </div>
@@ -476,10 +476,10 @@
                         <div class="card-body">
                             <div class="card-content-top">
                                 <h3 class="card-title">Card D</h3>
-                                <p class="card-text">Secondary carousel card</p>
+                                <p class="card-text">Something</p>
                             </div>
                             <div class="card-content-bottom">
-                                <p class="card-text mb-0">Example content</p>
+                                <p class="card-text mb-0">1920 - 2007</p>
                             </div>
                         </div>
                     </div>
@@ -491,10 +491,10 @@
                         <div class="card-body">
                             <div class="card-content-top">
                                 <h3 class="card-title">Card E</h3>
-                                <p class="card-text">Secondary carousel card</p>
+                                <p class="card-text">Something</p>
                             </div>
                             <div class="card-content-bottom">
-                                <p class="card-text mb-0">Example content</p>
+                                <p class="card-text mb-0">1920 - 2007</p>
                             </div>
                         </div>
                     </div>
@@ -506,10 +506,10 @@
                         <div class="card-body">
                             <div class="card-content-top">
                                 <h3 class="card-title">Card F</h3>
-                                <p class="card-text">Secondary carousel card</p>
+                                <p class="card-text">Something</p>
                             </div>
                             <div class="card-content-bottom">
-                                <p class="card-text mb-0">Example content</p>
+                                <p class="card-text mb-0">1920 - 2007</p>
                             </div>
                         </div>
                     </div>
