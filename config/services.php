@@ -50,4 +50,9 @@ return [
         'user_token' => env('SLACK_USER_TOKEN'),
     ],
 
+    'flickr' => [
+        'api_key' => env('FLICKR_API_KEY'),
+        'api_secret' => env('FLICKR_API_SECRET'),
+    ],
+
 ];
