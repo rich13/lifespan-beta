@@ -73,6 +73,7 @@ class SpanSearchApiTest extends TestCase
             'state' => 'complete',
             'start_precision' => 'year',
             'end_precision' => 'year',
+            'metadata' => ['subtype' => 'corporation'],
         ]);
         
         $this->placeSpan = Span::create([
@@ -131,6 +132,7 @@ class SpanSearchApiTest extends TestCase
             'state' => 'complete',
             'start_precision' => 'year',
             'end_precision' => 'year',
+            'metadata' => ['subtype' => 'non-profit'],
         ]);
 
         // Create span permission for shared span

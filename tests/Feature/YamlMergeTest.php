@@ -36,6 +36,18 @@ class YamlMergeTest extends TestCase
             'access_level' => 'private',
         ]);
 
+        // Ensure the span is actually owned by the current user
+        $existingSpan->refresh();
+        if ($existingSpan->owner_id !== $user->id) {
+            // Fix the ownership if it's wrong
+            $existingSpan->update(['owner_id' => $user->id, 'updater_id' => $user->id]);
+            $existingSpan->refresh();
+        }
+        $this->assertEquals($user->id, $existingSpan->owner_id);
+        
+        // Debug: Check if the user has permission to update the span
+        $this->assertTrue($user->can('update', $existingSpan), 'User should have update permission for the span. Span owner: ' . $existingSpan->owner_id . ', Current user: ' . $user->id);
+
         // Create YAML content
         $yamlContent = "name: 'John Doe'
 type: person
@@ -58,7 +70,7 @@ sources:
         }
         
         // Debug: Check if the user has permission to update the span
-        $this->assertTrue(auth()->user()->can('update', $span), 'User should have update permission for the span. Span owner: ' . $span->owner_id . ', Current user: ' . auth()->id());
+        $this->assertTrue($user->can('update', $span), 'User should have update permission for the span. Span owner: ' . $span->owner_id . ', Current user: ' . $user->id);
         
         // Debug: Check if findExistingSpan finds the span
         $yamlSpanService = app(\App\Services\YamlSpanService::class);

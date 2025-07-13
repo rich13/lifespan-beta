@@ -34,6 +34,10 @@ class FlickrImportControllerTest extends TestCase
         
         // Set up Flickr API key in config
         config(['services.flickr.api_key' => 'test_api_key']);
+        
+        // Set up Flickr user ID in user metadata
+        $this->user->setMeta('flickr.user_id', 'test_user_id');
+        $this->user->save();
     }
 
     public function test_import_photos_creates_new_photos()
@@ -53,6 +57,7 @@ class FlickrImportControllerTest extends TestCase
                             'tags' => 'test photo',
                             'ispublic' => 1,
                             'license' => 1,
+                            'owner' => 'test_user_id',
                             'url_s' => 'https://example.com/thumb.jpg',
                             'url_m' => 'https://example.com/medium.jpg',
                             'url_l' => 'https://example.com/large.jpg',
@@ -131,6 +136,7 @@ class FlickrImportControllerTest extends TestCase
                             'tags' => 'updated photo',
                             'ispublic' => 1,
                             'license' => 1,
+                            'owner' => 'test_user_id',
                             'url_s' => 'https://example.com/new_thumb.jpg',
                             'url_m' => 'https://example.com/new_medium.jpg',
                             'url_l' => 'https://example.com/new_large.jpg',
@@ -226,6 +232,7 @@ class FlickrImportControllerTest extends TestCase
                             'tags' => 'london photo', // New tags
                             'ispublic' => 1,
                             'license' => 1,
+                            'owner' => 'test_user_id',
                         ]
                     ]
                 ]
