@@ -1,7 +1,5 @@
 @props(['span' => null, 'connection' => null])
 
-<x-shared.interactive-card-styles />
-
 @php
     // Determine the mode and prepare data
     $isSpan = $span !== null;
@@ -34,25 +32,34 @@
     }
 
     $creator = null;
-    if ($span->type_id === 'thing' && !empty($span->metadata['creator'])) {
+    if ($isSpan && $span->type_id === 'thing' && !empty($span->metadata['creator'])) {
         $creator = \App\Models\Span::find($span->metadata['creator']);
+    }
+    
+    // Determine model and description for base component
+    $model = $isSpan ? $span : $connection;
+    $description = null;
+    if ($isSpan && $span->description) {
+        $description = Str::limit($span->description, 150);
+    } elseif ($isConnection && $connection->connectionSpan && $connection->connectionSpan->description) {
+        $description = Str::limit($connection->connectionSpan->description, 150);
     }
 @endphp
 
-@if($span)
-    {{-- SPAN MODE --}}
+<x-shared.interactive-card-base 
+    :model="$model" 
+    :customDescription="$description"
+    :showDescription="true">
     
-    <div class="interactive-card-base mb-3 position-relative">
-        <!-- Tools Button -->
-        <x-tools-button :model="$span" />
-        
-        <!-- Single continuous button group for the entire sentence -->
-        <div class="btn-group btn-group-sm" role="group">
+    @if($isSpan)
+        <x-slot name="iconButton">
             <!-- Span type icon button -->
             <button type="button" class="btn btn-outline-{{ $span->type_id }} disabled" style="min-width: 40px;">
                 <x-icon type="{{ $span->type_id }}" category="span" />
             </button>
+        </x-slot>
 
+        <x-slot name="mainContent">
             <!-- Span name -->
             <a href="{{ route('spans.show', $span) }}" 
                class="btn {{ $span->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $span->type_id }}">
@@ -154,23 +161,17 @@
                     </a>
                 @endif
             @endif
-        </div>
-    </div>
+        </x-slot>
 
-@elseif($connection)
-    {{-- CONNECTION MODE --}}
-    
-    <div class="interactive-card-base mb-3 position-relative">
-        <!-- Tools Button -->
-        <x-tools-button :model="$connection" />
-        
-        <!-- Single continuous button group for the entire sentence -->
-        <div class="btn-group btn-group-sm" role="group">
+    @elseif($isConnection)
+        <x-slot name="iconButton">
             <!-- Connection type icon button -->
             <button type="button" class="btn btn-outline-{{ $connection->type_id }} disabled" style="min-width: 40px;">
                 <x-icon type="{{ $connection->type_id }}" category="connection" />
             </button>
+        </x-slot>
 
+        <x-slot name="mainContent">
             <!-- Subject span name -->
             <a href="{{ route('spans.show', $connection->parent) }}" 
                class="btn {{ $connection->parent->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $connection->parent->type_id }}">
@@ -231,17 +232,6 @@
                     </a>
                 @endif
             @endif
-        </div>
-    </div>
-@endif
-
-<!-- Description (if available) -->
-@if($isSpan && $span->description)
-    <div class="mt-2">
-        <small class="text-muted">{{ Str::limit($span->description, 150) }}</small>
-    </div>
-@elseif($isConnection && $connection->connectionSpan && $connection->connectionSpan->description)
-    <div class="mt-2">
-        <small class="text-muted">{{ Str::limit($connection->connectionSpan->description, 150) }}</small>
-    </div>
-@endif 
+        </x-slot>
+    @endif
+</x-shared.interactive-card-base> 

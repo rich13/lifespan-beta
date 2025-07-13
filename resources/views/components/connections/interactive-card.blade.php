@@ -1,7 +1,5 @@
 @props(['connection', 'isIncoming' => false])
 
-<x-shared.interactive-card-styles />
-
 @php
     // Load nested connections for sophisticated role descriptions
     $nestedOrganisation = null;
@@ -30,12 +28,12 @@
     $stateLabel = ucfirst($connectionState);
 @endphp
 
-<div class="interactive-card-base mb-3 position-relative">
-    <!-- Tools Button -->
-    <x-tools-button :model="$connection" />
+<x-shared.interactive-card-base 
+    :model="$connection" 
+    :customDescription="$connection->connectionSpan ? Str::limit($connection->connectionSpan->description, 150) : null"
+    :showDescription="true">
     
-    <!-- Single continuous button group for the entire sentence -->
-    <div class="btn-group btn-group-sm" role="group">
+    <x-slot name="iconButton">
         <!-- Connection type icon button -->
         @if($connection->connectionSpan)
             <a href="{{ route('spans.connection', ['subject' => $connection->parent, 'predicate' => str_replace(' ', '-', $connection->type->forward_predicate), 'object' => $connection->child]) }}" 
@@ -59,7 +57,9 @@
                 <x-icon type="{{ $connection->type_id }}" category="connection" />
             </button>
         @endif
-        
+    </x-slot>
+
+    <x-slot name="mainContent">
         <!-- Subject span name -->
         <a href="{{ route('spans.show', $connection->parent) }}" 
            class="btn {{ $connection->parent->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $connection->parent->type_id }}">
@@ -166,12 +166,5 @@
                 @endif
             @endif
         @endif
-    </div>
-    
-    <!-- Description (if available) -->
-    @if($connection->connectionSpan && $connection->connectionSpan->description)
-        <div class="mt-2">
-            <small class="text-muted">{{ Str::limit($connection->connectionSpan->description, 150) }}</small>
-        </div>
-    @endif
-</div> 
+    </x-slot>
+</x-shared.interactive-card-base> 

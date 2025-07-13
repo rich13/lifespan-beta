@@ -195,5 +195,81 @@
         visibility: visible !important;
         position: relative !important;
     }
+
+    /* Micro story component styling */
+    .micro-story {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.9rem;
+        line-height: 1.4;
+        color: #495057;
+    }
+
+    .micro-story-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        flex-shrink: 0;
+    }
+
+    .micro-story-content {
+        flex: 1;
+        min-width: 0; /* Allow text to wrap */
+    }
+
+    /* Micro story hover effects */
+    .micro-story:hover {
+        color: #212529;
+    }
+
+    .micro-story:hover .micro-story-icon {
+        background-color: #e9ecef;
+        border-color: #adb5bd;
+    }
+
+    /* Micro story link styling */
+    .micro-story .lead {
+        font-size: 1.1rem;
+        font-weight: 400;
+        text-decoration: underline;
+        transition: all 0.2s ease-in-out;
+    }
+    
+    .micro-story .lead:hover {
+        text-decoration: none;
+    }
+    
+    /* Ensure proper spacing between elements */
+    .micro-story-content {
+        display: inline;
+    }
+    
+    .micro-story-content .lead {
+        display: inline;
+        vertical-align: baseline;
+    }
+    
+    /* Responsive micro story */
+    @media (max-width: 767.98px) {
+        .micro-story {
+            font-size: 0.85rem;
+            gap: 0.375rem;
+        }
+        
+        .micro-story-icon {
+            width: 20px;
+            height: 20px;
+        }
+        
+        .micro-story .lead {
+            font-size: 1rem;
+        }
+    }
 </style>
 @endpush 

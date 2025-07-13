@@ -1,11 +1,14 @@
 @props(['span'])
 
-<div class="interactive-card-base mb-3 position-relative">
-    <!-- Tools Button -->
-    <x-tools-button :model="$span" />
-    
-    <!-- Single continuous button group for the entire sentence -->
-    <div class="btn-group btn-group-sm" role="group">
+@php
+    $creator = null;
+    if ($span->type_id === 'thing' && !empty($span->metadata['creator'])) {
+        $creator = \App\Models\Span::find($span->metadata['creator']);
+    }
+@endphp
+
+<x-shared.interactive-card-base :model="$span">
+    <x-slot name="iconButton">
         <!-- Span type icon button -->
         <button type="button" class="btn btn-outline-secondary disabled" style="min-width: 40px;">
             @switch($span->type_id)
@@ -31,7 +34,9 @@
                     <i class="bi bi-question-circle"></i>
             @endswitch
         </button>
+    </x-slot>
 
+    <x-slot name="mainContent">
         <!-- Span name -->
         <a href="{{ route('spans.show', $span) }}" 
            class="btn {{ $span->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $span->type_id }}">
@@ -39,12 +44,6 @@
             {{ $span->name }}
         </a>
 
-        @php
-            $creator = null;
-            if ($span->type_id === 'thing' && !empty($span->metadata['creator'])) {
-                $creator = \App\Models\Span::find($span->metadata['creator']);
-            }
-        @endphp
         @if($span->type_id === 'thing' && $creator)
             <!-- Creator for things -->
             <button type="button" class="btn btn-outline-light text-dark inactive" disabled>by</button>
@@ -138,5 +137,5 @@
                 </a>
             @endif
         @endif
-    </div>
-</div> 
+    </x-slot>
+</x-shared.interactive-card-base> 
