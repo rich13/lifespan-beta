@@ -141,6 +141,9 @@
                     $isReflectionInPast = $reflectionDate->lt($nowCarbon);
                     $isReflectionBeforeBirth = $reflectionDate->lt($viewerBirthDate);
                     $isReflectionAfterDeath = $spanEndCarbon && $reflectionDate->gt($spanEndCarbon);
+                    
+                    // Check if reflection date is before person's birth (for all reflection types)
+                    $isReflectionBeforePersonBirth = $reflectionDate->lt($personBirthDate);
 
                     // Convert reflection date to object format for view
                     $reflectionDateObj = (object)[
@@ -290,9 +293,6 @@
                         {{-- Show person's age at that time --}}
                         @if($reflectionType === 'person_younger')
                             @php
-                                // Check if reflection date is before person's birth
-                                $isReflectionBeforePersonBirth = $reflectionDate->lt($personBirthDate);
-                                
                                 if (!$isReflectionBeforePersonBirth) {
                                     // Calculate the person's age as of the reflection date, not their current age
                                     $personAgeAtReflection = \App\Helpers\DateDurationCalculator::calculateDuration(
