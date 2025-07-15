@@ -1848,6 +1848,71 @@ class Span extends Model
     }
 
     /**
+     * Check if a user has access to this span
+     * This is a convenience method that wraps hasPermission for 'view'
+     */
+    public function isAccessibleBy(?User $user = null): bool
+    {
+        return $this->hasPermission($user, 'view');
+    }
+
+    /**
+     * Get all sets that belong to a user (default sets + user-created sets)
+     * 
+     * @param User $user The user to get sets for
+     * @return \Illuminate\Database\Eloquent\Collection
+     */
+    public static function getUserSets(User $user)
+    {
+        $allSets = collect();
+        
+        // Add default sets (Starred, Desert Island Discs) - these belong to the user
+        $defaultSets = static::where('owner_id', $user->id)
+            ->where('type_id', 'set')
+            ->whereJsonContains('metadata->is_default', true)
+            ->get();
+        $allSets = $allSets->merge($defaultSets);
+        
+        // Get the user's personal span
+        $personalSpan = $user->personalSpan;
+        
+        if ($personalSpan) {
+            // Get sets that either:
+            // 1. Have a "creates" connection from the user's personal span (user owns them)
+            // 2. Have NO "creates" connection at all AND are owned by the current user (excluding default sets)
+            $userCreatedSets = static::where('type_id', 'set')
+                ->where(function($query) use ($personalSpan, $user) {
+                    $query->whereHas('connectionsAsObject', function($subQuery) use ($personalSpan) {
+                        $subQuery->where('parent_id', $personalSpan->id)
+                                ->where('type_id', 'created');
+                    })
+                    ->orWhere(function($subQuery) use ($user) {
+                        $subQuery->whereDoesntHave('connectionsAsObject', function($subSubQuery) {
+                            $subSubQuery->where('type_id', 'created');
+                        })
+                        ->where('owner_id', $user->id); // Must be owned by current user
+                    });
+                })
+                ->whereNotIn('id', $defaultSets->pluck('id')) // Exclude default sets
+                ->orderBy('name')
+                ->get();
+            $allSets = $allSets->merge($userCreatedSets);
+        } else {
+            // Fallback: if no personal span, use owner_id filtering
+            $userSets = static::where('owner_id', $user->id)
+                ->where('type_id', 'set')
+                ->where('is_predefined', false)
+                ->whereNotIn('id', $defaultSets->pluck('id')) // Exclude default sets
+                ->orderBy('name')
+                ->get();
+            $allSets = $allSets->merge($userSets);
+        }
+        
+        // Sort all sets by name
+        return $allSets->sortBy('name');
+    }
+
+    /**
      * Check if this span can be edited by the given user
      */
     public function isEditableBy(?User $user = null): bool

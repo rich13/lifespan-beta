@@ -23,54 +23,13 @@ class SetsController extends Controller
         
         $allSets = collect();
         
-        // Ensure default sets exist for the user
-        $starredSet = Span::getOrCreateStarredSet($user);
-        $desertIslandDiscsSet = Span::getOrCreateDesertIslandDiscsSet($user);
-        
         // Add smart sets (predefined sets that belong to the user)
         $smartSets = Span::getPredefinedSets($user);
         $allSets = $allSets->merge($smartSets);
         
-        // Add default sets (Starred, Desert Island Discs) - these belong to the user
-        $defaultSets = Span::where('owner_id', $user->id)
-            ->where('type_id', 'set')
-            ->whereJsonContains('metadata->is_default', true)
-            ->get();
-        $allSets = $allSets->merge($defaultSets);
-        
-        // Get the user's personal span
-        $personalSpan = $user->personalSpan;
-        
-        if ($personalSpan) {
-            // Get sets that either:
-            // 1. Have a "creates" connection from the user's personal span (user owns them)
-            // 2. Have NO "creates" connection at all AND are owned by the current user (system/default sets)
-            $userCreatedSets = Span::where('type_id', 'set')
-                ->where(function($query) use ($personalSpan, $user) {
-                    $query->whereHas('connectionsAsObject', function($subQuery) use ($personalSpan) {
-                        $subQuery->where('parent_id', $personalSpan->id)
-                                ->where('type_id', 'created');
-                    })
-                    ->orWhere(function($subQuery) use ($user) {
-                        $subQuery->whereDoesntHave('connectionsAsObject', function($subSubQuery) {
-                            $subSubQuery->where('type_id', 'created');
-                        })
-                        ->where('owner_id', $user->id); // Must be owned by current user
-                    });
-                })
-                ->orderBy('name')
-                ->get();
-            $allSets = $allSets->merge($userCreatedSets);
-        } else {
-            // Fallback: if no personal span, use owner_id filtering
-            $userSets = Span::where('owner_id', $user->id)
-                ->where('type_id', 'set')
-                ->where('is_predefined', false)
-                ->whereNotIn('id', $defaultSets->pluck('id')) // Exclude default sets
-                ->orderBy('name')
-                ->get();
-            $allSets = $allSets->merge($userSets);
-        }
+        // Add user's sets (default sets + user-created sets)
+        $userSets = Span::getUserSets($user);
+        $allSets = $allSets->merge($userSets);
         
         // Sort all sets by name
         $allSets = $allSets->sortBy('name');
@@ -277,7 +236,7 @@ class SetsController extends Controller
                 $model = $model->first();
             }
         } elseif ($modelClass === 'App\\Models\\Connection' || $modelClass === 'App\Models\Connection') {
-            $model = Connection::with(['parent:id,name', 'child:id,name', 'type:type,name', 'connectionSpan:id,name'])->find($modelId);
+            $model = Connection::with(['parent:id,name', 'child:id,name', 'type:type,forward_description', 'connectionSpan:id,name'])->find($modelId);
         }
 
         // Permission check
@@ -285,13 +244,14 @@ class SetsController extends Controller
             return response()->json(['error' => 'Forbidden'], 403);
         }
 
-        // Get user's sets with optimized query
-        $sets = Span::where('owner_id', $user->id)
-            ->where('type_id', 'set')
-            ->where('is_predefined', false) // Only user-created sets
-            ->select('id', 'name', 'description')
-            ->orderBy('name')
-            ->get();
+        // Get user's sets (default sets + user-created sets)
+        $sets = Span::getUserSets($user)->map(function ($set) {
+            return [
+                'id' => $set->id,
+                'name' => $set->name,
+                'description' => $set->description
+            ];
+        })->values(); // Convert to indexed array
 
         // Get current memberships for all possible items with optimized batching
         $currentMemberships = [];
@@ -372,7 +332,7 @@ class SetsController extends Controller
             $itemSummary = [
                 'type' => 'connection',
                 'name' => $model->connectionSpan?->name ?? 'Connection',
-                'type_name' => $model->type?->name ?? 'Unknown Type',
+                'type_name' => $model->type?->forward_description ?? 'Unknown Type',
                 'subject' => $model->parent?->name ?? 'Unknown',
                 'object' => $model->child?->name ?? 'Unknown'
             ];
@@ -416,13 +376,7 @@ class SetsController extends Controller
         return response()->json([
             'itemSummary' => $itemSummary,
             'addOptions' => $addOptions,
-            'sets' => $sets->map(function ($set) {
-                return [
-                    'id' => $set->id,
-                    'name' => $set->name,
-                    'description' => $set->description
-                ];
-            }),
+            'sets' => $sets,
             'currentMemberships' => $currentMemberships,
             'membershipDetails' => $membershipDetails
         ]);
