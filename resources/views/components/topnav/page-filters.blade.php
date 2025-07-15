@@ -1,5 +1,15 @@
+@props(['align' => 'right', 'class' => ''])
+
+@php
+$alignmentClass = $align === 'right' ? 'ms-auto' : '';
+@endphp
+
 <!-- Page Filters Section -->
-<div class="px-3 d-flex align-items-center ms-auto">
+<div class="d-flex align-items-center {{ $alignmentClass }} {{ $class }}">
     <!-- Page-specific filters -->
-    @yield('page_filters')
+    @if(trim($__env->yieldContent('page_filters')))
+        @yield('page_filters')
+    @else
+        {{ $slot ?? '' }}
+    @endif
 </div> 
