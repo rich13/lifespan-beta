@@ -59,9 +59,18 @@ class SetsModalTest extends TestCase
         ]);
 
         $data = $response->json();
-        $this->assertCount(1, $data['sets']);
-        $this->assertEquals($this->testSet->id, $data['sets'][0]['id']);
-        $this->assertEquals($this->testSet->name, $data['sets'][0]['name']);
+        // Should return 3 sets: the test set + 2 default sets (Starred and Desert Island Discs)
+        $this->assertCount(3, $data['sets']);
+        
+        // Find the test set in the returned sets
+        $testSetData = collect($data['sets'])->firstWhere('id', $this->testSet->id);
+        $this->assertNotNull($testSetData, 'Test set should be in the returned sets');
+        $this->assertEquals($this->testSet->name, $testSetData['name']);
+        
+        // Verify default sets are present
+        $setNames = collect($data['sets'])->pluck('name')->toArray();
+        $this->assertContains('Starred', $setNames);
+        $this->assertContains('Desert Island Discs', $setNames);
     }
 
     /** @test */
