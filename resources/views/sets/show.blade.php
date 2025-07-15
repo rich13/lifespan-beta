@@ -121,7 +121,7 @@
                         @endif
                     </label>
                     <input type="text" class="form-control" id="searchTerm" 
-                           placeholder="@if(($set->metadata['subtype'] ?? null) === 'desertislanddiscs')Enter track name to search...@elseEnter name to search...@endif">
+                           placeholder="Search...">
                     @if(($set->metadata['subtype'] ?? null) === 'desertislanddiscs')
                         <div class="form-text">
                             <i class="bi bi-info-circle me-1"></i>
