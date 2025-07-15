@@ -14,6 +14,7 @@ use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
+use App\Models\Connection;
 
 /**
  * User Model
@@ -232,7 +233,168 @@ class User extends Authenticatable
             'span_id' => $span->id
         ]);
 
+        // Create default sets for the user with proper connections
+        $this->createDefaultSets($span);
+
         return $span;
+    }
+
+    /**
+     * Create default sets for the user with proper connections
+     */
+    private function createDefaultSets(Span $personalSpan): void
+    {
+        Log::info('Creating default sets for user', [
+            'user_id' => $this->id,
+            'personal_span_id' => $personalSpan->id
+        ]);
+
+        // Create Starred set
+        $starredSet = Span::create([
+            'name' => 'Starred',
+            'slug' => Str::slug($personalSpan->name ?? 'user') . '-starred',
+            'type_id' => 'set',
+            'description' => 'Your starred items',
+            'metadata' => [
+                'is_default' => true,
+                'icon' => 'bi-star-fill',
+                'subtype' => 'starred'
+            ],
+            'owner_id' => $this->id,
+            'updater_id' => $this->id,
+            'access_level' => 'private',
+            'state' => 'complete'
+        ]);
+
+        // Create Desert Island Discs set
+        $desertIslandDiscsSet = Span::create([
+            'name' => 'Desert Island Discs',
+            'slug' => Str::slug($personalSpan->name ?? 'user') . '-desert-island-discs',
+            'type_id' => 'set',
+            'description' => 'Your desert island discs',
+            'metadata' => [
+                'is_default' => true,
+                'icon' => 'bi-music-note-beamed',
+                'subtype' => 'desertislanddiscs'
+            ],
+            'owner_id' => $this->id,
+            'updater_id' => $this->id,
+            'access_level' => 'private',
+            'state' => 'complete'
+        ]);
+
+        // Create "created" connections from personal span to both sets
+        $this->createSetConnection($personalSpan, $starredSet, 'Starred');
+        $this->createSetConnection($personalSpan, $desertIslandDiscsSet, 'Desert Island Discs');
+
+        Log::info('Default sets created successfully', [
+            'user_id' => $this->id,
+            'starred_set_id' => $starredSet->id,
+            'desert_island_discs_set_id' => $desertIslandDiscsSet->id
+        ]);
+    }
+
+    /**
+     * Ensure default sets exist for the user (for existing users who might not have them)
+     */
+    public function ensureDefaultSetsExist(): void
+    {
+        $personalSpan = $this->personalSpan;
+        if (!$personalSpan) {
+            Log::warning('Cannot ensure default sets exist - no personal span found', [
+                'user_id' => $this->id
+            ]);
+            return;
+        }
+
+        // Check if default sets exist
+        $starredSet = Span::where('owner_id', $this->id)
+            ->where('type_id', 'set')
+            ->whereJsonContains('metadata->is_default', true)
+            ->whereJsonContains('metadata->subtype', 'starred')
+            ->first();
+
+        $desertIslandDiscsSet = Span::where('owner_id', $this->id)
+            ->where('type_id', 'set')
+            ->whereJsonContains('metadata->is_default', true)
+            ->whereJsonContains('metadata->subtype', 'desertislanddiscs')
+            ->first();
+
+        // Create missing sets individually to avoid duplicates
+        if (!$starredSet) {
+            Log::info('Creating missing Starred set for existing user', [
+                'user_id' => $this->id
+            ]);
+            
+            $starredSet = Span::create([
+                'name' => 'Starred',
+                'slug' => Str::slug($personalSpan->name ?? 'user') . '-starred',
+                'type_id' => 'set',
+                'description' => 'Your starred items',
+                'metadata' => [
+                    'is_default' => true,
+                    'icon' => 'bi-star-fill',
+                    'subtype' => 'starred'
+                ],
+                'owner_id' => $this->id,
+                'updater_id' => $this->id,
+                'access_level' => 'private',
+                'state' => 'complete'
+            ]);
+            
+            $this->createSetConnection($personalSpan, $starredSet, 'Starred');
+        }
+
+        if (!$desertIslandDiscsSet) {
+            Log::info('Creating missing Desert Island Discs set for existing user', [
+                'user_id' => $this->id
+            ]);
+            
+            $desertIslandDiscsSet = Span::create([
+                'name' => 'Desert Island Discs',
+                'slug' => Str::slug($personalSpan->name ?? 'user') . '-desert-island-discs',
+                'type_id' => 'set',
+                'description' => 'Your desert island discs',
+                'metadata' => [
+                    'is_default' => true,
+                    'icon' => 'bi-music-note-beamed',
+                    'subtype' => 'desertislanddiscs'
+                ],
+                'owner_id' => $this->id,
+                'updater_id' => $this->id,
+                'access_level' => 'private',
+                'state' => 'complete'
+            ]);
+            
+            $this->createSetConnection($personalSpan, $desertIslandDiscsSet, 'Desert Island Discs');
+        }
+    }
+
+    /**
+     * Create a "created" connection from personal span to a set
+     */
+    private function createSetConnection(Span $personalSpan, Span $set, string $setName): void
+    {
+        // Create the connection span
+        $connectionSpan = Span::create([
+            'name' => $personalSpan->name . ' created ' . $setName . ' set',
+            'type_id' => 'connection',
+            'owner_id' => $this->id,
+            'updater_id' => $this->id,
+            'state' => 'complete',
+            'metadata' => ['timeless' => true]
+        ]);
+
+        // Create the connection
+        Connection::create([
+            'parent_id' => $personalSpan->id,
+            'child_id' => $set->id,
+            'type_id' => 'created',
+            'connection_span_id' => $connectionSpan->id,
+            'metadata' => [
+                'set_type' => $setName === 'Starred' ? 'starred' : 'desert-island-discs'
+            ]
+        ]);
     }
 
     /**

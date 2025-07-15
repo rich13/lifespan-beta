@@ -59,6 +59,11 @@ class EmailFirstAuthController extends Controller
 
         if (Auth::attempt($credentials)) {
             $request->session()->regenerate();
+            
+            // Ensure default sets exist as a failsafe
+            $user = Auth::user();
+            $user->ensureDefaultSetsExist();
+            
             return redirect()->intended(RouteServiceProvider::HOME);
         }
 
