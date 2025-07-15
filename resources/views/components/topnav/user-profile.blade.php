@@ -1,43 +1,12 @@
-@props(['span' => null])
+@props(['span' => null, 'class' => ''])
 
 @php
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Session;
 @endphp
-<!-- DEBUG: User Profile Component Loaded -->
-<!-- User Profile Section -->
-<div class="px-3 d-flex align-items-center">
-    <!-- Global Search -->
-    <x-topnav.global-search />
-    
-    <!-- New Span Button -->
-    @auth
-        <div class="me-3" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Create a new span (⌘K)">
-            <button type="button" class="btn btn-sm btn-primary" 
-                    data-bs-toggle="modal" data-bs-target="#newSpanModal" 
-                    id="new-span-btn">
-                <i class="bi bi-plus-circle me-1"></i>New
-            </button>
-        </div>
-    @endauth
-    
-    <!-- Improve Span Button (only on span show pages) -->
-    @auth
-        @if(request()->routeIs('spans.show') && $span)
-            <div class="me-3" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Improve this span with AI data (⌘I)">
-                <button type="button" class="btn btn-sm btn-success" 
-                        data-bs-toggle="modal" data-bs-target="#newSpanModal" 
-                        id="improve-span-btn"
-                        data-span-name="{{ $span->name }}"
-                        data-span-type="{{ $span->type_id }}">
-                    <i class="bi bi-magic me-1"></i>Improve
-                </button>
-            </div>
-        @endif
-    @endauth
-    
 
-    
+<!-- User Profile Section -->
+<div class="d-flex align-items-center {{ $class }}">
     <!-- Custom User Dropdown -->
     <div class="position-relative" id="customUserDropdown">
         <button class="btn btn-sm btn-secondary" type="button" id="customUserDropdownToggle">
@@ -46,90 +15,10 @@ use Illuminate\Support\Facades\Session;
         </button>
         <div class="position-absolute end-0 mt-1 bg-white shadow rounded d-none user-dropdown-menu" id="customUserDropdownMenu">
             <div class="p-2">
-                <!-- User Info -->
-                <div class="px-2 py-1 mb-2 border-bottom">
-                    @if(Auth::user()->personalSpan)
-                        <x-spans.display.micro-card :span="Auth::user()->personalSpan" />
-                    @else
-                        <div class="fw-bold">{{ Auth::user()->name }}</div>
-                    @endif
-                </div>
-                
                 <!-- Menu Items -->
-                
-                <a href="{{ route('settings.index') }}" class="d-block p-2 text-decoration-none text-dark rounded hover-bg-light">
-                    <i class="bi bi-gear me-2"></i>Settings
-                </a>
-                
-                @if(Auth::user()->is_admin)
-                    <div class="mt-2 mb-1">
-                        <div class="px-2 py-1 border-top border-bottom bg-light">
-                            <small class="text-muted fw-bold">Switch User</small>
-                        </div>
-                        <div id="userSwitcherList" class="py-1 max-height-200 overflow-auto">
-                            <div class="px-2 py-1 text-center">
-                                <div class="spinner-border spinner-border-sm" role="status"></div>
-                                <small class="ms-2">Loading users...</small>
-                            </div>
-                        </div>
-                    </div>
-                @endif
-                
-                @if(Session::has('admin_user_id'))
-                    <form method="POST" action="{{ route('admin.user-switcher.switch-back') }}">
-                        @csrf
-                        <button type="submit" class="d-block w-100 text-start p-2 border-0 bg-transparent text-primary rounded hover-bg-light">
-                            <i class="bi bi-arrow-return-left me-2"></i>Switch Back to Admin
-                        </button>
-                    </form>
-                @endif
-                
-                <hr class="my-2">
-                
-                <form method="POST" action="{{ route('logout') }}">
-                    @csrf
-                    <button type="submit" class="d-block w-100 text-start p-2 border-0 bg-transparent text-danger rounded hover-bg-light">
-                        <i class="bi bi-box-arrow-right me-2"></i>Sign Out
-                    </button>
-                </form>
+                <x-shared.user-profile-info variant="desktop" />
+                <x-shared.user-switcher variant="desktop" />
             </div>
         </div>
     </div>
-</div>
-
-
-
-<script>
-$(document).ready(function() {
-    // Global keyboard shortcuts
-    $(document).on('keydown', function(e) {
-        // Check for Cmd+K (Mac) or Ctrl+K (Windows/Linux) - New Span
-        if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-            e.preventDefault(); // Prevent any potential conflicts
-            
-            // Check if user is authenticated and button exists
-            const newSpanBtn = document.getElementById('new-span-btn');
-            if (newSpanBtn) {
-                newSpanBtn.click();
-            }
-        }
-        
-        // Check for Cmd+I (Mac) or Ctrl+I (Windows/Linux) - Improve Span
-        if ((e.metaKey || e.ctrlKey) && e.key === 'i') {
-            e.preventDefault(); // Prevent any potential conflicts
-            
-            // Check if user is authenticated and improve button exists
-            const improveSpanBtn = document.getElementById('improve-span-btn');
-            if (improveSpanBtn) {
-                improveSpanBtn.click();
-            }
-        }
-    });
-    
-    // Initialize Bootstrap tooltips
-    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-    tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl);
-    });
-});
-</script> 
+</div> 

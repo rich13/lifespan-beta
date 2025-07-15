@@ -293,23 +293,28 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
                     <!-- Main Content Area with Top Navigation -->
                     <div id="main-content" class="bg-light main-content">
                         <!-- Top Navigation Bar -->
-                        <div class="bg-light border-bottom shadow-sm" style="height: 56px;">
-                            <div class="d-flex align-items-center h-100 px-3">
-                                <!-- Mobile Menu Button -->
-                                <button class="btn btn-link text-dark d-md-none me-2 p-0" type="button" data-bs-toggle="offcanvas" data-bs-target="#mobileNav" aria-controls="mobileNav">
-                                    <i class="bi bi-list fs-4"></i>
-                                </button>
+                        <x-topnav-container>
+                            <!-- Mobile Menu Button -->
+                            <button class="btn btn-link text-dark d-md-none me-2 p-0" type="button" data-bs-toggle="offcanvas" data-bs-target="#mobileNav" aria-controls="mobileNav">
+                                <i class="bi bi-list fs-4"></i>
+                            </button>
 
-                                <x-topnav.page-title />
-                                
-                                <!-- Page Tools -->
-                                <x-topnav.page-filters />
-                                <!-- Page Tools -->
-                                <x-topnav.page-tools />
-                                <!-- User Profile -->
-                                <x-topnav.user-profile :span="$span ?? null" />
-                            </div>
-                        </div>
+                            <x-topnav.page-title />
+                            
+                            <!-- Page Tools -->
+                            <x-topnav.page-filters class="d-none d-md-flex" />
+                            <!-- Page Tools -->
+                            <x-topnav.page-tools class="d-none d-md-flex" />
+                            <!-- Top Navigation Actions (Search, New, Improve) -->
+                            <x-topnav.topnav-actions :span="$span ?? null" class="d-none d-md-flex" />
+                            <!-- User Profile -->
+                            <x-topnav.user-profile :span="$span ?? null" class="d-none d-md-flex" />
+                            
+                            <!-- Mobile Right Nav Button -->
+                            <button class="btn btn-link text-dark d-md-none ms-auto p-0" type="button" data-bs-toggle="offcanvas" data-bs-target="#mobileRightNav" aria-controls="mobileRightNav">
+                                <i class="bi bi-three-dots-vertical fs-4"></i>
+                            </button>
+                        </x-topnav-container>
                         
                         <!-- Page Content -->
                         <div class="py-3 px-3">
@@ -348,7 +353,7 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
         <div class="offcanvas offcanvas-start" tabindex="-1" id="mobileNav" aria-labelledby="mobileNavLabel">
             <div class="offcanvas-header bg-dark text-white">
                 <h5 class="offcanvas-title" id="mobileNavLabel">
-                    <i class="bi bi-bar-chart-steps me-1"></i> Lifespan
+                    <x-brand variant="white" size="h5" />
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
             </div>
@@ -358,6 +363,9 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
                 <x-sidebar.footer />
             </div>
         </div>
+        
+        <!-- Mobile Right Navigation Offcanvas -->
+        <x-mobile-right-nav :span="$span ?? null" />
         @endauth
         
         <!-- Modals -->
