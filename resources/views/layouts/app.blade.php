@@ -299,9 +299,14 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
                                 <button class="btn btn-link text-dark d-md-none me-2 p-0" type="button" data-bs-toggle="offcanvas" data-bs-target="#mobileNav" aria-controls="mobileNav">
                                     <i class="bi bi-list fs-4"></i>
                                 </button>
+
                                 <x-topnav.page-title />
+                                
+                                <!-- Page Tools -->
                                 <x-topnav.page-filters />
+                                <!-- Page Tools -->
                                 <x-topnav.page-tools />
+                                <!-- User Profile -->
                                 <x-topnav.user-profile :span="$span ?? null" />
                             </div>
                         </div>
