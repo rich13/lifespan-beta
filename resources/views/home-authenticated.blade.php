@@ -835,7 +835,11 @@
             <div class="mb-4">
                 @php
                     // Get the user's starred set
-                    $starredSet = \App\Models\Span::getOrCreateStarredSet(auth()->user());
+                    $starredSet = \App\Models\Span::where('owner_id', auth()->id())
+                    ->where('type_id', 'set')
+                    ->whereJsonContains('metadata->is_default', true)
+                    ->whereJsonContains('metadata->subtype', 'starred')
+                    ->first();
                     $starredItems = $starredSet->getSetContents();
                 @endphp
 
