@@ -588,6 +588,12 @@ class DesertIslandDiscsStepImportController extends Controller
             
             $yamlService = new \App\Services\YamlSpanService();
             
+            // Get the system user for AI-generated spans
+            $systemUser = \App\Models\User::where('email', 'system@lifespan.app')->first();
+            if (!$systemUser) {
+                throw new \Exception('System user not found');
+            }
+            
             // Add import metadata to the YAML data
             $yamlData = $aiData['parsed'];
             if (!isset($yamlData['metadata'])) {
@@ -676,7 +682,7 @@ class DesertIslandDiscsStepImportController extends Controller
             }
             
             // Use the proper YAML import system for new spans
-            $result = $yamlService->createSpanFromYaml($yamlData);
+            $result = $yamlService->createSpanFromYaml($yamlData, $systemUser->id);
             
             Log::info('YAML import result', [
                 'name' => $yamlData['name'] ?? 'Unknown',
