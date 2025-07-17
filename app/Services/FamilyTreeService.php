@@ -296,6 +296,16 @@ class FamilyTreeService
     }
 
     /**
+     * Get extra nephews and nieces (children of cousins)
+     */
+    public function getExtraNephewsAndNieces(Span $span): Collection
+    {
+        return $this->getCousins($span)->flatMap(function ($cousin) {
+            return $this->getChildren($cousin);
+        })->unique('id')->values();
+    }
+
+    /**
      * Helper method to compare spans by ID
      */
     protected function compareSpans(Span $a, Span $b): bool

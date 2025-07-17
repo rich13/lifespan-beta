@@ -115,6 +115,14 @@ trait HasFamilyCapabilities
     }
 
     /**
+     * Get extra nephews and nieces (children of cousins)
+     */
+    public function extraNephewsAndNieces(): Collection
+    {
+        return new Collection($this->getFamilyTreeService()->getExtraNephewsAndNieces($this));
+    }
+
+    /**
      * Add a parent to this person
      */
     public function addParent(Span $parent, array $metadata = [])

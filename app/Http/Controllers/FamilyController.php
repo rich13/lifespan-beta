@@ -17,34 +17,33 @@ class FamilyController extends Controller
         
         if (!$personalSpan) {
             return view('family.index', [
-                'familyData' => null,
+                'span' => null,
                 'message' => 'No personal span found for your account.'
             ]);
         }
 
-        $familyData = $this->buildFamilyTree($personalSpan);
-        
         return view('family.index', [
-            'familyData' => $familyData,
+            'span' => $personalSpan,
             'message' => null
         ]);
     }
 
-    /**
-     * API endpoint to get family tree data
-     */
-    public function data()
+    public function show(Span $span)
     {
-        $user = auth()->user();
-        $personalSpan = $user->personalSpan;
-        
-        if (!$personalSpan) {
-            return response()->json(['error' => 'No personal span found'], 404);
+        // Check if the span is a person
+        if ($span->type_id !== 'person') {
+            abort(404, 'Family view is only available for people.');
         }
 
-        $familyData = $this->buildFamilyTree($personalSpan);
-        
-        return response()->json($familyData);
+        // Check if user has access to this span
+        if (!$span->hasPermission(auth()->user(), 'view')) {
+            abort(403, 'You do not have permission to view this person\'s family.');
+        }
+
+        return view('family.show', [
+            'span' => $span,
+            'message' => null
+        ]);
     }
 
     /**
@@ -124,183 +123,6 @@ class FamilyController extends Controller
             ]);
 
             return response()->json(['error' => 'Failed to create family connection'], 500);
-        }
-    }
-
-    private function buildFamilyTree(Span $rootPerson)
-    {
-        Log::debug("Building family tree for: " . $rootPerson->name);
-        
-        // Get all related spans
-        $allSpans = $this->getAllRelatedSpans($rootPerson);
-        
-        // Create nodes array
-        $nodes = [];
-        $links = [];
-        
-        foreach ($allSpans as $span) {
-            $node = [
-                'id' => $span->id,
-                'name' => $span->name,
-                'type' => $this->getNodeType($span, $rootPerson),
-                'gender' => $span->getMeta('gender'),
-                'span' => $span
-            ];
-            $nodes[] = $node;
-        }
-        
-        // Create links for parent-child relationships
-        foreach ($allSpans as $span) {
-            $children = $span->children()->get();
-            foreach ($children as $child) {
-                $links[] = [
-                    'source' => $span->id,
-                    'target' => $child->id,
-                    'type' => 'parent-child'
-                ];
-            }
-        }
-        
-        $tree = [
-            'nodes' => $nodes,
-            'links' => $links
-        ];
-        
-        Log::debug("Force-directed tree structure: " . json_encode($tree));
-        
-        return $tree;
-    }
-    
-    private function getAllRelatedSpans(Span $rootPerson)
-    {
-        $spans = collect([$rootPerson]);
-        $processed = collect();
-        
-        while ($spans->count() > $processed->count()) {
-            $current = $spans->diff($processed)->first();
-            $processed->push($current);
-            
-            // Add parents
-            $parents = $current->parents()->get();
-            foreach ($parents as $parent) {
-                if (!$spans->contains('id', $parent->id)) {
-                    $spans->push($parent);
-                }
-            }
-            
-            // Add children
-            $children = $current->children()->get();
-            foreach ($children as $child) {
-                if (!$spans->contains('id', $child->id)) {
-                    $spans->push($child);
-                }
-            }
-        }
-        
-        return $spans;
-    }
-    
-    private function getNodeType(Span $span, Span $rootPerson)
-    {
-        if ($span->id === $rootPerson->id) {
-            return 'current-user';
-        }
-        
-        // Check if it's a parent of the root person
-        $rootParents = $rootPerson->parents()->get();
-        if ($rootParents->contains('id', $span->id)) {
-            return 'parent';
-        }
-        
-        // Check if it's a sibling of the root person
-        $rootSiblings = $rootPerson->siblings();
-        if ($rootSiblings->contains('id', $span->id)) {
-            return 'sibling';
-        }
-        
-        // Check if it's a child of the root person
-        $rootChildren = $rootPerson->children()->get();
-        if ($rootChildren->contains('id', $span->id)) {
-            return 'child';
-        }
-        
-        // Check if it's a grandparent of the root person
-        foreach ($rootParents as $parent) {
-            $grandparents = $parent->parents()->get();
-            if ($grandparents->contains('id', $span->id)) {
-                return 'grandparent';
-            }
-        }
-        
-        // Check if it's a grandchild of the root person
-        foreach ($rootChildren as $child) {
-            $grandchildren = $child->children()->get();
-            if ($grandchildren->contains('id', $span->id)) {
-                return 'grandchild';
-            }
-        }
-        
-        // Check if it's an uncle/aunt (sibling of parent)
-        foreach ($rootParents as $parent) {
-            $parentSiblings = $parent->siblings();
-            if ($parentSiblings->contains('id', $span->id)) {
-                return 'uncle-aunt';
-            }
-        }
-        
-        // Check if it's a cousin (child of uncle/aunt, or child of sibling)
-        // First check if it's a child of an uncle/aunt
-        foreach ($rootParents as $parent) {
-            $parentSiblings = $parent->siblings();
-            foreach ($parentSiblings as $uncleAunt) {
-                $cousins = $uncleAunt->children()->get();
-                if ($cousins->contains('id', $span->id)) {
-                    return 'cousin';
-                }
-            }
-        }
-        
-        // Check if it's a child of a sibling (niece/nephew)
-        $rootSiblings = $rootPerson->siblings();
-        foreach ($rootSiblings as $sibling) {
-            $niecesNephews = $sibling->children()->get();
-            if ($niecesNephews->contains('id', $span->id)) {
-                return 'niece-nephew';
-            }
-        }
-        
-        // Check if it's a great-grandparent
-        foreach ($rootParents as $parent) {
-            $grandparents = $parent->parents()->get();
-            foreach ($grandparents as $grandparent) {
-                $greatGrandparents = $grandparent->parents()->get();
-                if ($greatGrandparents->contains('id', $span->id)) {
-                    return 'great-grandparent';
-                }
-            }
-        }
-        
-        // Check if it's a great-grandchild
-        foreach ($rootChildren as $child) {
-            $grandchildren = $child->children()->get();
-            foreach ($grandchildren as $grandchild) {
-                $greatGrandchildren = $grandchild->children()->get();
-                if ($greatGrandchildren->contains('id', $span->id)) {
-                    return 'great-grandchild';
-                }
-            }
-        }
-        
-        // Default based on whether it has children (ancestor) or parents (descendant)
-        $children = $span->children()->get();
-        $parents = $span->parents()->get();
-        
-        if ($children->count() > 0 && $parents->count() > 0) {
-            return 'ancestor';
-        } elseif ($children->count() > 0) {
-            return 'ancestor';
-        } else {
-            return 'descendant';
         }
     }
 } 
