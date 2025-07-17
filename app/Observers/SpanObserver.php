@@ -92,6 +92,18 @@ class SpanObserver
                 $this->makePublicFigureConnectionsPublic($span);
             }
         }
+        
+        // Handle family connection end dates when a person dies
+        if ($span->type_id === 'person' && $span->end_year && $span->wasChanged('end_year')) {
+            $this->endFamilyConnectionsOnDeath($span);
+        }
+        
+        // Sync family connection dates when birth/death dates change
+        if ($span->type_id === 'person' && 
+            ($span->wasChanged('start_year') || $span->wasChanged('start_month') || $span->wasChanged('start_day') ||
+             $span->wasChanged('end_year') || $span->wasChanged('end_month') || $span->wasChanged('end_day'))) {
+            $this->syncFamilyConnectionDates($span);
+        }
     }
 
     /**
@@ -153,5 +165,258 @@ class SpanObserver
         
         // Clear timeline caches for the public figure
         $span->clearAllTimelineCaches();
+    }
+    
+    /**
+     * End family connections when a person dies
+     */
+    private function endFamilyConnectionsOnDeath(Span $span): void
+    {
+        $deathYear = $span->end_year;
+        $deathMonth = $span->end_month;
+        $deathDay = $span->end_day;
+        
+        Log::info('Person died, ending family connections', [
+            'person_id' => $span->id,
+            'person_name' => $span->name,
+            'death_year' => $deathYear,
+            'death_month' => $deathMonth,
+            'death_day' => $deathDay
+        ]);
+        
+        // Get all family connections where this person is involved
+        $familyConnections = \App\Models\Connection::where('type_id', 'family')
+            ->where(function ($query) use ($span) {
+                $query->where('parent_id', $span->id)
+                      ->orWhere('child_id', $span->id);
+            })
+            ->with('connectionSpan')
+            ->get();
+        
+        foreach ($familyConnections as $connection) {
+            if ($connection->connectionSpan) {
+                $connectionSpan = $connection->connectionSpan;
+                
+                // Only update if the connection doesn't already have an end date
+                // or if the current end date is after the person's death
+                if (!$connectionSpan->end_year || $connectionSpan->end_year > $deathYear) {
+                    Log::info('Ending family connection on person\'s death', [
+                        'connection_id' => $connection->id,
+                        'connection_span_id' => $connectionSpan->id,
+                        'old_end_year' => $connectionSpan->end_year,
+                        'new_end_year' => $deathYear,
+                        'person_name' => $span->name
+                    ]);
+                    
+                    $connectionSpan->end_year = $deathYear;
+                    $connectionSpan->end_month = $deathMonth;
+                    $connectionSpan->end_day = $deathDay;
+                    $connectionSpan->saveQuietly(); // Save without triggering observers
+                    
+                    // Clear timeline caches for the connection span
+                    $connectionSpan->clearAllTimelineCaches();
+                }
+            }
+        }
+        
+        // Also handle relationship connections (spouses, etc.)
+        $relationshipConnections = \App\Models\Connection::where('type_id', 'relationship')
+            ->where(function ($query) use ($span) {
+                $query->where('parent_id', $span->id)
+                      ->orWhere('child_id', $span->id);
+            })
+            ->with('connectionSpan')
+            ->get();
+        
+        foreach ($relationshipConnections as $connection) {
+            if ($connection->connectionSpan) {
+                $connectionSpan = $connection->connectionSpan;
+                
+                // Only update if the connection doesn't already have an end date
+                // or if the current end date is after the person's death
+                if (!$connectionSpan->end_year || $connectionSpan->end_year > $deathYear) {
+                    Log::info('Ending relationship connection on person\'s death', [
+                        'connection_id' => $connection->id,
+                        'connection_span_id' => $connectionSpan->id,
+                        'old_end_year' => $connectionSpan->end_year,
+                        'new_end_year' => $deathYear,
+                        'person_name' => $span->name
+                    ]);
+                    
+                    $connectionSpan->end_year = $deathYear;
+                    $connectionSpan->end_month = $deathMonth;
+                    $connectionSpan->end_day = $deathDay;
+                    $connectionSpan->saveQuietly(); // Save without triggering observers
+                    
+                    // Clear timeline caches for the connection span
+                    $connectionSpan->clearAllTimelineCaches();
+                }
+            }
+        }
+        
+        // Clear timeline caches for the person who died
+        $span->clearAllTimelineCaches();
+    }
+    
+    /**
+     * Sync family connection dates when birth/death dates change
+     */
+    private function syncFamilyConnectionDates(Span $span): void
+    {
+        Log::info('Syncing family connection dates for person', [
+            'person_id' => $span->id,
+            'person_name' => $span->name,
+            'birth_date' => $span->start_year ? "{$span->start_year}-{$span->start_month}-{$span->start_day}" : 'unknown',
+            'death_date' => $span->end_year ? "{$span->end_year}-{$span->end_month}-{$span->end_day}" : 'unknown'
+        ]);
+        
+        // Get all family connections where this person is involved
+        $familyConnections = \App\Models\Connection::where('type_id', 'family')
+            ->where(function ($query) use ($span) {
+                $query->where('parent_id', $span->id)
+                      ->orWhere('child_id', $span->id);
+            })
+            ->with(['subject', 'object', 'connectionSpan'])
+            ->get();
+        
+        foreach ($familyConnections as $connection) {
+            $this->updateConnectionDates($connection, $span);
+        }
+        
+        // Clear timeline caches for the person
+        $span->clearAllTimelineCaches();
+    }
+    
+    /**
+     * Update connection dates based on the updated person
+     */
+    private function updateConnectionDates(\App\Models\Connection $connection, Span $updatedSpan): void
+    {
+        $span1 = $connection->subject;
+        $span2 = $connection->object;
+        
+        if (!$span1 || !$span2) {
+            return;
+        }
+        
+        // Determine which span is the updated one
+        $otherSpan = ($span1->id === $updatedSpan->id) ? $span2 : $span1;
+        
+        // Get birth and death dates
+        $span1Birth = $this->getBirthDate($span1);
+        $span1Death = $this->getDeathDate($span1);
+        $span2Birth = $this->getBirthDate($span2);
+        $span2Death = $this->getDeathDate($span2);
+        
+        $suggestedStartDate = null;
+        $suggestedEndDate = null;
+        
+        if ($connection->type_id === 'family') {
+            // Parent-child relationship logic
+            if ($span1Birth && $span2Birth) {
+                if ($span1Birth->lt($span2Birth)) {
+                    // span1 is likely parent, span2 is likely child
+                    $suggestedStartDate = $span2Birth; // child's birth
+                    $suggestedEndDate = $span1Death ?: $span2Death; // parent's death, or child's death if parent not dead
+                } else {
+                    // span2 is likely parent, span1 is likely child
+                    $suggestedStartDate = $span1Birth; // child's birth
+                    $suggestedEndDate = $span2Death ?: $span1Death; // parent's death, or child's death if parent not dead
+                }
+            } elseif ($span1Birth) {
+                $suggestedStartDate = $span1Birth;
+                $suggestedEndDate = $span1Death ?: $span2Death;
+            } elseif ($span2Birth) {
+                $suggestedStartDate = $span2Birth;
+                $suggestedEndDate = $span2Death ?: $span1Death;
+            }
+        } else {
+            // Relationship logic
+            if ($span1Birth && $span2Birth) {
+                $suggestedStartDate = $span1Birth->gt($span2Birth) ? $span1Birth : $span2Birth;
+            } elseif ($span1Birth) {
+                $suggestedStartDate = $span1Birth;
+            } elseif ($span2Birth) {
+                $suggestedStartDate = $span2Birth;
+            }
+            
+            if ($span1Death && $span2Death) {
+                $suggestedEndDate = $span1Death->lt($span2Death) ? $span1Death : $span2Death;
+            } elseif ($span1Death) {
+                $suggestedEndDate = $span1Death;
+            } elseif ($span2Death) {
+                $suggestedEndDate = $span2Death;
+            }
+        }
+        
+        // Update the connection span if we have suggestions
+        if ($connection->connectionSpan && ($suggestedStartDate || $suggestedEndDate)) {
+            $connectionSpan = $connection->connectionSpan;
+            $updated = false;
+            
+            if ($suggestedStartDate) {
+                $currentStart = $this->getBirthDate($connectionSpan);
+                if (!$currentStart || !$currentStart->equalTo($suggestedStartDate)) {
+                    $connectionSpan->start_year = $suggestedStartDate->year;
+                    $connectionSpan->start_month = $suggestedStartDate->month;
+                    $connectionSpan->start_day = $suggestedStartDate->day;
+                    $updated = true;
+                }
+            }
+            
+            if ($suggestedEndDate) {
+                $currentEnd = $this->getDeathDate($connectionSpan);
+                if (!$currentEnd || !$currentEnd->equalTo($suggestedEndDate)) {
+                    $connectionSpan->end_year = $suggestedEndDate->year;
+                    $connectionSpan->end_month = $suggestedEndDate->month;
+                    $connectionSpan->end_day = $suggestedEndDate->day;
+                    $updated = true;
+                }
+            }
+            
+            if ($updated) {
+                Log::info('Updated family connection dates', [
+                    'connection_id' => $connection->id,
+                    'connection_type' => $connection->type_id,
+                    'span1_name' => $span1->name,
+                    'span2_name' => $span2->name,
+                    'new_start_date' => $suggestedStartDate ? $suggestedStartDate->format('Y-m-d') : 'unchanged',
+                    'new_end_date' => $suggestedEndDate ? $suggestedEndDate->format('Y-m-d') : 'unchanged'
+                ]);
+                
+                $connectionSpan->saveQuietly(); // Save without triggering observers
+                $connectionSpan->clearAllTimelineCaches();
+            }
+        }
+    }
+    
+    /**
+     * Get the birth date from a span
+     */
+    private function getBirthDate(Span $span): ?\Carbon\Carbon
+    {
+        if ($span->start_year) {
+            return \Carbon\Carbon::createFromDate(
+                $span->start_year, 
+                $span->start_month ?: 1, 
+                $span->start_day ?: 1
+            );
+        }
+        return null;
+    }
+    
+    /**
+     * Get the death date from a span
+     */
+    private function getDeathDate(Span $span): ?\Carbon\Carbon
+    {
+        if ($span->end_year) {
+            return \Carbon\Carbon::createFromDate(
+                $span->end_year, 
+                $span->end_month ?: 12, 
+                $span->end_day ?: 31
+            );
+        }
+        return null;
     }
 } 
