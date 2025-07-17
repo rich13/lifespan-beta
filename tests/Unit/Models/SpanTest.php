@@ -86,27 +86,31 @@ class SpanTest extends TestCase
 
     public function test_default_sets_have_correct_slugs()
     {
-        // Create a user with a unique name
+        // Create a user
         $user = User::factory()->create();
-        // Set the name on the user's existing personal span
+        // Delete any default sets created automatically
+        $user->spans()->where('type_id', 'set')->delete();
+        // Set the name on the user's existing personal span BEFORE creating default sets
         $personalSpan = $user->personalSpan;
-        $personalSpan->name = 'Test User ' . uniqid();
+        $personalSpan->name = 'Test User ABC123';
         $personalSpan->save();
         $user->refresh();
 
-        // Get default sets
+        // Manually create default sets after setting the name
+        \App\Models\Span::getOrCreateStarredSet($user);
+        \App\Models\Span::getOrCreateDesertIslandDiscsSet($user);
         $defaultSets = Span::getDefaultSets($user);
 
-        // Check Starred set slug - should include the user's name
+        // Check Starred set slug - should include the user's name (from personal span)
         $starredSet = $defaultSets->where('name', 'Starred')->first();
         $this->assertNotNull($starredSet, 'Starred set should exist');
-        $expectedStarredSlug = Str::slug($user->name) . '-starred';
+        $expectedStarredSlug = Str::slug($personalSpan->name) . '-starred';
         $this->assertEquals($expectedStarredSlug, $starredSet->slug);
 
-        // Check Desert Island Discs set slug - should include the user's name
+        // Check Desert Island Discs set slug - should include the user's name (from personal span)
         $desertIslandSet = $defaultSets->where('name', 'Desert Island Discs')->first();
         $this->assertNotNull($desertIslandSet, 'Desert Island Discs set should exist');
-        $expectedDesertIslandSlug = Str::slug($user->name) . '-desert-island-discs';
+        $expectedDesertIslandSlug = Str::slug($personalSpan->name) . '-desert-island-discs';
         $this->assertEquals($expectedDesertIslandSlug, $desertIslandSet->slug);
     }
 
