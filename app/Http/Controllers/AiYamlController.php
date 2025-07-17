@@ -89,6 +89,66 @@ class AiYamlController extends Controller
     }
 
     /**
+     * Improve existing YAML for a person using AI
+     */
+    public function improvePersonYaml(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'existing_yaml' => 'required|string',
+            'disambiguation' => 'nullable|string|max:500'
+        ]);
+
+        try {
+            $aiService = $this->getAiService();
+            $result = $aiService->improvePersonYaml(
+                $validated['name'],
+                $validated['existing_yaml'],
+                $validated['disambiguation'] ?? null
+            );
+
+            if (!$result['success']) {
+                // Send Slack notification for failed AI improvement
+                $this->slackService->notifyAiYamlGenerated($validated['name'], false, $result['error']);
+                
+                return response()->json([
+                    'success' => false,
+                    'error' => $result['error']
+                ], 500);
+            }
+
+            // Send Slack notification for successful AI improvement
+            $this->slackService->notifyAiYamlGenerated($validated['name'], true);
+
+            // Validate the generated YAML
+            $validation = $aiService->validateYaml($result['yaml']);
+            
+            return response()->json([
+                'success' => true,
+                'yaml' => $result['yaml'],
+                'valid' => $validation['valid'],
+                'usage' => $result['usage'] ?? null,
+                'validation_error' => $validation['valid'] ? null : $validation['error']
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('AI YAML improvement error', [
+                'error' => $e->getMessage(),
+                'name' => $validated['name'],
+                'disambiguation' => $validated['disambiguation'] ?? null
+            ]);
+
+            // Send Slack notification for failed AI improvement
+            $this->slackService->notifyAiYamlGenerated($validated['name'], false, $e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to improve YAML: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Show the AI YAML generator interface
      */
     public function show()

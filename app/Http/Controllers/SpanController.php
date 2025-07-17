@@ -333,7 +333,12 @@ class SpanController extends Controller
         $confirmMerge = $request->boolean('confirm_merge', false);
 
         try {
-            $user = Auth::user();
+            // Get the system user for AI-generated spans
+            $systemUser = User::where('email', 'system@lifespan.app')->first();
+            if (!$systemUser) {
+                throw new \Exception('System user not found');
+            }
+            
             $yamlService = app(YamlSpanService::class);
 
             // Parse and validate the AI YAML data
@@ -402,8 +407,8 @@ class SpanController extends Controller
                 'name' => $validated['name'],
                 'type_id' => $validated['type_id'],
                 'state' => $validated['state'],
-                'owner_id' => $user->id,
-                'updater_id' => $user->id,
+                'owner_id' => $systemUser->id,
+                'updater_id' => $systemUser->id,
                 'access_level' => 'private',
             ]);
             $span->save();
@@ -763,8 +768,18 @@ class SpanController extends Controller
             
             $span->delete();
             
+            // Debug: Log the request details
+            Log::info('Span delete request details', [
+                'expectsJson' => request()->expectsJson(),
+                'wantsJson' => request()->wantsJson(),
+                'isAjax' => request()->ajax(),
+                'accept' => request()->header('Accept'),
+                'contentType' => request()->header('Content-Type'),
+                'userAgent' => request()->header('User-Agent')
+            ]);
+            
             // If this is an AJAX request, return JSON
-            if (request()->expectsJson() || request()->wantsJson()) {
+            if (request()->expectsJson() || request()->wantsJson() || request()->ajax()) {
                 return response()->json([
                     'success' => true,
                     'message' => "Span '{$spanName}' deleted successfully"
@@ -781,7 +796,7 @@ class SpanController extends Controller
                 'error' => $e->getMessage()
             ]);
             
-            if (request()->expectsJson() || request()->wantsJson()) {
+            if (request()->expectsJson() || request()->wantsJson() || request()->ajax()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Failed to delete span: ' . $e->getMessage()
@@ -1076,6 +1091,26 @@ class SpanController extends Controller
         return response()->json([
             'spans' => $results
         ]);
+    }
+
+    /**
+     * Get the YAML representation of a span
+     */
+    public function getYaml(Span $span)
+    {
+        try {
+            $yamlContent = $this->yamlService->spanToYaml($span);
+            
+            return response()->json([
+                'success' => true,
+                'yaml' => $yamlContent
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to generate YAML: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
@@ -2275,5 +2310,244 @@ class SpanController extends Controller
         }
         
         return !$this->routeReservationService->isReserved($slug);
+    }
+
+    /**
+     * Improve an existing span with AI-generated YAML data
+     */
+    public function improveWithAi(Request $request, Span $span)
+    {
+        $this->authorize('update', $span);
+        
+        $validated = $request->validate([
+            'ai_yaml' => 'required|string',
+        ]);
+
+        try {
+            $yamlService = app(YamlSpanService::class);
+
+            // Parse and validate the AI YAML data
+            Log::info('AI YAML improvement content for validation', [
+                'span_id' => $span->id,
+                'span_name' => $span->name,
+                'yaml_length' => strlen($validated['ai_yaml']),
+                'yaml_sample' => substr($validated['ai_yaml'], 0, 500)
+            ]);
+            
+            $validationResult = $yamlService->yamlToSpanData($validated['ai_yaml']);
+            Log::info('YAML improvement validation result', [
+                'span_id' => $span->id,
+                'success' => $validationResult['success'],
+                'errors' => $validationResult['errors'] ?? []
+            ]);
+            
+            if (!$validationResult['success']) {
+                $errorMessage = 'Failed to validate AI improvement data';
+                if (!empty($validationResult['errors'])) {
+                    $errorMessage .= ': ' . implode(', ', $validationResult['errors']);
+                }
+                return response()->json([
+                    'success' => false,
+                    'error' => $errorMessage
+                ], 422);
+            }
+
+            // Merge the AI data with the existing span
+            $mergedData = $yamlService->mergeYamlWithExistingSpan($span, $validationResult['data']);
+            
+            // Apply the merged data to the span
+            $applyResult = $yamlService->applyMergedYamlToSpan($span, $mergedData);
+            
+            if ($applyResult['success']) {
+                // Clear AI cache for this person so future generations include the new data
+                $this->clearAiCacheForPerson($span->name);
+                
+                // Explicitly clear timeline caches for the updated span
+                $span->clearTimelineCaches();
+                
+                return response()->json([
+                    'success' => true,
+                    'span_id' => $span->id,
+                    'span' => $span->fresh(),
+                    'message' => 'Span improved successfully with AI data.'
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'error' => $applyResult['message']
+                ], 500);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('AI span improvement error', [
+                'error' => $e->getMessage(),
+                'span_id' => $span->id,
+                'span_name' => $span->name
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to improve span: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Preview changes that would be made by improving a span with AI-generated YAML
+     */
+    public function previewImprovement(Request $request, Span $span)
+    {
+        $this->authorize('update', $span);
+        
+        $validated = $request->validate([
+            'ai_yaml' => 'required|string',
+        ]);
+
+        try {
+            $yamlService = app(YamlSpanService::class);
+
+            // Parse and validate the AI YAML data (skip slug validation for preview)
+            $validationResult = $yamlService->yamlToSpanDataForPreview($validated['ai_yaml'], $span);
+            
+            if (!$validationResult['success']) {
+                $errorMessage = 'Failed to validate AI improvement data';
+                if (!empty($validationResult['errors'])) {
+                    $errorMessage .= ': ' . implode(', ', $validationResult['errors']);
+                }
+                return response()->json([
+                    'success' => false,
+                    'error' => $errorMessage
+                ], 422);
+            }
+
+            // Generate merged data to see what the final state would be
+            $mergedData = $yamlService->mergeYamlWithExistingSpan($span, $validationResult['data']);
+            
+            // Analyze the impacts of the changes
+            $impacts = $yamlService->analyzeChangeImpacts($mergedData, $span);
+            
+            // Get current span data for comparison
+            $currentData = $yamlService->spanToArray($span);
+            
+            // Create a structured diff showing what will change
+            $diff = $this->createStructuredDiff($currentData, $mergedData);
+            
+            return response()->json([
+                'success' => true,
+                'impacts' => $impacts,
+                'diff' => $diff,
+                'current_data' => $currentData,
+                'merged_data' => $mergedData,
+                'message' => 'Preview generated successfully'
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('AI span improvement preview error', [
+                'error' => $e->getMessage(),
+                'span_id' => $span->id,
+                'span_name' => $span->name
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to generate preview: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Create a structured diff between current and merged data
+     */
+    private function createStructuredDiff(array $currentData, array $mergedData): array
+    {
+        $diff = [
+            'basic_fields' => [],
+            'metadata' => [],
+            'sources' => [],
+            'connections' => []
+        ];
+
+        // Compare basic fields
+        $basicFields = ['description', 'notes', 'start', 'end'];
+        foreach ($basicFields as $field) {
+            $current = $currentData[$field] ?? null;
+            $merged = $mergedData[$field] ?? null;
+            
+            if ($current !== $merged) {
+                $diff['basic_fields'][] = [
+                    'field' => $field,
+                    'current' => $current,
+                    'new' => $merged,
+                    'action' => $current === null ? 'add' : ($merged === null ? 'remove' : 'update')
+                ];
+            }
+        }
+
+        // Compare metadata
+        $currentMetadata = $currentData['metadata'] ?? [];
+        $mergedMetadata = $mergedData['metadata'] ?? [];
+        
+        $allMetadataKeys = array_unique(array_merge(array_keys($currentMetadata), array_keys($mergedMetadata)));
+        foreach ($allMetadataKeys as $key) {
+            $current = $currentMetadata[$key] ?? null;
+            $merged = $mergedMetadata[$key] ?? null;
+            
+            if ($current !== $merged) {
+                $diff['metadata'][] = [
+                    'key' => $key,
+                    'current' => $current,
+                    'new' => $merged,
+                    'action' => $current === null ? 'add' : ($merged === null ? 'remove' : 'update')
+                ];
+            }
+        }
+
+        // Compare sources
+        $currentSources = $currentData['sources'] ?? [];
+        $mergedSources = $mergedData['sources'] ?? [];
+        
+        $addedSources = array_diff($mergedSources, $currentSources);
+        $removedSources = array_diff($currentSources, $mergedSources);
+        
+        if (!empty($addedSources)) {
+            $diff['sources'][] = [
+                'action' => 'add',
+                'sources' => array_values($addedSources)
+            ];
+        }
+        
+        if (!empty($removedSources)) {
+            $diff['sources'][] = [
+                'action' => 'remove',
+                'sources' => array_values($removedSources)
+            ];
+        }
+
+        // Compare connections
+        $currentConnections = $currentData['connections'] ?? [];
+        $mergedConnections = $mergedData['connections'] ?? [];
+        
+        $allConnectionTypes = array_unique(array_merge(array_keys($currentConnections), array_keys($mergedConnections)));
+        
+        foreach ($allConnectionTypes as $type) {
+            $current = $currentConnections[$type] ?? [];
+            $merged = $mergedConnections[$type] ?? [];
+            
+            $currentNames = array_column($current, 'name');
+            $mergedNames = array_column($merged, 'name');
+            
+            $added = array_diff($mergedNames, $currentNames);
+            $removed = array_diff($currentNames, $mergedNames);
+            
+            if (!empty($added) || !empty($removed)) {
+                $diff['connections'][] = [
+                    'type' => $type,
+                    'added' => array_values($added),
+                    'removed' => array_values($removed)
+                ];
+            }
+        }
+
+        return $diff;
     }
 }

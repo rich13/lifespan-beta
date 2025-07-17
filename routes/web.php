@@ -252,9 +252,12 @@ Route::middleware('web')->group(function () {
             Route::get('/create', [SpanController::class, 'create'])->name('spans.create');
             Route::post('/', [SpanController::class, 'store'])->name('spans.store');
             Route::get('/{span}/edit', [SpanController::class, 'edit'])->name('spans.edit');
+            Route::get('/{span}/yaml', [SpanController::class, 'getYaml'])->name('spans.yaml');
             Route::get('/{span}/editor', [SpanController::class, 'yamlEditor'])->name('spans.yaml-editor');
             Route::post('/{span}/editor/validate', [SpanController::class, 'validateYaml'])->name('spans.yaml-validate');
             Route::post('/{span}/editor/apply', [SpanController::class, 'applyYaml'])->name('spans.yaml-apply');
+            Route::post('/{span}/improve/preview', [SpanController::class, 'previewImprovement'])->name('spans.improve.preview');
+            Route::post('/{span}/improve', [SpanController::class, 'improveWithAi'])->name('spans.improve');
             Route::put('/{span}', [SpanController::class, 'update'])->name('spans.update');
             Route::delete('/{span}', [SpanController::class, 'destroy'])->name('spans.destroy');
             Route::get('/{span}/compare', [SpanController::class, 'compare'])->name('spans.compare');
@@ -429,6 +432,7 @@ Route::middleware('web')->group(function () {
         
         // AI YAML Generator for authenticated users (for modal use)
         Route::post('/ai-yaml-generator/generate', [\App\Http\Controllers\AiYamlController::class, 'generatePersonYaml'])->name('ai-yaml-generator.generate');
+        Route::post('/ai-yaml-generator/improve', [\App\Http\Controllers\AiYamlController::class, 'improvePersonYaml'])->name('ai-yaml-generator.improve');
 
         // Settings routes
         Route::prefix('settings')->name('settings.')->group(function () {
@@ -461,6 +465,7 @@ Route::middleware('web')->group(function () {
             // AI YAML Generator routes
             Route::get('/ai-yaml-generator', [\App\Http\Controllers\AiYamlController::class, 'show'])->name('ai-yaml-generator.show');
             Route::post('/ai-yaml-generator/generate', [\App\Http\Controllers\AiYamlController::class, 'generatePersonYaml'])->name('ai-yaml-generator.generate');
+            Route::post('/ai-yaml-generator/improve', [\App\Http\Controllers\AiYamlController::class, 'improvePersonYaml'])->name('ai-yaml-generator.improve');
             Route::get('/ai-yaml-generator/placeholders', [\App\Http\Controllers\AiYamlController::class, 'getPlaceholderSpans'])->name('ai-yaml-generator.placeholders');
 
             // Import Management

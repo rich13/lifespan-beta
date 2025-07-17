@@ -2861,7 +2861,7 @@ class YamlSpanService
     /**
      * Create a new span from validated YAML data
      */
-    public function createSpanFromYaml(array $data): array
+    public function createSpanFromYaml(array $data, ?string $ownerId = null): array
     {
         try {
             DB::beginTransaction();
@@ -2908,8 +2908,8 @@ class YamlSpanService
                 'end_month' => $data['end_month'] ?? null,
                 'end_day' => $data['end_day'] ?? null,
                 'access_level' => $data['access_level'] ?? 'private',
-                'owner_id' => auth()->id(),
-                'updater_id' => auth()->id(),
+                'owner_id' => $ownerId ?? auth()->id(),
+                'updater_id' => $ownerId ?? auth()->id(),
             ]);
 
             // Handle connections if present
@@ -2965,14 +2965,13 @@ class YamlSpanService
         $mergedData['type_id'] = $existingSpan->type_id;
         $mergedData['slug'] = $existingSpan->slug;
         
-        // Merge dates (only update if existing is null/empty and new has data)
-        $mergedData['start_year'] = $existingSpan->start_year ?: $newData['start_year'] ?? null;
-        $mergedData['start_month'] = $existingSpan->start_month ?: $newData['start_month'] ?? null;
-        $mergedData['start_day'] = $existingSpan->start_day ?: $newData['start_day'] ?? null;
-        
-        $mergedData['end_year'] = $existingSpan->end_year ?: $newData['end_year'] ?? null;
-        $mergedData['end_month'] = $existingSpan->end_month ?: $newData['end_month'] ?? null;
-        $mergedData['end_day'] = $existingSpan->end_day ?: $newData['end_day'] ?? null;
+        // Overwrite dates with new data if present
+        $mergedData['start_year'] = $newData['start_year'] ?? $existingSpan->start_year;
+        $mergedData['start_month'] = $newData['start_month'] ?? $existingSpan->start_month;
+        $mergedData['start_day'] = $newData['start_day'] ?? $existingSpan->start_day;
+        $mergedData['end_year'] = $newData['end_year'] ?? $existingSpan->end_year;
+        $mergedData['end_month'] = $newData['end_month'] ?? $existingSpan->end_month;
+        $mergedData['end_day'] = $newData['end_day'] ?? $existingSpan->end_day;
         
         // Reconstruct start and end strings if date parts are present
         if ($mergedData['start_year']) {
@@ -2997,19 +2996,9 @@ class YamlSpanService
             $mergedData['end'] = $end;
         }
         
-        // Merge description (prefer existing if both have content, otherwise use whichever has content)
-        if ($existingSpan->description && $newData['description'] ?? null) {
-            $mergedData['description'] = $existingSpan->description;
-        } else {
-            $mergedData['description'] = $existingSpan->description ?: $newData['description'] ?? null;
-        }
-        
-        // Merge notes (prefer existing if both have content, otherwise use whichever has content)
-        if ($existingSpan->notes && $newData['notes'] ?? null) {
-            $mergedData['notes'] = $existingSpan->notes;
-        } else {
-            $mergedData['notes'] = $existingSpan->notes ?: $newData['notes'] ?? null;
-        }
+        // Overwrite description and notes with new data if present
+        $mergedData['description'] = $newData['description'] ?? $existingSpan->description;
+        $mergedData['notes'] = $newData['notes'] ?? $existingSpan->notes;
         
         // Merge metadata (combine both, new data takes precedence for overlapping keys)
         $existingMetadata = $existingSpan->metadata ?? [];
@@ -3258,5 +3247,70 @@ class YamlSpanService
     private function getReservedRouteNames(): array
     {
         return app(\App\Services\RouteReservationService::class)->getReservedRouteNames();
+    }
+
+    /**
+     * Parse YAML content to span data for preview purposes (skips slug validation)
+     */
+    public function yamlToSpanDataForPreview(string $yamlContent, ?Span $span = null): array
+    {
+        try {
+            $data = Yaml::parse($yamlContent);
+            
+            if (!is_array($data)) {
+                return [
+                    'success' => false,
+                    'errors' => ['YAML must parse to an array']
+                ];
+            }
+            
+            // Use the preview validation service for schema validation (skips slug validation)
+            $validationService = new YamlValidationService();
+            $schemaErrors = $validationService->validateSchemaForPreview($data);
+            
+            if (!empty($schemaErrors)) {
+                return [
+                    'success' => false,
+                    'errors' => $schemaErrors
+                ];
+            }
+            
+            // Then validate required fields
+            $this->validateRequiredFields($data);
+            
+            // Validate and normalize dates
+            $this->validateAndNormalizeDates($data);
+            
+            // Validate connections
+            $this->validateConnections($data);
+            
+            // Analyze the impacts if we have a span context
+            $impacts = [];
+            if ($span) {
+                $impacts = $this->analyzeChangeImpacts($data, $span);
+            }
+            
+            return [
+                'success' => true,
+                'data' => $data,
+                'impacts' => $impacts
+            ];
+            
+        } catch (\Symfony\Component\Yaml\Exception\ParseException $e) {
+            return [
+                'success' => false,
+                'errors' => ['Invalid YAML syntax: ' . $e->getMessage()]
+            ];
+        } catch (\InvalidArgumentException $e) {
+            return [
+                'success' => false,
+                'errors' => [ $e->getMessage() ]
+            ];
+        } catch (\Exception $e) {
+            return [
+                'success' => false,
+                'errors' => ['Unexpected error: ' . $e->getMessage()]
+            ];
+        }
     }
 } 
