@@ -81,6 +81,70 @@ class YamlValidationService
     }
     
     /**
+     * Validate YAML structure against database schema (for preview purposes - skips slug validation)
+     */
+    public function validateSchemaForPreview(array $data): array
+    {
+        $errors = [];
+        
+        // Get base schema from database
+        $baseSchema = $this->getBaseSchema();
+        
+        // Check for unknown fields
+        foreach ($data as $field => $value) {
+            if (!isset($baseSchema[$field])) {
+                $errors[] = "Unknown field '{$field}'. Valid fields are: " . implode(', ', array_keys($baseSchema));
+            }
+        }
+        
+        // Check required fields
+        foreach ($baseSchema as $field => $config) {
+            if ($config['required'] && !isset($data[$field])) {
+                $errors[] = "Required field '{$field}' is missing";
+            }
+        }
+        
+        // Check data types
+        foreach ($data as $field => $value) {
+            if (isset($baseSchema[$field])) {
+                $expectedType = $baseSchema[$field]['type'];
+                $actualType = $this->getValueType($value);
+                
+                if (!$this->isTypeCompatible($actualType, $expectedType)) {
+                    $errors[] = "Field '{$field}' should be of type '{$expectedType}', got '{$actualType}'";
+                }
+            }
+        }
+        
+        // Validate metadata structure if present
+        if (isset($data['metadata']) && is_array($data['metadata'])) {
+            $metadataErrors = $this->validateMetadataStructure($data['metadata'], $data['type'] ?? null);
+            $errors = array_merge($errors, $metadataErrors);
+        }
+        
+        // Validate connections structure if present
+        if (isset($data['connections']) && is_array($data['connections'])) {
+            $connectionErrors = $this->validateConnectionSchema($data['connections']);
+            $errors = array_merge($errors, $connectionErrors);
+        }
+        
+        // After schema validation, enforce start date rules
+        $state = $data['state'] ?? 'complete';
+        
+        if ($state !== 'placeholder') {
+            if (!isset($data['start']) || $data['start'] === null || $data['start'] === '') {
+                $errors[] = "Field 'start' is required unless state is 'placeholder' (current state: '{$state}')";
+            } elseif (!in_array($this->getValueType($data['start']), ['string', 'integer'])) {
+                $errors[] = "Field 'start' must be a string or integer (e.g. '1990' or 1990 or '1990-05-01')";
+            }
+        }
+        
+        // Note: We skip slug validation for preview purposes since we're not creating a new span
+        
+        return $errors;
+    }
+    
+    /**
      * Get base schema from database configuration
      */
     private function getBaseSchema(): array

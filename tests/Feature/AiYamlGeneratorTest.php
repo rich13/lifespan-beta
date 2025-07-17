@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Span;
 use App\Models\User;
 use Tests\TestCase;
+use App\Services\AiYamlCreatorService;
 
 class AiYamlGeneratorTest extends TestCase
 {
@@ -130,5 +131,185 @@ class AiYamlGeneratorTest extends TestCase
                 'success' => true,
                 'placeholders' => []
             ]);
+    }
+
+    public function test_improve_span_with_ai()
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        // Create an existing span
+        $existingSpan = Span::factory()->create([
+            'name' => 'Jonny Greenwood',
+            'type_id' => 'person',
+            'owner_id' => $user->id,
+            'state' => 'placeholder',
+            'description' => 'Radiohead guitarist',
+            'metadata' => ['subtype' => 'public_figure'],
+            'start_year' => null,
+            'start_month' => null,
+            'start_day' => null,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null
+        ]);
+
+        // Mock the AI service to return improved YAML
+        $improvedYaml = <<<'YAML'
+name: 'Jonny Greenwood'
+type: person
+start: '1971-10-05'
+description: 'English musician and composer, best known as the lead guitarist and keyboardist of Radiohead'
+metadata:
+  subtype: public_figure
+  occupation: 'Musician, Composer'
+sources:
+  - 'https://en.wikipedia.org/wiki/Jonny_Greenwood'
+connections:
+  membership:
+    - name: 'Radiohead'
+      type: 'band'
+      start: '1985'
+      metadata:
+        role: 'Lead Guitarist'
+        instrument: 'Guitar, Keyboard'
+  residence:
+    - name: 'Oxford'
+      type: 'place'
+      start: '1971'
+      end: '1991'
+YAML;
+
+        // Make the improve request
+        $response = $this->postJson("/spans/{$existingSpan->id}/improve", [
+            'ai_yaml' => $improvedYaml
+        ]);
+
+        // Debug: dump the response content
+        if ($response->status() !== 200) {
+            dump('Response status: ' . $response->status());
+            dump('Response content: ' . $response->content());
+        }
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'message' => 'Span improved successfully with AI data.'
+            ]);
+
+        // Verify the span was updated
+        $existingSpan->refresh();
+        $this->assertEquals('Jonny Greenwood', $existingSpan->name);
+        $this->assertEquals(1971, $existingSpan->start_year);
+        $this->assertEquals(10, $existingSpan->start_month);
+        $this->assertEquals(5, $existingSpan->start_day);
+        $this->assertEquals('complete', $existingSpan->state);
+        $this->assertEquals('English musician and composer, best known as the lead guitarist and keyboardist of Radiohead', $existingSpan->description);
+        $this->assertEquals('public_figure', $existingSpan->metadata['subtype']);
+        $this->assertEquals('Musician, Composer', $existingSpan->metadata['occupation']);
+        $this->assertContains('https://en.wikipedia.org/wiki/Jonny_Greenwood', $existingSpan->sources);
+
+        // Verify connections were created
+        $this->assertDatabaseHas('connections', [
+            'parent_id' => $existingSpan->id,
+            'type_id' => 'membership'
+        ]);
+
+        $this->assertDatabaseHas('connections', [
+            'parent_id' => $existingSpan->id,
+            'type_id' => 'residence'
+        ]);
+    }
+
+    public function test_preview_span_improvement()
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        // Create an existing span
+        $existingSpan = Span::factory()->create([
+            'name' => 'Jonny Greenwood',
+            'type_id' => 'person',
+            'owner_id' => $user->id,
+            'state' => 'placeholder',
+            'description' => 'Radiohead guitarist',
+            'metadata' => ['subtype' => 'public_figure'],
+            'start_year' => null,
+            'start_month' => null,
+            'start_day' => null,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null
+        ]);
+
+        // Improved YAML data
+        $improvedYaml = <<<'YAML'
+name: 'Jonny Greenwood'
+type: person
+start: '1971-10-05'
+description: 'English musician and composer, best known as the lead guitarist and keyboardist of Radiohead'
+metadata:
+  subtype: public_figure
+  occupation: 'Musician, Composer'
+sources:
+  - 'https://en.wikipedia.org/wiki/Jonny_Greenwood'
+connections:
+  membership:
+    - name: 'Radiohead'
+      type: 'band'
+      start: '1985'
+      metadata:
+        role: 'Lead Guitarist'
+        instrument: 'Guitar, Keyboard'
+  residence:
+    - name: 'Oxford'
+      type: 'place'
+      start: '1971'
+      end: '1991'
+YAML;
+
+        // Make the preview request
+        $response = $this->postJson("/spans/{$existingSpan->id}/improve/preview", [
+            'ai_yaml' => $improvedYaml
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'message' => 'Preview generated successfully'
+            ])
+            ->assertJsonStructure([
+                'success',
+                'impacts',
+                'diff',
+                'current_data',
+                'merged_data',
+                'message'
+            ]);
+
+        // Verify the preview data structure
+        $data = $response->json();
+        
+        // Check that impacts are present
+        $this->assertIsArray($data['impacts']);
+        $this->assertNotEmpty($data['impacts']);
+        
+        // Check that diff is present and has the expected structure
+        $this->assertIsArray($data['diff']);
+        $this->assertArrayHasKey('basic_fields', $data['diff']);
+        $this->assertArrayHasKey('metadata', $data['diff']);
+        $this->assertArrayHasKey('sources', $data['diff']);
+        $this->assertArrayHasKey('connections', $data['diff']);
+        
+        // Check that basic fields diff shows the description change
+        $descriptionChanges = array_filter($data['diff']['basic_fields'], function($field) {
+            return $field['field'] === 'description';
+        });
+        $this->assertNotEmpty($descriptionChanges);
+        
+        // Check that the span wasn't actually modified
+        $existingSpan->refresh();
+        $this->assertEquals('Radiohead guitarist', $existingSpan->description);
+        $this->assertNull($existingSpan->start_year);
     }
 } 
