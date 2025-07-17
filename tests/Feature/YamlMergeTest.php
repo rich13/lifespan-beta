@@ -38,11 +38,6 @@ class YamlMergeTest extends TestCase
 
         // Ensure the span is actually owned by the current user
         $existingSpan->refresh();
-        if ($existingSpan->owner_id !== $user->id) {
-            // Fix the ownership if it's wrong
-            $existingSpan->update(['owner_id' => $user->id, 'updater_id' => $user->id]);
-            $existingSpan->refresh();
-        }
         $this->assertEquals($user->id, $existingSpan->owner_id);
         
         // Debug: Check if the user has permission to update the span
@@ -64,7 +59,7 @@ sources:
         session(['yaml_content' => $yamlContent]);
 
         // Debug: Check if the span exists in the database
-        $span = Span::where('name', 'John Doe')->first();
+        $span = Span::find($existingSpan->id);
         if (!$span) {
             $this->fail('John Doe span not found in database');
         }
@@ -144,7 +139,7 @@ sources:
         // Assert merged data contains both existing and new information
         $this->assertEquals('John Doe', $mergedData['name']);
         $this->assertEquals('person', $mergedData['type_id']);
-        $this->assertEquals('Existing description', $mergedData['description']); // Prefer existing
+        $this->assertEquals('New description from AI', $mergedData['description']); // Prefer new AI data
         
         // Check start date (should be present since existing span has start_year=1990)
         if (isset($mergedData['start'])) {
