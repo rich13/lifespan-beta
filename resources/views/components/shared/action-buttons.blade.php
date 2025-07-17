@@ -21,7 +21,8 @@ use Illuminate\Support\Facades\Auth;
                         data-bs-dismiss="offcanvas"
                         id="mobile-improve-span-btn"
                         data-span-name="{{ $span->name }}"
-                        data-span-type="{{ $span->type_id }}">
+                        data-span-type="{{ $span->type_id }}"
+                        data-span-id="{{ $span->id }}">
                     <i class="bi bi-magic me-2"></i>Improve This Span
                 </button>
             @endif
@@ -38,13 +39,14 @@ use Illuminate\Support\Facades\Auth;
             
             @if(request()->routeIs('spans.show') && $span)
                 <div class="me-3" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Improve this span with AI data (⌘I)">
-                    <button type="button" class="btn btn-sm btn-success" 
-                            data-bs-toggle="modal" data-bs-target="#newSpanModal" 
-                            id="improve-span-btn"
-                            data-span-name="{{ $span->name }}"
-                            data-span-type="{{ $span->type_id }}">
-                        <i class="bi bi-magic me-1"></i>Improve
-                    </button>
+                                    <button type="button" class="btn btn-sm btn-success" 
+                        data-bs-toggle="modal" data-bs-target="#newSpanModal" 
+                        id="improve-span-btn"
+                        data-span-name="{{ $span->name }}"
+                        data-span-type="{{ $span->type_id }}"
+                        data-span-id="{{ $span->id }}">
+                    <i class="bi bi-magic me-1"></i>Improve
+                </button>
                 </div>
             @endif
         </div>

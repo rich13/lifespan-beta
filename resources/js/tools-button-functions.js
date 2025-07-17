@@ -458,10 +458,12 @@ window.confirmDeleteSpan = function(button) {
         method: 'DELETE',
         headers: {
             'Content-Type': 'application/json',
+            'Accept': 'application/json',
             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
         }
     })
     .then(response => {
+        console.log('Delete response status:', response.status);
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -501,8 +503,12 @@ window.confirmDeleteSpan = function(button) {
         icon.className = originalIcon;
         button.disabled = false;
         
-        // Show error message
-        alert('Failed to delete span. Please try again or contact an administrator.');
+        // Show error message with more details
+        let errorMessage = 'Failed to delete span. Please try again or contact an administrator.';
+        if (error.message) {
+            errorMessage += '\n\nError: ' + error.message;
+        }
+        alert(errorMessage);
     });
 }
 
@@ -531,6 +537,7 @@ window.confirmDeleteConnection = function(button) {
         method: 'DELETE',
         headers: {
             'Content-Type': 'application/json',
+            'Accept': 'application/json',
             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
         }
     })
