@@ -38,7 +38,7 @@
         </a>
     </li>
     <li class="nav-item">
-        <a class="nav-link {{ request()->routeIs('family.*') ? 'active' : '' }}" href="{{ route('family.index') }}">
+                        <a class="nav-link {{ request()->routeIs('family.*') ? 'active' : '' }}" href="{{ auth()->user()->personalSpan ? route('family.show', auth()->user()->personalSpan) : route('family.index') }}">
             <i class="bi bi-people-fill me-1"></i> <span>Family</span>
         </a>
     </li>

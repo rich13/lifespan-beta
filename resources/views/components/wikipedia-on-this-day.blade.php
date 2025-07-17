@@ -104,7 +104,7 @@ function renderWikipediaContent(data) {
         html += '<div class="mt-3 pt-2 border-top">';
         html += '<small class="text-muted">';
         html += '<i class="bi bi-info-circle me-1"></i>';
-        html += `Data from <a href="https://en.wikipedia.org/wiki/Wikipedia:On_this_day/{{ $targetDate->format('F_j') }}" target="_blank" class="text-decoration-none">Wikipedia On This Day</a>`;
+        html += `Data from <a href="https://en.wikipedia.org/wiki/Wikipedia:On_this_day/{{ $targetDate->format('F_j') }}" target="_blank" class="text-decoration-none">Wikipedia On This Day</a>, not Lifespan.`;
         html += '</small>';
         html += '</div>';
     } else {
