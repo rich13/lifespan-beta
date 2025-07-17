@@ -203,6 +203,27 @@
                 </div>
             </div>
         </div>
+
+        <!-- Family Connection Date Sync -->
+        <div class="col-lg-3 col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-calendar-check"></i>
+                        Family Connection Date Sync
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">Automatically sync start and end dates for family connections based on birth and death dates.</p>
+                    
+                    <div class="d-grid">
+                        <a href="{{ route('admin.tools.family-connection-date-sync') }}" class="btn btn-warning btn-sm">
+                            <i class="bi bi-calendar-check me-1"></i>Sync Dates
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Row 2: Span Management Tools -->

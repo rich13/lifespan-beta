@@ -1401,4 +1401,81 @@ class ToolsController extends Controller
         // Clear timeline caches for the public figure
         $span->clearAllTimelineCaches();
     }
+
+    /**
+     * Show the family connection date sync tool
+     */
+    public function familyConnectionDateSync(Request $request)
+    {
+        // Get statistics about family connections
+        $stats = [
+            'total_family_connections' => Connection::whereHas('type', function($q) {
+                $q->whereIn('type', ['family', 'relationship']);
+            })->count(),
+            'connections_with_dates' => Connection::whereHas('type', function($q) {
+                $q->whereIn('type', ['family', 'relationship']);
+            })->whereHas('connectionSpan', function($q) {
+                $q->whereNotNull('start_year');
+            })->count(),
+            'connections_without_dates' => Connection::whereHas('type', function($q) {
+                $q->whereIn('type', ['family', 'relationship']);
+            })->whereHas('connectionSpan', function($q) {
+                $q->whereNull('start_year');
+            })->count(),
+        ];
+
+        // Get sample connections that need syncing
+        $sampleConnections = Connection::whereHas('type', function($q) {
+            $q->whereIn('type', ['family', 'relationship']);
+        })->whereHas('connectionSpan', function($q) {
+            $q->whereNull('start_year');
+        })->with(['type', 'subject', 'object', 'connectionSpan'])
+        ->limit(5)
+        ->get();
+
+        return view('admin.tools.family-connection-date-sync', compact('stats', 'sampleConnections'));
+    }
+
+    /**
+     * Execute family connection date sync
+     */
+    public function familyConnectionDateSyncAction(Request $request)
+    {
+        $request->validate([
+            'dry_run' => 'boolean',
+            'connection_id' => 'nullable|exists:connections,id',
+        ]);
+
+        $dryRun = $request->boolean('dry_run', true);
+        $connectionId = $request->input('connection_id');
+
+        try {
+            // Use the existing command logic
+            $command = new \App\Console\Commands\SyncFamilyConnectionDates();
+            
+            if ($connectionId) {
+                // Sync specific connection
+                $result = $command->syncSpecificConnection($connectionId, $dryRun);
+                $message = $dryRun ? 'Dry run completed for specific connection.' : 'Specific connection synced successfully.';
+            } else {
+                // Sync all connections
+                $result = $command->syncAllConnections($dryRun);
+                $message = $dryRun ? 'Dry run completed for all connections.' : 'All connections synced successfully.';
+            }
+
+            return redirect()->route('admin.tools.family-connection-date-sync')
+                ->with('status', $message)
+                ->with('sync_results', $result);
+
+        } catch (\Exception $e) {
+            Log::error('Family connection date sync failed', [
+                'error' => $e->getMessage(),
+                'dry_run' => $dryRun,
+                'connection_id' => $connectionId,
+            ]);
+
+            return redirect()->route('admin.tools.family-connection-date-sync')
+                ->withErrors(['general' => 'Sync failed: ' . $e->getMessage()]);
+        }
+    }
 } 

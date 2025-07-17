@@ -364,6 +364,10 @@ Route::middleware('web')->group(function () {
         Route::middleware('span.access')->group(function () {
             // Primary route structure - handle both span show and connections
             Route::get('/', [SpanController::class, 'index'])->name('spans.index');
+            
+            // Family route (must come before general span route)
+            Route::get('/{span}/family', [FamilyController::class, 'show'])->name('family.show');
+            
             Route::get('/{subject}', [SpanController::class, 'show'])->name('spans.show');
             
             // Specific span routes (must come before connection routes to avoid conflicts)
@@ -409,8 +413,6 @@ Route::middleware('web')->group(function () {
         Route::post('logout', [EmailFirstAuthController::class, 'destroy'])->name('logout');
 
         // Family routes
-        Route::get('/family', [FamilyController::class, 'index'])->name('family.index');
-        Route::get('/family/data', [FamilyController::class, 'data'])->name('family.data');
         Route::post('/api/family/connections', [FamilyController::class, 'createConnection'])->name('family.connections.create');
 
         // Friends routes
@@ -714,6 +716,12 @@ Route::middleware('web')->group(function () {
             // Admin Tools
             Route::get('/tools', [App\Http\Controllers\Admin\ToolsController::class, 'index'])
                 ->name('tools.index');
+            
+            // Family Connection Date Sync Tool
+            Route::get('/tools/family-connection-date-sync', [App\Http\Controllers\Admin\ToolsController::class, 'familyConnectionDateSync'])
+                ->name('tools.family-connection-date-sync');
+            Route::post('/tools/family-connection-date-sync', [App\Http\Controllers\Admin\ToolsController::class, 'familyConnectionDateSyncAction'])
+                ->name('tools.family-connection-date-sync-action');
             Route::get('/tools/find-similar-spans', [App\Http\Controllers\Admin\ToolsController::class, 'findSimilarSpans'])
                 ->name('tools.find-similar-spans');
             Route::post('/tools/merge-spans', [App\Http\Controllers\Admin\ToolsController::class, 'mergeSpans'])
