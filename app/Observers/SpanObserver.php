@@ -356,7 +356,7 @@ class SpanObserver
             
             if ($suggestedStartDate) {
                 $currentStart = $this->getBirthDate($connectionSpan);
-                if (!$currentStart || !$currentStart->equalTo($suggestedStartDate)) {
+                if (!$currentStart || $currentStart->format('Y-m-d') !== $suggestedStartDate->format('Y-m-d')) {
                     $connectionSpan->start_year = $suggestedStartDate->year;
                     $connectionSpan->start_month = $suggestedStartDate->month;
                     $connectionSpan->start_day = $suggestedStartDate->day;
@@ -366,7 +366,7 @@ class SpanObserver
             
             if ($suggestedEndDate) {
                 $currentEnd = $this->getDeathDate($connectionSpan);
-                if (!$currentEnd || !$currentEnd->equalTo($suggestedEndDate)) {
+                if (!$currentEnd || $currentEnd->format('Y-m-d') !== $suggestedEndDate->format('Y-m-d')) {
                     $connectionSpan->end_year = $suggestedEndDate->year;
                     $connectionSpan->end_month = $suggestedEndDate->month;
                     $connectionSpan->end_day = $suggestedEndDate->day;

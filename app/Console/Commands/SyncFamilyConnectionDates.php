@@ -40,12 +40,18 @@ class SyncFamilyConnectionDates extends Command
         // Display results
         if ($isDryRun) {
             $this->info('DRY RUN MODE - No changes were made');
-        }
-
-        if ($result['updated'] > 0) {
-            $this->info("✅ Updated {$result['updated']} connections.");
+            
+            if (!empty($result['issues'])) {
+                $this->info("✅ Found " . count($result['issues']) . " connections that need date syncing.");
+            } else {
+                $this->info('✅ All family connections have proper dates!');
+            }
         } else {
-            $this->info('✅ All family connections have proper dates!');
+            if ($result['updated'] > 0) {
+                $this->info("✅ Updated {$result['updated']} connections.");
+            } else {
+                $this->info('✅ All family connections have proper dates!');
+            }
         }
 
         return 0;
@@ -220,11 +226,12 @@ class SyncFamilyConnectionDates extends Command
             $currentStartDate = $this->getBirthDate($connectionSpan);
             $currentEndDate = $this->getDeathDate($connectionSpan);
             
-            if ($suggestedStartDate && (!$currentStartDate || !$currentStartDate->equalTo($suggestedStartDate))) {
+            // Only suggest changes if we have actual dates to work with
+            if ($suggestedStartDate && (!$currentStartDate || $currentStartDate->format('Y-m-d') !== $suggestedStartDate->format('Y-m-d'))) {
                 $changes['start_date'] = $suggestedStartDate;
             }
 
-            if ($suggestedEndDate && (!$currentEndDate || !$currentEndDate->equalTo($suggestedEndDate))) {
+            if ($suggestedEndDate && (!$currentEndDate || $currentEndDate->format('Y-m-d') !== $suggestedEndDate->format('Y-m-d'))) {
                 $changes['end_date'] = $suggestedEndDate;
             }
         }

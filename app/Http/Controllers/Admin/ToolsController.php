@@ -1407,31 +1407,31 @@ class ToolsController extends Controller
      */
     public function familyConnectionDateSync(Request $request)
     {
+        // Use the same logic as the sync command to determine what actually needs syncing
+        $command = new \App\Console\Commands\SyncFamilyConnectionDates();
+        $syncResult = $command->syncAllConnections(true); // Dry run to get actual issues
+        
+        $totalConnections = Connection::whereHas('type', function($q) {
+            $q->whereIn('type', ['family', 'relationship']);
+        })->count();
+        
+        $connectionsWithIssues = count($syncResult['issues']);
+        $connectionsWithoutIssues = $totalConnections - $connectionsWithIssues;
+        
         // Get statistics about family connections
         $stats = [
-            'total_family_connections' => Connection::whereHas('type', function($q) {
-                $q->whereIn('type', ['family', 'relationship']);
-            })->count(),
-            'connections_with_dates' => Connection::whereHas('type', function($q) {
-                $q->whereIn('type', ['family', 'relationship']);
-            })->whereHas('connectionSpan', function($q) {
-                $q->whereNotNull('start_year');
-            })->count(),
-            'connections_without_dates' => Connection::whereHas('type', function($q) {
-                $q->whereIn('type', ['family', 'relationship']);
-            })->whereHas('connectionSpan', function($q) {
-                $q->whereNull('start_year');
-            })->count(),
+            'total_family_connections' => $totalConnections,
+            'connections_with_dates' => $connectionsWithoutIssues,
+            'connections_without_dates' => $connectionsWithIssues,
         ];
 
-        // Get sample connections that need syncing
-        $sampleConnections = Connection::whereHas('type', function($q) {
-            $q->whereIn('type', ['family', 'relationship']);
-        })->whereHas('connectionSpan', function($q) {
-            $q->whereNull('start_year');
-        })->with(['type', 'subject', 'object', 'connectionSpan'])
-        ->limit(5)
-        ->get();
+        // Get sample connections that actually need syncing
+        $sampleConnections = collect($syncResult['issues'])
+            ->take(5)
+            ->map(function($issue) {
+                // Load the connection with all necessary relationships
+                return $issue['connection']->load(['type', 'subject', 'object', 'connectionSpan']);
+            });
 
         return view('admin.tools.family-connection-date-sync', compact('stats', 'sampleConnections'));
     }
