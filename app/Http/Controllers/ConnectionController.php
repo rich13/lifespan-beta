@@ -67,7 +67,11 @@ class ConnectionController extends Controller
         try {
             // Log the incoming request data
             Log::info('Creating new connection', [
-                'request_data' => $request->all()
+                'request_data' => $request->all(),
+                'connection_year' => $request->input('connection_year'),
+                'connection_month' => $request->input('connection_month'),
+                'connection_day' => $request->input('connection_day'),
+                'state' => $request->input('state')
             ]);
 
             $validated = $request->validate([
@@ -80,7 +84,8 @@ class ConnectionController extends Controller
                 'connection_day' => 'nullable|integer|between:1,31',
                 'connection_end_year' => 'nullable|integer',
                 'connection_end_month' => 'nullable|integer|between:1,12',
-                'connection_end_day' => 'nullable|integer|between:1,31'
+                'connection_end_day' => 'nullable|integer|between:1,31',
+                'state' => 'nullable|in:placeholder,draft,complete'
             ]);
 
             // Get the spans and connection type
@@ -123,7 +128,8 @@ class ConnectionController extends Controller
                 'type_id' => 'connection',
                 'owner_id' => auth()->id(),
                 'updater_id' => auth()->id(),
-                'name' => "{$parent->name} {$connectionType->getPredicate($validated['direction'] === 'inverse')} {$child->name}"
+                'name' => "{$parent->name} {$connectionType->getPredicate($validated['direction'] === 'inverse')} {$child->name}",
+                'state' => $validated['state'] ?? 'placeholder'
             ];
 
             // For family connections, use child's birth date as start and earliest death date as end
@@ -161,15 +167,22 @@ class ConnectionController extends Controller
             }
 
             // Create connection span
+            Log::info('Creating connection span with data', [
+                'span_data' => $spanData,
+                'start_year' => $spanData['start_year'] ?? 'null',
+                'end_year' => $spanData['end_year'] ?? 'null'
+            ]);
             $connectionSpan = Span::create($spanData);
 
-            // Validate span dates using temporal service
-            if (!$this->temporalService->validateSpanDates($connectionSpan)) {
-                $connectionSpan->delete();
-                return response()->json([
-                    'success' => false,
-                    'message' => 'End date cannot be before start date'
-                ], 422);
+            // Validate span dates using temporal service (only if dates are provided and not placeholder)
+            if (($connectionSpan->start_year !== null || $connectionSpan->end_year !== null) && $connectionSpan->state !== 'placeholder') {
+                if (!$this->temporalService->validateSpanDates($connectionSpan)) {
+                    $connectionSpan->delete();
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'End date cannot be before start date'
+                    ], 422);
+                }
             }
 
             // Create the connection
@@ -203,6 +216,26 @@ class ConnectionController extends Controller
                 'data' => $connection
             ]);
 
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            Log::error('Validation error creating connection', [
+                'errors' => $e->errors(),
+                'message' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\InvalidArgumentException $e) {
+            Log::error('Invalid argument error creating connection', [
+                'message' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], 422);
         } catch (\Exception $e) {
             Log::error('Error creating connection', [
                 'error' => $e->getMessage(),

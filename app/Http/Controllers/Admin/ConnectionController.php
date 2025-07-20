@@ -155,13 +155,15 @@ class ConnectionController extends Controller
             // Create connection span
             $connectionSpan = Span::create($spanData);
 
-            // Validate span dates using temporal service
-            if (!$this->temporalService->validateSpanDates($connectionSpan)) {
-                $connectionSpan->delete();
-                return response()->json([
-                    'success' => false,
-                    'message' => 'End date cannot be before start date'
-                ], 422);
+            // Validate span dates using temporal service (only if not placeholder)
+            if ($connectionSpan->state !== 'placeholder') {
+                if (!$this->temporalService->validateSpanDates($connectionSpan)) {
+                    $connectionSpan->delete();
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'End date cannot be before start date'
+                    ], 422);
+                }
             }
 
             // Create the connection
