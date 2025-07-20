@@ -20,6 +20,9 @@ import './shared/user-switcher';
 // Import component enhancements
 import './components/responsive-button-groups';
 
+// Import modal functionality
+import './add-connection-modal';
+
 import Alpine from 'alpinejs';
 
 window.Alpine = Alpine;

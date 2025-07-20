@@ -27,8 +27,17 @@
 
 @if($parentConnections->isNotEmpty() || $childConnections->isNotEmpty())
     <div class="card mb-4">
-        <div class="card-header">
+        <div class="card-header d-flex justify-content-between align-items-center">
             <h2 class="card-title h5 mb-0">Connections <small class="text-muted">(will become contextual)</small></h2>
+            @auth
+                @if(auth()->user()->can('update', $span))
+                    <button type="button" class="btn btn-sm btn-outline-primary" 
+                            data-bs-toggle="modal" data-bs-target="#addConnectionModal"
+                            data-span-id="{{ $span->id }}" data-span-name="{{ $span->name }}" data-span-type="{{ $span->type_id }}">
+                        <i class="bi bi-plus-lg"></i>
+                    </button>
+                @endif
+            @endauth
         </div>
         
         <div class="card-body">
@@ -53,6 +62,25 @@
                     @endforeach
                 </div>
             @endif
+        </div>
+    </div>
+@else
+    <!-- Show empty state with add button -->
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h2 class="card-title h5 mb-0">Connections</h2>
+            @auth
+                @if(auth()->user()->can('update', $span))
+                    <button type="button" class="btn btn-sm btn-outline-primary" 
+                            data-bs-toggle="modal" data-bs-target="#addConnectionModal"
+                            data-span-id="{{ $span->id }}" data-span-name="{{ $span->name }}" data-span-type="{{ $span->type_id }}">
+                        <i class="bi bi-plus-lg"></i>
+                    </button>
+                @endif
+            @endauth
+        </div>
+        <div class="card-body">
+            <p class="text-muted mb-0">No connections yet.</p>
         </div>
     </div>
 @endif 
