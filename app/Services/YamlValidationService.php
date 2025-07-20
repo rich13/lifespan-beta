@@ -11,7 +11,7 @@ class YamlValidationService
     /**
      * Validate YAML structure against database schema
      */
-    public function validateSchema(array $data, ?string $currentSlug = null): array
+    public function validateSchema(array $data, ?string $currentSlug = null, ?\App\Models\Span $span = null): array
     {
         $errors = [];
         
@@ -72,7 +72,9 @@ class YamlValidationService
             $newSlug = $data['slug'];
             // Only validate uniqueness if the slug is actually changing
             if ($currentSlug === null || $newSlug !== $currentSlug) {
-                $slugErrors = $this->validateSlugUniqueness($newSlug, $data['id'] ?? null);
+                // Use span ID if available, otherwise fall back to data['id']
+                $currentSpanId = $span ? $span->id : ($data['id'] ?? null);
+                $slugErrors = $this->validateSlugUniqueness($newSlug, $currentSpanId);
                 $errors = array_merge($errors, $slugErrors);
             }
         }

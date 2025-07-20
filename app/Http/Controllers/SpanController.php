@@ -2334,7 +2334,7 @@ class SpanController extends Controller
                 'yaml_sample' => substr($validated['ai_yaml'], 0, 500)
             ]);
             
-            $validationResult = $yamlService->yamlToSpanData($validated['ai_yaml']);
+            $validationResult = $yamlService->yamlToSpanData($validated['ai_yaml'], $span->slug, $span);
             Log::info('YAML improvement validation result', [
                 'span_id' => $span->id,
                 'success' => $validationResult['success'],

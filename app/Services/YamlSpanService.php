@@ -508,7 +508,7 @@ class YamlSpanService
             
             // Use the new validation service for schema validation
             $validationService = new YamlValidationService();
-            $schemaErrors = $validationService->validateSchema($data, $currentSlug);
+            $schemaErrors = $validationService->validateSchema($data, $currentSlug, $span);
             
             if (!empty($schemaErrors)) {
                 return [
