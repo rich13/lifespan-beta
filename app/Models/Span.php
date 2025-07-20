@@ -175,7 +175,10 @@ class Span extends Model
             // Also check if this individual span is marked as timeless
             $isTimeless = $isTimeless || ($span->metadata['timeless'] ?? false);
             
-            if (!$span->start_year && $span->state !== 'placeholder' && !$isTimeless) {
+            // Placeholder spans don't require start year
+            $isPlaceholder = $span->state === 'placeholder';
+            
+            if (!$span->start_year && !$isPlaceholder && !$isTimeless) {
                 throw new \InvalidArgumentException(sprintf(
                     'Start year is required for %s span "%s". Expected format: YYYY-MM-DD, YYYY-MM, or YYYY',
                     $span->type_id ?? 'unknown type',

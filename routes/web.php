@@ -330,28 +330,33 @@ Route::middleware('web')->group(function () {
                     $connectionYear = $parentSpan->start_year + $validated['age'];
                 }
                 
-                // Create a placeholder connection span with temporal information
+                // Create a connection span with temporal information
                 $connectionSpanData = [
                     'name' => "Connection between spans",
                     'type_id' => 'connection',
                     'owner_id' => auth()->id(),
                     'updater_id' => auth()->id(),
                     'access_level' => 'private',
-                    'state' => 'placeholder'  // Still marked as placeholder for editing
+                    'state' => $validated['is_placeholder'] ? 'placeholder' : 'normal'
                 ];
                 
-                // Add date fields if provided
-                if ($connectionYear) $connectionSpanData['start_year'] = $connectionYear;
+                // Add start date fields if provided
+                if (isset($validated['start_year'])) $connectionSpanData['start_year'] = $validated['start_year'];
                 if (isset($validated['start_month'])) $connectionSpanData['start_month'] = $validated['start_month'];
                 if (isset($validated['start_day'])) $connectionSpanData['start_day'] = $validated['start_day'];
+                
+                // Add end date fields if provided
+                if (isset($validated['end_year'])) $connectionSpanData['end_year'] = $validated['end_year'];
+                if (isset($validated['end_month'])) $connectionSpanData['end_month'] = $validated['end_month'];
+                if (isset($validated['end_day'])) $connectionSpanData['end_day'] = $validated['end_day'];
                 
                 $connectionSpan = \App\Models\Span::create($connectionSpanData);
                 
                 // Create the connection
                 $connection = \App\Models\Connection::create([
-                    'parent_id' => $validated['parent_id'],
-                    'child_id' => $validated['child_id'],
-                    'type_id' => $validated['type_id'],
+                    'parent_id' => $validated['subject_id'],
+                    'child_id' => $validated['object_id'],
+                    'type_id' => $validated['predicate'],
                     'connection_span_id' => $connectionSpan->id
                 ]);
                 
@@ -360,6 +365,169 @@ Route::middleware('web')->group(function () {
                     'connection' => $connection,
                     'connection_span' => $connectionSpan
                 ]);
+            });
+
+            // New API routes for add connection modal
+            // Note: connection-types endpoint moved to routes/api.php
+
+            Route::get('/api/spans/search', function (Request $request) {
+                $query = $request->get('q', '');
+                $types = $request->get('types', '');
+                $exclude = $request->get('exclude', '');
+                $user = auth()->user();
+                
+                $spansQuery = \App\Models\Span::query()
+                    ->where('name', 'like', "%{$query}%")
+                    ->where('type_id', '!=', 'connection');
+                
+                // Apply access control
+                if (!$user) {
+                    // Guest users can only see public spans
+                    $spansQuery->where('access_level', 'public');
+                } elseif (!$user->is_admin) {
+                    // Regular users can see public spans, their own spans, and spans they have permission to view
+                    $spansQuery->where(function ($q) use ($user) {
+                        $q->where('access_level', 'public')
+                          ->orWhere('owner_id', $user->id)
+                          ->orWhereHas('spanPermissions', function ($permQ) use ($user) {
+                              $permQ->where('user_id', $user->id)
+                                    ->whereIn('permission_type', ['view', 'edit']);
+                          })
+                          ->orWhereHas('spanPermissions', function ($permQ) use ($user) {
+                              $permQ->whereNotNull('group_id')
+                                    ->whereIn('permission_type', ['view', 'edit'])
+                                    ->whereHas('group', function ($groupQ) use ($user) {
+                                        $groupQ->whereHas('users', function ($userQ) use ($user) {
+                                            $userQ->where('user_id', $user->id);
+                                        });
+                                    });
+                          });
+                    });
+                }
+                // Admins can see all spans (no additional where clause needed)
+                
+                if ($types) {
+                    $typeArray = explode(',', $types);
+                    $spansQuery->whereIn('type_id', $typeArray);
+                }
+                
+                if ($exclude) {
+                    $spansQuery->where('id', '!=', $exclude);
+                }
+                
+                $spans = $spansQuery->limit(10)->get(['id', 'name', 'type_id', 'start_year']);
+                
+                return response()->json($spans);
+            });
+
+            // New connection creation endpoint
+            Route::post('/api/connections/create', function (Request $request) {
+                $validated = $request->validate([
+                    'subject_id' => 'required|uuid|exists:spans,id',
+                    'object_id' => 'required|uuid|exists:spans,id',
+                    'predicate' => 'required|string|exists:connection_types,type',
+                    'state' => 'required|in:placeholder,draft,complete',
+                    'start_year' => 'nullable|integer|min:1000|max:2100',
+                    'start_month' => 'nullable|integer|min:1|max:12',
+                    'start_day' => 'nullable|integer|min:1|max:31',
+                    'end_year' => 'nullable|integer|min:1000|max:2100',
+                    'end_month' => 'nullable|integer|min:1|max:12',
+                    'end_day' => 'nullable|integer|min:1|max:31'
+                ]);
+
+                try {
+                    // Get the spans and connection type
+                    $subject = \App\Models\Span::findOrFail($validated['subject_id']);
+                    $object = \App\Models\Span::findOrFail($validated['object_id']);
+                    $connectionType = \App\Models\ConnectionType::findOrFail($validated['predicate']);
+
+                    // Check if user can access both spans
+                    if (!$subject->isAccessibleBy(auth()->user()) || !$object->isAccessibleBy(auth()->user())) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'You do not have permission to create connections between these spans.'
+                        ], 403);
+                    }
+
+                    // Validate span types
+                    if (!$connectionType->isSpanTypeAllowed($subject->type_id, 'parent')) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => "Invalid subject span type. Expected one of: " . 
+                                        implode(', ', $connectionType->getAllowedSpanTypes('parent'))
+                        ], 422);
+                    }
+
+                    if (!$connectionType->isSpanTypeAllowed($object->type_id, 'child')) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => "Invalid object span type. Expected one of: " . 
+                                        implode(', ', $connectionType->getAllowedSpanTypes('child'))
+                        ], 422);
+                    }
+
+                    // Check for existing connection
+                    $existingConnection = \App\Models\Connection::where(function($query) use ($subject, $object) {
+                        $query->where('parent_id', $subject->id)
+                              ->where('child_id', $object->id);
+                    })->orWhere(function($query) use ($subject, $object) {
+                        $query->where('parent_id', $object->id)
+                              ->where('child_id', $subject->id);
+                    })->where('type_id', $validated['predicate'])
+                    ->first();
+
+                    if ($existingConnection) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'A connection of this type already exists between these spans'
+                        ], 422);
+                    }
+
+                    // Create connection span
+                    $connectionSpanData = [
+                        'name' => "{$subject->name} - {$object->name} {$connectionType->forward_predicate}",
+                        'type_id' => 'connection',
+                        'owner_id' => auth()->id(),
+                        'updater_id' => auth()->id(),
+                        'access_level' => 'private',
+                        'state' => $validated['state']
+                    ];
+
+                    // Add date fields
+                    if ($validated['start_year']) $connectionSpanData['start_year'] = $validated['start_year'];
+                    if ($validated['start_month']) $connectionSpanData['start_month'] = $validated['start_month'];
+                    if ($validated['start_day']) $connectionSpanData['start_day'] = $validated['start_day'];
+                    if ($validated['end_year']) $connectionSpanData['end_year'] = $validated['end_year'];
+                    if ($validated['end_month']) $connectionSpanData['end_month'] = $validated['end_month'];
+                    if ($validated['end_day']) $connectionSpanData['end_day'] = $validated['end_day'];
+
+                    $connectionSpan = \App\Models\Span::create($connectionSpanData);
+
+                    // Create the connection
+                    $connection = \App\Models\Connection::create([
+                        'parent_id' => $subject->id,
+                        'child_id' => $object->id,
+                        'type_id' => $validated['predicate'],
+                        'connection_span_id' => $connectionSpan->id
+                    ]);
+
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Connection created successfully',
+                        'data' => $connection
+                    ]);
+
+                } catch (\Exception $e) {
+                    \Log::error('Error creating connection', [
+                        'error' => $e->getMessage(),
+                        'trace' => $e->getTraceAsString()
+                    ]);
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => $e->getMessage()
+                    ], 500);
+                }
             });
         });
 

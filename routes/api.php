@@ -49,3 +49,24 @@ Route::get('/wikipedia/on-this-day/{month}/{day}', function ($month, $day) {
         'data' => $data
     ]);
 });
+
+// Connection Types API
+Route::get('/connection-types', function (Request $request) {
+    $spanType = $request->query('span_type');
+    
+    if ($spanType) {
+        // Filter connection types based on the span type
+        $types = \App\Models\ConnectionType::whereJsonContains('allowed_span_types->parent', $spanType)->get();
+    } else {
+        // Return all connection types if no span type specified
+        $types = \App\Models\ConnectionType::all();
+    }
+    
+    return response()->json($types);
+});
+
+// Connections API
+Route::post('/connections/create', [\App\Http\Controllers\ConnectionController::class, 'store']);
+
+// Create placeholder span API
+Route::middleware('auth')->post('/spans/create', [\App\Http\Controllers\Api\SpanSearchController::class, 'store']);

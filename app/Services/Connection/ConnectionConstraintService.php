@@ -70,9 +70,21 @@ class ConnectionConstraintService
             return ConnectionConstraintResult::success();
         }
 
+        // Skip temporal validation for placeholder connections or connections with no dates
+        if ($connection->connectionSpan->state === 'placeholder' || 
+            ($connection->connectionSpan->start_year === null && $connection->connectionSpan->end_year === null)) {
+            return ConnectionConstraintResult::success();
+        }
+
         $newRange = TemporalRange::fromSpan($connection->connectionSpan);
 
         foreach ($existingConnections as $existing) {
+            // Skip temporal validation for existing placeholder connections
+            if ($existing->connectionSpan->state === 'placeholder' || 
+                ($existing->connectionSpan->start_year === null && $existing->connectionSpan->end_year === null)) {
+                continue;
+            }
+
             $existingRange = TemporalRange::fromSpan($existing->connectionSpan);
             
             if ($this->temporalService->overlaps($newRange, $existingRange)) {
