@@ -22,7 +22,7 @@
             <div class="card">
                 <div class="card-body text-center">
                     <h5 class="card-title">Total People</h5>
-                    <h3 class="text-primary">{{ $people->total() }}</h3>
+                    <h3 class="text-primary">{{ $totalPeople }}</h3>
                 </div>
             </div>
         </div>
@@ -46,7 +46,7 @@
             <div class="card">
                 <div class="card-body text-center">
                     <h5 class="card-title">Uncategorized</h5>
-                    <h3 class="text-muted">{{ ($people->total() - ($subtypeCounts['public_figure'] ?? 0) - ($subtypeCounts['private_individual'] ?? 0)) }}</h3>
+                    <h3 class="text-muted">{{ ($totalPeople - ($subtypeCounts['public_figure'] ?? 0) - ($subtypeCounts['private_individual'] ?? 0)) }}</h3>
                 </div>
             </div>
         </div>
@@ -221,6 +221,14 @@ function resetForm() {
     }
 }
 
+// Add event listeners when the page loads
+document.addEventListener('DOMContentLoaded', function() {
+    // Add change event listeners to checkboxes to update select all state
+    document.querySelectorAll('.person-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', updateSelectAllState);
+    });
+});
+
 function toggleSelectAll() {
     const selectAll = document.getElementById('selectAll').checked;
     const headerSelectAll = document.getElementById('headerSelectAll').checked;
@@ -279,8 +287,8 @@ function bulkSetAndSubmit(subtype) {
     // Update the hidden input with the selected subtypes
     updateSelectedSubtypesInput();
     
-    // Submit the form
-    document.getElementById('subtypeForm').submit();
+    // Process updates via AJAX with batching
+    processBulkUpdates(subtype);
 }
 
 
@@ -316,6 +324,144 @@ function showTemporaryMessage(message, type = 'info') {
 function updateSelectedSubtypesInput() {
     const input = document.getElementById('selectedSubtypes');
     input.value = JSON.stringify(selectedSubtypes);
+}
+
+// Process bulk updates via AJAX with batching
+function processBulkUpdates(subtype) {
+    const selectedCheckboxes = document.querySelectorAll('.person-checkbox:checked');
+    const batchSize = 10; // Process 10 people at a time
+    const totalPeople = selectedCheckboxes.length;
+    let processedCount = 0;
+    let totalUpdated = 0;
+    let allErrors = [];
+    
+    // Disable the bulk action buttons during processing
+    const bulkButtons = document.querySelectorAll('.btn-success, .btn-warning');
+    bulkButtons.forEach(btn => btn.disabled = true);
+    
+    // Show progress message
+    showTemporaryMessage(`Processing ${totalPeople} people in batches of ${batchSize}...`, 'info');
+    
+    // Create progress bar
+    const progressContainer = document.createElement('div');
+    progressContainer.className = 'progress mt-3';
+    progressContainer.innerHTML = `
+        <div class="progress-bar" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+            0 / ${totalPeople}
+        </div>
+    `;
+    
+    // Insert progress bar after the bulk actions
+    const bulkActions = document.querySelector('.row.mb-3');
+    bulkActions.parentNode.insertBefore(progressContainer, bulkActions.nextSibling);
+    
+    const progressBar = progressContainer.querySelector('.progress-bar');
+    
+    // Process in batches
+    function processBatch() {
+        const batch = [];
+        const startIndex = processedCount;
+        const endIndex = Math.min(startIndex + batchSize, totalPeople);
+        
+        for (let i = startIndex; i < endIndex; i++) {
+            const checkbox = selectedCheckboxes[i];
+            batch.push({
+                span_id: checkbox.value,
+                subtype: subtype
+            });
+        }
+        
+        // Send AJAX request for this batch
+        $.ajax({
+            url: '{{ route("admin.tools.update-person-subtypes-ajax") }}',
+            method: 'POST',
+            data: {
+                _token: '{{ csrf_token() }}',
+                updates: batch
+            },
+            success: function(response) {
+                if (response.success) {
+                    totalUpdated += response.updated;
+                    if (response.errors && response.errors.length > 0) {
+                        allErrors = allErrors.concat(response.errors);
+                    }
+                } else {
+                    allErrors.push('Batch processing failed');
+                }
+                
+                processedCount += batch.length;
+                
+                // Update progress bar
+                const progress = Math.round((processedCount / totalPeople) * 100);
+                progressBar.style.width = progress + '%';
+                progressBar.setAttribute('aria-valuenow', progress);
+                progressBar.textContent = `${processedCount} / ${totalPeople}`;
+                
+                // Check if there are more batches to process
+                if (processedCount < totalPeople) {
+                    // Add a small delay between batches to prevent overwhelming the server
+                    setTimeout(processBatch, 500);
+                } else {
+                    // All batches processed
+                    completeProcessing();
+                }
+            },
+            error: function(xhr, status, error) {
+                allErrors.push(`Batch processing error: ${error}`);
+                processedCount += batch.length;
+                
+                // Update progress bar
+                const progress = Math.round((processedCount / totalPeople) * 100);
+                progressBar.style.width = progress + '%';
+                progressBar.setAttribute('aria-valuenow', progress);
+                progressBar.textContent = `${processedCount} / ${totalPeople}`;
+                
+                // Continue with next batch even if this one failed
+                if (processedCount < totalPeople) {
+                    setTimeout(processBatch, 500);
+                } else {
+                    completeProcessing();
+                }
+            }
+        });
+    }
+    
+    function completeProcessing() {
+        // Remove progress bar
+        progressContainer.remove();
+        
+        // Re-enable bulk action buttons
+        bulkButtons.forEach(btn => btn.disabled = false);
+        
+        // Show completion message
+        let message = `Successfully updated ${totalUpdated} out of ${totalPeople} people.`;
+        if (allErrors.length > 0) {
+            message += ` Errors: ${allErrors.slice(0, 5).join(', ')}${allErrors.length > 5 ? '...' : ''}`;
+        }
+        
+        showTemporaryMessage(message, allErrors.length > 0 ? 'warning' : 'success');
+        
+        // Uncheck all checkboxes
+        selectedCheckboxes.forEach(checkbox => {
+            checkbox.checked = false;
+        });
+        
+        // Reset select all checkboxes
+        document.getElementById('selectAll').checked = false;
+        document.getElementById('headerSelectAll').checked = false;
+        
+        // Clear selected subtypes
+        selectedSubtypes = {};
+        updateSelectedSubtypesInput();
+        
+        // Reload the page after a short delay to show updated data
+        setTimeout(() => {
+            window.location.reload();
+        }, 2000);
+    }
+    
+    // Start processing
+    processBatch();
 }
 
 

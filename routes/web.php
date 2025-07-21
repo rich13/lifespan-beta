@@ -916,6 +916,8 @@ Route::middleware('web')->group(function () {
                 ->name('tools.manage-person-subtypes');
             Route::post('/tools/manage-person-subtypes', [App\Http\Controllers\Admin\ToolsController::class, 'updatePersonSubtypes'])
                 ->name('tools.update-person-subtypes');
+            Route::post('/tools/manage-person-subtypes/ajax', [App\Http\Controllers\Admin\ToolsController::class, 'updatePersonSubtypesAjax'])
+                ->name('tools.update-person-subtypes-ajax');
 
             // Data Export
             Route::prefix('data-export')->name('data-export.')->group(function () {

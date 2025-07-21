@@ -822,13 +822,18 @@ class ToolsController extends Controller
 
         $people = $query->orderBy('name')->paginate(50)->appends($request->query());
 
+        // Get the total count of all people (not just the paginated results)
+        // Statistics should always show global counts, regardless of filters
+        $totalPeople = Span::where('type_id', 'person')->count();
+
+        // Calculate subtype counts - always show global counts regardless of filters
         $subtypeCounts = Span::where('type_id', 'person')
             ->selectRaw("metadata->>'subtype' as subtype, COUNT(*) as count")
             ->groupBy(DB::raw("metadata->>'subtype'"))
             ->pluck('count', 'subtype')
             ->toArray();
 
-        return view('admin.tools.manage-person-subtypes', compact('people', 'subtypeCounts'));
+        return view('admin.tools.manage-person-subtypes', compact('people', 'subtypeCounts', 'totalPeople'));
     }
 
     /**
@@ -895,6 +900,55 @@ class ToolsController extends Controller
 
         return redirect()->route('admin.tools.manage-person-subtypes')
             ->with('status', $message);
+    }
+
+    /**
+     * Update person subtypes in bulk via AJAX with batch processing
+     */
+    public function updatePersonSubtypesAjax(Request $request)
+    {
+        $validated = $request->validate([
+            'updates' => 'required|array',
+            'updates.*.span_id' => 'required|string|exists:spans,id',
+            'updates.*.subtype' => 'required|string|in:public_figure,private_individual',
+        ]);
+
+        $updated = 0;
+        $errors = [];
+
+        foreach ($validated['updates'] as $update) {
+            try {
+                $span = Span::find($update['span_id']);
+                
+                // Update the subtype in metadata
+                $metadata = $span->metadata ?? [];
+                $metadata['subtype'] = $update['subtype'];
+                $span->metadata = $metadata;
+                
+                // If changing to public_figure, also set access_level to public
+                if ($update['subtype'] === 'public_figure' && $span->access_level === 'private') {
+                    $span->access_level = 'public';
+                }
+                
+                $span->save();
+                
+                // If this is now a public figure, ensure all its connections are public
+                if ($update['subtype'] === 'public_figure') {
+                    $this->makePublicFigureConnectionsPublic($span);
+                }
+                
+                $updated++;
+            } catch (\Exception $e) {
+                $errors[] = "Failed to update {$span->name}: " . $e->getMessage();
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'updated' => $updated,
+            'errors' => $errors,
+            'message' => "Updated {$updated} people successfully." . (!empty($errors) ? " Errors: " . implode(', ', $errors) : '')
+        ]);
     }
     
     /**
