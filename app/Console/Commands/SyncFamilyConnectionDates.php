@@ -62,7 +62,7 @@ class SyncFamilyConnectionDates extends Command
      */
     public function syncAllConnections(bool $dryRun = true): array
     {
-        $connections = Connection::whereIn('type_id', ['family', 'relationship'])
+        $connections = Connection::where('type_id', 'family')
             ->with(['subject', 'object', 'connectionSpan'])
             ->get();
 
@@ -74,7 +74,7 @@ class SyncFamilyConnectionDates extends Command
      */
     public function syncSpecificConnection(string $connectionId, bool $dryRun = true): array
     {
-        $connection = Connection::whereIn('type_id', ['family', 'relationship'])
+        $connection = Connection::where('type_id', 'family')
             ->where('id', $connectionId)
             ->with(['subject', 'object', 'connectionSpan'])
             ->first();
@@ -170,54 +170,30 @@ class SyncFamilyConnectionDates extends Command
         $span2Birth = $this->getBirthDate($span2);
         $span2Death = $this->getDeathDate($span2);
 
-        // For parent-child relationships, start date should be child's birth
-        // For other family relationships, start date should be the later birth date
+        // For family connections (parent-child relationships):
+        // Start date: child's birth date
+        // End date: parent's death date (or child's death if sooner)
         $suggestedStartDate = null;
         $suggestedEndDate = null;
 
-        if ($connection->type_id === 'family') {
-            // This is likely a parent-child relationship
-            // Start date: child's birth date
-            // End date: parent's death date (or child's death if sooner)
-            
-            // Determine which is likely the parent and which is the child
-            // For now, assume the one with earlier birth is the parent
-            if ($span1Birth && $span2Birth) {
-                if ($span1Birth->lt($span2Birth)) {
-                    // span1 is likely parent, span2 is likely child
-                    $suggestedStartDate = $span2Birth; // child's birth
-                    $suggestedEndDate = $span1Death ?: $span2Death; // parent's death, or child's death if parent not dead
-                } else {
-                    // span2 is likely parent, span1 is likely child
-                    $suggestedStartDate = $span1Birth; // child's birth
-                    $suggestedEndDate = $span2Death ?: $span1Death; // parent's death, or child's death if parent not dead
-                }
-            } elseif ($span1Birth) {
-                $suggestedStartDate = $span1Birth;
-                $suggestedEndDate = $span1Death ?: $span2Death;
-            } elseif ($span2Birth) {
-                $suggestedStartDate = $span2Birth;
-                $suggestedEndDate = $span2Death ?: $span1Death;
+        // Determine which is likely the parent and which is the child
+        // Assume the one with earlier birth is the parent
+        if ($span1Birth && $span2Birth) {
+            if ($span1Birth->lt($span2Birth)) {
+                // span1 is likely parent, span2 is likely child
+                $suggestedStartDate = $span2Birth; // child's birth
+                $suggestedEndDate = $span1Death ?: $span2Death; // parent's death, or child's death if parent not dead
+            } else {
+                // span2 is likely parent, span1 is likely child
+                $suggestedStartDate = $span1Birth; // child's birth
+                $suggestedEndDate = $span2Death ?: $span1Death; // parent's death, or child's death if parent not dead
             }
-        } else {
-            // This is a relationship (spouse, etc.)
-            // Start date: later of the two birth dates (when they could have met)
-            // End date: earlier of the two death dates
-            if ($span1Birth && $span2Birth) {
-                $suggestedStartDate = $span1Birth->gt($span2Birth) ? $span1Birth : $span2Birth;
-            } elseif ($span1Birth) {
-                $suggestedStartDate = $span1Birth;
-            } elseif ($span2Birth) {
-                $suggestedStartDate = $span2Birth;
-            }
-
-            if ($span1Death && $span2Death) {
-                $suggestedEndDate = $span1Death->lt($span2Death) ? $span1Death : $span2Death;
-            } elseif ($span1Death) {
-                $suggestedEndDate = $span1Death;
-            } elseif ($span2Death) {
-                $suggestedEndDate = $span2Death;
-            }
+        } elseif ($span1Birth) {
+            $suggestedStartDate = $span1Birth;
+            $suggestedEndDate = $span1Death ?: $span2Death;
+        } elseif ($span2Birth) {
+            $suggestedStartDate = $span2Birth;
+            $suggestedEndDate = $span2Death ?: $span1Death;
         }
 
         // Check if current dates need updating (via connection span)

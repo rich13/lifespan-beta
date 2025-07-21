@@ -69,14 +69,14 @@
                 <div class="card-header">
                     <h5 class="card-title mb-0">
                         <i class="bi bi-calendar-check me-2"></i>
-                        Sync Family Connection Dates
+                        Sync Family Connection Dates (Parent-Child Only)
                     </h5>
                 </div>
                 <div class="card-body">
                     <p class="text-muted">
-                        This tool automatically sets start and end dates for family connections based on the birth and death dates of the connected people.
-                        Parent-child relationships start at the child's birth and end at the parent's death (or child's death if sooner).
-                        Other family relationships start at the later birth date and end at the earlier death date.
+                        This tool automatically sets start and end dates for family connections (parent-child relationships) based on the birth and death dates of the connected people.
+                        Family connections start at the child's birth and end at the parent's death (or child's death if sooner).
+                        This tool focuses only on family connections, not romantic or personal relationships which have more complex dating rules.
                     </p>
 
                     <div class="row">

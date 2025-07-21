@@ -1466,7 +1466,7 @@ class ToolsController extends Controller
         $syncResult = $command->syncAllConnections(true); // Dry run to get actual issues
         
         $totalConnections = Connection::whereHas('type', function($q) {
-            $q->whereIn('type', ['family', 'relationship']);
+            $q->where('type', 'family');
         })->count();
         
         $connectionsWithIssues = count($syncResult['issues']);

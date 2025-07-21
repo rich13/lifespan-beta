@@ -192,4 +192,50 @@ class FamilyConnectionDateSyncToolTest extends TestCase
         $connectionSpan->refresh();
         $this->assertEquals(2010, $connectionSpan->start_year);
     }
+
+    public function test_family_connection_date_sync_ignores_relationship_connections(): void
+    {
+        // Create test data for a relationship connection
+        $person1 = Span::factory()->create([
+            'type_id' => 'person',
+            'start_year' => 1980,
+            'start_month' => 1,
+            'start_day' => 1,
+        ]);
+
+        $person2 = Span::factory()->create([
+            'type_id' => 'person',
+            'start_year' => 1985,
+            'start_month' => 1,
+            'start_day' => 1,
+        ]);
+
+        $connectionSpan = Span::factory()->create([
+            'type_id' => 'connection',
+            'start_year' => null, // No dates set
+            'start_month' => null,
+            'start_day' => null,
+            'metadata' => ['timeless' => true], // Mark as timeless to avoid validation error
+        ]);
+
+        $connection = Connection::factory()->create([
+            'type_id' => 'relationship',
+            'parent_id' => $person1->id,
+            'child_id' => $person2->id,
+            'connection_span_id' => $connectionSpan->id,
+        ]);
+
+        $response = $this->actingAs($this->admin)
+            ->post('/admin/tools/family-connection-date-sync', [
+                'dry_run' => '0',
+            ]);
+
+        $response->assertStatus(302);
+        $response->assertRedirect(route('admin.tools.family-connection-date-sync'));
+        $response->assertSessionHas('status');
+
+        // Check that no changes were made to relationship connections
+        $connectionSpan->refresh();
+        $this->assertNull($connectionSpan->start_year);
+    }
 } 
