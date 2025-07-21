@@ -62,6 +62,7 @@ Thumbs.db
 # Local development directories
 /thinking/
 /uncommitted_tmp
+temp/
 
 # New backups directory
 /backups
