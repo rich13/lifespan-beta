@@ -132,9 +132,7 @@ class MusicBrainzImportService
         
         // More comprehensive exclusion list
         $excludeNames = [
-            '[unknown]', 'various artists', 'various', 'unknown artist',
-            'the beatles', 'bruce springsteen', 'the rolling stones',
-            'academy of st martin in the fields', 'fields of the nephilim'
+            '[unknown]', 'various artists', 'various', 'unknown artist'
         ];
         $excludeTypes = ['Other'];
         $artistNameLower = mb_strtolower($artistName);
@@ -154,6 +152,7 @@ class MusicBrainzImportService
                 'name' => $artist['name'],
                 'disambiguation' => $artist['disambiguation'] ?? null,
                 'type' => $artist['type'] ?? null,
+                'score' => isset($artist['score']) ? (string)$artist['score'] : null,
             ];
         })
         // Exclude generic/unknown artists and obviously unrelated results
@@ -1333,5 +1332,85 @@ class MusicBrainzImportService
                       ->where('type_id', 'created');
             })
             ->count();
+    }
+
+    /**
+     * Import a release directly from MusicBrainz API data (by release MBID)
+     */
+    public function importReleaseByApiData(array $release, string $ownerId): array
+    {
+        try {
+            // Extract main fields
+            $releaseId = $release['id'] ?? null;
+            $title = $release['title'] ?? null;
+            // Date logic: try top-level date, then release-group, then release-events
+            $date = $release['date'] ?? null;
+            if (!$date && isset($release['release-group']['first-release-date'])) {
+                $date = $release['release-group']['first-release-date'];
+            }
+            if (!$date && isset($release['release-events']) && is_array($release['release-events'])) {
+                $dates = array_filter(array_column($release['release-events'], 'date'));
+                if (!empty($dates)) {
+                    sort($dates);
+                    $date = $dates[0]; // Earliest date
+                }
+            }
+            $artistCredit = $release['artist-credit'][0]['artist'] ?? null;
+            $artistName = $artistCredit['name'] ?? null;
+            $artistId = $artistCredit['id'] ?? null;
+            // Build tracks array in the same format as getTracks
+            $tracks = [];
+            if (isset($release['media'][0]['tracks'])) {
+                foreach ($release['media'][0]['tracks'] as $track) {
+                    $recording = $track['recording'] ?? null;
+                    if (!$recording) continue;
+                    $tracks[] = [
+                        'id' => $recording['id'] ?? null,
+                        'title' => $track['title'] ?? null,
+                        'length' => $track['length'] ?? null,
+                        'isrc' => $recording['isrcs'][0] ?? null,
+                        'artist_credits' => collect($recording['artist-credit'] ?? [])->map(function ($credit) { return $credit['name'] . ($credit['joinphrase'] ?? ''); })->join(''),
+                        'first_release_date' => $release['date'] ?? null,
+                        'position' => $track['position'] ?? null,
+                        'number' => $track['number'] ?? null,
+                    ];
+                }
+            }
+            if (!$releaseId || !$title || !$artistId || !$artistName) {
+                return [
+                    'success' => false,
+                    'error' => 'Missing required release or artist data.'
+                ];
+            }
+            // Create or update artist span
+            $artistSpan = $this->createOrUpdateArtist($artistName, $artistId, $ownerId);
+            // Build album array for importDiscography
+            $album = [
+                'id' => $releaseId,
+                'title' => $title,
+                'type' => $release['release-group']['primary-type'] ?? 'Album',
+                'primary-type' => $release['release-group']['primary-type'] ?? 'Album',
+                'secondary-types' => $release['release-group']['secondary-types'] ?? [],
+                'disambiguation' => $release['disambiguation'] ?? null,
+                'first_release_date' => $date,
+                'tracks' => $tracks,
+            ];
+            // Use the same import logic as the regular importer
+            $imported = $this->importDiscography($artistSpan, [$album], $ownerId);
+            return [
+                'success' => true,
+                'message' => "Imported '{$title}' with " . count($tracks) . " tracks for artist '{$artistName}'.",
+                'imported' => $imported,
+            ];
+        } catch (\Exception $e) {
+            Log::error('Failed to import release by API data', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return [
+                'success' => false,
+                'error' => 'Failed to import release: ' . $e->getMessage(),
+            ];
+        }
     }
 } 

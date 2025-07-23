@@ -511,12 +511,16 @@ class DesertIslandDiscsImportController extends Controller
             // Try to find artist in MusicBrainz first
             $searchResults = $musicBrainzService->searchArtist($artistName);
             $artist = null;
-            
+
             if (!empty($searchResults)) {
-                // Use the first result
+                // If the top result has a score of 100, auto-select it
                 $firstResult = $searchResults[0];
-                $artist = $musicBrainzService->createOrUpdateArtist($artistName, $firstResult['id'], auth()->id());
-                
+                if (isset($firstResult['score']) && $firstResult['score'] === '100') {
+                    $artist = $musicBrainzService->createOrUpdateArtist($artistName, $firstResult['id'], auth()->id());
+                } else {
+                    // Use the first result (current behaviour)
+                    $artist = $musicBrainzService->createOrUpdateArtist($artistName, $firstResult['id'], auth()->id());
+                }
                 // If this is a band, create person spans for band members
                 if ($artist->type_id === 'band') {
                     $artistDetails = $musicBrainzService->getArtistDetails($firstResult['id']);

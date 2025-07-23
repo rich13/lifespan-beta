@@ -309,6 +309,38 @@
             </div>
         </div>
     </div>
+    <!-- New: Import by MusicBrainz Release URL -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card border-info">
+                <div class="card-header bg-info text-white">
+                    <h6 class="card-title mb-0">
+                        <i class="bi bi-link-45deg me-2"></i>Import by MusicBrainz Release URL
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <form id="importByUrlForm" class="row g-2 align-items-center">
+                        <div class="col-md-10">
+                            <label for="musicbrainzUrl" class="form-label">Paste a MusicBrainz Release URL:</label>
+                            <input type="url" class="form-control" id="musicbrainzUrl" name="musicbrainzUrl" placeholder="https://musicbrainz.org/release/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" required>
+                        </div>
+                        <div class="col-md-2 d-grid">
+                            <button type="submit" class="btn btn-info">
+                                <i class="bi bi-search me-1"></i>Preview Release
+                            </button>
+                        </div>
+                    </form>
+                    <div id="importByUrlMessage" class="mt-3"></div>
+                    <div id="importByUrlPreview" class="mt-3 d-none"></div>
+                    <div id="importByUrlConfirm" class="mt-3 d-none text-end">
+                        <button class="btn btn-success" id="confirmImportByUrlButton">
+                            <i class="bi bi-box-arrow-in-down me-1"></i>Confirm Import
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Global Loading Overlay -->
     <div id="globalLoadingOverlay" class="position-fixed top-0 start-0 w-100 h-100 d-none" style="background: rgba(0,0,0,0.5); z-index: 9999;">
@@ -886,6 +918,94 @@ $(document).ready(function() {
             showError('Failed to import albums');
         } finally {
             $('#globalLoadingOverlay').addClass('d-none');
+        }
+    });
+
+    // Import by MusicBrainz URL with preview
+    let previewData = null;
+    $('#importByUrlForm').on('submit', async function(e) {
+        e.preventDefault();
+        const url = $('#musicbrainzUrl').val().trim();
+        const $msg = $('#importByUrlMessage');
+        const $preview = $('#importByUrlPreview');
+        const $confirm = $('#importByUrlConfirm');
+        $msg.removeClass().text('');
+        $preview.addClass('d-none').html('');
+        $confirm.addClass('d-none');
+        previewData = null;
+        if (!url) {
+            $msg.addClass('alert alert-danger').text('Please enter a MusicBrainz Release URL.');
+            return;
+        }
+        $msg.addClass('alert alert-info').text('Fetching release preview...');
+        try {
+            const response = await fetch('{{ route("admin.import.musicbrainz.preview-by-url") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({ url })
+            });
+            const data = await response.json();
+            if (response.ok && data.success) {
+                previewData = data.preview;
+                $msg.removeClass().text('');
+                // Render preview
+                let html = `<div class='card border-primary'>`;
+                html += `<div class='card-header bg-primary text-white'><strong>Release Preview</strong></div>`;
+                html += `<div class='card-body'>`;
+                html += `<p><strong>Title:</strong> ${previewData.title || '-'}<br>`;
+                html += `<strong>Artist:</strong> ${previewData.artist_name || '-'}<br>`;
+                html += `<strong>Date:</strong> ${previewData.date || '-'}<br>`;
+                html += `<strong>Year:</strong> ${previewData.start_year || '-'}<br>`;
+                html += `<strong>Month:</strong> ${previewData.start_month || '-'}<br>`;
+                html += `<strong>Day:</strong> ${previewData.start_day || '-'}<br>`;
+                html += `<strong>Tracks:</strong> ${previewData.tracks.length}</p>`;
+                if (previewData.tracks.length > 0) {
+                    html += `<div class='table-responsive'><table class='table table-sm table-bordered'><thead><tr><th>#</th><th>Title</th><th>Length</th></tr></thead><tbody>`;
+                    previewData.tracks.forEach((track, i) => {
+                        html += `<tr><td>${i+1}</td><td>${track.title || '-'}</td><td>${track.length ? Math.floor(track.length/60000)+":"+String(Math.floor((track.length%60000)/1000)).padStart(2,'0') : '-'}</td></tr>`;
+                    });
+                    html += `</tbody></table></div>`;
+                }
+                html += `</div></div>`;
+                $preview.html(html).removeClass('d-none');
+                $confirm.removeClass('d-none');
+            } else {
+                $msg.removeClass().addClass('alert alert-danger').text(data.error || 'Failed to preview release.');
+            }
+        } catch (err) {
+            $msg.removeClass().addClass('alert alert-danger').text('Failed to preview release.');
+        }
+    });
+    // Confirm import by URL
+    $('#confirmImportByUrlButton').on('click', async function() {
+        if (!previewData) return;
+        const url = $('#musicbrainzUrl').val().trim();
+        const $msg = $('#importByUrlMessage');
+        $msg.removeClass().text('');
+        $msg.addClass('alert alert-info').text('Importing release...');
+        try {
+            const response = await fetch('{{ route("admin.import.musicbrainz.import-by-url") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({ url })
+            });
+            const data = await response.json();
+            if (response.ok && data.success) {
+                $msg.removeClass().addClass('alert alert-success').text(data.message || 'Release imported successfully!');
+                $('#musicbrainzUrl').val('');
+                $('#importByUrlPreview').addClass('d-none').html('');
+                $('#importByUrlConfirm').addClass('d-none');
+            } else {
+                $msg.removeClass().addClass('alert alert-danger').text(data.error || 'Failed to import release.');
+            }
+        } catch (err) {
+            $msg.removeClass().addClass('alert alert-danger').text('Failed to import release.');
         }
     });
 });

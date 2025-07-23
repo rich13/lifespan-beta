@@ -646,6 +646,8 @@ Route::middleware('web')->group(function () {
                     Route::post('/tracks', [MusicBrainzImportController::class, 'showTracks'])->name('show-tracks');
                     Route::post('/import', [MusicBrainzImportController::class, 'import'])->name('import');
                     Route::post('/import-all', [MusicBrainzImportController::class, 'importAll'])->name('import-all');
+                    Route::post('/import-by-url', [MusicBrainzImportController::class, 'importByUrl'])->name('import-by-url');
+                    Route::post('/preview-by-url', [MusicBrainzImportController::class, 'previewByUrl'])->name('preview-by-url');
                 });
 
                 // Desert Island Discs Import (must come before legacy routes to avoid conflicts)

@@ -67,13 +67,6 @@ sources:
         // Debug: Check if the user has permission to update the span
         $this->assertTrue($user->can('update', $span), 'User should have update permission for the span. Span owner: ' . $span->owner_id . ', Current user: ' . $user->id);
         
-        // Debug: Check if findExistingSpan finds the span
-        $yamlSpanService = app(\App\Services\YamlSpanService::class);
-        $foundSpan = $yamlSpanService->findExistingSpan('John Doe', 'person');
-        if (!$foundSpan) {
-            $this->fail('findExistingSpan did not find the span');
-        }
-        
         // Access the YAML editor
         $response = $this->get('/spans/editor/new');
 

@@ -59,7 +59,13 @@ class YamlValidationService
         // After schema validation, enforce start date rules
         $state = $data['state'] ?? 'complete';
         
-        if ($state !== 'placeholder') {
+        // Validate start field only if not timeless
+        $isTimeless = false;
+        if (isset($data['type'])) {
+            $spanTypeModel = \App\Models\SpanType::where('type_id', $data['type'])->first();
+            $isTimeless = $spanTypeModel && ($spanTypeModel->metadata['timeless'] ?? false);
+        }
+        if ($state !== 'placeholder' && !$isTimeless) {
             if (!isset($data['start']) || $data['start'] === null || $data['start'] === '') {
                 $errors[] = "Field 'start' is required unless state is 'placeholder' (current state: '{$state}')";
             } elseif (!in_array($this->getValueType($data['start']), ['string', 'integer'])) {
