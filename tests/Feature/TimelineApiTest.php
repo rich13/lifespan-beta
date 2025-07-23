@@ -51,7 +51,6 @@ class TimelineApiTest extends TestCase
             'end_day' => null,
         ]);
         // Debug output before connection creation
-        fwrite(STDERR, "DEBUG: connectionSpan start_year={$connectionSpan->start_year}, start_month={$connectionSpan->start_month}, start_day={$connectionSpan->start_day}, end_year={$connectionSpan->end_year}, end_month={$connectionSpan->end_month}, end_day={$connectionSpan->end_day}\n");
 
         Connection::create([
             'parent_id' => $person->id,

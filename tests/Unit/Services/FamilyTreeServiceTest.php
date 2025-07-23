@@ -297,12 +297,6 @@ class FamilyTreeServiceTest extends TestCase
     {
         $descendants = $this->service->getDescendants($this->grandparent1);
         
-        // Debug output
-        echo "\nDescendants of {$this->grandparent1->name}:\n";
-        foreach ($descendants as $descendant) {
-            echo "- {$descendant['span']->name} (ID: {$descendant['span']->id}, Generation: {$descendant['generation']})\n";
-        }
-        
         $this->assertCount(5, $descendants);
         $this->assertTrue($descendants->contains(function ($descendant) {
             return $descendant['span']->id === $this->parent1->id;

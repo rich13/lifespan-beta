@@ -185,12 +185,6 @@ YAML;
             'ai_yaml' => $improvedYaml
         ]);
 
-        // Debug: dump the response content
-        if ($response->status() !== 200) {
-            dump('Response status: ' . $response->status());
-            dump('Response content: ' . $response->content());
-        }
-
         $response->assertStatus(200)
             ->assertJson([
                 'success' => true,

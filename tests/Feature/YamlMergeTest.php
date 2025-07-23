@@ -236,10 +236,6 @@ connections:
         $yamlSpanService = app(\App\Services\YamlSpanService::class);
         $mergedData = $yamlSpanService->mergeYamlWithExistingSpan($existingSpan, $data);
         
-        // Debug: Let's see what's in the merged data
-        // var_dump($mergedData);
-        // $this->fail('DEBUG: Merged data keys: ' . implode(', ', array_keys($mergedData)));
-        
         // Assert connections are merged
         $this->assertArrayHasKey('family', $mergedData['connections']);
         $this->assertArrayHasKey('employment', $mergedData['connections']);

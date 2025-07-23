@@ -50,14 +50,6 @@ class GroupBasedAccessTest extends TestCase
             'permission_type' => 'view'
         ]);
 
-        // Debug: Check group membership
-        $isMember = $this->group->hasMember($this->groupMember);
-        dump('Is groupMember in group?', $isMember);
-        // Debug: List group users
-        dump('Group users:', $this->group->users()->pluck('id')->toArray());
-        // Debug: List permissions for span
-        dump('Span permissions:', $this->sharedSpan->spanPermissions()->get()->toArray());
-
         $response = $this->actingAs($this->groupMember)
             ->get(route('spans.show', $this->sharedSpan));
 
