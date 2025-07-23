@@ -23,6 +23,9 @@ class TimelineApiTest extends TestCase
             'name' => 'Test Person',
             'start_year' => 1990,
             'owner_id' => $user->id,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
         ]);
 
         // Create a photo span
@@ -32,6 +35,9 @@ class TimelineApiTest extends TestCase
             'start_year' => 2000,
             'metadata' => ['subtype' => 'photo'],
             'owner_id' => $user->id,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
         ]);
 
         // Create a connection between person and photo
@@ -40,7 +46,12 @@ class TimelineApiTest extends TestCase
             'name' => 'Person created photo',
             'start_year' => 2000,
             'owner_id' => $user->id,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
         ]);
+        // Debug output before connection creation
+        fwrite(STDERR, "DEBUG: connectionSpan start_year={$connectionSpan->start_year}, start_month={$connectionSpan->start_month}, start_day={$connectionSpan->start_day}, end_year={$connectionSpan->end_year}, end_month={$connectionSpan->end_month}, end_day={$connectionSpan->end_day}\n");
 
         Connection::create([
             'parent_id' => $person->id,

@@ -57,6 +57,9 @@ class SpanObserverTest extends TestCase
             'start_year' => 1950,
             'start_month' => 1,
             'start_day' => 1,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
         ]);
 
         $child = Span::factory()->create([
@@ -66,6 +69,9 @@ class SpanObserverTest extends TestCase
             'start_year' => 1980,
             'start_month' => 1,
             'start_day' => 1,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
         ]);
 
         // Create a family connection between them
@@ -76,6 +82,9 @@ class SpanObserverTest extends TestCase
             'start_year' => 1980, // Child's birth year
             'start_month' => 1,
             'start_day' => 1,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
         ]);
 
         $connection = Connection::factory()->create([
