@@ -622,6 +622,13 @@ Route::middleware('web')->group(function () {
                 Route::post('/import-photos', [\App\Http\Controllers\FlickrImportController::class, 'importPhotos'])->name('import-photos');
                 Route::get('/get-imported-photos', [\App\Http\Controllers\FlickrImportController::class, 'getImportedPhotos'])->name('get-imported-photos');
             });
+            
+            // LinkedIn Import routes
+            Route::prefix('import/linkedin')->name('import.linkedin.')->group(function () {
+                Route::get('/', [\App\Http\Controllers\LinkedInImportController::class, 'index'])->name('index');
+                Route::post('/preview', [\App\Http\Controllers\LinkedInImportController::class, 'preview'])->name('preview');
+                Route::post('/import', [\App\Http\Controllers\LinkedInImportController::class, 'import'])->name('import');
+            });
         });
 
         // Admin routes
