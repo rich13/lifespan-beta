@@ -41,7 +41,7 @@
                         <p class="text-muted">Configure how data is imported into your account.</p>
                         
                         <div class="row">
-                            <div class="col-md-6 mb-3">
+                            <div class="col-md-4 mb-3">
                                 <div class="card h-100">
                                     <div class="card-body">
                                         <h6 class="card-title">
@@ -55,7 +55,21 @@
                                 </div>
                             </div>
                             
-                            <div class="col-md-6 mb-3">
+                            <div class="col-md-4 mb-3">
+                                <div class="card h-100">
+                                    <div class="card-body">
+                                        <h6 class="card-title">
+                                            <i class="bi bi-linkedin me-2"></i>LinkedIn Import
+                                        </h6>
+                                        <p class="card-text text-muted">Import your work history from LinkedIn as organisation and role spans with connections.</p>
+                                        <a href="{{ route('settings.import.linkedin.index') }}" class="btn btn-outline-primary btn-sm">
+                                            <i class="bi bi-arrow-right me-1"></i>Configure LinkedIn Import
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-4 mb-3">
                                 <div class="card h-100">
                                     <div class="card-body">
                                         <h6 class="card-title">

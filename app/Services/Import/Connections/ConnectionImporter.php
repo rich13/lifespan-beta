@@ -222,24 +222,21 @@ class ConnectionImporter
         
         // Parse start date if provided
         if ($startDate) {
-            try {
-                $parts = explode('-', $startDate);
-                $dates['start_year'] = (int) $parts[0];
-                if (isset($parts[1])) $dates['start_month'] = (int) $parts[1];
-                if (isset($parts[2])) $dates['start_day'] = (int) $parts[2];
-            } catch (\Exception $e) {
-                // If date parsing fails, return null to indicate no dates
-                return null;
+            $parsedStart = $this->parseLinkedInDate($startDate);
+            if ($parsedStart) {
+                $dates['start_year'] = $parsedStart['year'];
+                if (isset($parsedStart['month'])) $dates['start_month'] = $parsedStart['month'];
+                if (isset($parsedStart['day'])) $dates['start_day'] = $parsedStart['day'];
             }
         }
 
         // Parse end date if provided
         if ($endDate) {
-            try {
-                $parts = explode('-', $endDate);
-                $dates['end_year'] = (int) $parts[0];
-                if (isset($parts[1])) $dates['end_month'] = (int) $parts[1];
-                if (isset($parts[2])) $dates['end_day'] = (int) $parts[2];
+            $parsedEnd = $this->parseLinkedInDate($endDate);
+            if ($parsedEnd) {
+                $dates['end_year'] = $parsedEnd['year'];
+                if (isset($parsedEnd['month'])) $dates['end_month'] = $parsedEnd['month'];
+                if (isset($parsedEnd['day'])) $dates['end_day'] = $parsedEnd['day'];
 
                 // Validate that end date is not before start date
                 if (isset($dates['start_year'])) {
@@ -265,13 +262,124 @@ class ConnectionImporter
                         unset($dates['end_year'], $dates['end_month'], $dates['end_day']);
                     }
                 }
-            } catch (\Exception $e) {
-                // If end date parsing fails, just omit it
-                unset($dates['end_year'], $dates['end_month'], $dates['end_day']);
             }
         }
 
         return empty($dates) ? null : $dates;
+    }
+
+    /**
+     * Parse LinkedIn date format (e.g., "Jul 2023", "May 2014", "2020", "2020-01-01")
+     */
+    public function parseLinkedInDate(?string $dateString): ?array
+    {
+        if (empty($dateString)) {
+            return null;
+        }
+
+        $dateString = trim($dateString);
+
+        // Try year-only format first (YYYY)
+        if (preg_match('/^\d{4}$/', $dateString)) {
+            return ['year' => (int) $dateString];
+        }
+
+        // Try ISO format (YYYY-MM-DD, YYYY-MM, YYYY)
+        if (preg_match('/^\d{4}(-\d{1,2}(-\d{1,2})?)?$/', $dateString)) {
+            try {
+                $parts = explode('-', $dateString);
+                $result = ['year' => (int) $parts[0]];
+                if (isset($parts[1])) $result['month'] = (int) $parts[1];
+                if (isset($parts[2])) $result['day'] = (int) $parts[2];
+                return $result;
+            } catch (\Exception $e) {
+                Log::warning('Failed to parse ISO date format', [
+                    'date_string' => $dateString,
+                    'error' => $e->getMessage()
+                ]);
+                return null;
+            }
+        }
+
+        // Try LinkedIn format (Month Year, e.g., "Jul 2023", "May 2014")
+        if (preg_match('/^([A-Za-z]+)\s+(\d{4})$/', $dateString, $matches)) {
+            $monthName = $matches[1];
+            $year = (int) $matches[2];
+            
+            $monthMap = [
+                'jan' => 1, 'january' => 1,
+                'feb' => 2, 'february' => 2,
+                'mar' => 3, 'march' => 3,
+                'apr' => 4, 'april' => 4,
+                'may' => 5,
+                'jun' => 6, 'june' => 6,
+                'jul' => 7, 'july' => 7,
+                'aug' => 8, 'august' => 8,
+                'sep' => 9, 'september' => 9,
+                'oct' => 10, 'october' => 10,
+                'nov' => 11, 'november' => 11,
+                'dec' => 12, 'december' => 12
+            ];
+            
+            $monthLower = strtolower($monthName);
+            if (isset($monthMap[$monthLower])) {
+                return [
+                    'year' => $year,
+                    'month' => $monthMap[$monthLower]
+                ];
+            } else {
+                Log::warning('Unknown month name in LinkedIn date', [
+                    'date_string' => $dateString,
+                    'month_name' => $monthName
+                ]);
+                return null;
+            }
+        }
+
+        // Try other common formats
+        // Full date with day (e.g., "14 May 2020", "May 14, 2020")
+        $patterns = [
+            '/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/', // "14 May 2020"
+            '/^([A-Za-z]+)\s+(\d{1,2})\s*,?\s*(\d{4})$/', // "May 14, 2020" or "May 14 2020" or "May 14,2020"
+        ];
+        
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $dateString, $matches)) {
+                $monthName = $matches[2] ?? $matches[1];
+                $day = (int) ($matches[1] ?? $matches[2]);
+                $year = (int) $matches[3];
+                
+                $monthMap = [
+                    'jan' => 1, 'january' => 1,
+                    'feb' => 2, 'february' => 2,
+                    'mar' => 3, 'march' => 3,
+                    'apr' => 4, 'april' => 4,
+                    'may' => 5,
+                    'jun' => 6, 'june' => 6,
+                    'jul' => 7, 'july' => 7,
+                    'aug' => 8, 'august' => 8,
+                    'sep' => 9, 'september' => 9,
+                    'oct' => 10, 'october' => 10,
+                    'nov' => 11, 'november' => 11,
+                    'dec' => 12, 'december' => 12
+                ];
+                
+                $monthLower = strtolower($monthName);
+                if (isset($monthMap[$monthLower])) {
+                    return [
+                        'year' => $year,
+                        'month' => $monthMap[$monthLower],
+                        'day' => $day
+                    ];
+                }
+            }
+        }
+
+        Log::warning('Could not parse LinkedIn date format', [
+            'date_string' => $dateString
+        ]);
+        
+        return null;
     }
 
     protected function generateConnectionName(Span $parent, Span $child, string $connectionType): string
