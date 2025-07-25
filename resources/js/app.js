@@ -8,14 +8,15 @@ import './tools-button-functions';
 // Import timeline manager
 import './timeline/timeline-manager';
 
+// Import shared components first
+import './shared/user-switcher';
+import './mobile-right-nav';
+
 // Import page-specific scripts
 import './spans/show';
 import './spans/index';
 import './spans/edit';
 import './layouts/user-dropdown';
-
-// Import shared components
-import './shared/user-switcher';
 
 // Import component enhancements
 import './components/responsive-button-groups';

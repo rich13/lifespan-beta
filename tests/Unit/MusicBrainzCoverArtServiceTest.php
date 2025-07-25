@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use App\Services\MusicBrainzCoverArtService;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class MusicBrainzCoverArtServiceTest extends TestCase
@@ -13,6 +14,11 @@ class MusicBrainzCoverArtServiceTest extends TestCase
         $service = MusicBrainzCoverArtService::getInstance();
         // Use a valid MBID format (even if it doesn't exist, it won't be a 400 error)
         $releaseGroupId = 'bca9280e-28b4-327f-8fe0-fd918579e486';
+        
+        // Mock the HTTP response
+        Http::fake([
+            'https://coverartarchive.org/*' => Http::response(['images' => []], 200)
+        ]);
         
         // Clear any existing cache
         $service->clearCache($releaseGroupId);
@@ -56,7 +62,16 @@ class MusicBrainzCoverArtServiceTest extends TestCase
 
     public function test_caching_with_error_response()
     {
-        $service = MusicBrainzCoverArtService::getInstance();
+        // Create a partial mock of the service
+        $service = $this->partialMock(MusicBrainzCoverArtService::class);
+        $service->shouldAllowMockingProtectedMethods();
+        
+        // Mock the makeRateLimitedRequest method to return a 400 error response
+        $service->shouldReceive('makeRateLimitedRequest')
+            ->andReturn(new \Illuminate\Http\Client\Response(
+                new \GuzzleHttp\Psr7\Response(400, [], 'Bad Request')
+            ));
+        
         // Use an invalid MBID that will cause a 400 error
         $releaseGroupId = 'invalid-mbid';
         

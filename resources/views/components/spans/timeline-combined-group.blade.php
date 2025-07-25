@@ -23,7 +23,12 @@
         </div>
     </div>
     <div class="card-body">
-        <div id="timeline-combined-container-{{ $span->id }}" style="height: 300px; width: 100%; cursor: crosshair;">
+        <div id="timeline-combined-container-{{ $span->id }}" style="height: 60px; width: 100%; cursor: crosshair; position: relative; overflow: hidden; transition: height 0.3s cubic-bezier(.4,0,.2,1);">
+            <div id="timeline-combined-spinner-{{ $span->id }}" class="d-flex justify-content-center align-items-center h-100" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.7); z-index: 10;">
+                <div class="spinner-border text-secondary" role="status" style="width: 2rem; height: 2rem;">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
             <!-- D3 combined timeline will be rendered here -->
         </div>
     </div>
@@ -34,6 +39,11 @@
 <script>
 // Use a unique identifier to avoid conflicts with other timeline components
 const combinedTimelineId = 'combined_{{ str_replace('-', '_', $span->id) }}';
+let tooltipLocked_{{ str_replace('-', '_', $span->id) }} = false;
+let lastTooltipEvent_{{ str_replace('-', '_', $span->id) }} = null;
+let unlockListener_{{ str_replace('-', '_', $span->id) }} = null;
+let tooltipMask_{{ str_replace('-', '_', $span->id) }} = null;
+let tooltipEscapeListener_{{ str_replace('-', '_', $span->id) }} = null;
 
 document.addEventListener('DOMContentLoaded', function() {
     // Add a small delay to ensure DOM is fully ready
@@ -46,6 +56,7 @@ function initializeCombinedTimeline_{{ str_replace('-', '_', $span->id) }}() {
     const spanId = '{{ $span->id }}';
     const currentUserSpanId = '{{ $currentUserSpanId }}';
     const container = document.getElementById(`timeline-combined-container-${spanId}`);
+    const spinner = document.getElementById(`timeline-combined-spinner-${spanId}`);
     
     // Check if container exists
     if (!container) {
@@ -69,8 +80,12 @@ function initializeCombinedTimeline_{{ str_replace('-', '_', $span->id) }}() {
                 .filter(conn => {
                     // Exclude connections to connection spans
                     if (conn.target_type === 'connection') return false;
-                    // Exclude "created" connections to photos
-                    if (conn.type_id === 'created' && conn.target_type === 'thing' && conn.target_metadata?.subtype === 'photo') return false;
+                    // Exclude "created" connections to photos or sets
+                    if (
+                        conn.type_id === 'created' &&
+                        conn.target_type === 'thing' &&
+                        (conn.target_metadata?.subtype === 'photo' || conn.target_metadata?.subtype === 'set')
+                    ) return false;
                     return true;
                 })
                 .map(conn => conn.target_id)
@@ -195,25 +210,83 @@ function initializeCombinedTimeline_{{ str_replace('-', '_', $span->id) }}() {
                         timelineData[0].duringConnections = allDuringConnections;
                     }
                     
-                    renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpanData.span, 'absolute', currentUserSpanId);
-                    
-                    // Add event listeners for mode toggle
-                    setupModeToggle_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpanData.span, currentUserSpanId);
+                    const finishRender = (timelineData) => {
+                        // Calculate the final height for the timeline
+                        const swimlaneHeight = 20;
+                        const swimlaneSpacing = 10;
+                        const swimlaneBottomMargin = 30;
+                        const margin = { top: 20, right: 20, bottom: 30, left: 20 };
+                        const totalSwimlanes = timelineData.length;
+                        const totalHeight = totalSwimlanes * (swimlaneHeight + swimlaneSpacing) - swimlaneSpacing + swimlaneBottomMargin;
+                        const adjustedHeight = totalHeight + margin.top + margin.bottom;
+                        // Animate the container height
+                        container.style.height = '60px';
+                        // Hide spinner after a short delay to ensure DOM update
+                        setTimeout(() => {
+                            if (spinner) spinner.style.display = 'none';
+                            container.style.height = adjustedHeight + 'px';
+                            // Wait for the transition to finish before rendering SVG
+                            setTimeout(() => {
+                                renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpanData.span, 'absolute', currentUserSpanId);
+                                // Add event listeners for mode toggle
+                                setupModeToggle_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpanData.span, currentUserSpanId);
+                            }, 300);
+                        }, 50);
+                    };
+                    finishRender(timelineData);
                 })
                 .catch(error => {
                     console.error('Error loading subject timelines:', error);
-                    // Still render with what we have
-                    renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpanData.span, 'absolute', currentUserSpanId);
-                    
-                    // Add event listeners for mode toggle
-                    setupModeToggle_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpanData.span, currentUserSpanId);
+                    const finishRender = (timelineData) => {
+                        // Calculate the final height for the timeline
+                        const swimlaneHeight = 20;
+                        const swimlaneSpacing = 10;
+                        const swimlaneBottomMargin = 30;
+                        const margin = { top: 20, right: 20, bottom: 30, left: 20 };
+                        const totalSwimlanes = timelineData.length;
+                        const totalHeight = totalSwimlanes * (swimlaneHeight + swimlaneSpacing) - swimlaneSpacing + swimlaneBottomMargin;
+                        const adjustedHeight = totalHeight + margin.top + margin.bottom;
+                        // Animate the container height
+                        container.style.height = '60px';
+                        // Hide spinner after a short delay to ensure DOM update
+                        setTimeout(() => {
+                            if (spinner) spinner.style.display = 'none';
+                            container.style.height = adjustedHeight + 'px';
+                            // Wait for the transition to finish before rendering SVG
+                            setTimeout(() => {
+                                renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpanData.span, 'absolute', currentUserSpanId);
+                                // Add event listeners for mode toggle
+                                setupModeToggle_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpanData.span, currentUserSpanId);
+                            }, 300);
+                        }, 50);
+                    };
+                    finishRender(timelineData);
                 });
         } else {
-            // No subjects, just render current span (and user span if needed)
-            renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpanData.span, 'absolute', currentUserSpanId);
-            
-            // Add event listeners for mode toggle
-            setupModeToggle_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpanData.span, currentUserSpanId);
+            const finishRender = (timelineData) => {
+                // Calculate the final height for the timeline
+                const swimlaneHeight = 20;
+                const swimlaneSpacing = 10;
+                const swimlaneBottomMargin = 30;
+                const margin = { top: 20, right: 20, bottom: 30, left: 20 };
+                const totalSwimlanes = timelineData.length;
+                const totalHeight = totalSwimlanes * (swimlaneHeight + swimlaneSpacing) - swimlaneSpacing + swimlaneBottomMargin;
+                const adjustedHeight = totalHeight + margin.top + margin.bottom;
+                // Animate the container height
+                container.style.height = '60px';
+                // Hide spinner after a short delay to ensure DOM update
+                setTimeout(() => {
+                    if (spinner) spinner.style.display = 'none';
+                    container.style.height = adjustedHeight + 'px';
+                    // Wait for the transition to finish before rendering SVG
+                    setTimeout(() => {
+                        renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpanData.span, 'absolute', currentUserSpanId);
+                        // Add event listeners for mode toggle
+                        setupModeToggle_{{ str_replace('-', '_', $span->id) }}(timelineData, currentSpanData.span, currentUserSpanId);
+                    }, 300);
+                }, 50);
+            };
+            finishRender(timelineData);
         }
     })
     .catch(error => {
@@ -344,112 +417,106 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
                 .style('opacity', hasConnections ? 0.3 : 0.7)
                 .style('pointer-events', 'auto') // Always allow interaction
                 .on('mouseover', function(event) {
-                    d3.select(this).style('opacity', 0.9);
-                    updateLifeSpanTooltip_{{ str_replace('-', '_', $span->id) }}(event, timelineSpan, timelineData, timeline.name, isCurrentSpan, mode);
+                    persistentTooltipHandler(event, updateLifeSpanTooltip_{{ str_replace('-', '_', $span->id) }}, timelineSpan, timelineData, timeline.name, isCurrentSpan, mode);
                 })
                 .on('mousemove', function(event) {
-                    updateLifeSpanTooltip_{{ str_replace('-', '_', $span->id) }}(event, timelineSpan, timelineData, timeline.name, isCurrentSpan, mode);
+                    persistentTooltipHandler(event, updateLifeSpanTooltip_{{ str_replace('-', '_', $span->id) }}, timelineSpan, timelineData, timeline.name, isCurrentSpan, mode);
                 })
                 .on('mouseout', function() {
-                    d3.select(this).style('opacity', hasConnections ? 0.3 : 0.7);
-                    hideCombinedTooltip_{{ str_replace('-', '_', $span->id) }}();
+                    persistentTooltipHide();
+                })
+                .on('click', function(event) {
+                    persistentTooltipClick(event, updateLifeSpanTooltip_{{ str_replace('-', '_', $span->id) }}, timelineSpan, timelineData, timeline.name, isCurrentSpan, mode);
                 });
         }
 
         // Add connections for this timeline
         if (timeline.timeline.connections) {
-            timeline.timeline.connections
-                .filter(connection => {
-                    // Exclude connections to connection spans
-                    if (connection.target_type === 'connection') return false;
-                    // Exclude "created" connections to photos
-                    if (connection.type_id === 'created' && connection.target_type === 'thing' && connection.target_metadata?.subtype === 'photo') return false;
-                    return true;
-                })
+            filterConnectionsDeep(timeline.timeline.connections)
                 .forEach(connection => {
-                const connectionType = connection.type_id;
-                
-                if (connectionType === 'created') {
-                    const connectionStartYear = mode === 'absolute' ? connection.start_year : connection.start_year - timelineSpan.start_year;
-                    const x = xScale(connectionStartYear);
-                    const y1 = swimlaneY;
-                    const y2 = swimlaneY + swimlaneHeight;
-                    const circleY = (y1 + y2) / 2;
-                    const circleRadius = 3;
-                    
-                    svg.append('line')
-                        .attr('class', 'timeline-moment')
-                        .attr('x1', x)
-                        .attr('x2', x)
-                        .attr('y1', y1)
-                        .attr('y2', y2)
-                        .attr('stroke', getConnectionColor(connectionType))
-                        .attr('stroke-width', 2)
-                        .style('opacity', 0.8)
-                        .on('mouseover', function(event) {
-                            d3.select(this).style('opacity', 0.9);
-                            updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}(event, [connection], timeline.name, isCurrentSpan, mode);
-                        })
-                        .on('mousemove', function(event) {
-                            updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}(event, [connection], timeline.name, isCurrentSpan, mode);
-                        })
-                        .on('mouseout', function() {
-                            d3.select(this).style('opacity', 0.8);
-                            hideCombinedTooltip_{{ str_replace('-', '_', $span->id) }}();
-                        });
-                    
-                    svg.append('circle')
-                        .attr('class', 'timeline-moment-circle')
-                        .attr('cx', x)
-                        .attr('cy', circleY)
-                        .attr('r', circleRadius)
-                        .attr('fill', getConnectionColor(connectionType))
-                        .attr('stroke', 'white')
-                        .attr('stroke-width', 1)
-                        .style('opacity', 0.9)
-                        .on('mouseover', function(event) {
-                            d3.select(this).style('opacity', 1);
-                            updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}(event, [connection], timeline.name, isCurrentSpan, mode);
-                        })
-                        .on('mousemove', function(event) {
-                            updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}(event, [connection], timeline.name, isCurrentSpan, mode);
-                        })
-                        .on('mouseout', function() {
-                            d3.select(this).style('opacity', 0.9);
-                            hideCombinedTooltip_{{ str_replace('-', '_', $span->id) }}();
-                        });
-                } else {
-                    const connectionStartYear = mode === 'absolute' ? connection.start_year : connection.start_year - timelineSpan.start_year;
-                    const connectionEndYear = mode === 'absolute' 
-                        ? (connection.end_year || new Date().getFullYear())
-                        : (connection.end_year ? connection.end_year - timelineSpan.start_year : new Date().getFullYear() - timelineSpan.start_year);
-                    const connectionWidth = xScale(connectionEndYear) - xScale(connectionStartYear);
-                    
-                    svg.append('rect')
-                        .attr('class', 'timeline-bar')
-                        .attr('x', xScale(connectionStartYear))
-                        .attr('y', swimlaneY + 2)
-                        .attr('width', Math.max(1, connectionWidth))
-                        .attr('height', swimlaneHeight - 4)
-                        .attr('fill', getConnectionColor(connectionType))
-                        .attr('stroke', 'white')
-                        .attr('stroke-width', 1)
-                        .attr('rx', 2)
-                        .attr('ry', 2)
-                        .style('opacity', 0.6)
-                        .on('mouseover', function(event) {
-                            d3.select(this).style('opacity', 0.9);
-                            updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}(event, [connection], timeline.name, isCurrentSpan, mode);
-                        })
-                        .on('mousemove', function(event) {
-                            updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}(event, [connection], timeline.name, isCurrentSpan, mode);
-                        })
-                        .on('mouseout', function() {
-                            d3.select(this).style('opacity', 0.6);
-                            hideCombinedTooltip_{{ str_replace('-', '_', $span->id) }}();
-                        });
-                }
-            });
+                    const connectionType = connection.type_id;
+                    // Only render 'created' moments if not filtered (filterTimelineConnections already excludes sets/photos)
+                    if (connectionType === 'created') {
+                        const connectionStartYear = mode === 'absolute' ? connection.start_year : connection.start_year - timelineSpan.start_year;
+                        const x = xScale(connectionStartYear);
+                        const y1 = swimlaneY;
+                        const y2 = swimlaneY + swimlaneHeight;
+                        const circleY = (y1 + y2) / 2;
+                        const circleRadius = 3;
+                        svg.append('line')
+                            .attr('class', 'timeline-moment')
+                            .attr('x1', x)
+                            .attr('x2', x)
+                            .attr('y1', y1)
+                            .attr('y2', y2)
+                            .attr('stroke', getConnectionColor(connectionType))
+                            .attr('stroke-width', 2)
+                            .style('opacity', 0.8)
+                            .on('mouseover', function(event) {
+                                persistentTooltipHandler(event, updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}, [connection], timeline.name, isCurrentSpan, mode);
+                            })
+                            .on('mousemove', function(event) {
+                                persistentTooltipHandler(event, updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}, [connection], timeline.name, isCurrentSpan, mode);
+                            })
+                            .on('mouseout', function() {
+                                persistentTooltipHide();
+                            })
+                            .on('click', function(event) {
+                                persistentTooltipClick(event, updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}, [connection], timeline.name, isCurrentSpan, mode);
+                            });
+                        svg.append('circle')
+                            .attr('class', 'timeline-moment-circle')
+                            .attr('cx', x)
+                            .attr('cy', circleY)
+                            .attr('r', circleRadius)
+                            .attr('fill', getConnectionColor(connectionType))
+                            .attr('stroke', 'white')
+                            .attr('stroke-width', 1)
+                            .style('opacity', 0.9)
+                            .on('mouseover', function(event) {
+                                persistentTooltipHandler(event, updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}, [connection], timeline.name, isCurrentSpan, mode);
+                            })
+                            .on('mousemove', function(event) {
+                                persistentTooltipHandler(event, updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}, [connection], timeline.name, isCurrentSpan, mode);
+                            })
+                            .on('mouseout', function() {
+                                persistentTooltipHide();
+                            })
+                            .on('click', function(event) {
+                                persistentTooltipClick(event, updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}, [connection], timeline.name, isCurrentSpan, mode);
+                            });
+                    } else {
+                        const connectionStartYear = mode === 'absolute' ? connection.start_year : connection.start_year - timelineSpan.start_year;
+                        const connectionEndYear = mode === 'absolute' 
+                            ? (connection.end_year || new Date().getFullYear())
+                            : (connection.end_year ? connection.end_year - timelineSpan.start_year : new Date().getFullYear() - timelineSpan.start_year);
+                        const connectionWidth = xScale(connectionEndYear) - xScale(connectionStartYear);
+                        svg.append('rect')
+                            .attr('class', 'timeline-bar')
+                            .attr('x', xScale(connectionStartYear))
+                            .attr('y', swimlaneY + 2)
+                            .attr('width', Math.max(1, connectionWidth))
+                            .attr('height', swimlaneHeight - 4)
+                            .attr('fill', getConnectionColor(connectionType))
+                            .attr('stroke', 'white')
+                            .attr('stroke-width', 1)
+                            .attr('rx', 2)
+                            .attr('ry', 2)
+                            .style('opacity', 0.6)
+                            .on('mouseover', function(event) {
+                                persistentTooltipHandler(event, updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}, [connection], timeline.name, isCurrentSpan, mode);
+                            })
+                            .on('mousemove', function(event) {
+                                persistentTooltipHandler(event, updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}, [connection], timeline.name, isCurrentSpan, mode);
+                            })
+                            .on('mouseout', function() {
+                                persistentTooltipHide();
+                            })
+                            .on('click', function(event) {
+                                persistentTooltipClick(event, updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}, [connection], timeline.name, isCurrentSpan, mode);
+                            });
+                    }
+                });
         }
 
         // Add "during" connections for this timeline (nested within the span)
@@ -477,15 +544,16 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
                     .style('opacity', 0.4) // Make more subtle
                     // .style('stroke-dasharray', '2,2') // Remove dashed border
                     .on('mouseover', function(event) {
-                        d3.select(this).style('opacity', 1);
-                        updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}(event, [connection], timeline.name, isCurrentSpan, mode, true);
+                        persistentTooltipHandler(event, updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}, [connection], timeline.name, isCurrentSpan, mode, true);
                     })
                     .on('mousemove', function(event) {
-                        updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}(event, [connection], timeline.name, isCurrentSpan, mode, true);
+                        persistentTooltipHandler(event, updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}, [connection], timeline.name, isCurrentSpan, mode, true);
                     })
                     .on('mouseout', function() {
-                        d3.select(this).style('opacity', 0.4);
-                        hideCombinedTooltip_{{ str_replace('-', '_', $span->id) }}();
+                        persistentTooltipHide();
+                    })
+                    .on('click', function(event) {
+                        persistentTooltipClick(event, updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}, [connection], timeline.name, isCurrentSpan, mode, true);
                     });
             });
         }
@@ -495,7 +563,6 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
     if (mode === 'absolute') {
         const currentYear = new Date().getFullYear();
         const nowX = xScale(currentYear);
-        
         // Only show the "now" line if it's within the visible time range
         if (nowX >= margin.left && nowX <= width - margin.right) {
             svg.append('line')
@@ -507,8 +574,6 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
                 .attr('stroke', '#dc3545')
                 .attr('stroke-width', 1)
                 .style('opacity', 0.8);
-            
-            // Add "NOW" label
             svg.append('text')
                 .attr('class', 'now-label')
                 .attr('x', nowX + 5)
@@ -518,6 +583,37 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
                 .attr('font-weight', 'bold')
                 .attr('fill', '#dc3545')
                 .text('NOW');
+        }
+    } else if (mode === 'relative') {
+        // In relative mode, show "now" at the current user's age (if available)
+        if (currentUserSpanId) {
+            const userTimeline = timelineData.find(t => t.id == currentUserSpanId);
+            if (userTimeline && userTimeline.timeline && userTimeline.timeline.span && userTimeline.timeline.span.start_year) {
+                const currentYear = new Date().getFullYear();
+                const userStartYear = userTimeline.timeline.span.start_year;
+                const userCurrentAge = currentYear - userStartYear;
+                const nowX = xScale(userCurrentAge);
+                if (nowX >= margin.left && nowX <= width - margin.right) {
+                    svg.append('line')
+                        .attr('class', 'now-line')
+                        .attr('x1', nowX)
+                        .attr('x2', nowX)
+                        .attr('y1', margin.top)
+                        .attr('y2', adjustedHeight - margin.bottom)
+                        .attr('stroke', '#dc3545')
+                        .attr('stroke-width', 1)
+                        .style('opacity', 0.8);
+                    svg.append('text')
+                        .attr('class', 'now-label')
+                        .attr('x', nowX + 5)
+                        .attr('y', margin.top + 15)
+                        .attr('text-anchor', 'start')
+                        .attr('font-size', '10px')
+                        .attr('font-weight', 'bold')
+                        .attr('fill', '#dc3545')
+                        .text('NOW');
+                }
+            }
         }
     }
 
@@ -551,7 +647,112 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
         .style('border-radius', '4px')
         .style('font-size', '12px')
         .style('pointer-events', 'none')
-        .style('opacity', 0);
+        .style('opacity', 0)
+        .style('z-index', 9999);
+
+    // --- MODIFIED EVENT HANDLERS FOR PERSISTENT TOOLTIP ---
+    function persistentTooltipHandler(event, showFn, ...args) {
+        if (!tooltipLocked_{{ str_replace('-', '_', $span->id) }}) {
+            showFn(event, ...args);
+            lastTooltipEvent_{{ str_replace('-', '_', $span->id) }} = { showFn, args, event };
+        }
+    }
+    function persistentTooltipHide() {
+        if (!tooltipLocked_{{ str_replace('-', '_', $span->id) }}) {
+            hideCombinedTooltip_{{ str_replace('-', '_', $span->id) }}();
+        }
+    }
+    function persistentTooltipClick(event, showFn, ...args) {
+        tooltipLocked_{{ str_replace('-', '_', $span->id) }} = true;
+        showFn(event, ...args);
+        lastTooltipEvent_{{ str_replace('-', '_', $span->id) }} = { showFn, args, event };
+        tooltip.style('pointer-events', 'auto');
+        // Add fullscreen mask
+        if (!tooltipMask_{{ str_replace('-', '_', $span->id) }}) {
+            tooltipMask_{{ str_replace('-', '_', $span->id) }} = document.createElement('div');
+            tooltipMask_{{ str_replace('-', '_', $span->id) }}.className = 'timeline-tooltip-mask';
+            Object.assign(tooltipMask_{{ str_replace('-', '_', $span->id) }}.style, {
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                width: '100vw',
+                height: '100vh',
+                background: 'rgba(255,255,255,0.7)',
+                zIndex: 9998, // Mask below tooltip
+                cursor: 'pointer',
+            });
+            tooltipMask_{{ str_replace('-', '_', $span->id) }}.addEventListener('mousedown', function(e) {
+                tooltipLocked_{{ str_replace('-', '_', $span->id) }} = false;
+                hideCombinedTooltip_{{ str_replace('-', '_', $span->id) }}();
+                tooltip.style('pointer-events', 'none');
+                if (tooltipMask_{{ str_replace('-', '_', $span->id) }}) {
+                    document.body.removeChild(tooltipMask_{{ str_replace('-', '_', $span->id) }});
+                    tooltipMask_{{ str_replace('-', '_', $span->id) }} = null;
+                }
+                if (tooltipEscapeListener_{{ str_replace('-', '_', $span->id) }}) {
+                    document.removeEventListener('keydown', tooltipEscapeListener_{{ str_replace('-', '_', $span->id) }});
+                    tooltipEscapeListener_{{ str_replace('-', '_', $span->id) }} = null;
+                }
+                if (unlockListener_{{ str_replace('-', '_', $span->id) }}) {
+                    document.removeEventListener('mousedown', unlockListener_{{ str_replace('-', '_', $span->id) }});
+                    unlockListener_{{ str_replace('-', '_', $span->id) }} = null;
+                }
+            });
+        }
+        document.body.appendChild(tooltipMask_{{ str_replace('-', '_', $span->id) }});
+        // Add Escape key listener
+        if (!tooltipEscapeListener_{{ str_replace('-', '_', $span->id) }}) {
+            tooltipEscapeListener_{{ str_replace('-', '_', $span->id) }} = function(e) {
+                if (e.key === 'Escape') {
+                    tooltipLocked_{{ str_replace('-', '_', $span->id) }} = false;
+                    hideCombinedTooltip_{{ str_replace('-', '_', $span->id) }}();
+                    tooltip.style('pointer-events', 'none');
+                    if (tooltipMask_{{ str_replace('-', '_', $span->id) }}) {
+                        document.body.removeChild(tooltipMask_{{ str_replace('-', '_', $span->id) }});
+                        tooltipMask_{{ str_replace('-', '_', $span->id) }} = null;
+                    }
+                    document.removeEventListener('keydown', tooltipEscapeListener_{{ str_replace('-', '_', $span->id) }});
+                    tooltipEscapeListener_{{ str_replace('-', '_', $span->id) }} = null;
+                    if (unlockListener_{{ str_replace('-', '_', $span->id) }}) {
+                        document.removeEventListener('mousedown', unlockListener_{{ str_replace('-', '_', $span->id) }});
+                        unlockListener_{{ str_replace('-', '_', $span->id) }} = null;
+                    }
+                }
+            };
+            document.addEventListener('keydown', tooltipEscapeListener_{{ str_replace('-', '_', $span->id) }});
+        }
+        // Remove any previous listener
+        if (unlockListener_{{ str_replace('-', '_', $span->id) }}) {
+            document.removeEventListener('mousedown', unlockListener_{{ str_replace('-', '_', $span->id) }});
+        }
+        unlockListener_{{ str_replace('-', '_', $span->id) }} = function(e) {
+            const svg = document.getElementById(`timeline-combined-container-${spanId}`);
+            const tooltipNode = tooltip.node();
+            // If mask is present, let it handle the click
+            if (tooltipMask_{{ str_replace('-', '_', $span->id) }} && e.target === tooltipMask_{{ str_replace('-', '_', $span->id) }}) {
+                return;
+            }
+            if (
+                tooltipNode && !tooltipNode.contains(e.target) &&
+                svg && !svg.contains(e.target)
+            ) {
+                tooltipLocked_{{ str_replace('-', '_', $span->id) }} = false;
+                hideCombinedTooltip_{{ str_replace('-', '_', $span->id) }}();
+                tooltip.style('pointer-events', 'none');
+                if (tooltipMask_{{ str_replace('-', '_', $span->id) }}) {
+                    document.body.removeChild(tooltipMask_{{ str_replace('-', '_', $span->id) }});
+                    tooltipMask_{{ str_replace('-', '_', $span->id) }} = null;
+                }
+                document.removeEventListener('mousedown', unlockListener_{{ str_replace('-', '_', $span->id) }});
+                unlockListener_{{ str_replace('-', '_', $span->id) }} = null;
+                if (tooltipEscapeListener_{{ str_replace('-', '_', $span->id) }}) {
+                    document.removeEventListener('keydown', tooltipEscapeListener_{{ str_replace('-', '_', $span->id) }});
+                    tooltipEscapeListener_{{ str_replace('-', '_', $span->id) }} = null;
+                }
+            }
+        };
+        document.addEventListener('mousedown', unlockListener_{{ str_replace('-', '_', $span->id) }});
+    }
 
     function showCombinedTooltip_{{ str_replace('-', '_', $span->id) }}(event, connections, timelineName, isCurrentSpan, hoverYear, mode = 'absolute', isDuring = false) {
         tooltip.transition().duration(200).style('opacity', 1);
@@ -614,14 +815,7 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
         if (mode === 'absolute') {
             timelineData.forEach(timeline => {
                 if (timeline.timeline.connections) {
-                    timeline.timeline.connections
-                        .filter(otherConnection => {
-                            // Exclude connections to connection spans
-                            if (otherConnection.target_type === 'connection') return false;
-                            // Exclude "created" connections to photos
-                            if (otherConnection.type_id === 'created' && otherConnection.target_type === 'thing' && otherConnection.target_metadata?.subtype === 'photo') return false;
-                            return true;
-                        })
+                    filterConnectionsDeep(timeline.timeline.connections)
                         .forEach(otherConnection => {
                         const otherStart = otherConnection.start_year;
                         const otherEnd = otherConnection.end_year || new Date().getFullYear();
@@ -634,7 +828,9 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
                                 start_year: otherConnection.start_year,
                                 end_year: otherConnection.end_year,
                                 isCurrentSpan: timeline.isCurrentSpan,
-                                nested_connections: otherConnection.nested_connections || []
+                                nested_connections: otherConnection.nested_connections || [],
+                                span_id: timeline.id, // Add span_id
+                                target_id: otherConnection.target_id // Add target_id
                             });
                         }
                     });
@@ -664,20 +860,15 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
                         end_age: lifeEndAge,
                         isCurrentSpan: timeline.isCurrentSpan,
                         isLifeSpan: true,
-                        alive: alive
+                        alive: alive,
+                        span_id: timeline.id, // Add span_id
+                        target_id: null // Add target_id
                     });
                     lifeSpanIncluded = true;
                 }
                 // Add subspans if any
                 if (timeline.timeline.connections) {
-                    timeline.timeline.connections
-                        .filter(otherConnection => {
-                            // Exclude connections to connection spans
-                            if (otherConnection.target_type === 'connection') return false;
-                            // Exclude "created" connections to photos
-                            if (otherConnection.type_id === 'created' && otherConnection.target_type === 'thing' && otherConnection.target_metadata?.subtype === 'photo') return false;
-                            return true;
-                        })
+                    filterConnectionsDeep(timeline.timeline.connections)
                         .forEach(otherConnection => {
                         if (timelineSpan && timelineSpan.start_year) {
                             const otherStart = otherConnection.start_year - timelineSpan.start_year;
@@ -695,7 +886,9 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
                                     start_age: otherStart,
                                     end_age: otherEnd,
                                     isCurrentSpan: timeline.isCurrentSpan,
-                                    nested_connections: otherConnection.nested_connections || []
+                                    nested_connections: otherConnection.nested_connections || [],
+                                    span_id: timeline.id, // Add span_id
+                                    target_id: otherConnection.target_id // Add target_id
                                 });
                                 found = true;
                             }
@@ -707,21 +900,27 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
                     activities.push({
                         timelineName: timeline.name,
                         notAlive: true,
-                        isCurrentSpan: timeline.isCurrentSpan
+                        isCurrentSpan: timeline.isCurrentSpan,
+                        span_id: timeline.id, // Add span_id
+                        target_id: null // Add target_id
                     });
                 } else if (!alive) {
                     // Not alive at this age
                     activities.push({
                         timelineName: timeline.name,
                         notAlive: true,
-                        isCurrentSpan: timeline.isCurrentSpan
+                        isCurrentSpan: timeline.isCurrentSpan,
+                        span_id: timeline.id, // Add span_id
+                        target_id: null // Add target_id
                     });
                 } else if (!found) {
                     // Alive but no subspans at this age
                     activities.push({
                         timelineName: timeline.name,
                         noActivity: true,
-                        isCurrentSpan: timeline.isCurrentSpan
+                        isCurrentSpan: timeline.isCurrentSpan,
+                        span_id: timeline.id, // Add span_id
+                        target_id: null // Add target_id
                     });
                 }
             });
@@ -737,72 +936,76 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
 
     function formatActivitiesWithDividers_{{ str_replace('-', '_', $span->id) }}(activities, mode = 'absolute', hoverYear = null) {
         if (activities.length === 0) return '';
-        
+        // Group activities by timelineName
+        const grouped = {};
+        activities.forEach(activity => {
+            if (!grouped[activity.timelineName]) grouped[activity.timelineName] = [];
+            grouped[activity.timelineName].push(activity);
+        });
         let formattedContent = '';
-        let currentTimeline = '';
-        
-        activities.forEach((activity, index) => {
-            // Add divider if we're switching to a new timeline
-            if (activity.timelineName !== currentTimeline) {
-                if (currentTimeline !== '') {
-                    formattedContent += '<hr style="margin: 4px 0; border: none; border-top: 1px solid white;">';
-                }
-                currentTimeline = activity.timelineName;
+        Object.entries(grouped).forEach(([timelineName, acts], idx) => {
+            if (idx > 0) {
+                formattedContent += '<hr style="margin: 4px 0; border: none; border-top: 1px solid white;">';
             }
-            
-            if (activity.notAlive) {
-                formattedContent += `<span style='color: #ccc;'>●</span> <em>${activity.timelineName}</em>: <span style='color:#aaa'>Not alive at this age</span><br/>`;
-            } else if (activity.noActivity) {
-                formattedContent += `<span style='color: #ccc;'>●</span> <em>${activity.timelineName}</em>: <span style='color:#aaa'>No span at this age</span><br/>`;
-            } else if (activity.isLifeSpan && mode === 'absolute') {
-                // Only show life span in absolute mode, not in relative mode
-                let timeInfo = ` (${activity.start_year} - ${activity.end_year})`;
-                formattedContent += `<span style='color: black;'>●</span> <em>${activity.timelineName}</em>: <strong>Life span</strong>${timeInfo}<br/>`;
-            } else if (!activity.isLifeSpan) {
-                // Show regular activities (not life span)
-                const bulletColor = getConnectionColor(activity.type_id);
-                let timeInfo = '';
-                if (mode === 'absolute') {
-                    const endYear = activity.end_year || 'Present';
-                    timeInfo = ` (${activity.start_year} - ${endYear})`;
+            // Find the first activity with a spanId (assume all activities for a timeline have the same spanId)
+            const firstActivity = acts.find(a => a.span_id);
+            let nameHtml = timelineName;
+            if (tooltipLocked_{{ str_replace('-', '_', $span->id) }} && firstActivity && firstActivity.span_id) {
+                // Use Laravel route: /spans/{spanId}
+                nameHtml = `<a href="/spans/${firstActivity.span_id}" style="color: #fff; text-decoration: underline;">${timelineName}</a>`;
+            }
+            formattedContent += `<div><strong>${nameHtml}</strong></div>`;
+            acts.forEach(activity => {
+                if (activity.notAlive) {
+                    formattedContent += `<div style='color:#aaa; margin-left: 1.5em;'>Not alive at this age</div>`;
+                } else if (activity.noActivity) {
+                    formattedContent += `<div style='color:#aaa; margin-left: 1.5em;'>No span at this age</div>`;
+                } else if (activity.isLifeSpan && mode === 'absolute') {
+                    let endDisplay = (activity.end_year === null || typeof activity.end_year === 'undefined') ? 'now' : activity.end_year;
+                    let timeInfo = ` (${activity.start_year} - ${endDisplay})`;
+                    formattedContent += `<div style='margin-left: 1.5em;'>• <strong>Life span</strong>${timeInfo}</div>`;
                 } else {
-                    const endAge = activity.end_age || 'Present';
-                    timeInfo = ` (Age ${activity.start_age} - ${endAge})`;
+                    let timeInfo = '';
+                    if (mode === 'absolute') {
+                        let endDisplay = (activity.end_year === null || typeof activity.end_year === 'undefined') ? 'now' : activity.end_year;
+                        timeInfo = ` (${activity.start_year} - ${endDisplay})`;
+                    } else if (typeof activity.start_age !== 'undefined' && typeof activity.end_age !== 'undefined') {
+                        let endDisplay = (activity.end_age === null || typeof activity.end_age === 'undefined') ? 'now' : activity.end_age;
+                        timeInfo = ` (Age ${activity.start_age} - ${endDisplay})`;
+                    }
+                    let targetHtml = activity.target_name;
+                    if (tooltipLocked_{{ str_replace('-', '_', $span->id) }} && activity.target_id) {
+                        targetHtml = `<a href="/spans/${activity.target_id}" style="color: #fff; text-decoration: underline;">${activity.target_name}</a>`;
+                    }
+                    formattedContent += `<div style='margin-left: 1.5em;'>- ${activity.type_name} ${targetHtml}${timeInfo}</div>`;
                 }
-                formattedContent += `<span style="color: ${bulletColor};">●</span> <em>${activity.timelineName}</em>: ${activity.type_name} ${activity.target_name}${timeInfo}<br/>`;
-                
-                // Add nested connections (phases) if they exist
+                // Nested connections (phases)
                 if (activity.nested_connections && activity.nested_connections.length > 0) {
                     activity.nested_connections.forEach(nestedConnection => {
                         const nestedStart = nestedConnection.start_year;
                         const nestedEnd = nestedConnection.end_year || new Date().getFullYear();
-                        
-                        // Only show phases that are active at the current hover time
                         if (nestedStart <= hoverYear && nestedEnd >= hoverYear) {
                             let nestedTimeInfo = '';
                             if (mode === 'absolute') {
-                                const nestedEndYear = nestedConnection.end_year || 'Present';
-                                nestedTimeInfo = ` (${nestedConnection.start_year} - ${nestedEndYear})`;
+                                let nestedEndDisplay = (nestedConnection.end_year === null || typeof nestedConnection.end_year === 'undefined') ? 'now' : nestedConnection.end_year || 'now';
+                                nestedTimeInfo = ` (${nestedConnection.start_year} - ${nestedEndDisplay})`;
                             } else {
                                 const timelineSpan = timelineData.find(t => t.name === activity.timelineName)?.timeline?.span;
                                 if (timelineSpan && timelineSpan.start_year) {
                                     const nestedStartAge = nestedConnection.start_year - timelineSpan.start_year;
-                                    const nestedEndAge = nestedConnection.end_year 
-                                        ? nestedConnection.end_year - timelineSpan.start_year 
-                                        : new Date().getFullYear() - timelineSpan.start_year;
+                                    let nestedEndAge = (nestedConnection.end_year === null || typeof nestedConnection.end_year === 'undefined')
+                                        ? 'now'
+                                        : nestedConnection.end_year - timelineSpan.start_year;
                                     nestedTimeInfo = ` (Age ${nestedStartAge} - ${nestedEndAge})`;
                                 }
                             }
-                            
                             const nestedBulletColor = getConnectionColor(nestedConnection.type_id);
-                            formattedContent += `<span style="color: ${nestedBulletColor}; margin-left: 12px;">└─</span> ${nestedConnection.type_name} ${nestedConnection.target_name}${nestedTimeInfo}<br/>`;
+                            formattedContent += `<div style='margin-left: 3em; color: ${nestedBulletColor};'>└─ ${nestedConnection.type_name} ${nestedConnection.target_name}${nestedTimeInfo}</div>`;
                         }
                     });
                 }
-            }
-            // Skip life span entries in relative mode (they're already shown as the black bar)
+            });
         });
-        
         return formattedContent;
     }
 
@@ -815,14 +1018,7 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
             if (timeline.name === currentTimelineName) return; // Skip the current timeline
             
             if (timeline.timeline.connections) {
-                timeline.timeline.connections
-                    .filter(otherConnection => {
-                        // Exclude connections to connection spans
-                        if (otherConnection.target_type === 'connection') return false;
-                        // Exclude "created" connections to photos
-                        if (otherConnection.type_id === 'created' && otherConnection.target_type === 'thing' && otherConnection.target_metadata?.subtype === 'photo') return false;
-                        return true;
-                    })
+                filterConnectionsDeep(timeline.timeline.connections)
                     .forEach(otherConnection => {
                     const otherStart = otherConnection.start_year;
                     const otherEnd = otherConnection.end_year || new Date().getFullYear();
@@ -880,8 +1076,9 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
         const mouseX = event.clientX - svgRect.left;
         const hoverYear = Math.round(xScale.invert(mouseX));
         console.log('Connection mousemove - mouseX:', mouseX, 'hoverYear:', hoverYear, 'isDuring:', isDuring);
-        
-        showCombinedTooltip_{{ str_replace('-', '_', $span->id) }}(event, connections, timelineName, isCurrentSpan, hoverYear, mode, isDuring);
+        // Filter connections for tooltip
+        const filteredConnections = filterConnectionsDeep(connections);
+        showCombinedTooltip_{{ str_replace('-', '_', $span->id) }}(event, filteredConnections, timelineName, isCurrentSpan, hoverYear, mode, isDuring);
     }
 
     function showCombinedLifeSpanTooltip_{{ str_replace('-', '_', $span->id) }}(event, span, timelineData, timelineName, isCurrentSpan, hoverYear, mode = 'absolute') {
@@ -1038,6 +1235,30 @@ function setupModeToggle_{{ str_replace('-', '_', $span->id) }}(timelineData, cu
         radio._modeToggleHandler = handler;
         radio.addEventListener('change', handler);
     });
+}
+
+// Helper function to filter out unwanted connections (created/photos/sets) recursively
+function filterConnectionsDeep(connections) {
+    return connections
+        .filter(conn => {
+            if (conn.target_type === 'connection') return false;
+            if (
+                conn.type_id === 'created' &&
+                conn.target_type === 'thing' &&
+                (conn.target_metadata?.subtype === 'photo' || conn.target_metadata?.subtype === 'set')
+            ) return false;
+            return true;
+        })
+        .map(conn => {
+            // Recursively filter nested_connections if present
+            if (Array.isArray(conn.nested_connections)) {
+                return {
+                    ...conn,
+                    nested_connections: filterConnectionsDeep(conn.nested_connections)
+                };
+            }
+            return conn;
+        });
 }
 </script>
 @endpush 

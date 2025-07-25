@@ -88,29 +88,22 @@ class SpanTest extends TestCase
     {
         // Create a user
         $user = User::factory()->create();
-        // Delete any default sets created automatically
-        $user->spans()->where('type_id', 'set')->delete();
-        // Set the name on the user's existing personal span BEFORE creating default sets
-        $personalSpan = $user->personalSpan;
-        $personalSpan->name = 'Test User ABC123';
-        $personalSpan->save();
-        $user->refresh();
+        // Get the actual name used for the personal span
+        $actualName = $user->personalSpan->name;
 
-        // Manually create default sets after setting the name
-        \App\Models\Span::getOrCreateStarredSet($user);
-        \App\Models\Span::getOrCreateDesertIslandDiscsSet($user);
+        // Now get default sets (this should create them if needed)
         $defaultSets = Span::getDefaultSets($user);
 
         // Check Starred set slug - should include the user's name (from personal span)
         $starredSet = $defaultSets->where('name', 'Starred')->first();
         $this->assertNotNull($starredSet, 'Starred set should exist');
-        $expectedStarredSlug = Str::slug($personalSpan->name) . '-starred';
+        $expectedStarredSlug = Str::slug($actualName) . '-starred';
         $this->assertEquals($expectedStarredSlug, $starredSet->slug);
 
         // Check Desert Island Discs set slug - should include the user's name (from personal span)
         $desertIslandSet = $defaultSets->where('name', 'Desert Island Discs')->first();
         $this->assertNotNull($desertIslandSet, 'Desert Island Discs set should exist');
-        $expectedDesertIslandSlug = Str::slug($personalSpan->name) . '-desert-island-discs';
+        $expectedDesertIslandSlug = Str::slug($actualName) . '-desert-island-discs';
         $this->assertEquals($expectedDesertIslandSlug, $desertIslandSet->slug);
     }
 

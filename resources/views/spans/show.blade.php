@@ -164,7 +164,6 @@
 @endsection
 
 @push('scripts')
-<script src="{{ asset('js/tools-button-functions.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     // Delete span confirmation

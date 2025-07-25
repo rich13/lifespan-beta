@@ -391,13 +391,7 @@ $(document).ready(function() {
 
     // Load user switcher list for admin users
     @if(Auth::user() && Auth::user()->is_admin)
-        // Initialize shared user switcher for mobile
-        const mobileUserSwitcher = new UserSwitcher('mobileUserSwitcherList');
-
-        // Load user switcher when offcanvas is shown
-        $('#mobileRightNav').on('shown.bs.offcanvas', function() {
-            mobileUserSwitcher.loadUserList();
-        });
+        // (Moved to resources/js/mobile-right-nav.js)
     @endif
 });
 </script> 

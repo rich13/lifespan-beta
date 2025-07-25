@@ -16,9 +16,7 @@
 <div class="card mb-4">
     <div class="card-body">
         <h2 class="card-title h5 mb-3">
-            <a href="{{ route('spans.story', $span) }}" class="text-decoration-none">
-                <i class="bi bi-book me-2"></i>Story
-            </a>
+            <i class="bi bi-book me-2"></i>Story
         </h2>
         
         @if(isset($story['error']))

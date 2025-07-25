@@ -4,7 +4,7 @@
 class UserSwitcher {
     constructor(containerId = 'userSwitcherList') {
         this.containerId = containerId;
-        this.csrfToken = $('meta[name="csrf-token"]').attr('content');
+        // Get CSRF token when needed, not at construction time
         this.init();
     }
 
@@ -12,9 +12,25 @@ class UserSwitcher {
         console.log('UserSwitcher initialized for container:', this.containerId);
     }
 
+    getCsrfToken() {
+        // Get CSRF token when needed, ensuring jQuery is available
+        if (typeof $ !== 'undefined') {
+            return $('meta[name="csrf-token"]').attr('content');
+        }
+        // Fallback for when jQuery is not available
+        const metaTag = document.querySelector('meta[name="csrf-token"]');
+        return metaTag ? metaTag.getAttribute('content') : '';
+    }
+
     loadUserList() {
         console.log('Loading user switcher list...');
         console.log('URL:', window.routes.userSwitcher.users);
+        
+        // Ensure jQuery is available
+        if (typeof $ === 'undefined') {
+            console.error('jQuery is not available for UserSwitcher');
+            return;
+        }
         
         const $container = $(`#${this.containerId}`);
         if (!$container.length) {
@@ -26,7 +42,7 @@ class UserSwitcher {
             url: window.routes.userSwitcher.users,
             method: 'GET',
             headers: {
-                'X-CSRF-TOKEN': this.csrfToken,
+                'X-CSRF-TOKEN': this.getCsrfToken(),
                 'Accept': 'application/json'
             }
         })
@@ -42,6 +58,12 @@ class UserSwitcher {
     }
 
     displayUsers(response) {
+        // Ensure jQuery is available
+        if (typeof $ === 'undefined') {
+            console.error('jQuery is not available for UserSwitcher');
+            return;
+        }
+        
         const $container = $(`#${this.containerId}`);
         $container.empty();
         
@@ -68,6 +90,12 @@ class UserSwitcher {
     }
 
     createUserItem(user) {
+        // Ensure jQuery is available
+        if (typeof $ === 'undefined') {
+            console.error('jQuery is not available for UserSwitcher');
+            return null;
+        }
+        
         let buttonClass = 'btn btn-outline-secondary btn-sm w-100 text-start';
         let buttonHtml = '';
         
@@ -91,7 +119,7 @@ class UserSwitcher {
         
         return $(`
             <form method="POST" action="${window.routes.userSwitcher.switch.replace(':userId', user.id)}" class="mb-2">
-                <input type="hidden" name="_token" value="${this.csrfToken}">
+                <input type="hidden" name="_token" value="${this.getCsrfToken()}">
                 <button type="submit" class="${buttonClass}">
                     ${buttonHtml}
                 </button>
@@ -100,7 +128,10 @@ class UserSwitcher {
     }
 }
 
-// Export for use in other modules
+// Export for ES6 modules
+export default UserSwitcher;
+
+// Also export for CommonJS and global scope for backward compatibility
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = UserSwitcher;
 } else {

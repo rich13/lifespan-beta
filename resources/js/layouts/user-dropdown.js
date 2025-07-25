@@ -1,3 +1,6 @@
+// Import UserSwitcher class
+import UserSwitcher from '../shared/user-switcher.js';
+
 // Custom dropdown implementation
 document.addEventListener('DOMContentLoaded', function() {
     // Check if jQuery is available
@@ -56,12 +59,12 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Load user list for admin user switcher
     function loadUserList() {
-        // Use shared UserSwitcher class
-        if (typeof UserSwitcher !== 'undefined') {
+        try {
+            // Use imported UserSwitcher class
             const userSwitcher = new UserSwitcher('userSwitcherList');
             userSwitcher.loadUserList();
-        } else {
-            console.error('UserSwitcher class not available');
+        } catch (error) {
+            console.error('Failed to initialize UserSwitcher:', error);
         }
     }
     

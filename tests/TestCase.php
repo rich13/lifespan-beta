@@ -58,6 +58,9 @@ abstract class TestCase extends BaseTestCase
         Config::set('session.driver', 'array');
         $this->withoutMiddleware(\App\Http\Middleware\VerifyCsrfToken::class);
         
+        // Mock external services to prevent real API calls during tests
+        $this->mockExternalServices();
+        
         // Validate test environment after everything is set up
         $this->validateTestEnvironment();
     }
@@ -252,5 +255,22 @@ abstract class TestCase extends BaseTestCase
                 "ERROR: Failed to validate test database: " . $e->getMessage()
             );
         }
+    }
+
+    /**
+     * Mock external services to prevent real API calls during tests
+     */
+    protected function mockExternalServices(): void
+    {
+        // Mock MusicBrainzCoverArtService to prevent real API calls during tests
+        $this->mock(\App\Services\MusicBrainzCoverArtService::class, function ($mock) {
+            $mock->shouldReceive('getCoverArt')->andReturn(null);
+            $mock->shouldReceive('getFrontCoverUrl')->andReturn(null);
+            $mock->shouldReceive('getAllCoverUrls')->andReturn([]);
+            $mock->shouldReceive('hasCoverArt')->andReturn(false);
+            $mock->shouldReceive('getCoverArtSummary')->andReturn(null);
+            $mock->shouldReceive('clearCache')->andReturn(null);
+            $mock->shouldReceive('clearAllCaches')->andReturn(null);
+        });
     }
 }

@@ -311,7 +311,20 @@ class SpanSearchController extends Controller
                     
                     return $connectionData;
                 })
+                // Filter out unwanted connections at the source
                 ->filter(function ($connection) {
+                    if (
+                        $connection['type_id'] === 'created' && (
+                            $connection['target_type'] === 'set' ||
+                            (
+                                $connection['target_type'] === 'thing' &&
+                                isset($connection['target_metadata']['subtype']) &&
+                                ($connection['target_metadata']['subtype'] === 'photo' || $connection['target_metadata']['subtype'] === 'set')
+                            )
+                        )
+                    ) {
+                        return false;
+                    }
                     return $connection['start_year'] !== null;
                 })
                 ->sortBy('start_year')
@@ -366,8 +379,21 @@ class SpanSearchController extends Controller
                     'parent_connection_id' => $duringConnection->parent_id
                 ];
             })
-            ->filter(function ($duringConnection) {
-                return $duringConnection['start_year'] !== null;
+            // Filter out unwanted nested connections at the source
+            ->filter(function ($connection) {
+                if (
+                    $connection['type_id'] === 'created' && (
+                        $connection['target_type'] === 'set' ||
+                        (
+                            $connection['target_type'] === 'thing' &&
+                            isset($connection['target_metadata']['subtype']) &&
+                            ($connection['target_metadata']['subtype'] === 'photo' || $connection['target_metadata']['subtype'] === 'set')
+                        )
+                    )
+                ) {
+                    return false;
+                }
+                return $connection['start_year'] !== null;
             })
             ->values()
             ->toArray();

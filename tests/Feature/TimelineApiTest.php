@@ -28,35 +28,34 @@ class TimelineApiTest extends TestCase
             'end_day' => null,
         ]);
 
-        // Create a photo span
-        $photo = Span::factory()->create([
-            'type_id' => 'thing',
-            'name' => 'Test Photo',
-            'start_year' => 2000,
-            'metadata' => ['subtype' => 'photo'],
+        // Create a place span with metadata
+        $place = Span::factory()->create([
+            'type_id' => 'place',
+            'name' => 'Test City',
+            'start_year' => 1800,
+            'metadata' => ['subtype' => 'city', 'country' => 'Test Country'],
             'owner_id' => $user->id,
             'end_year' => null,
             'end_month' => null,
             'end_day' => null,
         ]);
 
-        // Create a connection between person and photo
+        // Create a connection between person and place
         $connectionSpan = Span::factory()->create([
             'type_id' => 'connection',
-            'name' => 'Person created photo',
+            'name' => 'Person lived in place',
             'start_year' => 2000,
             'owner_id' => $user->id,
             'end_year' => null,
             'end_month' => null,
             'end_day' => null,
         ]);
-        // Debug output before connection creation
 
         Connection::create([
             'parent_id' => $person->id,
-            'child_id' => $photo->id,
+            'child_id' => $place->id,
             'connection_span_id' => $connectionSpan->id,
-            'type_id' => 'created',
+            'type_id' => 'residence',
         ]);
 
         // Get timeline data
@@ -84,11 +83,12 @@ class TimelineApiTest extends TestCase
         $connections = $response->json('connections');
         $this->assertNotEmpty($connections);
         
-        $photoConnection = collect($connections)->first(function ($conn) use ($photo) {
-            return $conn['target_id'] === $photo->id;
+        $placeConnection = collect($connections)->first(function ($conn) use ($place) {
+            return $conn['target_id'] === $place->id;
         });
         
-        $this->assertNotNull($photoConnection);
-        $this->assertEquals('photo', $photoConnection['target_metadata']['subtype']);
+        $this->assertNotNull($placeConnection);
+        $this->assertEquals('city', $placeConnection['target_metadata']['subtype']);
+        $this->assertEquals('Test Country', $placeConnection['target_metadata']['country']);
     }
 } 

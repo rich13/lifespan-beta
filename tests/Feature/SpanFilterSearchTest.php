@@ -108,7 +108,7 @@ class SpanFilterSearchTest extends TestCase
         $this->actingAs($this->user);
 
         // Test single type filter
-        $response = $this->get('/spans?types=person');
+        $response = $this->get('/spans/?types=person');
         $response->assertStatus(200);
         
         // Debug: Check what's actually in the response
@@ -133,7 +133,7 @@ class SpanFilterSearchTest extends TestCase
         $response->assertDontSee('London Bridge');
 
         // Test multiple type filters
-        $response = $this->get('/spans?types=person,organisation');
+        $response = $this->get('/spans/?types=person,organisation');
         $response->assertStatus(200);
         $response->assertSee('Richard Northover');
         $response->assertSee('Acme Corporation');
@@ -153,29 +153,29 @@ class SpanFilterSearchTest extends TestCase
         $this->assertDatabaseHas('spans', ['description' => 'A test organisation where Richard works']);
 
         // Test basic search
-        $response = $this->get('/spans?search=Richard');
+        $response = $this->get('/spans/?search=Richard');
         $response->assertStatus(200);
         $response->assertSee('Richard Northover');
         $response->assertSee('Acme Corporation'); // Should find this because description contains "Richard"
 
         // Test case insensitive search
-        $response = $this->get('/spans?search=richard');
+        $response = $this->get('/spans/?search=richard');
         $response->assertStatus(200);
         $response->assertSee('Richard Northover');
         $response->assertSee('Acme Corporation'); // Should find this because description contains "Richard"
 
         // Test multi-word search
-        $response = $this->get('/spans?search=Richard Northover');
+        $response = $this->get('/spans/?search=Richard Northover');
         $response->assertStatus(200);
         $response->assertSee('Richard Northover');
         
         // Test search in reverse word order
-        $response = $this->get('/spans?search=Northover Richard');
+        $response = $this->get('/spans/?search=Northover Richard');
         $response->assertStatus(200);
         $response->assertSee('Richard Northover');
         
         // Test partial word search
-        $response = $this->get('/spans?search=Corporation');
+        $response = $this->get('/spans/?search=Corporation');
         $response->assertStatus(200);
         $response->assertSee('Acme Corporation');
     }
@@ -188,13 +188,13 @@ class SpanFilterSearchTest extends TestCase
         $this->actingAs($this->user);
 
         // Test search + type filter
-        $response = $this->get('/spans?search=Richard&types=person');
+        $response = $this->get('/spans/?search=Richard&types=person');
         $response->assertStatus(200);
         $response->assertSee('Richard Northover');
         $response->assertDontSee('Acme Corporation');
         
         // Test search that matches multiple types but filtered to one
-        $response = $this->get('/spans?search=London&types=place');
+        $response = $this->get('/spans/?search=London&types=place');
         $response->assertStatus(200);
         $response->assertSee('London Bridge');
         $response->assertDontSee('Richard Northover');
@@ -208,12 +208,12 @@ class SpanFilterSearchTest extends TestCase
         $this->actingAs($this->user);
 
         // Test empty search results
-        $response = $this->get('/spans?search=NonexistentTerm');
+        $response = $this->get('/spans/?search=NonexistentTerm');
         $response->assertStatus(200);
         $response->assertSee('No spans found');
         
         // Test search with special characters
-        $response = $this->get('/spans?search=Richard\'s');
+        $response = $this->get('/spans/?search=Richard\'s');
         $response->assertStatus(200);
         // This should not cause errors, even if no results
         $response->assertStatus(200);
@@ -227,7 +227,7 @@ class SpanFilterSearchTest extends TestCase
         $this->actingAs($this->user);
 
         // Test that filter buttons are present
-        $response = $this->get('/spans');
+        $response = $this->get('/spans/');
         $response->assertStatus(200);
         $response->assertSee('filter_person', false);
         $response->assertSee('filter_organisation', false);
