@@ -2292,12 +2292,27 @@ class SpanController extends Controller
             ];
         });
 
+        // Get spans that the user owns and has shared with groups
+        $spansSharedByMe = Span::with(['spanPermissions.group', 'type'])
+            ->where('owner_id', $user->id)
+            ->where('access_level', 'shared')
+            ->whereHas('spanPermissions', function ($query) {
+                $query->whereNotNull('group_id');
+            })
+            ->orderBy('name')
+            ->get()
+            ->groupBy(function ($span) {
+                // Group by the first group that has access (for display purposes)
+                $firstGroupPermission = $span->spanPermissions->whereNotNull('group_id')->first();
+                return $firstGroupPermission ? $firstGroupPermission->group->name : 'Other Groups';
+            });
+
         // Get all span types for filtering (if needed in the view)
         $spanTypes = SpanType::where('type_id', '!=', 'connection')
             ->orderBy('name')
             ->get();
 
-        return view('spans.shared-with-me', compact('groupsWithSpans', 'spanTypes'));
+        return view('spans.shared-with-me', compact('groupsWithSpans', 'spansSharedByMe', 'spanTypes'));
     }
 
     /**

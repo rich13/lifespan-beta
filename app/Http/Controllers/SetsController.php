@@ -236,33 +236,57 @@ class SetsController extends Controller
                 $model = $model->first();
             }
         } elseif ($modelClass === 'App\\Models\\Connection' || $modelClass === 'App\Models\Connection') {
-            $model = Connection::with(['parent:id,name', 'child:id,name', 'type:type,forward_description', 'connectionSpan:id,name'])->find($modelId);
+            $model = Connection::with(['parent:id,name,access_level,owner_id', 'child:id,name,access_level,owner_id', 'type:type,forward_description', 'connectionSpan:id,name,access_level,owner_id'])->find($modelId);
         }
 
-        // Permission check
-        if (!$model || ($model instanceof Span && !$model->hasPermission($user, 'view')) || ($model instanceof Connection && !$model->isAccessibleBy($user))) {
-            return response()->json(['error' => 'Forbidden'], 403);
+
+
+        // Get user's sets first
+        $sets = Span::getUserSets($user)
+            ->filter(function ($set) {
+                // Filter out any predefined/smart sets that might have virtual IDs
+                return !empty($set->id) && !$set->is_predefined;
+            })
+            ->map(function ($set) {
+                return [
+                    'id' => $set->id,
+                    'name' => $set->name,
+                    'description' => $set->description
+                ];
+            })->values(); // Convert to indexed array
+
+        // Only check item permissions if the user has sets to add to
+        if ($sets->isEmpty()) {
+            return response()->json(['error' => 'No sets available'], 403);
         }
 
-        // Get user's sets (default sets + user-created sets)
-        $sets = Span::getUserSets($user)->map(function ($set) {
-            return [
-                'id' => $set->id,
-                'name' => $set->name,
-                'description' => $set->description
-            ];
-        })->values(); // Convert to indexed array
+        // Check if the model is viewable (for display purposes)
+        $itemViewable = false;
+        if ($model) {
+            if ($model instanceof Span) {
+                $itemViewable = $model->hasPermission($user, 'view');
+            } elseif ($model instanceof Connection) {
+                $itemViewable = $model->isAccessibleBy($user);
+            }
+        }
+
+        // If the item isn't viewable, we can still show the modal but with limited info
+        if (!$itemViewable) {
+            \Log::info('Item not viewable, showing limited modal data');
+        }
 
         // Get current memberships for all possible items with optimized batching
         $currentMemberships = [];
         $membershipDetails = [];
         
-        if ($model instanceof Span) {
-            $currentMemberships = $model->getContainingSets()
-                ->where('owner_id', $user->id)
-                ->pluck('id')
-                ->toArray();
-        } elseif ($model instanceof Connection) {
+        // Only check memberships if the item is viewable
+        if ($itemViewable && $model) {
+            if ($model instanceof Span) {
+                $currentMemberships = $model->getContainingSets()
+                    ->where('owner_id', $user->id)
+                    ->pluck('id')
+                    ->toArray();
+            } elseif ($model instanceof Connection) {
             // For connections, batch the membership checks to reduce queries
             $itemsToCheck = collect();
             
@@ -308,68 +332,95 @@ class SetsController extends Controller
             
             $currentMemberships = $allMemberships->pluck('id')->unique()->toArray();
         }
+        }
 
-        // Prepare the item summary and options
+                // Prepare the item summary and options
         $itemSummary = [];
         $addOptions = [];
         
-        if ($model instanceof Span) {
-            $itemSummary = [
-                'type' => 'span',
-                'name' => $model->name,
-                'type_name' => $model->type->name ?? 'Unknown Type'
-            ];
-            $addOptions = [
-                [
-                    'id' => 'span_' . $model->id,
-                    'label' => $model->name,
+        // Item summary - only show details if viewable
+        if ($itemViewable && $model) {
+            if ($model instanceof Span) {
+                $itemSummary = [
                     'type' => 'span',
-                    'model_id' => $model->id,
-                    'model_class' => 'App\Models\Span'
-                ]
-            ];
-        } elseif ($model instanceof Connection) {
-            $itemSummary = [
-                'type' => 'connection',
-                'name' => $model->connectionSpan?->name ?? 'Connection',
-                'type_name' => $model->type?->forward_description ?? 'Unknown Type',
-                'subject' => $model->parent?->name ?? 'Unknown',
-                'object' => $model->child?->name ?? 'Unknown'
-            ];
-            
-            $addOptions = [];
-            
-            // Option to add the connection span
-            if ($model->connectionSpan) {
-                $addOptions[] = [
-                    'id' => 'connection_' . $model->id,
-                    'label' => $model->connectionSpan->name,
+                    'name' => $model->name,
+                    'type_name' => $model->type->name ?? 'Unknown Type'
+                ];
+            } elseif ($model instanceof Connection) {
+                $itemSummary = [
                     'type' => 'connection',
-                    'model_id' => $model->connectionSpan->id,
-                    'model_class' => 'App\Models\Span'
+                    'name' => $model->connectionSpan?->name ?? 'Connection',
+                    'type_name' => $model->type?->forward_description ?? 'Unknown Type',
+                    'subject' => $model->parent?->name ?? 'Unknown',
+                    'object' => $model->child?->name ?? 'Unknown'
                 ];
             }
-            
-            // Option to add the subject (parent)
-            if ($model->parent) {
-                $addOptions[] = [
-                    'id' => 'subject_' . $model->parent->id,
-                    'label' => $model->parent->name,
-                    'type' => 'subject',
-                    'model_id' => $model->parent->id,
-                    'model_class' => 'App\Models\Span'
+        } else {
+            // Limited item summary for non-viewable items
+            if ($model instanceof Span) {
+                $itemSummary = [
+                    'type' => 'span',
+                    'name' => 'Unknown Item',
+                    'type_name' => 'Unknown Type'
+                ];
+            } elseif ($model instanceof Connection) {
+                $itemSummary = [
+                    'type' => 'connection',
+                    'name' => 'Connection',
+                    'type_name' => 'Unknown Type',
+                    'subject' => 'Unknown',
+                    'object' => 'Unknown'
                 ];
             }
-            
-            // Option to add the object (child)
-            if ($model->child) {
-                $addOptions[] = [
-                    'id' => 'object_' . $model->child->id,
-                    'label' => $model->child->name,
-                    'type' => 'object',
-                    'model_id' => $model->child->id,
-                    'model_class' => 'App\Models\Span'
+        }
+        
+        // Add options - always show if we have a model, regardless of viewability
+        if ($model) {
+            if ($model instanceof Span) {
+                $addOptions = [
+                    [
+                        'id' => 'span_' . $model->id,
+                        'label' => $itemViewable ? $model->name : 'Unknown Item',
+                        'type' => 'span',
+                        'model_id' => $model->id,
+                        'model_class' => 'App\Models\Span'
+                    ]
                 ];
+            } elseif ($model instanceof Connection) {
+                $addOptions = [];
+                
+                // Option to add the connection span
+                if ($model->connectionSpan) {
+                    $addOptions[] = [
+                        'id' => 'connection_' . $model->id,
+                        'label' => $model->connectionSpan->hasPermission($user, 'view') ? $model->connectionSpan->name : 'Connection',
+                        'type' => 'connection',
+                        'model_id' => $model->connectionSpan->id,
+                        'model_class' => 'App\Models\Span'
+                    ];
+                }
+                
+                // Option to add the subject (parent)
+                if ($model->parent) {
+                    $addOptions[] = [
+                        'id' => 'subject_' . $model->parent->id,
+                        'label' => $model->parent->hasPermission($user, 'view') ? $model->parent->name : 'Subject',
+                        'type' => 'subject',
+                        'model_id' => $model->parent->id,
+                        'model_class' => 'App\Models\Span'
+                    ];
+                }
+                
+                // Option to add the object (child)
+                if ($model->child) {
+                    $addOptions[] = [
+                        'id' => 'object_' . $model->child->id,
+                        'label' => $model->child->hasPermission($user, 'view') ? $model->child->name : 'Object',
+                        'type' => 'object',
+                        'model_id' => $model->child->id,
+                        'model_class' => 'App\Models\Span'
+                    ];
+                }
             }
         }
 
@@ -415,11 +466,22 @@ class SetsController extends Controller
             'model_class' => $modelClass,
             'user_id' => Auth::user() ? Auth::user()->id : null,
             'model_found' => $model ? true : false,
-            'has_permission' => $model ? $model->hasPermission(Auth::user(), 'edit') : null
+            'has_permission' => $model ? ($model instanceof Connection ? $model->isAccessibleBy(Auth::user()) : $model->hasPermission(Auth::user(), 'view')) : null
         ]);
 
-        if (!$model || !$model->hasPermission(Auth::user(), 'edit')) {
+        // Check permissions based on model type
+        if (!$model) {
             abort(403);
+        }
+        
+        if ($model instanceof Connection) {
+            if (!$model->isAccessibleBy(Auth::user())) {
+                abort(403);
+            }
+        } else {
+            if (!$model->hasPermission(Auth::user(), 'view')) {
+                abort(403);
+            }
         }
 
         $success = false;

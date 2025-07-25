@@ -1971,6 +1971,11 @@ class Span extends Model
             return true;
         }
         
+        // Public spans are viewable by everyone
+        if ($this->access_level === 'public' && $permission === 'view') {
+            return true;
+        }
+        
         // Define permission hierarchy - higher permissions include lower ones
         $permissionHierarchy = [
             'edit' => ['edit'],

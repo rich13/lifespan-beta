@@ -14,8 +14,12 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
 
         <title>{{ config('app.name', 'Laravel') }}</title>
 
-        <!-- Favicon -->
-        <link rel="icon" href="{{ asset('favicon.ico') }}" type="image/x-icon">
+        <!-- Favicon and App Icons -->
+        <link rel="icon" href="{{ asset('img/favicon.ico') }}" type="image/x-icon">
+        <link rel="icon" href="{{ asset('img/favicon-16x16.png') }}" type="image/png" sizes="16x16">
+        <link rel="icon" href="{{ asset('img/favicon-32x32.png') }}" type="image/png" sizes="32x32">
+        <link rel="apple-touch-icon" href="{{ asset('img/apple-touch-icon.png') }}">
+        <link rel="manifest" href="{{ asset('img/site.webmanifest') }}">
 
         <!-- jQuery -->
         <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
@@ -52,12 +56,30 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
         <!-- Custom styles -->
         <style>
             /* Only add minimal custom styling, prefer Bootstrap classes */
-            .nav-link {
+            /* Sidebar nav links */
+            .sidebar .nav-link {
                 color: rgba(255, 255, 255, 0.8) !important;
             }
-            .nav-link:hover, .nav-link.active {
+            .sidebar .nav-link:hover, .sidebar .nav-link.active {
                 color: #fff !important;
                 background-color: rgba(255, 255, 255, 0.1);
+            }
+            
+            /* Bootstrap tabs - ensure proper contrast */
+            .nav-tabs .nav-link {
+                color: #495057 !important;
+                background-color: transparent !important;
+                border: 1px solid transparent !important;
+            }
+            .nav-tabs .nav-link:hover {
+                color: #495057 !important;
+                background-color: #e9ecef !important;
+                border-color: #e9ecef #e9ecef #dee2e6 !important;
+            }
+            .nav-tabs .nav-link.active {
+                color: #495057 !important;
+                background-color: #fff !important;
+                border-color: #dee2e6 #dee2e6 #fff !important;
             }
             
             /* Collapsible sidebar styles */

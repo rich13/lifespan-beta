@@ -273,11 +273,11 @@ class SpanSearchController extends Controller
         // Cache key includes user ID for proper access control
         $cacheKey = "timeline_{$span->id}_" . ($user?->id ?? 'guest');
         
-        return Cache::remember($cacheKey, 300, function () use ($span) {
-            // Optimized query with eager loading and joins - with access control
-            $connections = $span->connectionsAsSubjectWithAccess()
+        return Cache::remember($cacheKey, 300, function () use ($span, $user) {
+            // Get all connections (not just accessible ones) for timeline display
+            $connections = $span->connectionsAsSubject()
                 ->with([
-                    'child:id,name,type_id,start_year,end_year,metadata',
+                    'child:id,name,type_id,start_year,end_year,metadata,access_level,owner_id',
                     'connectionSpan:id,start_year,start_month,start_day,end_year,end_month,end_day',
                     'type:type,forward_predicate'
                 ])
@@ -285,16 +285,21 @@ class SpanSearchController extends Controller
                     $query->whereNotNull('start_year');
                 })
                 ->get()
-                ->map(function ($connection) {
+                ->map(function ($connection) use ($user) {
                     $connectionSpan = $connection->connectionSpan;
+                    
+                    // Check if user can access the target span
+                    $targetAccessible = $connection->child->isAccessibleBy($user);
+                    
                     $connectionData = [
                         'id' => $connection->id,
                         'type_id' => $connection->type_id,
                         'type_name' => $connection->type->forward_predicate ?? $connection->type_id,
-                        'target_name' => $connection->child->name,
-                        'target_id' => $connection->child->id,
+                        'target_name' => $targetAccessible ? $connection->child->name : 'Private Person',
+                        'target_id' => $targetAccessible ? $connection->child->id : null,
                         'target_type' => $connection->child->type_id,
-                        'target_metadata' => $connection->child->metadata ?? [],
+                        'target_metadata' => $targetAccessible ? ($connection->child->metadata ?? []) : [],
+                        'target_accessible' => $targetAccessible,
                         'start_year' => $connectionSpan ? $connectionSpan->start_year : null,
                         'start_month' => $connectionSpan ? $connectionSpan->start_month : null,
                         'start_day' => $connectionSpan ? $connectionSpan->start_day : null,
