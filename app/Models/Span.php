@@ -365,14 +365,20 @@ class Span extends Model
                     }
                 }
                 
-                $span->slug = $baseSlug;
-                
-                // Ensure unique slug
-                $count = 2;
-                $originalSlug = $span->slug;
-                while (static::where('slug', $span->slug)->exists()) {
-                    $span->slug = $originalSlug . '-' . $count++;
+                $slug = $baseSlug;
+                $counter = 1;
+
+                // Check for reserved route names and database uniqueness
+                $reservedNames = static::getReservedRouteNames();
+
+                while (
+                    static::where('slug', $slug)->exists() ||
+                    in_array(strtolower($slug), array_map('strtolower', $reservedNames))
+                ) {
+                    $slug = $baseSlug . '-' . ++$counter;
                 }
+
+                $span->slug = $slug;
             }
         });
 
@@ -1671,17 +1677,8 @@ class Span extends Model
         }
 
         // Create a new public set owned by system user
-        $slug = Str::slug($person->name) . '-desert-island-discs';
-        $counter = 1;
-        
-        // Ensure unique slug
-        while (static::where('slug', $slug)->exists()) {
-            $slug = Str::slug($person->name) . '-desert-island-discs-' . ++$counter;
-        }
-
         $set = static::create([
             'name' => 'Desert Island Discs',
-            'slug' => $slug,
             'type_id' => 'set',
             'description' => "{$person->name}'s desert island discs",
             'metadata' => [
@@ -1755,7 +1752,6 @@ class Span extends Model
         try {
             $set = static::create([
                 'name' => $name,
-                'slug' => $slug,
                 'type_id' => 'set',
                 'is_personal_span' => true,
                 'state' => 'complete',

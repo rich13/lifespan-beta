@@ -278,7 +278,7 @@ class SpanController extends Controller
                 'regex:/^[a-z0-9-]+$/',
                 'unique:spans,slug',
                 function ($attribute, $value, $fail) {
-                    if (!$this->validateSlugNotReserved($value)) {
+                    if (!empty($value) && !$this->validateSlugNotReserved($value)) {
                         $reservedNames = $this->routeReservationService->getReservedNamesForDisplay();
                         $fail("The slug '{$value}' conflicts with a reserved route name. Reserved names include: " . implode(', ', $reservedNames));
                     }

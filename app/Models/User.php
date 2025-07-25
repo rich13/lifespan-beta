@@ -252,7 +252,6 @@ class User extends Authenticatable
         // Create Starred set
         $starredSet = Span::create([
             'name' => 'Starred',
-            'slug' => Str::slug($personalSpan->name ?? 'user') . '-starred',
             'type_id' => 'set',
             'description' => 'Your starred items',
             'metadata' => [
@@ -269,7 +268,6 @@ class User extends Authenticatable
         // Create Desert Island Discs set
         $desertIslandDiscsSet = Span::create([
             'name' => 'Desert Island Discs',
-            'slug' => Str::slug($personalSpan->name ?? 'user') . '-desert-island-discs',
             'type_id' => 'set',
             'description' => 'Your desert island discs',
             'metadata' => [
@@ -328,7 +326,6 @@ class User extends Authenticatable
             
             $starredSet = Span::create([
                 'name' => 'Starred',
-                'slug' => Str::slug($personalSpan->name ?? 'user') . '-starred',
                 'type_id' => 'set',
                 'description' => 'Your starred items',
                 'metadata' => [
@@ -352,7 +349,6 @@ class User extends Authenticatable
             
             $desertIslandDiscsSet = Span::create([
                 'name' => 'Desert Island Discs',
-                'slug' => Str::slug($personalSpan->name ?? 'user') . '-desert-island-discs',
                 'type_id' => 'set',
                 'description' => 'Your desert island discs',
                 'metadata' => [

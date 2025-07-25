@@ -36,6 +36,22 @@ class SpanSlugValidationTest extends TestCase
         }
         
         $this->user = User::factory()->create();
+        
+        // Create a personal span for the user to ensure proper authentication
+        $personalSpan = Span::create([
+            'name' => $this->user->name ?? 'Test User',
+            'type_id' => 'person',
+            'owner_id' => $this->user->id,
+            'updater_id' => $this->user->id,
+            'access_level' => 'private',
+            'is_personal_span' => true,
+            'state' => 'complete',
+            'start_year' => 1990,
+        ]);
+        
+        // Link the personal span to the user
+        $this->user->personal_span_id = $personalSpan->id;
+        $this->user->save();
     }
 
     /** @test */
