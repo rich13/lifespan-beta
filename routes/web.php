@@ -33,106 +33,27 @@ use Illuminate\Support\Facades\DB;
 |
 */
 
-// Health check endpoint for Render
+// Health check endpoint for production monitoring
 Route::get('/health', function () {
     try {
-        // Basic app check
-        if (!app()->isDownForMaintenance()) {
-            // Database connection check with more detailed info
-            $dbInfo = [];
-            
-            try {
-                $pdo = DB::connection()->getPdo();
-                $dbConfig = config('database.connections.' . config('database.default'));
-                
-                // Get sanitized config (don't show password)
-                $dbInfo = [
-                    'connection' => config('database.default'),
-                    'host' => $dbConfig['host'] ?? 'unknown',
-                    'port' => $dbConfig['port'] ?? 'unknown',
-                    'database' => $dbConfig['database'] ?? 'unknown',
-                    'username' => $dbConfig['username'] ?? 'unknown',
-                    'status' => 'connected'
-                ];
-                
-                // Test a simple query
-                $tables = DB::select("SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = 'public'");
-                $dbInfo['tables_count'] = $tables[0]->count ?? 0;
-                
-                // Try to get the user count as a more meaningful test
-                try {
-                    $userCount = DB::table('users')->count();
-                    $dbInfo['users_count'] = $userCount;
-                    $dbInfo['query_test'] = 'passed';
-                } catch (\Exception $e) {
-                    $dbInfo['query_test'] = 'failed';
-                    $dbInfo['query_error'] = $e->getMessage();
-                }
-                
-            } catch (\Exception $e) {
-                $dbInfo = [
-                    'status' => 'error',
-                    'error' => $e->getMessage(),
-                    'error_code' => $e->getCode(),
-                    'driver' => config('database.default')
-                ];
-                
-                // Get the database config we're trying to use
-                try {
-                    $dbConfig = config('database.connections.' . config('database.default'));
-                    $dbInfo['connection_info'] = [
-                        'driver' => config('database.default'),
-                        'host' => $dbConfig['host'] ?? 'unknown',
-                        'port' => $dbConfig['port'] ?? 'unknown',
-                        'database' => $dbConfig['database'] ?? 'unknown',
-                        'username' => $dbConfig['username'] ?? 'unknown',
-                    ];
-                } catch (\Exception $ex) {
-                    $dbInfo['config_error'] = $ex->getMessage();
-                }
-                
-                // Return 500 for database errors
-                return response()->json([
-                    'status' => 'unhealthy',
-                    'reason' => 'database_connection_failed',
-                    'database' => $dbInfo,
-                    'timestamp' => now()->toIso8601String(),
-                    'environment' => app()->environment()
-                ], 500);
-            }
-            
-            // Log successful health check
-            Log::info('Health check successful', [
-                'environment' => app()->environment(),
-                'database' => $dbInfo,
-                'timestamp' => now()->toIso8601String()
-            ]);
-            
-            return response()->json([
-                'status' => 'healthy',
-                'database' => $dbInfo,
-                'timestamp' => now()->toIso8601String(),
-                'environment' => app()->environment()
-            ]);
-        }
+        // Check database connection
+        DB::connection()->getPdo();
+        
+        // Check if we can perform a simple query
+        DB::select('SELECT 1');
         
         return response()->json([
-            'status' => 'maintenance',
-            'timestamp' => now()->toIso8601String()
-        ], 503);
-        
-    } catch (\Exception $e) {
-        Log::error('Health check failed', [
-            'error' => $e->getMessage(),
-            'error_class' => get_class($e),
-            'trace' => $e->getTraceAsString()
+            'status' => 'healthy',
+            'timestamp' => now()->toISOString(),
+            'database' => 'connected',
+            'memory_usage' => memory_get_usage(true),
+            'memory_peak' => memory_get_peak_usage(true)
         ]);
-        
+    } catch (\Exception $e) {
         return response()->json([
             'status' => 'unhealthy',
-            'error' => $e->getMessage(),
-            'error_type' => get_class($e),
-            'timestamp' => now()->toIso8601String()
+            'timestamp' => now()->toISOString(),
+            'error' => $e->getMessage()
         ], 500);
     }
 });
@@ -599,8 +520,8 @@ Route::middleware('web')->group(function () {
         Route::post('/sets/{set}/items', [\App\Http\Controllers\SetsController::class, 'toggleItem'])->name('sets.toggle-item');
         
         // AI YAML Generator for authenticated users (for modal use)
-        Route::post('/ai-yaml-generator/generate', [\App\Http\Controllers\AiYamlController::class, 'generatePersonYaml'])->name('ai-yaml-generator.generate');
-        Route::post('/ai-yaml-generator/improve', [\App\Http\Controllers\AiYamlController::class, 'improvePersonYaml'])->name('ai-yaml-generator.improve');
+        Route::post('/ai-yaml-generator/generate', [\App\Http\Controllers\AiYamlController::class, 'generateYaml'])->name('ai-yaml-generator.generate');
+        Route::post('/ai-yaml-generator/improve', [\App\Http\Controllers\AiYamlController::class, 'improveYaml'])->name('ai-yaml-generator.improve');
 
         // Settings routes
         Route::prefix('settings')->name('settings.')->group(function () {
@@ -639,8 +560,12 @@ Route::middleware('web')->group(function () {
 
             // AI YAML Generator routes
             Route::get('/ai-yaml-generator', [\App\Http\Controllers\AiYamlController::class, 'show'])->name('ai-yaml-generator.show');
-            Route::post('/ai-yaml-generator/generate', [\App\Http\Controllers\AiYamlController::class, 'generatePersonYaml'])->name('ai-yaml-generator.generate');
-            Route::post('/ai-yaml-generator/improve', [\App\Http\Controllers\AiYamlController::class, 'improvePersonYaml'])->name('ai-yaml-generator.improve');
+            Route::post('/ai-yaml-generator/generate', [\App\Http\Controllers\AiYamlController::class, 'generateYaml'])->name('ai-yaml-generator.generate');
+            Route::post('/ai-yaml-generator/improve', [\App\Http\Controllers\AiYamlController::class, 'improveYaml'])->name('ai-yaml-generator.improve');
+            Route::post('/ai-yaml-generator/generate-person', [\App\Http\Controllers\AiYamlController::class, 'generatePersonYaml'])->name('ai-yaml-generator.generate-person');
+            Route::post('/ai-yaml-generator/improve-person', [\App\Http\Controllers\AiYamlController::class, 'improvePersonYaml'])->name('ai-yaml-generator.improve-person');
+            Route::post('/ai-yaml-generator/generate-organisation', [\App\Http\Controllers\AiYamlController::class, 'generateOrganisationYaml'])->name('ai-yaml-generator.generate-organisation');
+            Route::post('/ai-yaml-generator/improve-organisation', [\App\Http\Controllers\AiYamlController::class, 'improveOrganisationYaml'])->name('ai-yaml-generator.improve-organisation');
             Route::get('/ai-yaml-generator/placeholders', [\App\Http\Controllers\AiYamlController::class, 'getPlaceholderSpans'])->name('ai-yaml-generator.placeholders');
 
             // Import Management

@@ -2418,6 +2418,14 @@ class SpanController extends Controller
             'ai_yaml' => 'required|string',
         ]);
 
+        Log::info('Preview improvement request', [
+            'span_id' => $span->id,
+            'span_name' => $span->name,
+            'span_type' => $span->type_id,
+            'ai_yaml_length' => strlen($validated['ai_yaml']),
+            'ai_yaml_sample' => substr($validated['ai_yaml'], 0, 500)
+        ]);
+
         try {
             $yamlService = app(YamlSpanService::class);
 
