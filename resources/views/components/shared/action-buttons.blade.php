@@ -2,6 +2,7 @@
 
 @php
 use Illuminate\Support\Facades\Auth;
+use App\Services\AiYamlCreatorService;
 @endphp
 
 <!-- Shared Action Buttons Component -->
@@ -15,7 +16,7 @@ use Illuminate\Support\Facades\Auth;
                 <i class="bi bi-plus-circle me-2"></i>Create New Span
             </button>
             
-            @if(request()->routeIs('spans.show') && $span)
+            @if(request()->routeIs('spans.show') && $span && AiYamlCreatorService::supportsAiImprovement($span->type_id))
                 <button type="button" class="btn btn-success" 
                         data-bs-toggle="modal" data-bs-target="#newSpanModal" 
                         data-bs-dismiss="offcanvas"
@@ -37,16 +38,16 @@ use Illuminate\Support\Facades\Auth;
                 </button>
             </div>
             
-            @if(request()->routeIs('spans.show') && $span)
+            @if(request()->routeIs('spans.show') && $span && AiYamlCreatorService::supportsAiImprovement($span->type_id))
                 <div class="me-3" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Improve this span with AI data (⌘I)">
-                                    <button type="button" class="btn btn-sm btn-success" 
+                    <button type="button" class="btn btn-sm btn-success" 
                         data-bs-toggle="modal" data-bs-target="#newSpanModal" 
                         id="improve-span-btn"
                         data-span-name="{{ $span->name }}"
                         data-span-type="{{ $span->type_id }}"
                         data-span-id="{{ $span->id }}">
-                    <i class="bi bi-magic me-1"></i>Improve
-                </button>
+                        <i class="bi bi-magic me-1"></i>Improve
+                    </button>
                 </div>
             @endif
         </div>

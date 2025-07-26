@@ -221,14 +221,12 @@ $(document).ready(function() {
             });
         }
         
-        // For people, skip directly to the creation method selection
-        if (spanType === 'person') {
-            // Show step 1 first to set up the form, then immediately go to step 2
-            showStep(1);
-            setTimeout(() => {
-                showStep(2);
-            }, 100);
-        }
+        // For all span types, skip directly to the creation method selection
+        // Show step 1 first to set up the form, then immediately go to step 2
+        showStep(1);
+        setTimeout(() => {
+            showStep(2);
+        }, 100);
     });
     
     // Handle New button click (reset improve mode)
@@ -285,8 +283,8 @@ $(document).ready(function() {
         2: `
             <div class="text-center mb-3">
                 <div class="badge bg-primary mb-2">Step 2 of 3</div>
-                <h6 class="text-muted">${isImproveMode ? 'Improve Person' : 'Create Person'}</h6>
-                <p class="text-muted small">How would you like to ${isImproveMode ? 'improve' : 'create'} this person?</p>
+                <h6 class="text-muted">${isImproveMode ? 'Improve Span' : 'Create Span'}</h6>
+                <p class="text-muted small">How would you like to ${isImproveMode ? 'improve' : 'create'} this ${formData.type_id || 'span'}?</p>
             </div>
             
             <div class="row g-3">
@@ -383,7 +381,7 @@ $(document).ready(function() {
                     <span class="visually-hidden">Loading...</span>
                 </div>
                 <h6 class="text-muted mb-2">AI is doing its thing...</h6>
-                <p class="text-muted small">Finding out about <span id="ai-person-name"></span></p>
+                <p class="text-muted small">Finding out about <span id="ai-span-name"></span></p>
                 <p class="text-muted small">Yes, it's <strike>a bit</strike> <strong>very</strong> slow...</p>
             </div>
         `,
@@ -731,6 +729,14 @@ $(document).ready(function() {
                     return;
                 }
                 
+                if (!aiData.yaml) {
+                    console.error('aiData exists but aiData.yaml is missing:', aiData);
+                    console.error('aiData keys:', Object.keys(aiData));
+                    console.error('aiData full structure:', JSON.stringify(aiData, null, 2));
+                    alert('AI data is missing YAML content');
+                    return;
+                }
+                
                 // Show loading state
                 const btn = $(this);
                 const originalText = btn.html();
@@ -741,6 +747,9 @@ $(document).ready(function() {
                     btn.html('<span class="spinner-border spinner-border-sm me-1"></span>Generating Preview...');
                     
                     // Generate preview of changes
+                    console.log('Preview - sending ai_yaml:', aiData.yaml);
+                    console.log('Preview - span ID:', window.currentSpanId);
+                    
                     $.ajax({
                         url: '{{ route("spans.improve.preview", ":spanId") }}'.replace(':spanId', window.currentSpanId),
                         method: 'POST',
@@ -749,6 +758,7 @@ $(document).ready(function() {
                             _token: $('meta[name="csrf-token"]').attr('content')
                         },
                         success: function(response) {
+                            console.log('Preview - success response:', response);
                             if (response.success) {
                                 window.previewData = response;
                                 showStep(8); // Show preview step
@@ -763,6 +773,8 @@ $(document).ready(function() {
                             // Reset button state
                             btn.prop('disabled', false);
                             btn.html(originalText);
+                            console.error('Preview - error response:', xhr.responseJSON);
+                            console.error('Preview - status:', xhr.status);
                             let errorMessage = 'Failed to generate preview';
                             if (xhr.responseJSON && xhr.responseJSON.error) {
                                 errorMessage += ': ' + xhr.responseJSON.error;
@@ -930,33 +942,45 @@ $(document).ready(function() {
     // AI Process
     function startAiProcess() {
         const name = formData.name;
-        $('#ai-person-name').text(name);
+        const spanType = formData.type_id;
+        $('#ai-span-name').text(name);
         
         // Determine if we're in improve mode and have existing YAML
         const isImprove = isImproveMode && window.existingYaml;
         const url = isImprove ? '{{ route("ai-yaml-generator.improve") }}' : '{{ route("ai-yaml-generator.generate") }}';
         const data = {
             name: name,
+            span_type: spanType,
             _token: $('meta[name="csrf-token"]').attr('content')
         };
         
         if (isImprove) {
-            data.existing_yaml = window.existingYaml;
+            data.yaml = window.existingYaml;
+            console.log('Improve mode - sending existing YAML:', window.existingYaml);
         }
+        
+        console.log('AI Process - sending data:', data);
+        console.log('AI Process - URL:', url);
         
         $.ajax({
             url: url,
             method: 'POST',
             data: data,
             success: function(response) {
+                console.log('AI Process - success response:', response);
                 if (response.success) {
                     aiData = response;
+                    console.log('AI Process - aiData set to:', aiData);
+                    console.log('AI Process - aiData.yaml:', aiData.yaml);
                     showAiResults(true);
                 } else {
+                    console.error('AI Process - response not successful:', response);
                     showAiResults(false, response.error);
                 }
             },
             error: function(xhr) {
+                console.error('AI Process - error response:', xhr.responseJSON);
+                console.error('AI Process - status:', xhr.status);
                 showAiResults(false, 'Failed to generate AI data');
             }
         });
@@ -1001,8 +1025,8 @@ $(document).ready(function() {
             if (startMatch) summary.push(`<strong>Start:</strong> ${startMatch[1]}`);
             if (endMatch) summary.push(`<strong>End:</strong> ${endMatch[1]}`);
             
-            // Count connections
-            const connectionTypes = ['parents', 'children', 'relationship', 'employment', 'education', 'residence'];
+            // Count connections - handle different span types
+            const connectionTypes = ['parents', 'children', 'relationship', 'employment', 'education', 'residence', 'located', 'has_role', 'created', 'contains', 'membership', 'participation'];
             const connections = [];
             
             connectionTypes.forEach(type => {
