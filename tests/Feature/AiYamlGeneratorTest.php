@@ -306,4 +306,150 @@ YAML;
         $this->assertEquals('Radiohead guitarist', $existingSpan->description);
         $this->assertNull($existingSpan->start_year);
     }
+
+    /**
+     * Test organisation YAML generation endpoint
+     */
+    public function test_generate_organisation_yaml_endpoint()
+    {
+        // Create an admin user
+        $admin = User::factory()->create(['is_admin' => true]);
+        $this->actingAs($admin);
+
+        $response = $this->postJson('/admin/ai-yaml-generator/generate-organisation', [
+            'name' => 'Apple Inc.',
+            'disambiguation' => 'the tech company founded by Steve Jobs'
+        ]);
+
+        // In test environment without OpenAI API key, expect error
+        $response->assertStatus(500);
+        $response->assertJson([
+            'success' => false,
+            'error' => 'Failed to generate YAML: OpenAI API key not configured'
+        ]);
+    }
+
+    /**
+     * Test organisation YAML improvement endpoint
+     */
+    public function test_improve_organisation_yaml_endpoint()
+    {
+        // Create an admin user
+        $admin = User::factory()->create(['is_admin' => true]);
+        $this->actingAs($admin);
+
+        $existingYaml = "name: 'Apple Inc.'\ntype: organisation\nstate: placeholder\nstart: '1976'\nend: null\nmetadata:\n  subtype: corporation\n  industry: Technology\n  size: large\naccess_level: public";
+
+        $response = $this->postJson('/admin/ai-yaml-generator/improve-organisation', [
+            'name' => 'Apple Inc.',
+            'existing_yaml' => $existingYaml,
+            'disambiguation' => 'the tech company founded by Steve Jobs'
+        ]);
+
+        // In test environment without OpenAI API key, expect error
+        $response->assertStatus(500);
+        $response->assertJson([
+            'success' => false,
+            'error' => 'Failed to improve YAML: OpenAI API key not configured'
+        ]);
+    }
+
+    /**
+     * Test improving an organisation span with AI through the span improvement endpoint
+     */
+    public function test_improve_organisation_span_with_ai()
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        // Create an existing organisation span
+        $existingSpan = Span::factory()->create([
+            'name' => 'Apple Inc.',
+            'type_id' => 'organisation',
+            'owner_id' => $user->id,
+            'state' => 'placeholder',
+            'description' => 'Technology company',
+            'metadata' => ['subtype' => 'corporation'],
+            'start_year' => 1976,
+            'start_month' => null,
+            'start_day' => null,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null
+        ]);
+
+        // Mock the AI service to return improved YAML
+        $improvedYaml = <<<'YAML'
+name: 'Apple Inc.'
+type: organisation
+start: '1976-04-01'
+end: null
+description: 'American multinational technology company that specializes in consumer electronics, computer software, and online services'
+metadata:
+  subtype: corporation
+  industry: 'Technology'
+  size: large
+sources:
+  - 'https://en.wikipedia.org/wiki/Apple_Inc.'
+access_level: public
+connections:
+  located:
+    - name: 'Cupertino, California'
+      type: place
+      start: '1976-04-01'
+      end: null
+      metadata: {}
+YAML;
+
+        // Make the improve request
+        $response = $this->postJson("/spans/{$existingSpan->id}/improve", [
+            'ai_yaml' => $improvedYaml
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'message' => 'Span improved successfully with AI data.'
+            ]);
+
+        // Verify the span was updated
+        $existingSpan->refresh();
+        $this->assertEquals('Apple Inc.', $existingSpan->name);
+        $this->assertEquals(1976, $existingSpan->start_year);
+        $this->assertEquals(4, $existingSpan->start_month);
+        $this->assertEquals(1, $existingSpan->start_day);
+        $this->assertEquals('complete', $existingSpan->state);
+        $this->assertEquals('American multinational technology company that specializes in consumer electronics, computer software, and online services', $existingSpan->description);
+        $this->assertEquals('corporation', $existingSpan->metadata['subtype']);
+        $this->assertEquals('Technology', $existingSpan->metadata['industry']);
+        $this->assertEquals('large', $existingSpan->metadata['size']);
+        $this->assertContains('https://en.wikipedia.org/wiki/Apple_Inc.', $existingSpan->sources);
+
+        // Verify connections were created
+        $this->assertDatabaseHas('connections', [
+            'parent_id' => $existingSpan->id,
+            'type_id' => 'located'
+        ]);
+    }
+
+    /**
+     * Test that the supportsAiImprovement method correctly identifies supported span types
+     */
+    public function test_supports_ai_improvement_method()
+    {
+        // Test supported span types
+        $this->assertTrue(AiYamlCreatorService::supportsAiImprovement('person'));
+        $this->assertTrue(AiYamlCreatorService::supportsAiImprovement('organisation'));
+        $this->assertTrue(AiYamlCreatorService::supportsAiImprovement('place'));
+        $this->assertTrue(AiYamlCreatorService::supportsAiImprovement('event'));
+        $this->assertTrue(AiYamlCreatorService::supportsAiImprovement('thing'));
+        $this->assertTrue(AiYamlCreatorService::supportsAiImprovement('band'));
+
+        // Test unsupported span types
+        $this->assertFalse(AiYamlCreatorService::supportsAiImprovement('connection'));
+        $this->assertFalse(AiYamlCreatorService::supportsAiImprovement('set'));
+        $this->assertFalse(AiYamlCreatorService::supportsAiImprovement('role'));
+        $this->assertFalse(AiYamlCreatorService::supportsAiImprovement('phase'));
+        $this->assertFalse(AiYamlCreatorService::supportsAiImprovement('invalid_type'));
+    }
 } 

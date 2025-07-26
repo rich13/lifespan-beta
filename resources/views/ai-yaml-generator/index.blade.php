@@ -23,25 +23,38 @@
                     <div class="card">
                         <div class="card-header">
                             <h5 class="card-title mb-0">
-                                <i class="bi bi-person-plus me-2"></i>
-                                Generate Biographical YAML
+                                <i class="bi bi-robot me-2"></i>
+                                Generate YAML
                             </h5>
                         </div>
                         <div class="card-body">
                             <form id="aiYamlForm">
                                 @csrf
                                 <div class="mb-3">
-                                    <label for="personName" class="form-label">Person's Name *</label>
-                                    <input type="text" class="form-control" id="personName" name="name" 
-                                           placeholder="e.g., David Attenborough" required>
-                                    <div class="form-text">Enter the full name of the person</div>
+                                    <label for="entityType" class="form-label">Entity Type *</label>
+                                    <select class="form-select" id="entityType" name="span_type" required>
+                                        <option value="person">Person</option>
+                                        <option value="organisation">Organisation</option>
+                                        <option value="place">Place</option>
+                                        <option value="event">Event</option>
+                                        <option value="thing">Thing (Album, Book, Film, etc.)</option>
+                                        <option value="band">Band</option>
+                                    </select>
+                                    <div class="form-text">Select the type of entity to generate YAML for</div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="entityName" class="form-label">Name *</label>
+                                    <input type="text" class="form-control" id="entityName" name="name" 
+                                           placeholder="e.g., David Attenborough or Apple Inc." required>
+                                    <div class="form-text" id="nameHelpText">Enter the full name of the person</div>
                                 </div>
 
                                 <div class="mb-3">
                                     <label for="disambiguation" class="form-label">Disambiguation Hint</label>
                                     <input type="text" class="form-control" id="disambiguation" name="disambiguation" 
                                            placeholder="e.g., the naturalist and broadcaster">
-                                    <div class="form-text">Optional hint to distinguish from others with the same name</div>
+                                    <div class="form-text" id="disambiguationHelpText">Optional hint to distinguish from others with the same name</div>
                                 </div>
 
                                 <button type="submit" class="btn btn-primary w-100" id="generateBtn">
@@ -59,7 +72,7 @@
                                 <ul class="small text-muted mb-0">
                                     <li>Uses ChatGPT to research publicly available information</li>
                                     <li>Generates structured YAML following our schema</li>
-                                    <li>Includes biographical data, connections, and roles</li>
+                                    <li>Includes entity data, connections, and relationships</li>
                                     <li>Results are cached for 24 hours</li>
                                 </ul>
                             </div>
@@ -236,16 +249,57 @@ document.addEventListener('DOMContentLoaded', function() {
     const redirectForm = document.getElementById('redirectForm');
     const redirectYamlContent = document.getElementById('redirectYamlContent');
 
+    // Entity type change handler
+    const entityType = document.getElementById('entityType');
+    const nameHelpText = document.getElementById('nameHelpText');
+    const disambiguationHelpText = document.getElementById('disambiguationHelpText');
+    const entityName = document.getElementById('entityName');
+
+    entityType.addEventListener('change', function() {
+        const selectedType = this.value;
+        const placeholders = {
+            'person': 'e.g., David Attenborough',
+            'organisation': 'e.g., Apple Inc.',
+            'place': 'e.g., London, England',
+            'event': 'e.g., The Moon Landing',
+            'thing': 'e.g., Sgt. Pepper\'s Lonely Hearts Club Band',
+            'band': 'e.g., The Beatles'
+        };
+        
+        const helpTexts = {
+            'person': 'Enter the full name of the person',
+            'organisation': 'Enter the full name of the organisation',
+            'place': 'Enter the name of the place',
+            'event': 'Enter the name of the event',
+            'thing': 'Enter the name of the thing (album, book, film, etc.)',
+            'band': 'Enter the name of the band'
+        };
+        
+        const disambiguationTexts = {
+            'person': 'Optional hint to distinguish from others with the same name',
+            'organisation': 'Optional hint to distinguish from others with the same name',
+            'place': 'Optional hint to distinguish from other places with the same name',
+            'event': 'Optional hint to distinguish from other events with the same name',
+            'thing': 'Optional hint to distinguish from other things with the same name',
+            'band': 'Optional hint to distinguish from other bands with the same name'
+        };
+        
+        nameHelpText.textContent = helpTexts[selectedType] || 'Enter the name';
+        entityName.placeholder = placeholders[selectedType] || 'Enter name...';
+        disambiguationHelpText.textContent = disambiguationTexts[selectedType] || 'Optional hint to distinguish from others with the same name';
+    });
+
     // Form submission
     form.addEventListener('submit', async function(e) {
         e.preventDefault();
         
         const formData = new FormData(form);
         const name = formData.get('name').trim();
+        const spanType = formData.get('span_type');
         const disambiguation = formData.get('disambiguation').trim();
         
         if (!name) {
-            alert('Please enter a person\'s name');
+            alert('Please enter a name');
             return;
         }
 
@@ -261,6 +315,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 },
                 body: JSON.stringify({
                     name: name,
+                    span_type: spanType,
                     disambiguation: disambiguation || null
                 })
             });
