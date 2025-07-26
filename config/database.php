@@ -119,6 +119,11 @@ return [
             'prefix_indexes' => true,
             'search_path' => 'public',
             'sslmode' => 'prefer',
+            'options' => [
+                PDO::ATTR_PERSISTENT => false, // Disable persistent connections to prevent leaks
+                PDO::ATTR_TIMEOUT => 5, // 5 second timeout
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            ],
             'dump' => [
                 'dump_binary_path' => '/usr/bin',
                 'use_single_transaction' => true,

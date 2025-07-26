@@ -12,12 +12,7 @@ services:
       - "5173:5173"
     networks:
       - lifespan-network
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-        reservations:
-          memory: 1G
+
     healthcheck:
       test: ["CMD-SHELL", "kill -0 1"]
       interval: 30s
