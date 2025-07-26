@@ -195,19 +195,48 @@
                 </button>
             @endif
 
-            <!-- Nested connections (e.g., has_role at_organisation) -->
-            @if($connection->connectionSpan && $connection->connectionSpan->connectionsAsChild)
-                @foreach($connection->connectionSpan->connectionsAsChild as $nestedConnection)
-                    @if($nestedConnection->type_id === 'at_organisation' && $nestedConnection->child)
+            <!-- Nested connections (e.g., has_role with at_organisation) -->
+            @if($nestedOrganisation)
+                <!-- Nested predicate -->
+                <button type="button" class="btn inactive">
+                    at
+                </button>
+                
+                <!-- Nested organisation -->
+                <a href="{{ route('spans.show', $nestedOrganisation) }}" 
+                   class="btn {{ $nestedOrganisation->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $nestedOrganisation->type_id }}">
+                    {{ $nestedOrganisation->name }}
+                </a>
+                
+                @if($nestedDates && $nestedDates->start_year && $nestedDates->start_year > 0)
+                    @if($nestedDates->end_year)
                         <button type="button" class="btn inactive">
-                            at
+                            from
                         </button>
-                        <a href="{{ route('spans.show', $nestedConnection->child) }}" 
-                           class="btn {{ $nestedConnection->child->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $nestedConnection->child->type_id }}">
-                            {{ $nestedConnection->child->name }}
+                        <!-- Nested start date -->
+                        <a href="{{ route('date.explore', ['date' => $nestedDates->start_date_link]) }}" 
+                           class="btn btn-outline-date">
+                            {{ $nestedDates->human_readable_start_date }}
+                        </a>
+                        <button type="button" class="btn inactive">
+                            to
+                        </button>
+                        <!-- Nested end date -->
+                        <a href="{{ route('date.explore', ['date' => $nestedDates->end_date_link]) }}" 
+                           class="btn btn-outline-date">
+                            {{ $nestedDates->human_readable_end_date }}
+                        </a>
+                    @else
+                        <button type="button" class="btn inactive">
+                            from
+                        </button>
+                        <!-- Nested start date -->
+                        <a href="{{ route('date.explore', ['date' => $nestedDates->start_date_link]) }}" 
+                           class="btn btn-outline-date">
+                            {{ $nestedDates->human_readable_start_date }}
                         </a>
                     @endif
-                @endforeach
+                @endif
             @endif
 
             <!-- Date information -->

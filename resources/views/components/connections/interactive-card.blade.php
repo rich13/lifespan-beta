@@ -60,28 +60,94 @@
     </x-slot>
 
     <x-slot name="mainContent">
-        <!-- Subject span name -->
-        <a href="{{ route('spans.show', $connection->parent) }}" 
-           class="btn {{ $connection->parent->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $connection->parent->type_id }}">
-            {{ $connection->parent->name }}
-        </a>
+        @php
+            // Check if the parent span is a connection span that needs to be broken apart
+            $parentIsConnectionSpan = $connection->parent && $connection->parent->type_id === 'connection';
+            $originalConnection = null;
+            
+            if ($parentIsConnectionSpan) {
+                // Find the original connection this span represents
+                $originalConnection = \App\Models\Connection::where('connection_span_id', $connection->parent->id)
+                    ->with(['parent', 'child', 'type'])
+                    ->first();
+            }
+        @endphp
         
-        <!-- Predicate -->
-        <a href="{{ route('spans.connections', ['subject' => $connection->parent, 'predicate' => str_replace(' ', '-', $connection->type->forward_predicate)]) }}" 
-           class="btn btn-{{ $connection->type_id }}">
-            {{ $connection->type->forward_predicate }}
-        </a>
-        
-        <!-- Object span name -->
-        @if($connection->child)
+        @if($isIncoming && $parentIsConnectionSpan && $originalConnection)
+            <!-- Special rendering when the parent is a connection span - break it apart -->
+            <!-- Original subject (person) -->
+            <a href="{{ route('spans.show', $originalConnection->parent) }}" 
+               class="btn {{ $originalConnection->parent->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $originalConnection->parent->type_id }}">
+                {{ $originalConnection->parent->name }}
+            </a>
+            
+            <!-- Original predicate -->
+            <a href="{{ route('spans.connections', ['subject' => $originalConnection->parent, 'predicate' => str_replace(' ', '-', $originalConnection->type->forward_predicate)]) }}" 
+               class="btn btn-{{ $originalConnection->type_id }}">
+                {{ $originalConnection->type->forward_predicate }}
+            </a>
+            
+            <!-- Original object (role) -->
+            <a href="{{ route('spans.show', $originalConnection->child) }}" 
+               class="btn {{ $originalConnection->child->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $originalConnection->child->type_id }}">
+                {{ $originalConnection->child->name }}
+            </a>
+            
+            <!-- Current predicate -->
+            <a href="{{ route('spans.connections', ['subject' => $connection->parent, 'predicate' => str_replace(' ', '-', $connection->type->forward_predicate)]) }}" 
+               class="btn btn-{{ $connection->type_id }}">
+                {{ $connection->type->forward_predicate }}
+            </a>
+            
+            <!-- Current object (organisation) -->
+            <a href="{{ route('spans.show', $connection->child) }}" 
+               class="btn {{ $connection->child->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $connection->child->type_id }}">
+                {{ $connection->child->name }}
+            </a>
+        @elseif($isIncoming)
+            <!-- When viewing from the object's perspective, show: [Parent] [predicate] [Current Span] -->
+            <!-- Parent span name -->
+            <a href="{{ route('spans.show', $connection->parent) }}" 
+               class="btn {{ $connection->parent->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $connection->parent->type_id }}">
+                {{ $connection->parent->name }}
+            </a>
+            
+            <!-- Predicate -->
+            <a href="{{ route('spans.connections', ['subject' => $connection->parent, 'predicate' => str_replace(' ', '-', $connection->type->forward_predicate)]) }}" 
+               class="btn btn-{{ $connection->type_id }}">
+                {{ $connection->type->forward_predicate }}
+            </a>
+            
+            <!-- Current span name (object) -->
             <a href="{{ route('spans.show', $connection->child) }}" 
                class="btn {{ $connection->child->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $connection->child->type_id }}">
                 {{ $connection->child->name }}
             </a>
         @else
-            <button type="button" class="btn btn-placeholder">
-                [Missing Object]
-            </button>
+            <!-- When viewing from the subject's perspective, show: [Current Span] [predicate] [Child] -->
+            <!-- Current span name (subject) -->
+            <a href="{{ route('spans.show', $connection->parent) }}" 
+               class="btn {{ $connection->parent->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $connection->parent->type_id }}">
+                {{ $connection->parent->name }}
+            </a>
+            
+            <!-- Predicate -->
+            <a href="{{ route('spans.connections', ['subject' => $connection->parent, 'predicate' => str_replace(' ', '-', $connection->type->forward_predicate)]) }}" 
+               class="btn btn-{{ $connection->type_id }}">
+                {{ $connection->type->forward_predicate }}
+            </a>
+            
+            <!-- Child span name -->
+            @if($connection->child)
+                <a href="{{ route('spans.show', $connection->child) }}" 
+                   class="btn {{ $connection->child->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $connection->child->type_id }}">
+                    {{ $connection->child->name }}
+                </a>
+            @else
+                <button type="button" class="btn btn-placeholder">
+                    [Missing Object]
+                </button>
+            @endif
         @endif
         
         <!-- Date information - only show for main connection if no nested organisation -->
