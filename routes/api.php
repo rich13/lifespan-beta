@@ -29,9 +29,9 @@ Route::middleware('auth:sanctum')->group(function () {
 Route::get('/spans/search', [SpanSearchController::class, 'search']);
 
 // Timeline APIs - allow unauthenticated access, let the controller handle access control
-Route::get('/spans/{span}', [SpanSearchController::class, 'timeline']);
-Route::get('/spans/{span}/object-connections', [SpanSearchController::class, 'timelineObjectConnections']);
-Route::get('/spans/{span}/during-connections', [SpanSearchController::class, 'timelineDuringConnections']);
+Route::get('/spans/{span}', [SpanSearchController::class, 'timeline'])->middleware('timeout.prevention');
+Route::get('/spans/{span}/object-connections', [SpanSearchController::class, 'timelineObjectConnections'])->middleware('timeout.prevention');
+Route::get('/spans/{span}/during-connections', [SpanSearchController::class, 'timelineDuringConnections'])->middleware('timeout.prevention');
 
 // Temporal relationship API
 Route::get('/spans/{span}/temporal', [SpanSearchController::class, 'temporal']);
@@ -41,14 +41,28 @@ Route::get('/spans/{span}/temporal', [SpanSearchController::class, 'temporal']);
 
 // Wikipedia On This Day API
 Route::get('/wikipedia/on-this-day/{month}/{day}', function ($month, $day) {
-    $service = new \App\Services\WikipediaOnThisDayService();
-    $data = $service->getOnThisDay((int)$month, (int)$day);
-    
-    return response()->json([
-        'success' => true,
-        'data' => $data
-    ]);
-});
+    try {
+        $service = new \App\Services\WikipediaOnThisDayService();
+        $data = $service->getOnThisDay((int)$month, (int)$day);
+        
+        return response()->json([
+            'success' => true,
+            'data' => $data
+        ]);
+    } catch (\Exception $e) {
+        \Log::error('Wikipedia API error', [
+            'month' => $month,
+            'day' => $day,
+            'error' => $e->getMessage()
+        ]);
+        
+        return response()->json([
+            'success' => false,
+            'error' => 'Failed to load Wikipedia data',
+            'message' => 'The request timed out or failed. Please try again later.'
+        ], 408); // Request Timeout
+    }
+})->middleware('timeout.prevention');
 
 // Connection Types API
 Route::get('/connection-types', function (Request $request) {

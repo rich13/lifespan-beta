@@ -22,28 +22,113 @@ class WikipediaOnThisDayService
                 // Zero-pad month and day for the API
                 $monthPadded = str_pad($month, 2, '0', STR_PAD_LEFT);
                 $dayPadded = str_pad($day, 2, '0', STR_PAD_LEFT);
-                $response = Http::timeout(10)->get($this->baseUrl . "/all/{$monthPadded}/{$dayPadded}");
+                
+                // Use a shorter timeout for external API calls
+                $response = Http::timeout(5)->retry(2, 1000)->get($this->baseUrl . "/all/{$monthPadded}/{$dayPadded}");
                 
                 if ($response->successful()) {
                     return $response->json();
                 }
                 
-                // Cache empty results too to avoid repeated API calls
-                return [];
+                // Log the failed response for debugging
+                \Log::warning('Wikipedia API returned non-successful response', [
+                    'month' => $month,
+                    'day' => $day,
+                    'status' => $response->status(),
+                    'body' => $response->body()
+                ]);
+                
+                // Return fallback data instead of empty array
+                return $this->getFallbackData($month, $day);
             } catch (\Exception $e) {
                 \Log::warning('Failed to fetch Wikipedia On This Day data', [
                     'month' => $month,
                     'day' => $day,
-                    'error' => $e->getMessage()
+                    'error' => $e->getMessage(),
+                    'exception_class' => get_class($e)
                 ]);
                 
-                // Cache failed requests for a shorter time to avoid hammering the API
-                return [];
+                // Return fallback data instead of empty array
+                return $this->getFallbackData($month, $day);
             }
         });
         
         // Process the raw data with current span matches
         return $this->formatEventsWithMatches($rawData);
+    }
+
+    /**
+     * Get fallback historical data when Wikipedia API fails
+     */
+    private function getFallbackData(int $month, int $day): array
+    {
+        // Provide some basic historical data for common dates
+        $fallbackData = [
+            // New Year's Day
+            '1_1' => [
+                'events' => [
+                    ['year' => 45, 'text' => 'Julius Caesar establishes the Julian calendar'],
+                    ['year' => 1801, 'text' => 'The United Kingdom of Great Britain and Ireland is proclaimed']
+                ],
+                'births' => [
+                    ['year' => 1735, 'text' => 'Paul Revere, American silversmith and patriot'],
+                    ['year' => 1863, 'text' => 'Pierre de Coubertin, French educator and founder of the modern Olympic Games']
+                ],
+                'deaths' => [
+                    ['year' => 1515, 'text' => 'Louis XII, King of France'],
+                    ['year' => 1894, 'text' => 'Heinrich Hertz, German physicist']
+                ]
+            ],
+            // Independence Day (US)
+            '7_4' => [
+                'events' => [
+                    ['year' => 1776, 'text' => 'The United States Declaration of Independence is adopted by the Continental Congress'],
+                    ['year' => 1803, 'text' => 'The Louisiana Purchase is announced to the American people']
+                ],
+                'births' => [
+                    ['year' => 1804, 'text' => 'Nathaniel Hawthorne, American novelist'],
+                    ['year' => 1872, 'text' => 'Calvin Coolidge, 30th President of the United States']
+                ],
+                'deaths' => [
+                    ['year' => 1826, 'text' => 'Thomas Jefferson, 3rd President of the United States'],
+                    ['year' => 1831, 'text' => 'James Monroe, 5th President of the United States']
+                ]
+            ],
+            // Christmas
+            '12_25' => [
+                'events' => [
+                    ['year' => 800, 'text' => 'Charlemagne is crowned Holy Roman Emperor by Pope Leo III'],
+                    ['year' => 1066, 'text' => 'William the Conqueror is crowned King of England']
+                ],
+                'births' => [
+                    ['year' => 1642, 'text' => 'Isaac Newton, English physicist and mathematician'],
+                    ['year' => 1876, 'text' => 'Muhammad Ali Jinnah, founder of Pakistan']
+                ],
+                'deaths' => [
+                    ['year' => 1977, 'text' => 'Charlie Chaplin, English actor and filmmaker'],
+                    ['year' => 1989, 'text' => 'Nicolae Ceaușescu, Romanian dictator']
+                ]
+            ]
+        ];
+        
+        $dateKey = "{$month}_{$day}";
+        
+        if (isset($fallbackData[$dateKey])) {
+            return $fallbackData[$dateKey];
+        }
+        
+        // For other dates, return a generic message
+        return [
+            'events' => [
+                ['year' => null, 'text' => 'Historical events occurred on this date throughout history']
+            ],
+            'births' => [
+                ['year' => null, 'text' => 'Many notable people were born on this date']
+            ],
+            'deaths' => [
+                ['year' => null, 'text' => 'Many notable people passed away on this date']
+            ]
+        ];
     }
 
     /**
