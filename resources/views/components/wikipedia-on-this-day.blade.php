@@ -40,17 +40,22 @@ function loadWikipediaContent() {
     const day = {{ $day }};
     
     fetch(`/api/wikipedia/on-this-day/${month}/${day}`)
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            return response.json();
+        })
         .then(data => {
             if (data.success && data.data) {
                 renderWikipediaContent(data.data);
             } else {
-                showWikipediaError();
+                showWikipediaError(data.message || 'Failed to load data');
             }
         })
         .catch(error => {
             console.error('Error loading Wikipedia data:', error);
-            showWikipediaError();
+            showWikipediaError('Unable to load historical data. Please try again later.');
         });
 }
 
@@ -114,14 +119,14 @@ function renderWikipediaContent(data) {
     wikipediaContent.innerHTML = html;
 }
 
-function showWikipediaError() {
+function showWikipediaError(message = 'Unable to load historical data') {
     const wikipediaContent = document.getElementById('wikipedia-content');
     if (!wikipediaContent) return;
     
     wikipediaContent.innerHTML = `
         <div class="text-center py-3">
             <i class="bi bi-exclamation-triangle text-warning fs-4"></i>
-            <p class="text-muted small mt-2 mb-0">Unable to load historical data</p>
+            <p class="text-muted small mt-2 mb-0">${message}</p>
         </div>
     `;
 }
