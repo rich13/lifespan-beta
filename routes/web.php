@@ -173,12 +173,12 @@ Route::middleware('web')->group(function () {
             Route::get('/create', [SpanController::class, 'create'])->name('spans.create');
             Route::post('/', [SpanController::class, 'store'])->name('spans.store');
             Route::get('/{span}/edit', [SpanController::class, 'edit'])->name('spans.edit');
-            Route::get('/{span}/yaml', [SpanController::class, 'getYaml'])->name('spans.yaml');
-            Route::get('/{span}/editor', [SpanController::class, 'yamlEditor'])->name('spans.yaml-editor');
-            Route::post('/{span}/editor/validate', [SpanController::class, 'validateYaml'])->name('spans.yaml-validate');
-            Route::post('/{span}/editor/apply', [SpanController::class, 'applyYaml'])->name('spans.yaml-apply');
-            Route::post('/{span}/improve/preview', [SpanController::class, 'previewImprovement'])->name('spans.improve.preview');
-            Route::post('/{span}/improve', [SpanController::class, 'improveWithAi'])->name('spans.improve');
+            Route::get('/{span}/yaml', [SpanController::class, 'getYaml'])->name('spans.yaml')->middleware('timeout.prevention');
+            Route::get('/{span}/editor', [SpanController::class, 'yamlEditor'])->name('spans.yaml-editor')->middleware('timeout.prevention');
+            Route::post('/{span}/editor/validate', [SpanController::class, 'validateYaml'])->name('spans.yaml-validate')->middleware('timeout.prevention');
+            Route::post('/{span}/editor/apply', [SpanController::class, 'applyYaml'])->name('spans.yaml-apply')->middleware('timeout.prevention');
+            Route::post('/{span}/improve/preview', [SpanController::class, 'previewImprovement'])->name('spans.improve.preview')->middleware('timeout.prevention');
+            Route::post('/{span}/improve', [SpanController::class, 'improveWithAi'])->name('spans.improve')->middleware('timeout.prevention');
             Route::put('/{span}', [SpanController::class, 'update'])->name('spans.update');
             Route::delete('/{span}', [SpanController::class, 'destroy'])->name('spans.destroy');
             Route::get('/{span}/compare', [SpanController::class, 'compare'])->name('spans.compare');
