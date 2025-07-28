@@ -80,5 +80,6 @@ class Kernel extends HttpKernel
         'sets.access' => \App\Http\Middleware\SetsAccessMiddleware::class,
         'user.switcher' => \App\Http\Middleware\UserSwitcherMiddleware::class,
         'api.json' => \App\Http\Middleware\ApiJsonMiddleware::class,
+        'timeout.prevention' => \App\Http\Middleware\TimeoutPreventionMiddleware::class,
     ];
 }
