@@ -46,7 +46,60 @@ class SpanController extends Controller
         $this->routeReservationService = $routeReservationService;
     }
 
+    /**
+     * Safely log span data without causing deep serialization issues
+     */
+    private function safeLogSpanData(string $message, Span $span, array $additionalData = []): void
+    {
+        try {
+            // Create a safe representation of the span for logging
+            $safeSpanData = [
+                'id' => $span->id,
+                'name' => $span->name,
+                'type_id' => $span->type_id,
+                'state' => $span->state,
+                'start_year' => $span->start_year,
+                'end_year' => $span->end_year,
+                'owner_id' => $span->owner_id,
+                'access_level' => $span->access_level,
+                'connections_count' => $span->connectionsAsSubject()->count() + $span->connectionsAsObject()->count(),
+            ];
 
+            Log::info($message, array_merge($safeSpanData, $additionalData));
+        } catch (\Exception $e) {
+            // If logging fails, just log a minimal message
+            Log::warning("Failed to log detailed span data: " . $e->getMessage(), [
+                'span_id' => $span->id ?? 'unknown',
+                'span_name' => $span->name ?? 'unknown',
+                'original_message' => $message
+            ]);
+        }
+    }
+
+    /**
+     * Safely log connection data without causing deep serialization issues
+     */
+    private function safeLogConnectionData(string $message, Connection $connection, array $additionalData = []): void
+    {
+        try {
+            // Create a safe representation of the connection for logging
+            $safeConnectionData = [
+                'id' => $connection->id,
+                'type_id' => $connection->type_id,
+                'parent_id' => $connection->parent_id,
+                'child_id' => $connection->child_id,
+                'connection_span_id' => $connection->connection_span_id,
+            ];
+
+            Log::info($message, array_merge($safeConnectionData, $additionalData));
+        } catch (\Exception $e) {
+            // If logging fails, just log a minimal message
+            Log::warning("Failed to log detailed connection data: " . $e->getMessage(), [
+                'connection_id' => $connection->id ?? 'unknown',
+                'original_message' => $message
+            ]);
+        }
+    }
 
     /**
      * Display a listing of spans.
@@ -1094,18 +1147,26 @@ class SpanController extends Controller
     }
 
     /**
-     * Get the YAML representation of a span
+     * Get YAML content for a span
      */
     public function getYaml(Span $span)
     {
+        $this->authorize('view', $span);
+        
         try {
-            $yamlContent = $this->yamlService->spanToYaml($span);
+            // Use the safe serialization method to prevent timeouts
+            $yamlContent = $this->yamlService->spanToYamlSafe($span);
             
             return response()->json([
                 'success' => true,
-                'yaml' => $yamlContent
+                'yaml_content' => $yamlContent
             ]);
         } catch (\Exception $e) {
+            Log::error('Failed to generate YAML for span', [
+                'span_id' => $span->id,
+                'error' => $e->getMessage()
+            ]);
+            
             return response()->json([
                 'success' => false,
                 'error' => 'Failed to generate YAML: ' . $e->getMessage()

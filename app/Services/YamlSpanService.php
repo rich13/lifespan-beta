@@ -3313,4 +3313,173 @@ class YamlSpanService
             ];
         }
     }
+
+    /**
+     * Safely convert a span to array format without deep nesting issues
+     */
+    public function spanToArraySafe(Span $span): array
+    {
+        try {
+            // Set a reasonable limit for serialization depth
+            $maxDepth = 5;
+            $currentDepth = 0;
+            
+            return $this->spanToArrayWithDepthLimit($span, $maxDepth, $currentDepth);
+        } catch (\Exception $e) {
+            Log::error('Failed to safely convert span to array', [
+                'span_id' => $span->id,
+                'span_name' => $span->name,
+                'error' => $e->getMessage()
+            ]);
+            
+            // Return a minimal safe representation
+            return [
+                'id' => $span->id,
+                'name' => $span->name,
+                'type' => $span->type_id,
+                'state' => $span->state,
+                'description' => $span->description,
+                'notes' => $span->notes,
+                'metadata' => $span->metadata ?? [],
+                'error' => 'Serialization failed due to deep nesting'
+            ];
+        }
+    }
+
+    /**
+     * Convert span to array with depth limiting to prevent circular references
+     */
+    private function spanToArrayWithDepthLimit(Span $span, int $maxDepth, int $currentDepth): array
+    {
+        if ($currentDepth >= $maxDepth) {
+            return [
+                'id' => $span->id,
+                'name' => $span->name,
+                'type' => $span->type_id,
+                'note' => 'Max depth reached - truncated for performance'
+            ];
+        }
+
+        $data = [
+            'id' => $span->id,
+            'name' => $span->name,
+            'type' => $span->type_id,
+            'state' => $span->state,
+            'description' => $span->description,
+            'notes' => $span->notes,
+            'metadata' => $span->metadata ?? [],
+            'sources' => $span->sources ?? [],
+            'access_level' => $span->access_level,
+        ];
+
+        // Add dates if they exist
+        if ($span->start_year) {
+            $data['start'] = $this->formatDate($span->start_year, $span->start_month, $span->start_day);
+        }
+        if ($span->end_year) {
+            $data['end'] = $this->formatDate($span->end_year, $span->end_month, $span->end_day);
+        }
+
+        // Add connections with depth limiting
+        $connections = [];
+        $connectionTypes = ['has_role', 'at_organisation', 'during', 'contains', 'located', 'created', 'subject_of'];
+        
+        foreach ($connectionTypes as $connectionType) {
+            $typeConnections = $this->getConnectionsForType($span, $connectionType, $maxDepth, $currentDepth + 1);
+            if (!empty($typeConnections)) {
+                $connections[$connectionType] = $typeConnections;
+            }
+        }
+
+        if (!empty($connections)) {
+            $data['connections'] = $connections;
+        }
+
+        return $data;
+    }
+
+    /**
+     * Get connections for a specific type with depth limiting
+     */
+    private function getConnectionsForType(Span $span, string $connectionType, int $maxDepth, int $currentDepth): array
+    {
+        try {
+            $connections = [];
+            
+            // Get connections as subject
+            $subjectConnections = $span->connectionsAsSubject()
+                ->where('type_id', $connectionType)
+                ->with(['child:id,name,type_id,start_year,end_year,metadata'])
+                ->limit(50) // Limit to prevent excessive data
+                ->get();
+
+            foreach ($subjectConnections as $connection) {
+                $connectionData = [
+                    'name' => $connection->child->name,
+                    'type' => $connection->child->type_id,
+                    'id' => $connection->child->id,
+                ];
+
+                // Add dates if they exist
+                if ($connection->child->start_year) {
+                    $connectionData['start'] = $this->formatDate(
+                        $connection->child->start_year,
+                        $connection->child->start_month,
+                        $connection->child->start_day
+                    );
+                }
+                if ($connection->child->end_year) {
+                    $connectionData['end'] = $this->formatDate(
+                        $connection->child->end_year,
+                        $connection->child->end_month,
+                        $connection->child->end_day
+                    );
+                }
+
+                // Add metadata if it exists and is not too deep
+                if ($connection->child->metadata && $currentDepth < $maxDepth - 1) {
+                    $connectionData['metadata'] = $connection->child->metadata;
+                }
+
+                $connections[] = $connectionData;
+            }
+
+            return $connections;
+        } catch (\Exception $e) {
+            Log::warning("Failed to get connections for type: $connectionType", [
+                'span_id' => $span->id,
+                'error' => $e->getMessage()
+            ]);
+            return [];
+        }
+    }
+
+    /**
+     * Format date components into a string
+     */
+    private function formatDate(?int $year, ?int $month = null, ?int $day = null): string
+    {
+        if (!$year) {
+            return '';
+        }
+
+        if ($month && $day) {
+            return sprintf('%04d-%02d-%02d', $year, $month, $day);
+        } elseif ($month) {
+            return sprintf('%04d-%02d', $year, $month);
+        } else {
+            return (string) $year;
+        }
+    }
+
+    /**
+     * Convert a span to YAML format safely (prevents deep nesting issues)
+     */
+    public function spanToYamlSafe(Span $span): string
+    {
+        $data = $this->spanToArraySafe($span);
+        
+        // Use a custom YAML dump that ensures dates are quoted
+        return $this->dumpYamlWithQuotedDates($data, 4, 2);
+    }
 } 
