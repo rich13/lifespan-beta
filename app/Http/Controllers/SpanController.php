@@ -528,6 +528,26 @@ class SpanController extends Controller
                     ->with('status', session('status')); // Preserve flash message
             }
 
+            // Check for global time travel cookie and redirect if it exists
+            $timeTravelDate = $request->cookie('time_travel_date');
+            
+            if ($timeTravelDate) {
+                // Validate the date format before redirecting
+                if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $timeTravelDate) && checkdate(
+                    (int) substr($timeTravelDate, 5, 2),
+                    (int) substr($timeTravelDate, 8, 2),
+                    (int) substr($timeTravelDate, 0, 4)
+                )) {
+                    return redirect()->route('spans.at-date', [
+                        'span' => $subject,
+                        'date' => $timeTravelDate
+                    ]);
+                } else {
+                    // Invalid date in cookie, clear it
+                    $request->cookies->remove('time_travel_date');
+                }
+            }
+
             // Check if the span is private and the user is not authenticated
             if ($subject->access_level !== 'public' && !Auth::check()) {
                 return redirect()->route('login');
@@ -574,6 +594,289 @@ class SpanController extends Controller
                 ]);
             }
         }
+    }
+
+    /**
+     * Show a span at a specific date (time travel mode)
+     */
+    public function showAtDate(Request $request, Span $span, string $date): \Illuminate\Http\Response|\Illuminate\Http\RedirectResponse
+    {
+        try {
+            // If we're accessing via UUID and a slug exists, redirect to the slug URL
+            $routeParam = $request->segment(2); // Get the actual URL segment
+            
+            if (Str::isUuid($routeParam) && $span->slug) {
+                \Illuminate\Support\Facades\Log::info('Redirecting time travel to slug URL', [
+                    'from' => $routeParam,
+                    'to' => $span->slug,
+                    'date' => $date
+                ]);
+                
+                return redirect()
+                    ->route('spans.at-date', ['span' => $span->slug, 'date' => $date], 301)
+                    ->with('status', session('status')); // Preserve flash message
+            }
+
+            // Parse the date parameter (expecting YYYY-MM-DD format)
+            $dateParts = explode('-', $date);
+            if (count($dateParts) !== 3) {
+                abort(400, 'Date must be in YYYY-MM-DD format');
+            }
+            
+            $year = (int) $dateParts[0];
+            $month = (int) $dateParts[1];
+            $day = (int) $dateParts[2];
+
+            // Validate date components
+            if ($year < 1000 || $year > 2100) {
+                abort(400, 'Invalid year');
+            }
+            if ($month < 1 || $month > 12) {
+                abort(400, 'Invalid month');
+            }
+            if ($day < 1 || $day > 31) {
+                abort(400, 'Invalid day');
+            }
+            
+            // Additional validation: check if the date is actually valid
+            if (!checkdate($month, $day, $year)) {
+                abort(400, 'Invalid date');
+            }
+
+            // Check if the span is private and the user is not authenticated
+            if ($span->access_level !== 'public' && !Auth::check()) {
+                return redirect()->route('login');
+            }
+
+            // Authorize access using the SpanPolicy
+            if (Auth::check()) {
+                $this->authorize('view', $span);
+            }
+
+            // Get connections that are ongoing at this date
+            $ongoingConnections = $this->getOngoingConnectionsAtDate($span, $year, $month, $day);
+
+            // Format the date for display
+            $displayDate = $this->formatDateForDisplay($year, $month, $day);
+
+            // Set global time travel cookie
+            $cookie = cookie('time_travel_date', $date, 60 * 24 * 30); // 30 days
+
+            return response()->view('spans.at-date', compact('span', 'date', 'displayDate', 'ongoingConnections'))
+                ->withCookie($cookie);
+        } catch (AuthorizationException $e) {
+            return view('errors.403');
+        } catch (\Exception $e) {
+            Log::error('Error in spans showAtDate', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'span_id' => $span->id,
+                'date' => $date
+            ]);
+            
+            if (app()->environment('production')) {
+                return view('errors.500');
+            } else {
+                return view('errors.500', [
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString()
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Get connections that are ongoing at a specific date
+     */
+    private function getOngoingConnectionsAtDate(Span $span, int $year, int $month, int $day): array
+    {
+        $ongoingConnections = [];
+
+        // Get all connections where this span is involved
+        $connectionsAsSubject = $span->connectionsAsSubject()->with(['child', 'type'])->get();
+        $connectionsAsObject = $span->connectionsAsObject()->with(['parent', 'type'])->get();
+
+        // Check outgoing connections (where this span is the subject)
+        foreach ($connectionsAsSubject as $connection) {
+            if ($this->isConnectionOngoingAtDate($connection, $year, $month, $day)) {
+                $ongoingConnections[] = [
+                    'connection' => $connection,
+                    'other_span' => $connection->child,
+                    'direction' => 'outgoing',
+                    'type' => $connection->type
+                ];
+            }
+        }
+
+        // Check incoming connections (where this span is the object)
+        foreach ($connectionsAsObject as $connection) {
+            if ($this->isConnectionOngoingAtDate($connection, $year, $month, $day)) {
+                $ongoingConnections[] = [
+                    'connection' => $connection,
+                    'other_span' => $connection->parent,
+                    'direction' => 'incoming',
+                    'type' => $connection->type
+                ];
+            }
+        }
+
+        return $ongoingConnections;
+    }
+
+    /**
+     * Check if a connection is ongoing at a specific date
+     */
+    private function isConnectionOngoingAtDate(Connection $connection, int $year, int $month, int $day): bool
+    {
+        // Get the connection span if it exists
+        $connectionSpan = $connection->connectionSpan;
+        
+        if (!$connectionSpan) {
+            return false; // No connection span means no temporal data
+        }
+
+        // Check if the connection has start/end dates
+        $hasStartDate = $connectionSpan->start_year || $connectionSpan->start_month || $connectionSpan->start_day;
+        $hasEndDate = $connectionSpan->end_year || $connectionSpan->end_month || $connectionSpan->end_day;
+
+        if (!$hasStartDate && !$hasEndDate) {
+            return false; // No temporal data
+        }
+
+        // Create the target date for comparison
+        $targetDate = \Carbon\Carbon::create($year, $month, $day, 12, 0, 0); // Use noon to avoid timezone issues
+
+        // Get the expanded date ranges based on precision
+        $startRange = $connectionSpan->getStartDateRange();
+        $endRange = $connectionSpan->getEndDateRange();
+
+        // Check if the target date falls within the connection's date range
+        if ($startRange[0] && $targetDate < $startRange[0]) {
+            return false; // Connection hasn't started yet
+        }
+
+        if ($endRange[1] && $targetDate > $endRange[1]) {
+            return false; // Connection has already ended
+        }
+
+        return true; // Connection is ongoing at this date
+    }
+
+    /**
+     * Format date for display
+     */
+    private function formatDateForDisplay(int $year, int $month, int $day): string
+    {
+        return date('j F Y', mktime(0, 0, 0, $month, $day, $year));
+    }
+
+    /**
+     * Exit time travel mode - clear cookie and redirect to present
+     */
+    public function exitTimeTravel(Request $request, Span $span): \Illuminate\Http\RedirectResponse
+    {
+        // Clear the global time travel cookie
+        $cookie = cookie('time_travel_date', null, -1); // Expire immediately
+
+        return redirect()->route('spans.show', $span)
+            ->withCookie($cookie);
+    }
+
+    /**
+     * Global exit time travel mode - clear cookie and redirect to current span
+     */
+    public function exitTimeTravelGlobal(Request $request): \Illuminate\Http\RedirectResponse
+    {
+        // Clear the global time travel cookie
+        $cookie = cookie('time_travel_date', null, -1); // Expire immediately
+
+        // Try to get the span from the current URL path
+        $path = $request->path();
+        if (preg_match('/^spans\/([^\/]+)\/at\/\d{4}-\d{2}-\d{2}$/', $path, $matches)) {
+            $spanIdentifier = $matches[1];
+            return redirect()->route('spans.show', ['subject' => $spanIdentifier])->withCookie($cookie);
+        }
+        
+        // Fallback to home page if we can't determine the span
+        return redirect()->route('spans.index')->withCookie($cookie);
+    }
+
+    /**
+     * Toggle time travel mode - if active, exit; if inactive, show modal
+     */
+    public function toggleTimeTravel(Request $request): \Illuminate\Http\RedirectResponse
+    {
+        $timeTravelDate = $request->cookie('time_travel_date');
+        
+        if ($timeTravelDate) {
+            // Time travel is active, exit it
+            $cookie = cookie('time_travel_date', null, -1); // Expire immediately
+            
+            // Try to get the span from the referrer URL
+            $referrer = $request->headers->get('referer');
+            if ($referrer) {
+                $path = parse_url($referrer, PHP_URL_PATH);
+                if ($path && preg_match('/^\/spans\/([^\/]+)(?:\/at\/\d{4}-\d{2}-\d{2})?$/', $path, $matches)) {
+                    $spanIdentifier = $matches[1];
+                    return redirect()->route('spans.show', ['subject' => $spanIdentifier])->withCookie($cookie);
+                }
+            }
+            
+            return redirect()->route('spans.index')->withCookie($cookie);
+        } else {
+            // Time travel is inactive, redirect to modal
+            return redirect()->route('time-travel.modal');
+        }
+    }
+
+    /**
+     * Show time travel modal
+     */
+    public function showTimeTravelModal(Request $request): \Illuminate\View\View
+    {
+        return view('modals.time-travel');
+    }
+
+    /**
+     * Start time travel with selected date
+     */
+    public function startTimeTravel(Request $request): \Illuminate\Http\RedirectResponse
+    {
+        $request->validate([
+            'travel_day' => 'required|integer|min:1|max:31',
+            'travel_month' => 'required|integer|min:1|max:12',
+            'travel_year' => 'required|integer|min:1000|max:9999'
+        ]);
+
+        $day = $request->input('travel_day');
+        $month = $request->input('travel_month');
+        $year = $request->input('travel_year');
+
+        // Validate that the date is actually valid
+        if (!checkdate($month, $day, $year)) {
+            return back()->withErrors(['travel_day' => 'Invalid date. Please check your day, month, and year.']);
+        }
+
+        // Format the date as YYYY-MM-DD
+        $date = sprintf('%04d-%02d-%02d', $year, $month, $day);
+        
+        // Set the global time travel cookie
+        $cookie = cookie('time_travel_date', $date, 60 * 24 * 30); // 30 days
+        
+        // Try to determine the current span from the referrer URL
+        $referrer = $request->headers->get('referer');
+        if ($referrer) {
+            $path = parse_url($referrer, PHP_URL_PATH);
+            if ($path && preg_match('/^\/spans\/([^\/]+)(?:\/at\/\d{4}-\d{2}-\d{2})?$/', $path, $matches)) {
+                $spanIdentifier = $matches[1];
+                return redirect()->route('spans.at-date', ['span' => $spanIdentifier, 'date' => $date])
+                    ->withCookie($cookie);
+            }
+        }
+        
+        // Fallback to date exploration page if we can't determine the current span
+        return redirect()->route('date.explore', ['date' => $date])
+            ->withCookie($cookie);
     }
 
     /**

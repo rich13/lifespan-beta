@@ -448,6 +448,7 @@ class YamlValidationService
             'select' => 'string',
             'span' => 'string', // Span references are stored as UUIDs (strings)
             'array' => 'array',
+            'object' => 'array', // Objects are stored as arrays in JSON
             'boolean' => 'boolean',
             'integer' => 'integer',
             'float' => 'float',

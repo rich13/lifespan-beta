@@ -465,6 +465,29 @@ Route::middleware('web')->group(function () {
             // Specific span routes (must come before connection routes to avoid conflicts)
             Route::get('/{span}/story', [SpanController::class, 'story'])->name('spans.story');
             
+            // Time travel exit route - clear cookie and return to present
+            Route::get('/{span}/at/exit', [SpanController::class, 'exitTimeTravel'])
+                ->name('spans.at-date-exit');
+            
+            // Global time travel exit route (for header use)
+            Route::get('/time-travel/exit', [SpanController::class, 'exitTimeTravelGlobal'])
+                ->name('time-travel.exit');
+            
+            // Global time travel toggle route (for header use)
+            Route::get('/time-travel/toggle', [SpanController::class, 'toggleTimeTravel'])
+                ->name('time-travel.toggle');
+            
+            // Time travel modal route
+            Route::get('/time-travel/modal', [SpanController::class, 'showTimeTravelModal'])
+                ->name('time-travel.modal');
+            Route::post('/time-travel/modal', [SpanController::class, 'startTimeTravel'])
+                ->name('time-travel.start');
+            
+            // Time travel route - show span at specific date
+            Route::get('/{span}/at/{date}', [SpanController::class, 'showAtDate'])
+                ->where('date', '[0-9]{4}-[0-9]{2}-[0-9]{2}')
+                ->name('spans.at-date');
+            
             // Connection routes
             Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])->name('spans.connections');
             Route::get('/{subject}/{predicate}/{object}', [SpanController::class, 'showConnection'])->name('spans.connection');
@@ -542,6 +565,21 @@ Route::middleware('web')->group(function () {
                 Route::post('/test-connection', [\App\Http\Controllers\FlickrImportController::class, 'testConnection'])->name('test-connection');
                 Route::post('/import-photos', [\App\Http\Controllers\FlickrImportController::class, 'importPhotos'])->name('import-photos');
                 Route::get('/get-imported-photos', [\App\Http\Controllers\FlickrImportController::class, 'getImportedPhotos'])->name('get-imported-photos');
+                
+                // OAuth routes
+                Route::get('/authorize', [\App\Http\Controllers\FlickrImportController::class, 'startOAuth'])->name('authorize');
+                Route::get('/callback', [\App\Http\Controllers\FlickrImportController::class, 'callback'])->name('callback');
+                Route::post('/disconnect', [\App\Http\Controllers\FlickrImportController::class, 'disconnect'])->name('disconnect');
+            
+            // Photoset routes
+            Route::get('/photosets', [\App\Http\Controllers\FlickrImportController::class, 'getPhotosets'])->name('photosets');
+            Route::post('/import-photoset', [\App\Http\Controllers\FlickrImportController::class, 'importPhotoset'])->name('import-photoset');
+            });
+            
+            // Photo Upload routes
+            Route::prefix('upload/photos')->name('upload.photos.')->group(function () {
+                Route::get('/', [\App\Http\Controllers\PhotoUploadController::class, 'create'])->name('create');
+                Route::post('/', [\App\Http\Controllers\PhotoUploadController::class, 'store'])->name('store');
             });
             
             // LinkedIn Import routes
@@ -550,6 +588,12 @@ Route::middleware('web')->group(function () {
                 Route::post('/preview', [\App\Http\Controllers\LinkedInImportController::class, 'preview'])->name('preview');
                 Route::post('/import', [\App\Http\Controllers\LinkedInImportController::class, 'import'])->name('import');
             });
+        });
+
+        // Image Proxy routes (must be at root level for public access)
+        Route::prefix('images')->name('images.')->group(function () {
+            Route::get('/{spanId}/{size?}', [\App\Http\Controllers\ImageProxyController::class, 'proxy'])->name('proxy');
+            Route::get('/{spanId}/info', [\App\Http\Controllers\ImageProxyController::class, 'info'])->name('info');
         });
 
         // Admin routes
@@ -681,6 +725,21 @@ Route::middleware('web')->group(function () {
             // Span Management
             Route::get('/spans', [AdminSpanController::class, 'index'])
                 ->name('spans.index');
+            
+                            // Images Management
+                Route::get('/images', [\App\Http\Controllers\Admin\ImagesController::class, 'index'])
+                    ->name('images.index');
+
+                Route::post('/images/get-nearest-place', [\App\Http\Controllers\Admin\ImagesController::class, 'getNearestPlace'])
+                    ->name('images.get-nearest-place');
+            
+            // Person Subtype Management (must come before parameterized routes)
+            Route::get('/spans/person-subtypes', [AdminSpanController::class, 'managePersonSubtypes'])
+                ->name('spans.manage-person-subtypes');
+            Route::post('/spans/person-subtypes', [AdminSpanController::class, 'updatePersonSubtypes'])
+                ->name('spans.update-person-subtypes');
+            
+            // Parameterized span routes (must come after specific routes)
             Route::get('/spans/{span}', [AdminSpanController::class, 'show'])
                 ->name('spans.show');
             Route::get('/spans/{span}/edit', [AdminSpanController::class, 'edit'])
@@ -689,12 +748,6 @@ Route::middleware('web')->group(function () {
                 ->name('spans.update');
             Route::delete('/spans/{span}', [AdminSpanController::class, 'destroy'])
                 ->name('spans.destroy');
-            
-            // Person Subtype Management
-            Route::get('/spans/person-subtypes', [AdminSpanController::class, 'managePersonSubtypes'])
-                ->name('spans.manage-person-subtypes');
-            Route::post('/spans/person-subtypes', [AdminSpanController::class, 'updatePersonSubtypes'])
-                ->name('spans.update-person-subtypes');
             
             // Public Figure Connection Fixer
             Route::get('/tools/fix-public-figure-connections', [\App\Http\Controllers\Admin\ToolsController::class, 'fixPublicFigureConnections'])

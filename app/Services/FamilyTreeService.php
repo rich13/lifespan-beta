@@ -27,8 +27,9 @@ class FamilyTreeService
      */
     public function getDescendants(Span $span, int $generations = 2): Collection
     {
-        // Cache key based on span ID and generations
-        $cacheKey = "descendants_{$span->id}_{$generations}";
+        // Cache key based on environment, span ID and generations to avoid cross-env collisions
+        $cachePrefix = app()->environment();
+        $cacheKey = "{$cachePrefix}:descendants_{$span->id}_{$generations}";
         
         return Cache::remember($cacheKey, 3600, function () use ($span, $generations) {
             $descendants = collect();
@@ -159,8 +160,9 @@ class FamilyTreeService
      */
     public function getUnclesAndAunts(Span $span): Collection
     {
-        // Cache key based on span ID
-        $cacheKey = "uncles_and_aunts_{$span->id}";
+        // Cache key based on environment and span ID to avoid cross-env collisions
+        $cachePrefix = app()->environment();
+        $cacheKey = "{$cachePrefix}:uncles_and_aunts_{$span->id}";
         
         return Cache::remember($cacheKey, 3600, function () use ($span) {
             if (env('APP_DEBUG')) {
@@ -351,36 +353,28 @@ class FamilyTreeService
      */
     public function clearFamilyCaches(Span $span): void
     {
-        // Clear descendants cache for different generation levels
+        $cachePrefix = app()->environment();
+
+        // Clear descendants cache for different generation levels for this span
         for ($generations = 1; $generations <= 5; $generations++) {
-            Cache::forget("descendants_{$span->id}_{$generations}");
+            Cache::forget("{$cachePrefix}:descendants_{$span->id}_{$generations}");
         }
-        
-        // Clear uncles and aunts cache
-        Cache::forget("uncles_and_aunts_{$span->id}");
-        
-        // Clear caches for all family members that might be affected
-        $this->clearRelatedFamilyCaches($span);
-    }
 
-    /**
-     * Clear caches for related family members
-     */
-    protected function clearRelatedFamilyCaches(Span $span): void
-    {
-        // Clear caches for parents
-        $this->getParents($span)->each(function ($parent) {
-            $this->clearFamilyCaches($parent);
-        });
+        // Clear uncles and aunts cache for this span
+        Cache::forget("{$cachePrefix}:uncles_and_aunts_{$span->id}");
 
-        // Clear caches for children
-        $this->getChildren($span)->each(function ($child) {
-            $this->clearFamilyCaches($child);
-        });
+        // Shallow invalidation for immediate relatives only (no recursion)
+        $immediateRelatives = collect()
+            ->merge($this->getParents($span))
+            ->merge($this->getChildren($span))
+            ->merge($this->getSiblings($span))
+            ->unique('id');
 
-        // Clear caches for siblings
-        $this->getSiblings($span)->each(function ($sibling) {
-            $this->clearFamilyCaches($sibling);
-        });
+        foreach ($immediateRelatives as $relative) {
+            for ($generations = 1; $generations <= 3; $generations++) {
+                Cache::forget("{$cachePrefix}:descendants_{$relative->id}_{$generations}");
+            }
+            Cache::forget("{$cachePrefix}:uncles_and_aunts_{$relative->id}");
+        }
     }
 } 

@@ -96,10 +96,7 @@ class SpanObserver
         // Handle family connection end dates when a person dies
         if ($span->type_id === 'person' && $span->end_year && $span->wasChanged('end_year')) {
             $this->endFamilyConnectionsOnDeath($span);
-        }
-        
-        // Clear family relationship caches when person spans are updated
-        if ($span->type_id === 'person') {
+            // Clear family caches only when death date changes
             $this->clearFamilyCaches($span);
         }
         
@@ -108,6 +105,8 @@ class SpanObserver
             ($span->wasChanged('start_year') || $span->wasChanged('start_month') || $span->wasChanged('start_day') ||
              $span->wasChanged('end_year') || $span->wasChanged('end_month') || $span->wasChanged('end_day'))) {
             $this->syncFamilyConnectionDates($span);
+            // Clear family caches after syncing dates to keep derived data fresh
+            $this->clearFamilyCaches($span);
         }
     }
 

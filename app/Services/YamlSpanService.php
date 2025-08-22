@@ -157,6 +157,16 @@ class YamlSpanService
 
         // Add metadata (always include for consistency)
         $data['metadata'] = $span->metadata ?? [];
+        
+        // Ensure required metadata fields are present for place spans
+        if ($span->type_id === 'place' && !isset($data['metadata']['subtype'])) {
+            $data['metadata']['subtype'] = 'city_district'; // Default to a common place type
+        }
+        
+        // Ensure required metadata fields are present for organisation spans
+        if ($span->type_id === 'organisation' && !isset($data['metadata']['subtype'])) {
+            $data['metadata']['subtype'] = 'corporation'; // Default to a common organisation type
+        }
 
         // Add sources if present
         if (!empty($span->sources)) {
@@ -3371,6 +3381,16 @@ class YamlSpanService
             'sources' => $span->sources ?? [],
             'access_level' => $span->access_level,
         ];
+        
+        // Ensure required metadata fields are present for place spans
+        if ($span->type_id === 'place' && !isset($data['metadata']['subtype'])) {
+            $data['metadata']['subtype'] = 'city_district'; // Default to a common place type
+        }
+        
+        // Ensure required metadata fields are present for organisation spans
+        if ($span->type_id === 'organisation' && !isset($data['metadata']['subtype'])) {
+            $data['metadata']['subtype'] = 'corporation'; // Default to a common organisation type
+        }
 
         // Add dates if they exist
         if ($span->start_year) {

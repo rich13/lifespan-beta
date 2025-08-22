@@ -29,7 +29,7 @@ trait HasThingCapabilities
         $metadata = $this->metadata ?? [];
         
         // Validate subtype
-        if (!isset($metadata['subtype']) || !in_array($metadata['subtype'], ['book', 'album', 'painting', 'sculpture', 'other'])) {
+        if (!isset($metadata['subtype']) || !in_array($metadata['subtype'], ['book', 'album', 'painting', 'sculpture', 'photo', 'other'])) {
             throw new \InvalidArgumentException('Invalid thing subtype');
         }
 
@@ -52,7 +52,7 @@ trait HasThingCapabilities
      */
     public function setThingSubtype(string $subtype): self
     {
-        if (!in_array($subtype, ['book', 'album', 'painting', 'sculpture', 'other'])) {
+        if (!in_array($subtype, ['book', 'album', 'painting', 'sculpture', 'photo', 'other'])) {
             throw new \InvalidArgumentException('Invalid thing subtype');
         }
 
