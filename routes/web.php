@@ -705,6 +705,22 @@ Route::middleware('web')->group(function () {
                         ->name('clear-cache');
                 });
                 
+                // Science Museum Group Import
+                Route::prefix('science-museum-group')->name('science-museum-group.')->group(function () {
+                    Route::get('/', [App\Http\Controllers\Admin\ScienceMuseumGroupImportController::class, 'index'])
+                        ->name('index');
+                    Route::post('/search', [App\Http\Controllers\Admin\ScienceMuseumGroupImportController::class, 'search'])
+                        ->name('search');
+                    Route::post('/get-object-data', [App\Http\Controllers\Admin\ScienceMuseumGroupImportController::class, 'getObjectData'])
+                        ->name('get-object-data');
+                    Route::post('/preview', [App\Http\Controllers\Admin\ScienceMuseumGroupImportController::class, 'preview'])
+                        ->name('preview');
+                    Route::post('/import', [App\Http\Controllers\Admin\ScienceMuseumGroupImportController::class, 'import'])
+                        ->name('import');
+                    Route::post('/clear-cache', [App\Http\Controllers\Admin\ScienceMuseumGroupImportController::class, 'clearCache'])
+                        ->name('clear-cache');
+                });
+                
                 // Legacy YAML Import (must come last to avoid catching other routes)
                 Route::get('/', [ImportController::class, 'index'])
                     ->name('index');
