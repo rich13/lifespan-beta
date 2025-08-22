@@ -87,7 +87,9 @@ class SpanController extends Controller
 
     public function edit(Span $span): View
     {
-        return view('admin.spans.edit', compact('span'));
+        $types = SpanType::all();
+        $users = User::all();
+        return view('admin.spans.edit', compact('span', 'types', 'users'));
     }
 
     public function update(Request $request, Span $span)
