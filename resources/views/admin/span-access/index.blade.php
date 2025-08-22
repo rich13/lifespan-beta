@@ -289,7 +289,7 @@
                                                 </td>
                                                 <td>
                                                     @if(isset($span->connection_counts))
-                                                        <div class="d-flex gap-1">
+                                                        <div class="mt-2">
                                                             @if($span->connection_counts['public'] > 0)
                                                                 <span class="badge bg-success" title="Public connections">{{ $span->connection_counts['public'] }}</span>
                                                             @endif
@@ -300,11 +300,13 @@
                                                                 <span class="badge bg-danger" title="Private connections">{{ $span->connection_counts['private'] }}</span>
                                                             @endif
                                                             @if(array_sum($span->connection_counts) === 0)
-                                                                <small class="text-muted">-</small>
+                                                                <span class="text-muted small">No connections</span>
                                                             @endif
                                                         </div>
                                                     @else
-                                                        <small class="text-muted">-</small>
+                                                        <div class="mt-2">
+                                                            <span class="text-muted small">Connections loading...</span>
+                                                        </div>
                                                     @endif
                                                 </td>
                                                 <td>
@@ -385,7 +387,7 @@
                                                 </td>
                                                 <td>
                                                     @if(isset($span->connection_counts))
-                                                        <div class="d-flex gap-1">
+                                                        <div class="mt-2">
                                                             @if($span->connection_counts['public'] > 0)
                                                                 <span class="badge bg-success" title="Public connections">{{ $span->connection_counts['public'] }}</span>
                                                             @endif
@@ -396,11 +398,13 @@
                                                                 <span class="badge bg-danger" title="Private connections">{{ $span->connection_counts['private'] }}</span>
                                                             @endif
                                                             @if(array_sum($span->connection_counts) === 0)
-                                                                <small class="text-muted">-</small>
+                                                                <span class="text-muted small">No connections</span>
                                                             @endif
                                                         </div>
                                                     @else
-                                                        <small class="text-muted">-</small>
+                                                        <div class="mt-2">
+                                                            <span class="text-muted small">Connections loading...</span>
+                                                        </div>
                                                     @endif
                                                 </td>
                                                 <td>
@@ -494,7 +498,7 @@
                                                 </td>
                                                 <td>
                                                     @if(isset($span->connection_counts))
-                                                        <div class="d-flex gap-1">
+                                                        <div class="mt-2">
                                                             @if($span->connection_counts['public'] > 0)
                                                                 <span class="badge bg-success" title="Public connections">{{ $span->connection_counts['public'] }}</span>
                                                             @endif
@@ -505,11 +509,13 @@
                                                                 <span class="badge bg-danger" title="Private connections">{{ $span->connection_counts['private'] }}</span>
                                                             @endif
                                                             @if(array_sum($span->connection_counts) === 0)
-                                                                <small class="text-muted">-</small>
+                                                                <span class="text-muted small">No connections</span>
                                                             @endif
                                                         </div>
                                                     @else
-                                                        <small class="text-muted">-</small>
+                                                        <div class="mt-2">
+                                                            <span class="text-muted small">Connections loading...</span>
+                                                        </div>
                                                     @endif
                                                 </td>
                                                 <td>
@@ -590,7 +596,7 @@
                                                 </td>
                                                 <td>
                                                     @if(isset($span->connection_counts))
-                                                        <div class="d-flex gap-1">
+                                                        <div class="mt-2">
                                                             @if($span->connection_counts['public'] > 0)
                                                                 <span class="badge bg-success" title="Public connections">{{ $span->connection_counts['public'] }}</span>
                                                             @endif
@@ -601,11 +607,13 @@
                                                                 <span class="badge bg-danger" title="Private connections">{{ $span->connection_counts['private'] }}</span>
                                                             @endif
                                                             @if(array_sum($span->connection_counts) === 0)
-                                                                <small class="text-muted">-</small>
+                                                                <span class="text-muted small">No connections</span>
                                                             @endif
                                                         </div>
                                                     @else
-                                                        <small class="text-muted">-</small>
+                                                        <div class="mt-2">
+                                                            <span class="text-muted small">Connections loading...</span>
+                                                        </div>
                                                     @endif
                                                 </td>
                                                 <td>
@@ -802,6 +810,4 @@ document.addEventListener('DOMContentLoaded', function() {
     updateSelectedCounts();
 });
 </script>
-@endsection
-
 @endsection 

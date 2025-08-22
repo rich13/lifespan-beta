@@ -1,6 +1,8 @@
-@extends('layouts.admin')
+@extends('layouts.app')
 
-@section('title', 'Import Prime Ministers')
+@section('page_title')
+    Import Prime Ministers
+@endsection
 
 @section('content')
 <div class="d-flex justify-content-between align-items-center mb-4">

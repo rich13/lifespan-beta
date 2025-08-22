@@ -109,19 +109,11 @@ class SpanAccessManagerController extends Controller
         $privateSpans = $privateQuery->orderBy('name')->paginate(500, ['*'], 'private_page');
         $sharedSpans = $sharedQuery->orderBy('name')->paginate(500, ['*'], 'shared_page');
         
-        // Add connection counts to each span
-        $allSpans->getCollection()->each(function ($span) {
-            $span->connection_counts = $span->getConnectionCountsByAccessLevel();
-        });
-        $publicSpans->getCollection()->each(function ($span) {
-            $span->connection_counts = $span->getConnectionCountsByAccessLevel();
-        });
-        $privateSpans->getCollection()->each(function ($span) {
-            $span->connection_counts = $span->getConnectionCountsByAccessLevel();
-        });
-        $sharedSpans->getCollection()->each(function ($span) {
-            $span->connection_counts = $span->getConnectionCountsByAccessLevel();
-        });
+        // Add connection counts to each span using optimized queries
+        $this->addConnectionCountsToSpans($allSpans);
+        $this->addConnectionCountsToSpans($publicSpans);
+        $this->addConnectionCountsToSpans($privateSpans);
+        $this->addConnectionCountsToSpans($sharedSpans);
         
         // Calculate statistics using fresh queries to avoid filter interference
         $statsQuery = Span::with(['owner', 'spanPermissions'])
@@ -189,6 +181,46 @@ class SpanAccessManagerController extends Controller
 
         return redirect()->route('admin.span-access.index', $queryParams)
             ->with('status', "Span '{$span->name}' has been made public.");
+    }
+
+    /**
+     * Add connection counts to spans using optimized queries to avoid N+1 problem
+     */
+    private function addConnectionCountsToSpans($spans): void
+    {
+        if ($spans->isEmpty()) {
+            return;
+        }
+
+        $spanIds = $spans->pluck('id')->toArray();
+        
+        // Get connection counts for all spans in one query
+        $connectionCounts = DB::table('connections as c')
+            ->join('spans as s', function($join) {
+                $join->on('c.parent_id', '=', 's.id')
+                     ->orOn('c.child_id', '=', 's.id');
+            })
+            ->whereIn('s.id', $spanIds)
+            ->select(
+                's.id as span_id',
+                's.access_level',
+                DB::raw('COUNT(*) as connection_count')
+            )
+            ->groupBy('s.id', 's.access_level')
+            ->get()
+            ->groupBy('span_id')
+            ->map(function($counts) {
+                $result = ['public' => 0, 'shared' => 0, 'private' => 0];
+                foreach ($counts as $count) {
+                    $result[$count->access_level] = $count->connection_count;
+                }
+                return $result;
+            });
+
+        // Assign connection counts to spans
+        $spans->getCollection()->each(function ($span) use ($connectionCounts) {
+            $span->connection_counts = $connectionCounts->get($span->id, ['public' => 0, 'shared' => 0, 'private' => 0]);
+        });
     }
 
     /**

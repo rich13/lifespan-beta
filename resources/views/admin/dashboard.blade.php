@@ -154,13 +154,92 @@
                         </div>
                     </div>
                 </div>
+                <div class="col-md-3 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-3">
+                                <i class="bi bi-image fs-2 text-secondary me-3"></i>
+                                <div>
+                                    <h5 class="card-title mb-1">Manage Images</h5>
+                                    <p class="card-text text-muted">View and manage photo spans and their connections</p>
+                                </div>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="badge bg-secondary">{{ number_format($stats['photo_spans'] ?? 0) }} photos</span>
+                                <a href="{{ route('admin.images.index') }}" class="btn btn-outline-secondary btn-sm">
+                                    <i class="bi bi-arrow-right"></i> Manage
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- Configuration Section -->
+        <!-- User & Access Management Section -->
         <div class="col-12 mb-4">
             <h4 class="mb-3">
-                <i class="bi bi-gear me-2"></i>Configuration
+                <i class="bi bi-people me-2"></i>User & Access Management
+            </h4>
+            <div class="row">
+                <div class="col-md-3 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-3">
+                                <i class="bi bi-people fs-2 text-primary me-3"></i>
+                                <div>
+                                    <h5 class="card-title mb-1">User Groups</h5>
+                                    <p class="card-text text-muted">Manage user groups and memberships</p>
+                                </div>
+                            </div>
+                            <a href="{{ route('admin.groups.index') }}" class="btn btn-outline-primary btn-sm w-100">
+                                <i class="bi bi-arrow-right"></i> Manage Groups
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-3">
+                                <i class="bi bi-person-badge fs-2 text-warning me-3"></i>
+                                <div>
+                                    <h5 class="card-title mb-1">Person Subtypes</h5>
+                                    <p class="card-text text-muted">Manage public figures vs private individuals</p>
+                                </div>
+                            </div>
+                            <a href="{{ route('admin.spans.manage-person-subtypes') }}" class="btn btn-outline-warning btn-sm w-100">
+                                <i class="bi bi-arrow-right"></i> Manage Subtypes
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-3">
+                                <i class="bi bi-shield-lock fs-2 text-danger me-3"></i>
+                                <div>
+                                    <h5 class="card-title mb-1">Access Control</h5>
+                                    <p class="card-text text-muted">Manage span access levels and permissions</p>
+                                </div>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="badge bg-danger">{{ number_format($stats['public_spans']) }} public</span>
+                                <a href="{{ route('admin.span-access.index') }}" class="btn btn-outline-danger btn-sm">
+                                    <i class="bi bi-arrow-right"></i> Manage
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Configuration Section -->
+        <div class="col-12 mb-4">
+            <h4 class="mb-3">
+                <i class="bi bi-gear me-2"></i>System Configuration
             </h4>
             <div class="row">
                 <div class="col-md-4 mb-3">
@@ -196,25 +275,6 @@
                                 <span class="badge bg-warning">{{ count($connectionTypeStats) }} types</span>
                                 <a href="{{ route('admin.connection-types.index') }}" class="btn btn-outline-warning btn-sm">
                                     <i class="bi bi-arrow-right"></i> Configure
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-4 mb-3">
-                    <div class="card h-100">
-                        <div class="card-body">
-                            <div class="d-flex align-items-center mb-3">
-                                <i class="bi bi-shield-lock fs-2 text-danger me-3"></i>
-                                <div>
-                                    <h5 class="card-title mb-1">Span Access</h5>
-                                    <p class="card-text text-muted">Manage access levels and permissions</p>
-                                </div>
-                            </div>
-                            <div class="d-flex justify-content-between align-items-center">
-                                <span class="badge bg-danger">{{ number_format($stats['public_spans']) }} public</span>
-                                <a href="{{ route('admin.span-access.index') }}" class="btn btn-outline-danger btn-sm">
-                                    <i class="bi bi-arrow-right"></i> Manage
                                 </a>
                             </div>
                         </div>

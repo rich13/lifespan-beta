@@ -79,6 +79,11 @@ class DashboardController extends Controller
         
         // Place spans stats
         $stats['place_spans'] = Span::where('type_id', 'place')->count();
+        
+        // Photo spans stats
+        $stats['photo_spans'] = Span::where('type_id', 'thing')
+            ->whereJsonContains('metadata->subtype', 'photo')
+            ->count();
 
         // Get temporal stats
         $stats['spans_with_dates'] = Span::whereNotNull('start_year')->count();

@@ -1,6 +1,8 @@
-@extends('layouts.admin')
+@extends('layouts.app')
 
-@section('title', 'Manage Person Subtypes')
+@section('page_title')
+    Manage Person Subtypes
+@endsection
 
 @section('content')
 <div class="container-fluid">
