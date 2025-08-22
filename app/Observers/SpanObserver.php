@@ -98,6 +98,11 @@ class SpanObserver
             $this->endFamilyConnectionsOnDeath($span);
         }
         
+        // Clear family relationship caches when person spans are updated
+        if ($span->type_id === 'person') {
+            $this->clearFamilyCaches($span);
+        }
+        
         // Sync family connection dates when birth/death dates change
         if ($span->type_id === 'person' && 
             ($span->wasChanged('start_year') || $span->wasChanged('start_month') || $span->wasChanged('start_day') ||
@@ -418,5 +423,19 @@ class SpanObserver
             );
         }
         return null;
+    }
+
+    /**
+     * Clear family relationship caches for a given span.
+     */
+    private function clearFamilyCaches(Span $span): void
+    {
+        $familyTreeService = new \App\Services\FamilyTreeService();
+        $familyTreeService->clearFamilyCaches($span);
+        
+        Log::info('Cleared family relationship caches', [
+            'span_id' => $span->id,
+            'span_name' => $span->name
+        ]);
     }
 } 

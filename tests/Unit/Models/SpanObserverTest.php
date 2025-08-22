@@ -26,24 +26,6 @@ class SpanObserverTest extends TestCase
         // Create a mock SlackNotificationService
         $slackService = $this->createMock(SlackNotificationService::class);
         $this->observer = new SpanObserver($slackService);
-
-        // Insert 'friend' connection type for non-family connection test
-        \DB::table('connection_types')->updateOrInsert(
-            ['type' => 'friend'],
-            [
-                'forward_predicate' => 'is friend of',
-                'forward_description' => 'Is a friend of',
-                'inverse_predicate' => 'is friend of',
-                'inverse_description' => 'Is a friend of',
-                'constraint_type' => 'single',
-                'allowed_span_types' => json_encode([
-                    'parent' => ['person'],
-                    'child' => ['person']
-                ]),
-                'created_at' => now(),
-                'updated_at' => now()
-            ]
-        );
     }
 
     /** @test */
@@ -208,7 +190,7 @@ class SpanObserverTest extends TestCase
         $connection = Connection::factory()->create([
             'parent_id' => $person1->id,
             'child_id' => $person2->id,
-            'type_id' => 'friend', // Use correct type
+            'type_id' => 'relationship', // Use existing relationship type instead of friend
             'connection_span_id' => $connectionSpan->id,
         ]);
 

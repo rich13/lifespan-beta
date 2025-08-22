@@ -295,18 +295,15 @@ class AiYamlCreatorService
 - Always quote dates in YAML format (e.g., '1939-09-01')
 - Include sources as a top-level field, not in metadata
 - If a value is not publicly known, omit that field entirely (no placeholders)
-- ONLY use the fields defined in the schema below - do not add additional fields like "significance", "importance", "context", "background", etc.
-- Put any additional commentary, context, or descriptive information in the "description" or "notes" fields
+- ONLY use the fields defined in the schema below - do not add additional fields like "significance", "importance", etc.
+- Put any additional commentary or context in the "description" or "notes" fields
 - Follow the exact field names and structure provided in the schema
-- Do not invent new metadata fields - only use those explicitly listed in the schema
 
 **ACCURACY REQUIREMENTS**:
 - NEVER hallucinate or invent information
 - ONLY use publicly verifiable information from authoritative sources
 - If you cannot find verifiable information, omit that field rather than guess
 - Cross-reference multiple sources before including information
-- NEVER add fields that are not explicitly defined in the schema
-- If you want to include additional context or commentary, use the "description" or "notes" fields
 
 COMMON_RULES;
     }

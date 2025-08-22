@@ -135,11 +135,13 @@
                                     <i class="bi bi-arrow-clockwise"></i> Reset
                                 </button>
                             </div>
-                            <div>
-                                {{ $people->links() }}
-                            </div>
                         </div>
                     </form>
+                    
+                    <!-- Pagination -->
+                    <div class="mt-3">
+                        <x-pagination :paginator="$people" :showInfo="true" itemName="people" />
+                    </div>
                 </div>
             </div>
 

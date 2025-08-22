@@ -6,6 +6,7 @@ use App\Models\Span;
 use App\Models\Connection;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 
 class FamilyTreeService
 {
@@ -26,21 +27,26 @@ class FamilyTreeService
      */
     public function getDescendants(Span $span, int $generations = 2): Collection
     {
-        $descendants = collect();
-        $this->traverseDescendants($span, $descendants, $generations);
-        if (env('APP_DEBUG')) {
-            Log::debug("Descendants of {$span->name}:");
-            foreach ($descendants as $descendant) {
-                Log::debug(sprintf("- %s (ID: %s, Generation: %d)", 
-                    $descendant['span']->name, 
-                    $descendant['span']->id, 
-                    $descendant['generation']
-                ));
+        // Cache key based on span ID and generations
+        $cacheKey = "descendants_{$span->id}_{$generations}";
+        
+        return Cache::remember($cacheKey, 3600, function () use ($span, $generations) {
+            $descendants = collect();
+            $this->traverseDescendants($span, $descendants, $generations);
+            if (env('APP_DEBUG')) {
+                Log::debug("Descendants of {$span->name}:");
+                foreach ($descendants as $descendant) {
+                    Log::debug(sprintf("- %s (ID: %s, Generation: %d)", 
+                        $descendant['span']->name, 
+                        $descendant['span']->id, 
+                        $descendant['generation']
+                    ));
+                }
             }
-        }
-        return $descendants->unique(function ($item) {
-            return $item['span']->id;
-        })->values();
+            return $descendants->unique(function ($item) {
+                return $item['span']->id;
+            })->values();
+        });
     }
 
     /**
@@ -126,6 +132,17 @@ class FamilyTreeService
             return;
         }
 
+        // Safety check: limit total descendants to prevent memory issues
+        if ($descendants->count() > 100) {
+            Log::warning('Descendants limit reached, stopping traversal', [
+                'span_id' => $span->id,
+                'span_name' => $span->name,
+                'current_count' => $descendants->count(),
+                'generation' => $currentGen
+            ]);
+            return;
+        }
+
         $children = $this->getChildren($span);
         foreach ($children as $child) {
             $descendants->push([
@@ -142,99 +159,114 @@ class FamilyTreeService
      */
     public function getUnclesAndAunts(Span $span): Collection
     {
-        if (env('APP_DEBUG')) {
-            Log::debug("Getting uncles and aunts for {$span->name} (ID: {$span->id})");
-        }
-
-        // Get siblings of parents (traditional uncles/aunts)
-        $siblingsOfParents = $this->getParents($span)->flatMap(function ($parent) {
+        // Cache key based on span ID
+        $cacheKey = "uncles_and_aunts_{$span->id}";
+        
+        return Cache::remember($cacheKey, 3600, function () use ($span) {
             if (env('APP_DEBUG')) {
-                Log::debug("Getting siblings of parent {$parent->name} (ID: {$parent->id})");
+                Log::debug("Getting uncles and aunts for {$span->name} (ID: {$span->id})");
             }
-            return $this->getSiblings($parent);
+
+            // Get siblings of parents (traditional uncles/aunts)
+            $siblingsOfParents = $this->getParents($span)->flatMap(function ($parent) {
+                if (env('APP_DEBUG')) {
+                    Log::debug("Getting siblings of parent {$parent->name} (ID: {$parent->id})");
+                }
+                return $this->getSiblings($parent);
+            });
+
+            if (env('APP_DEBUG')) {
+                Log::debug("Found " . $siblingsOfParents->count() . " siblings of parents for {$span->name}:");
+                foreach ($siblingsOfParents as $uncle) {
+                    Log::debug("- {$uncle->name} (ID: {$uncle->id})");
+                }
+            }
+
+            // Get my siblings to exclude their parents and themselves from cousins
+            $siblings = $this->getSiblings($span);
+            if (env('APP_DEBUG')) {
+                Log::debug("Found " . $siblings->count() . " siblings to exclude:");
+                foreach ($siblings as $sibling) {
+                    Log::debug("- {$sibling->name} (ID: {$sibling->id})");
+                }
+            }
+
+            // Get parents of siblings to exclude from cousin calculation
+            $parentsOfSiblings = $siblings->flatMap(function ($sibling) {
+                return $this->getParents($sibling);
+            })->unique('id')->values();
+
+            if (env('APP_DEBUG')) {
+                Log::debug("Found " . $parentsOfSiblings->count() . " parents of siblings to exclude:");
+                foreach ($parentsOfSiblings as $parent) {
+                    Log::debug("- {$parent->name} (ID: {$parent->id})");
+                }
+            }
+
+            // Get cousins through grandparents, excluding siblings and their descendants
+            $cousins = $this->getParents($span)->flatMap(function ($parent) {
+                if (env('APP_DEBUG')) {
+                    Log::debug("Getting parents of parent {$parent->name} (ID: {$parent->id})");
+                }
+                return $this->getParents($parent);  // Get grandparents
+            })->flatMap(function ($grandparent) {
+                if (env('APP_DEBUG')) {
+                    Log::debug("Getting descendants of grandparent {$grandparent->name} (ID: {$grandparent->id})");
+                }
+                return $this->getDescendants($grandparent, 2);  // Get 2 generations of descendants
+            })->filter(function ($descendant) use ($span, $siblings) {
+                // Keep only cousins (same generation as span)
+                // Exclude self and siblings from cousin calculation
+                return $descendant['generation'] === 2 
+                    && $descendant['span']->id !== $span->id
+                    && !$siblings->contains(function ($sibling) use ($descendant) {
+                        return $sibling->id === $descendant['span']->id;
+                    });
+            })->pluck('span');
+
+            // Safety check: limit cousins to prevent memory issues
+            if ($cousins->count() > 50) {
+                Log::warning('Cousins limit reached, truncating results', [
+                    'span_id' => $span->id,
+                    'span_name' => $span->name,
+                    'cousins_count' => $cousins->count()
+                ]);
+                $cousins = $cousins->take(50);
+            }
+
+            if (env('APP_DEBUG')) {
+                Log::debug("Found " . $cousins->count() . " cousins for {$span->name}:");
+                foreach ($cousins as $cousin) {
+                    Log::debug("- {$cousin->name} (ID: {$cousin->id})");
+                }
+            }
+
+            // Get parents of cousins
+            $parentsOfCousins = $cousins->flatMap(function ($cousin) {
+                if (env('APP_DEBUG')) {
+                    Log::debug("Getting parents of cousin {$cousin->name} (ID: {$cousin->id})");
+                }
+                return $this->getParents($cousin);
+            })->reject(function ($potentialParent) use ($span, $parentsOfSiblings) {
+                // Reject the person's own parents and parents of siblings
+                return $this->getParents($span)->contains(function ($parent) use ($potentialParent) {
+                        return $parent->id === $potentialParent->id;
+                    })
+                    || $parentsOfSiblings->contains(function ($parent) use ($potentialParent) {
+                        return $parent->id === $potentialParent->id;
+                    });
+            });
+
+            if (env('APP_DEBUG')) {
+                Log::debug("Found " . $parentsOfCousins->count() . " parents of cousins for {$span->name}:");
+                foreach ($parentsOfCousins as $parent) {
+                    Log::debug("- {$parent->name} (ID: {$parent->id})");
+                }
+            }
+
+            // Combine siblings of parents and parents of cousins
+            return $siblingsOfParents->concat($parentsOfCousins)->unique('id')->values();
         });
-
-        if (env('APP_DEBUG')) {
-            Log::debug("Found " . $siblingsOfParents->count() . " siblings of parents for {$span->name}:");
-            foreach ($siblingsOfParents as $uncle) {
-                Log::debug("- {$uncle->name} (ID: {$uncle->id})");
-            }
-        }
-
-        // Get my siblings to exclude their parents and themselves from cousins
-        $siblings = $this->getSiblings($span);
-        if (env('APP_DEBUG')) {
-            Log::debug("Found " . $siblings->count() . " siblings to exclude:");
-            foreach ($siblings as $sibling) {
-                Log::debug("- {$sibling->name} (ID: {$sibling->id})");
-            }
-        }
-
-        // Get parents of siblings to exclude from cousin calculation
-        $parentsOfSiblings = $siblings->flatMap(function ($sibling) {
-            return $this->getParents($sibling);
-        })->unique('id')->values();
-
-        if (env('APP_DEBUG')) {
-            Log::debug("Found " . $parentsOfSiblings->count() . " parents of siblings to exclude:");
-            foreach ($parentsOfSiblings as $parent) {
-                Log::debug("- {$parent->name} (ID: {$parent->id})");
-            }
-        }
-
-        // Get cousins through grandparents, excluding siblings and their descendants
-        $cousins = $this->getParents($span)->flatMap(function ($parent) {
-            if (env('APP_DEBUG')) {
-                Log::debug("Getting parents of parent {$parent->name} (ID: {$parent->id})");
-            }
-            return $this->getParents($parent);  // Get grandparents
-        })->flatMap(function ($grandparent) {
-            if (env('APP_DEBUG')) {
-                Log::debug("Getting descendants of grandparent {$grandparent->name} (ID: {$grandparent->id})");
-            }
-            return $this->getDescendants($grandparent, 2);  // Get 2 generations of descendants
-        })->filter(function ($descendant) use ($span, $siblings) {
-            // Keep only cousins (same generation as span)
-            // Exclude self and siblings from cousin calculation
-            return $descendant['generation'] === 2 
-                && $descendant['span']->id !== $span->id
-                && !$siblings->contains(function ($sibling) use ($descendant) {
-                    return $sibling->id === $descendant['span']->id;
-                });
-        })->pluck('span');
-
-        if (env('APP_DEBUG')) {
-            Log::debug("Found " . $cousins->count() . " cousins for {$span->name}:");
-            foreach ($cousins as $cousin) {
-                Log::debug("- {$cousin->name} (ID: {$cousin->id})");
-            }
-        }
-
-        // Get parents of cousins
-        $parentsOfCousins = $cousins->flatMap(function ($cousin) {
-            if (env('APP_DEBUG')) {
-                Log::debug("Getting parents of cousin {$cousin->name} (ID: {$cousin->id})");
-            }
-            return $this->getParents($cousin);
-        })->reject(function ($potentialParent) use ($span, $parentsOfSiblings) {
-            // Reject the person's own parents and parents of siblings
-            return $this->getParents($span)->contains(function ($parent) use ($potentialParent) {
-                    return $parent->id === $potentialParent->id;
-                })
-                || $parentsOfSiblings->contains(function ($parent) use ($potentialParent) {
-                    return $parent->id === $potentialParent->id;
-                });
-        });
-
-        if (env('APP_DEBUG')) {
-            Log::debug("Found " . $parentsOfCousins->count() . " parents of cousins for {$span->name}:");
-            foreach ($parentsOfCousins as $parent) {
-                Log::debug("- {$parent->name} (ID: {$parent->id})");
-            }
-        }
-
-        // Combine siblings of parents and parents of cousins
-        return $siblingsOfParents->concat($parentsOfCousins)->unique('id')->values();
     }
 
     /**
@@ -311,5 +343,44 @@ class FamilyTreeService
     protected function compareSpans(Span $a, Span $b): bool
     {
         return $a->id === $b->id;
+    }
+
+    /**
+     * Clear all family relationship caches for a span
+     * This should be called when family relationships change
+     */
+    public function clearFamilyCaches(Span $span): void
+    {
+        // Clear descendants cache for different generation levels
+        for ($generations = 1; $generations <= 5; $generations++) {
+            Cache::forget("descendants_{$span->id}_{$generations}");
+        }
+        
+        // Clear uncles and aunts cache
+        Cache::forget("uncles_and_aunts_{$span->id}");
+        
+        // Clear caches for all family members that might be affected
+        $this->clearRelatedFamilyCaches($span);
+    }
+
+    /**
+     * Clear caches for related family members
+     */
+    protected function clearRelatedFamilyCaches(Span $span): void
+    {
+        // Clear caches for parents
+        $this->getParents($span)->each(function ($parent) {
+            $this->clearFamilyCaches($parent);
+        });
+
+        // Clear caches for children
+        $this->getChildren($span)->each(function ($child) {
+            $this->clearFamilyCaches($child);
+        });
+
+        // Clear caches for siblings
+        $this->getSiblings($span)->each(function ($sibling) {
+            $this->clearFamilyCaches($sibling);
+        });
     }
 } 

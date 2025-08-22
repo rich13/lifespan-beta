@@ -76,6 +76,9 @@ class DashboardController extends Controller
         // Additional connection stats
         $stats['total_connections'] = Connection::count();
         $stats['connection_spans'] = Span::where('type_id', 'connection')->count();
+        
+        // Place spans stats
+        $stats['place_spans'] = Span::where('type_id', 'place')->count();
 
         // Get temporal stats
         $stats['spans_with_dates'] = Span::whereNotNull('start_year')->count();

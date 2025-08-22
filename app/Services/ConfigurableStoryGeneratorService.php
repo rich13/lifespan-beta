@@ -467,16 +467,17 @@ class ConfigurableStoryGeneratorService
         };
 
         // Add debug info for birth_location method (only in development)
-        if ($method === 'getBirthLocation' && app()->environment('local', 'development')) {
-            $debug = $this->getBirthLocationDebug($span);
-            if ($debug && $result !== null) {
-                // Only add debug info if we have a non-null result
-                $result = [
-                    'value' => $result,
-                    'debug' => $debug
-                ];
-            }
-        }
+        // Temporarily disabled to prevent memory issues with people who have many connections
+        // if ($method === 'getBirthLocation' && app()->environment('local', 'development')) {
+        //     $debug = $this->getBirthLocationDebug($span);
+        //     if ($debug && $result !== null) {
+        //         // Only add debug info if we have a non-null result
+        //         $result = [
+        //             'value' => $result,
+        //             'debug' => $debug
+        //         ];
+        //     }
+        // }
 
         return $result;
     }
@@ -664,6 +665,7 @@ class ConfigurableStoryGeneratorService
                 $query->where('type_id', 'place');
             })
             ->with(['child', 'connectionSpan'])
+            ->limit(20) // Limit to prevent memory issues with people who have many residences
             ->get();
 
         $debug = [

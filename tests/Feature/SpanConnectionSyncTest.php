@@ -37,6 +37,24 @@ class SpanConnectionSyncTest extends TestCase
         }
     }
 
+    public function test_simple_span_creation(): void
+    {
+        // Test just creating a simple span without connections
+        $user = User::factory()->create();
+        
+        $span = Span::create([
+            'name' => 'Test Person',
+            'type_id' => 'person',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+            'start_year' => 1990,
+            'access_level' => 'public'
+        ]);
+
+        $this->assertNotNull($span->id);
+        $this->assertEquals('Test Person', $span->name);
+    }
+
     public function test_family_connections_are_properly_created(): void
     {
         // Create parent and child spans
@@ -93,6 +111,9 @@ class SpanConnectionSyncTest extends TestCase
         $this->assertEquals('family', $childConnections[0]->type_id);
         $this->assertEquals($parent->id, $childConnections[0]->parent_id);
         $this->assertEquals($connectionSpan->id, $childConnections[0]->connection_span_id);
+
+        // Manually refresh the materialized view since the trigger is disabled during tests
+        DB::statement('REFRESH MATERIALIZED VIEW span_connections');
 
         // Check materialized view
         $parentView = DB::table('span_connections')->where('span_id', $parent->id)->first();
@@ -160,6 +181,9 @@ class SpanConnectionSyncTest extends TestCase
         $this->assertEquals($band->id, $memberConnections[0]->parent_id);
         $this->assertEquals($connectionSpan->id, $memberConnections[0]->connection_span_id);
 
+        // Manually refresh the materialized view since the trigger is disabled during tests
+        DB::statement('REFRESH MATERIALIZED VIEW span_connections');
+
         // Check materialized view
         $bandView = DB::table('span_connections')->where('span_id', $band->id)->first();
         $this->assertNotNull($bandView);
@@ -217,6 +241,9 @@ class SpanConnectionSyncTest extends TestCase
 
         $this->assertCount(0, $parent->connections()->get());
         $this->assertCount(0, $child->connections()->get());
+
+        // Manually refresh the materialized view since the trigger is disabled during tests
+        DB::statement('REFRESH MATERIALIZED VIEW span_connections');
 
         // Check materialized view was updated
         $parentView = DB::table('span_connections')->where('span_id', $parent->id)->first();

@@ -109,8 +109,8 @@
             </div>
 
             <!-- Pagination -->
-            <div class="d-flex justify-content-center mt-4">
-                {{ $spans->appends(request()->query())->links() }}
+            <div class="mt-4">
+                <x-pagination :paginator="$spans->appends(request()->query())" :showInfo="true" itemName="spans" />
             </div>
         </div>
     </div>

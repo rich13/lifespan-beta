@@ -46,6 +46,23 @@ class RouteServiceProvider extends ServiceProvider
             return $span;
         });
 
+        Route::bind('subject', function ($value) {
+            // First try to find by slug since that's what we use in URLs
+            $span = Span::where('slug', $value)->first();
+            
+            // If not found by slug and the value is a valid UUID, try finding by ID
+            if (!$span && Str::isUuid($value)) {
+                $span = Span::where('id', $value)->first();
+            }
+
+            // If no span found, abort with 404
+            if (!$span) {
+                abort(404);
+            }
+
+            return $span;
+        });
+
         $this->routes(function () {
             Route::middleware('api')
                 ->prefix('api')

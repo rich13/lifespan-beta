@@ -848,6 +848,32 @@ Route::middleware('web')->group(function () {
             // Person Subtype Management
             Route::get('/tools/manage-person-subtypes', [App\Http\Controllers\Admin\ToolsController::class, 'managePersonSubtypes'])
                 ->name('tools.manage-person-subtypes');
+
+            // Place Management
+            Route::prefix('places')->name('places.')->group(function () {
+                Route::get('/', [\App\Http\Controllers\Admin\PlaceController::class, 'index'])
+                    ->name('index');
+                Route::get('/hierarchy', [\App\Http\Controllers\Admin\PlaceController::class, 'hierarchy'])
+                    ->name('hierarchy');
+                Route::get('/placeholders', [\App\Http\Controllers\Admin\PlaceController::class, 'placeholders'])
+                    ->name('placeholders');
+                Route::get('/needs-geocoding', [\App\Http\Controllers\Admin\PlaceController::class, 'needsGeocoding'])
+                    ->name('needs-geocoding');
+                Route::get('/{span}/disambiguate', [\App\Http\Controllers\Admin\PlaceController::class, 'disambiguate'])
+                    ->name('disambiguate');
+                Route::post('/{span}/resolve', [\App\Http\Controllers\Admin\PlaceController::class, 'resolve'])
+                    ->name('resolve');
+                Route::post('/batch-geocode', [\App\Http\Controllers\Admin\PlaceController::class, 'batchGeocode'])
+                    ->name('batch-geocode');
+                Route::post('/{span}/import', [\App\Http\Controllers\Admin\PlaceController::class, 'import'])
+                    ->name('import');
+                Route::post('/{span}/auto-geocode', [\App\Http\Controllers\Admin\PlaceController::class, 'autoGeocode'])
+                    ->name('auto-geocode');
+                Route::get('/{span}/search-matches', [\App\Http\Controllers\Admin\PlaceController::class, 'searchMatches'])
+                    ->name('search-matches');
+                Route::get('/stats', [\App\Http\Controllers\Admin\PlaceController::class, 'stats'])
+                    ->name('stats');
+            });
             Route::post('/tools/manage-person-subtypes', [App\Http\Controllers\Admin\ToolsController::class, 'updatePersonSubtypes'])
                 ->name('tools.update-person-subtypes');
             Route::post('/tools/manage-person-subtypes/ajax', [App\Http\Controllers\Admin\ToolsController::class, 'updatePersonSubtypesAjax'])

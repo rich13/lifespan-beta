@@ -161,12 +161,12 @@ if ! php artisan migrate --force; then
     exit 1
 fi
 
-# Run seeders
-log "Running seeders..."
-if ! php artisan db:seed --force; then
-    log "Error: Seeding failed"
-    exit 1
-fi
+# Skip seeding for now due to memory issues
+log "Skipping seeders due to memory constraints..."
+# if ! php -d memory_limit=512M artisan db:seed --force; then
+#     log "Warning: Seeding failed, but continuing to start the application"
+#     # Don't exit here, just log the warning and continue
+# fi
 
 # Clear cache
 log "Clearing Laravel caches..."

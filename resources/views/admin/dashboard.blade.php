@@ -78,7 +78,7 @@
                 <i class="bi bi-database me-2"></i>Data Management
             </h4>
             <div class="row">
-                <div class="col-md-4 mb-3">
+                <div class="col-md-3 mb-3">
                     <div class="card h-100">
                         <div class="card-body">
                             <div class="d-flex align-items-center mb-3">
@@ -97,7 +97,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="col-md-4 mb-3">
+                <div class="col-md-3 mb-3">
                     <div class="card h-100">
                         <div class="card-body">
                             <div class="d-flex align-items-center mb-3">
@@ -116,7 +116,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="col-md-4 mb-3">
+                <div class="col-md-3 mb-3">
                     <div class="card h-100">
                         <div class="card-body">
                             <div class="d-flex align-items-center mb-3">
@@ -129,6 +129,25 @@
                             <div class="d-flex justify-content-between align-items-center">
                                 <span class="badge bg-info">{{ number_format($stats['total_users']) }} users</span>
                                 <a href="{{ route('admin.users.index') }}" class="btn btn-outline-info btn-sm">
+                                    <i class="bi bi-arrow-right"></i> Manage
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-3">
+                                <i class="bi bi-geo-alt fs-2 text-warning me-3"></i>
+                                <div>
+                                    <h5 class="card-title mb-1">Manage Places</h5>
+                                    <p class="card-text text-muted">Manage place spans and geospatial data</p>
+                                </div>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="badge bg-warning">{{ number_format($stats['place_spans'] ?? 0) }} places</span>
+                                <a href="{{ route('admin.places.index') }}" class="btn btn-outline-warning btn-sm">
                                     <i class="bi bi-arrow-right"></i> Manage
                                 </a>
                             </div>

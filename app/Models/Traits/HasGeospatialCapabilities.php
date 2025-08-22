@@ -6,7 +6,17 @@ use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Adds geospatial capabilities to a Span model.
- * This trait should be used by place spans and any other spans that need geospatial features.
+ * 
+ * This trait provides a clean, Laravel-standard interface for geospatial functionality
+ * by delegating to the GeospatialCapability class. This follows the same pattern as
+ * Laravel's own traits like HasFactory, SoftDeletes, etc.
+ * 
+ * Usage:
+ *   $span->setOsmData($osmData);
+ *   $coordinates = $span->getCoordinates();
+ *   $osmData = $span->getOsmData();
+ * 
+ * @see \App\Models\SpanCapabilities\GeospatialCapability for implementation details
  */
 trait HasGeospatialCapabilities
 {
@@ -16,67 +26,51 @@ trait HasGeospatialCapabilities
     public static function bootHasGeospatialCapabilities()
     {
         static::saving(function ($span) {
-            // Validate geospatial metadata
+            // Validate geospatial metadata via the capability
             if ($span->type_id === 'place') {
-                $span->validateGeospatialData();
+                $span->geospatial()->validateMetadata();
             }
         });
     }
 
     /**
-     * Validate the geospatial data in the metadata
+     * Get the geospatial capability instance.
+     * 
+     * This provides access to the full geospatial capability implementation
+     * while keeping the trait interface clean and simple.
+     * 
+     * @return \App\Models\SpanCapabilities\GeospatialCapability
      */
-    protected function validateGeospatialData()
+    public function geospatial(): \App\Models\SpanCapabilities\GeospatialCapability
     {
-        $metadata = $this->metadata ?? [];
-        
-        // Validate coordinates if present
-        if (isset($metadata['coordinates'])) {
-            $this->validateCoordinates($metadata['coordinates']);
-        }
+        return new \App\Models\SpanCapabilities\GeospatialCapability($this);
     }
 
     /**
-     * Validate coordinate data
-     */
-    protected function validateCoordinates(array $coordinates)
-    {
-        if (!isset($coordinates['latitude']) || !isset($coordinates['longitude'])) {
-            throw new \InvalidArgumentException('Coordinates must include latitude and longitude');
-        }
-
-        $lat = $coordinates['latitude'];
-        $lng = $coordinates['longitude'];
-
-        if (!is_numeric($lat) || $lat < -90 || $lat > 90) {
-            throw new \InvalidArgumentException('Invalid latitude value');
-        }
-
-        if (!is_numeric($lng) || $lng < -180 || $lng > 180) {
-            throw new \InvalidArgumentException('Invalid longitude value');
-        }
-    }
-
-    /**
-     * Set the coordinates for this place
+     * Set coordinates for this place.
+     * 
+     * Delegates to the GeospatialCapability for implementation.
+     * 
+     * @param float $latitude The latitude
+     * @param float $longitude The longitude
+     * @return self
      */
     public function setCoordinates(float $latitude, float $longitude): self
     {
-        $metadata = $this->metadata ?? [];
-        $metadata['coordinates'] = [
-            'latitude' => $latitude,
-            'longitude' => $longitude
-        ];
-        $this->metadata = $metadata;
+        $this->geospatial()->setCoordinates($latitude, $longitude);
         return $this;
     }
 
     /**
-     * Get the coordinates for this place
+     * Get coordinates for this place.
+     * 
+     * Delegates to the GeospatialCapability for implementation.
+     * 
+     * @return array|null Array with 'latitude' and 'longitude' keys, or null
      */
     public function getCoordinates(): ?array
     {
-        return $this->metadata['coordinates'] ?? null;
+        return $this->geospatial()->getCoordinates();
     }
 
     /**
@@ -94,5 +88,81 @@ trait HasGeospatialCapabilities
             ->whereJsonPath('metadata->coordinates->latitude', '<=', $latitude + $latDelta)
             ->whereJsonPath('metadata->coordinates->longitude', '>=', $longitude - $lngDelta)
             ->whereJsonPath('metadata->coordinates->longitude', '<=', $longitude + $lngDelta);
+    }
+
+    /**
+     * Set OSM data for this place.
+     * 
+     * Delegates to the GeospatialCapability for implementation.
+     * 
+     * @param array $osmData The OSM data to set
+     * @return self
+     */
+    public function setOsmData(array $osmData): self
+    {
+        $this->geospatial()->setOsmData($osmData);
+        return $this;
+    }
+
+
+
+    /**
+     * Get OSM data for this place.
+     * 
+     * Delegates to the GeospatialCapability for implementation.
+     * 
+     * @return array|null
+     */
+    public function getOsmData(): ?array
+    {
+        return $this->geospatial()->getOsmData();
+    }
+
+    /**
+     * Generate hierarchical slug from OSM data.
+     * 
+     * Delegates to the GeospatialCapability for implementation.
+     * 
+     * @return string|null
+     */
+    public function generateHierarchicalSlug(): ?string
+    {
+        return $this->geospatial()->getHierarchicalSlug();
+    }
+
+    /**
+     * Get parent places from hierarchy.
+     * 
+     * Delegates to the GeospatialCapability for implementation.
+     * 
+     * @return array
+     */
+    public function getParentPlaces(): array
+    {
+        return $this->geospatial()->getParentPlaces();
+    }
+
+    /**
+     * Get the canonical name from OSM data.
+     * 
+     * Delegates to the GeospatialCapability for implementation.
+     * 
+     * @return string|null
+     */
+    public function getCanonicalName(): ?string
+    {
+        return $this->geospatial()->getCanonicalName();
+    }
+
+    /**
+     * Get the display name from OSM data.
+     * 
+     * Delegates to the GeospatialCapability for implementation.
+     * 
+     * @return string|null
+     */
+    public function getDisplayName(): ?string
+    {
+        return $this->geospatial()->getDisplayName();
     }
 } 

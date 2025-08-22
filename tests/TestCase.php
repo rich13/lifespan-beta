@@ -65,8 +65,6 @@ abstract class TestCase extends BaseTestCase
         $this->validateTestEnvironment();
     }
 
-
-
     /**
      * Force testing environment variables
      */

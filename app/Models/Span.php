@@ -157,6 +157,18 @@ class Span extends Model
             }
         });
 
+        // Process geocoding workflow for place spans
+        static::updating(function ($span) {
+            if ($span->type_id === 'place' && $span->isDirty('state')) {
+                $oldState = $span->getOriginal('state');
+                $newState = $span->state;
+                
+                // Trigger geocoding workflow
+                $geocodingService = app(\App\Services\PlaceGeocodingWorkflowService::class);
+                $geocodingService->processStateTransition($span, $oldState, $newState);
+            }
+        });
+
         // Load type-specific capabilities
         static::created(function ($span) {
             $span->loadTypeCapabilities();
@@ -563,6 +575,65 @@ class Span extends Model
             $this->{$prefix . '_month'},
             $this->{$prefix . '_day'}
         );
+    }
+
+    /**
+     * Check if this place span needs geocoding
+     */
+    public function needsGeocoding(): bool
+    {
+        return $this->type_id === 'place' && 
+               (!$this->getCoordinates() || !$this->getOsmData());
+    }
+
+    /**
+     * Check if this place span is a placeholder
+     */
+    public function isPlaceholder(): bool
+    {
+        return $this->state === 'placeholder';
+    }
+
+    /**
+     * Scope query to places that need geocoding
+     */
+    public function scopeNeedsGeocoding($query)
+    {
+        return $query->where('type_id', 'place')
+                     ->where(function ($q) {
+                         $q->whereRaw("metadata->>'coordinates' IS NULL")
+                           ->orWhereRaw("metadata->>'osm_data' IS NULL");
+                     });
+    }
+
+    /**
+     * Scope query to placeholder places
+     */
+    public function scopePlaceholders($query)
+    {
+        return $query->where('type_id', 'place')
+                     ->where('state', 'placeholder');
+    }
+
+    /**
+     * Static method to get places that need geocoding
+     */
+    public static function needsGeocodingStatic()
+    {
+        return static::where('type_id', 'place')
+                     ->where(function ($query) {
+                         $query->whereRaw("metadata->>'coordinates' IS NULL")
+                               ->orWhereRaw("metadata->>'osm_data' IS NULL");
+                     });
+    }
+
+    /**
+     * Static method to get placeholder places
+     */
+    public static function placeholdersStatic()
+    {
+        return static::where('type_id', 'place')
+                     ->where('state', 'placeholder');
     }
 
     /**
