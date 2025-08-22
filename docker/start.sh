@@ -49,7 +49,7 @@ generate_app_key() {
 }
 
 # Check for required commands
-for cmd in php npm; do
+for cmd in php; do
     if ! command_exists "$cmd"; then
         log "Error: $cmd is required but not installed."
         exit 1
@@ -161,12 +161,12 @@ if ! php artisan migrate --force; then
     exit 1
 fi
 
-# Skip seeding for now due to memory issues
-log "Skipping seeders due to memory constraints..."
-# if ! php -d memory_limit=512M artisan db:seed --force; then
-#     log "Warning: Seeding failed, but continuing to start the application"
-#     # Don't exit here, just log the warning and continue
-# fi
+# Run seeders with increased memory limit
+log "Running seeders..."
+if ! php -d memory_limit=512M artisan db:seed --force; then
+    log "Warning: Seeding failed, but continuing to start the application"
+    # Don't exit here, just log the warning and continue
+fi
 
 # Clear cache
 log "Clearing Laravel caches..."

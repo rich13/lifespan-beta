@@ -30,6 +30,8 @@ RUN apt-get update && apt-get install -y \
     git \
     curl \
     libpng-dev \
+    libjpeg-dev \
+    libfreetype6-dev \
     libonig-dev \
     libxml2-dev \
     zip \
@@ -39,13 +41,17 @@ RUN apt-get update && apt-get install -y \
     supervisor \
     libzip-dev \
     postgresql-client \
-    logrotate
+    logrotate \
+    nodejs \
+    npm \
+    exiftool
 
 # Clear cache
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions
-RUN docker-php-ext-install pdo_pgsql pgsql mbstring exif pcntl bcmath gd zip
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install pdo_pgsql pgsql mbstring exif pcntl bcmath gd zip
 
 # Get latest Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
@@ -61,8 +67,8 @@ COPY --from=node-builder /app/public/build public/build/
 # Copy font files
 COPY --from=node-builder /app/public/fonts public/fonts/
 
-# Install dependencies
-RUN composer install --no-dev --optimize-autoloader
+# Install dependencies (skip post-install scripts during build)
+RUN composer install --no-dev --optimize-autoloader --no-scripts
 
 # Create required directories with proper permissions
 RUN mkdir -p /var/www/storage/logs \
@@ -96,6 +102,7 @@ fi
 COPY docker/prod/nginx.conf /etc/nginx/nginx.conf
 COPY docker/prod/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY docker/prod/php-fpm/www.conf /usr/local/etc/php-fpm.d/www.conf
+COPY docker/prod/php.ini /usr/local/etc/php/conf.d/custom.ini
 COPY docker/prod/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY docker/prod/health-check.sh /usr/local/bin/health-check.sh
 COPY docker/prod/set-db-config.php /usr/local/bin/set-db-config.php

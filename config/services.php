@@ -53,6 +53,9 @@ return [
     'flickr' => [
         'api_key' => env('FLICKR_API_KEY'),
         'api_secret' => env('FLICKR_API_SECRET'),
+        'client_id' => env('FLICKR_CLIENT_ID', '3c41cc8de5c3d33ea2433a17ed61bebf'),
+        'client_secret' => env('FLICKR_CLIENT_SECRET', 'a9773d44336e6279'),
+        'callback_url' => env('FLICKR_CALLBACK_URL', 'http://localhost:8000/settings/import/flickr/callback'),
     ],
 
 ];
