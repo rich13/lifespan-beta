@@ -408,6 +408,9 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
         <!-- Add Connection Modal -->
         <x-modals.add-connection-modal />
         
+        <!-- Time Travel Modal -->
+        <x-modals.time-travel-modal />
+        
         <!-- Sidebar Toggle Script -->
         @auth
         <script>

@@ -1,4 +1,4 @@
-@props(['span'])
+@props(['span', 'timeTravelDate' => null])
 
 @php
     $currentUserSpanId = auth()->user()->personal_span_id ?? null;
@@ -559,11 +559,18 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
         }
     });
 
-    // Add "now" line (current year) - only in absolute mode
+    // Add "now" line (current year or time travel date) - only in absolute mode
     if (mode === 'absolute') {
-        const currentYear = new Date().getFullYear();
-        const nowX = xScale(currentYear);
-        // Only show the "now" line if it's within the visible time range
+        @if($timeTravelDate)
+            const timeTravelYear = new Date('{{ $timeTravelDate }}').getFullYear();
+            const nowX = xScale(timeTravelYear);
+            const indicatorText = '{{ date("M j Y", strtotime($timeTravelDate)) }}';
+        @else
+            const currentYear = new Date().getFullYear();
+            const nowX = xScale(currentYear);
+            const indicatorText = 'NOW';
+        @endif
+        // Only show the indicator line if it's within the visible time range
         if (nowX >= margin.left && nowX <= width - margin.right) {
             svg.append('line')
                 .attr('class', 'now-line')
@@ -582,7 +589,7 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
                 .attr('font-size', '10px')
                 .attr('font-weight', 'bold')
                 .attr('fill', '#dc3545')
-                .text('NOW');
+                .text(indicatorText);
         }
     } else if (mode === 'relative') {
         // In relative mode, show "now" at the current user's age (if available)

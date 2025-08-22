@@ -375,7 +375,8 @@ $(document).ready(function() {
             'created': ['thing'],
             'family': ['person'],
             'relationship': ['person'],
-            'friend': ['person']
+            'friend': ['person'],
+            'located': ['place']
         };
         
         return typeMap[connectionType] || ['person'];
@@ -396,7 +397,8 @@ $(document).ready(function() {
             'created': 'created',
             'family': 'related to',
             'relationship': 'has relationship with',
-            'friend': 'is friend of'
+            'friend': 'is friend of',
+            'located': 'located in'
         };
         
         return predicateMap[connectionType] || 'connected to';

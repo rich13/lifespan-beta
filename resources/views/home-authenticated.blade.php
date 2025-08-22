@@ -785,11 +785,11 @@
                 @endif
             </div>
 
-            <!-- Recently Created by You Card -->
+            <!-- Recently Created Card -->
             <div class="mb-4">
                 @php
-                    // Get recently created spans by the current user
-                    $recentlyCreatedSpans = \App\Models\Span::where('owner_id', auth()->id())
+                    // Get recently created public spans
+                    $recentlyCreatedSpans = \App\Models\Span::where('access_level', 'public')
                         ->where('state', '!=', 'placeholder')
                         ->where('type_id', '!=', 'connection')
                         ->orderBy('created_at', 'desc')
@@ -801,12 +801,12 @@
                     <div class="card-header">
                         <h3 class="h6 mb-0">
                             <i class="bi bi-plus-circle text-success me-2"></i>
-                            Recently Created by You
+                            Recently Created
                         </h3>
                     </div>
                     <div class="card-body">
                         @if($recentlyCreatedSpans->isEmpty())
-                            <p class="text-center text-muted my-3">No spans created yet.</p>
+                            <p class="text-center text-muted my-3">No public spans created yet.</p>
                             <div class="text-center">
                                 <a href="{{ route('spans.create') }}" class="btn btn-sm btn-outline-primary">
                                     <i class="bi bi-plus-circle me-1"></i>Create Your First Span
@@ -822,7 +822,7 @@
                             @if($recentlyCreatedSpans->count() >= 5)
                                 <div class="text-center mt-3">
                                     <a href="{{ route('spans.index') }}" class="btn btn-sm btn-outline-secondary">
-                                        View all your spans
+                                        View all public spans
                                     </a>
                                 </div>
                             @endif

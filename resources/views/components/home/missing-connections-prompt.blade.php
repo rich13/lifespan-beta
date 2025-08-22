@@ -822,7 +822,8 @@ $(document).ready(function() {
             'created': ['thing'],
             'family': ['person'],
             'relationship': ['person'],
-            'friend': ['person']
+            'friend': ['person'],
+            'located': ['place']
         };
         
         return typeMap[connectionType] || ['person'];

@@ -20,6 +20,45 @@ if ($user) {
 
 <!-- User Profile Section -->
 <div class="d-flex align-items-center {{ $class }}">
+    @php
+        $timeTravelDate = request()->cookie('time_travel_date');
+    @endphp
+    
+    <!-- Time Travel Button/Indicator -->
+    <div class="me-2">
+        @if($timeTravelDate)
+            <!-- Time Travel Active -->
+            <div class="btn-group" role="group">
+                <button class="btn btn-sm btn-warning d-flex align-items-center" 
+                        type="button" 
+                        data-bs-toggle="modal" 
+                        data-bs-target="#timeTravelModal"
+                        data-bs-toggle="tooltip" data-bs-placement="bottom" 
+                        title="Time Travel Active: {{ date('j F Y', strtotime($timeTravelDate)) }} - Click to change date">
+                    <i class="bi bi-clock-history me-1"></i>
+                    <span class="d-none d-sm-inline">{{ date('M j Y', strtotime($timeTravelDate)) }}</span>
+                </button>
+                <a href="{{ route('time-travel.toggle') }}" 
+                   class="btn btn-sm btn-outline-warning"
+                   data-bs-toggle="tooltip" data-bs-placement="bottom" 
+                   title="Exit Time Travel">
+                    <i class="bi bi-x"></i>
+                </a>
+            </div>
+        @else
+            <!-- Time Travel Inactive - Show button to start -->
+            <button type="button" 
+                    class="btn btn-sm btn-outline-secondary d-flex align-items-center"
+                    data-bs-toggle="modal" 
+                    data-bs-target="#timeTravelModal"
+                    data-bs-toggle="tooltip" data-bs-placement="bottom" 
+                    title="Start Time Travel">
+                <i class="bi bi-clock me-1"></i>
+                <span class="d-none d-sm-inline">Time Travel</span>
+            </button>
+        @endif
+    </div>
+    
     <!-- Custom User Dropdown -->
     <div class="position-relative" id="customUserDropdown">
         <button class="btn btn-sm btn-secondary d-flex align-items-center" type="button" id="customUserDropdownToggle">

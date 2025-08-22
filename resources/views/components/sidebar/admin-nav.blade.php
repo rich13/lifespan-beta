@@ -10,28 +10,13 @@ use Illuminate\Support\Facades\Auth;
             </a>
         </li>
         <li class="nav-item">
-            <a class="nav-link {{ request()->routeIs('admin.groups.*') ? 'active' : '' }}" href="{{ route('admin.groups.index') }}">
-                <i class="bi bi-people me-1"></i> <span>Groups</span>
+            <a class="nav-link {{ request()->routeIs('admin.images.*') ? 'active' : '' }}" href="{{ route('admin.images.index') }}">
+                <i class="bi bi-images me-1"></i> <span>Manage Images</span>
             </a>
         </li>
         <li class="nav-item">
-            <a class="nav-link {{ request()->routeIs('admin.users.*') ? 'active' : '' }}" href="{{ route('admin.users.index') }}">
-                <i class="bi bi-person-gear me-1"></i> <span>Users</span>
-            </a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link {{ request()->routeIs('admin.spans.*') ? 'active' : '' }}" href="{{ route('admin.spans.index') }}">
-                <i class="bi bi-bar-chart-steps me-1"></i> <span>Spans</span>
-            </a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link {{ request()->routeIs('admin.spans.manage-person-subtypes') ? 'active' : '' }}" href="{{ route('admin.spans.manage-person-subtypes') }}">
-                <i class="bi bi-person-badge me-1"></i> <span>Person Subtypes</span>
-            </a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link {{ request()->routeIs('admin.span-access.*') ? 'active' : '' }}" href="{{ route('admin.span-access.index') }}">
-                <i class="bi bi-shield-check me-1"></i> <span>Access Control</span>
+            <a class="nav-link {{ request()->routeIs('settings.upload.photos.*') ? 'active' : '' }}" href="{{ route('settings.upload.photos.create') }}">
+                <i class="bi bi-cloud-upload me-1"></i> <span>Upload Photos</span>
             </a>
         </li>
     </ul>

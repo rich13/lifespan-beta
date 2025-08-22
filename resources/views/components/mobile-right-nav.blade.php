@@ -54,6 +54,37 @@
             <x-shared.action-buttons :span="$span" variant="mobile" />
         </div>
 
+        <!-- Time Travel Status -->
+        @php
+            $timeTravelDate = request()->cookie('time_travel_date');
+        @endphp
+        <div class="p-3 border-bottom">
+            <h6 class="mb-3">
+                <i class="bi bi-clock-history me-2"></i>Time Travel
+            </h6>
+            <div class="d-grid gap-2">
+                @if($timeTravelDate)
+                    <button type="button" 
+                            class="btn btn-sm btn-warning w-100 mb-2"
+                            data-bs-toggle="modal" 
+                            data-bs-target="#timeTravelModal">
+                        <strong>Active:</strong> {{ date('j F Y', strtotime($timeTravelDate)) }}
+                        <br><small>Tap to change date</small>
+                    </button>
+                    <a href="{{ route('time-travel.toggle') }}" class="btn btn-sm btn-outline-warning">
+                        <i class="bi bi-x me-1"></i> Exit Time Travel
+                    </a>
+                @else
+                    <button type="button" 
+                            class="btn btn-sm btn-outline-secondary"
+                            data-bs-toggle="modal" 
+                            data-bs-target="#timeTravelModal">
+                        <i class="bi bi-clock me-1"></i> Start Time Travel
+                    </button>
+                @endif
+            </div>
+        </div>
+
         <!-- Mobile User Profile -->
         @auth
             <div class="p-3 border-bottom">
