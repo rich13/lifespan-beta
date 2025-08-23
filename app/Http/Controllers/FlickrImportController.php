@@ -234,7 +234,9 @@ class FlickrImportController extends Controller
                         'has_description' => isset($photo['description']),
                         'description_length' => isset($photo['description']['_content']) ? strlen($photo['description']['_content']) : 0,
                         'is_public' => $photo['ispublic'] ?? 'unknown',
-                        'owner' => $photo['owner'] ?? 'N/A'
+                        'has_owner' => isset($photo['owner']),
+                        'owner' => $photo['owner'] ?? 'N/A',
+                        'flickr_user_id' => $user->getMeta('flickr.user_id')
                     ]);
                     
                     // Dump the full photo data for debugging
@@ -361,7 +363,10 @@ class FlickrImportController extends Controller
         $metadata = $existingSpan->metadata ?? [];
         $metadata['subtype'] = 'photo';
         $metadata['flickr_id'] = $photo['id'];
-        $metadata['flickr_url'] = "https://www.flickr.com/photos/{$photo['owner']}/{$photo['id']}/";
+        
+        // Use owner from photo data if available, otherwise use the user's Flickr user ID
+        $ownerId = $photo['owner'] ?? $user->getMeta('flickr.user_id');
+        $metadata['flickr_url'] = "https://www.flickr.com/photos/{$ownerId}/{$photo['id']}/";
         $metadata['license'] = $photo['license'] ?? null;
         $metadata['is_public'] = $photo['ispublic'] == 1;
         
@@ -493,10 +498,13 @@ class FlickrImportController extends Controller
         $metadata = [
             'subtype' => 'photo',
             'flickr_id' => $photo['id'],
-            'flickr_url' => "https://www.flickr.com/photos/{$photo['owner']}/{$photo['id']}/",
-            'license' => $photo['license'] ?? null,
-            'is_public' => $photo['ispublic'] == 1,
         ];
+        
+        // Use owner from photo data if available, otherwise use the user's Flickr user ID
+        $ownerId = $photo['owner'] ?? $user->getMeta('flickr.user_id');
+        $metadata['flickr_url'] = "https://www.flickr.com/photos/{$ownerId}/{$photo['id']}/";
+        $metadata['license'] = $photo['license'] ?? null;
+        $metadata['is_public'] = $photo['ispublic'] == 1;
         
         // Set creator to the user's personal span (required for 'thing' spans)
         if ($user->personalSpan) {
@@ -1500,6 +1508,17 @@ class FlickrImportController extends Controller
 
             foreach ($photos as $photo) {
                 try {
+                    // Log photo details for debugging
+                    Log::info('Processing Flickr photo from photoset', [
+                        'photo_id' => $photo['id'],
+                        'title' => $photo['title'] ?? 'N/A',
+                        'available_fields' => array_keys($photo),
+                        'has_owner' => isset($photo['owner']),
+                        'owner' => $photo['owner'] ?? 'N/A',
+                        'flickr_user_id' => $user->getMeta('flickr.user_id'),
+                        'is_public' => $photo['ispublic'] ?? 'unknown'
+                    ]);
+                    
                     // Skip private photos if not importing them
                     if (!$importPrivate && $photo['ispublic'] == 0) {
                         continue;
@@ -1530,7 +1549,7 @@ class FlickrImportController extends Controller
 
                     if ($existingSpan) {
                         if ($updateExisting) {
-                            $this->updatePhotoSpan($photo, $user, $importMetadata);
+                            $this->updatePhotoSpan($existingSpan, $photo, $user, $importMetadata);
                             $updatedCount++;
                         }
                     } else {
