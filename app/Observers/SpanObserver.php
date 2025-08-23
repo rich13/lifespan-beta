@@ -223,40 +223,7 @@ class SpanObserver
             }
         }
         
-        // Also handle relationship connections (spouses, etc.)
-        $relationshipConnections = \App\Models\Connection::where('type_id', 'relationship')
-            ->where(function ($query) use ($span) {
-                $query->where('parent_id', $span->id)
-                      ->orWhere('child_id', $span->id);
-            })
-            ->with('connectionSpan')
-            ->get();
-        
-        foreach ($relationshipConnections as $connection) {
-            if ($connection->connectionSpan) {
-                $connectionSpan = $connection->connectionSpan;
-                
-                // Only update if the connection doesn't already have an end date
-                // or if the current end date is after the person's death
-                if (!$connectionSpan->end_year || $connectionSpan->end_year > $deathYear) {
-                    Log::info('Ending relationship connection on person\'s death', [
-                        'connection_id' => $connection->id,
-                        'connection_span_id' => $connectionSpan->id,
-                        'old_end_year' => $connectionSpan->end_year,
-                        'new_end_year' => $deathYear,
-                        'person_name' => $span->name
-                    ]);
-                    
-                    $connectionSpan->end_year = $deathYear;
-                    $connectionSpan->end_month = $deathMonth;
-                    $connectionSpan->end_day = $deathDay;
-                    $connectionSpan->saveQuietly(); // Save without triggering observers
-                    
-                    // Clear timeline caches for the connection span
-                    $connectionSpan->clearAllTimelineCaches();
-                }
-            }
-        }
+
         
         // Clear timeline caches for the person who died
         $span->clearAllTimelineCaches();

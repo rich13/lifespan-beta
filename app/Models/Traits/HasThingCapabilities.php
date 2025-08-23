@@ -32,11 +32,6 @@ trait HasThingCapabilities
         if (!isset($metadata['subtype']) || !in_array($metadata['subtype'], ['book', 'album', 'painting', 'sculpture', 'photo', 'other'])) {
             throw new \InvalidArgumentException('Invalid thing subtype');
         }
-
-        // Validate creator
-        if (!isset($metadata['creator'])) {
-            throw new \InvalidArgumentException('Creator is required for things');
-        }
     }
 
     /**

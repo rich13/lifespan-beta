@@ -42,6 +42,16 @@ class ToolsTest extends TestCase
     }
 
     /** @test */
+    public function can_access_admin_merge()
+    {
+        $response = $this->actingAs($this->admin)
+            ->get(route('admin.merge.index'));
+
+        $response->assertStatus(200);
+        $response->assertViewIs('admin.merge.index');
+    }
+
+    /** @test */
     public function can_find_similar_spans()
     {
         // Create spans with similar names
@@ -50,7 +60,7 @@ class ToolsTest extends TestCase
         $span3 = Span::factory()->create(['name' => 'Another Thing', 'slug' => 'another-thing']);
 
         $response = $this->actingAs($this->admin)
-            ->get(route('admin.tools.find-similar-spans', ['query' => 'test thing']));
+            ->get(route('admin.merge.find-similar-spans', ['query' => 'test thing']));
 
         $response->assertStatus(200);
         $response->assertJsonStructure(['similar_spans']);
@@ -66,7 +76,7 @@ class ToolsTest extends TestCase
         $span = Span::factory()->create();
 
         $response = $this->actingAs($this->admin)
-            ->get(route('admin.tools.span-details', ['span_id' => $span->id]));
+            ->get(route('admin.merge.span-details', ['span_id' => $span->id]));
 
         $response->assertStatus(200);
         $response->assertJsonStructure(['span']);
@@ -97,7 +107,7 @@ class ToolsTest extends TestCase
         ]);
 
         $response = $this->actingAs($this->admin)
-            ->post(route('admin.tools.merge-spans'), [
+            ->post(route('admin.merge.merge-spans'), [
                 'target_span_id' => $targetSpan->id,
                 'source_span_id' => $sourceSpan->id,
             ]);
@@ -119,7 +129,7 @@ class ToolsTest extends TestCase
         $span = Span::factory()->create();
 
         $response = $this->actingAs($this->admin)
-            ->post(route('admin.tools.merge-spans'), [
+            ->post(route('admin.merge.merge-spans'), [
                 'target_span_id' => $span->id,
                 'source_span_id' => $span->id,
             ]);
@@ -133,7 +143,7 @@ class ToolsTest extends TestCase
         $span = Span::factory()->create();
 
         $response = $this->actingAs($this->admin)
-            ->post(route('admin.tools.merge-spans'), [
+            ->post(route('admin.merge.merge-spans'), [
                 'target_span_id' => $span->id,
                 'source_span_id' => '00000000-0000-0000-0000-000000000000',
             ]);
@@ -159,7 +169,7 @@ class ToolsTest extends TestCase
         ]);
 
         $response = $this->actingAs($this->admin)
-            ->post(route('admin.tools.merge-spans'), [
+            ->post(route('admin.merge.merge-spans'), [
                 'target_span_id' => $targetSpan->id,
                 'source_span_id' => $sourceSpan->id,
             ]);

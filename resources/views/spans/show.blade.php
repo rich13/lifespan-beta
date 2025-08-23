@@ -134,12 +134,18 @@
             </div>
 
             <div class="col-md-3">
-                <!-- Image Card -->
-                <div class="card mb-4">
-                    <div class="card-body">
-                                               
-                        @if($span->subtype === 'album' && $span->has_cover_art && $span->cover_art_url)
-                            <!-- Album Cover -->
+                <!-- Image Gallery -->
+                <x-spans.partials.image-gallery :span="$span" />
+                
+                <!-- Legacy Album Cover (only for albums) -->
+                @if($span->subtype === 'album' && $span->has_cover_art && $span->cover_art_url)
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h6 class="card-title mb-0">
+                                <i class="bi bi-music-note me-2"></i>Album Cover
+                            </h6>
+                        </div>
+                        <div class="card-body">
                             <div class="text-center">
                                 <div class="ratio ratio-1x1">
                                     <img src="{{ $span->cover_art_url }}" 
@@ -149,26 +155,9 @@
                                          loading="lazy">
                                 </div>
                             </div>
-                        @else
-                            <!-- Placeholder -->
-                            <div class="text-center py-4">
-                                <i class="bi bi-image text-muted" style="font-size: 3rem;"></i>
-                                <p class="text-muted mt-2 mb-0 small">
-                                    @if($span->subtype === 'album')
-                                        No album cover available.
-                                    @else
-                                        No image available yet.
-                                    @endif
-                                </p>
-                                @if(auth()->check() && $span->isEditableBy(auth()->user()))
-                                    <a href="{{ route('spans.yaml-editor', $span) }}" class="btn btn-sm btn-outline-primary mt-2">
-                                        <i class="bi bi-plus-circle me-1"></i>Add Image
-                                    </a>
-                                @endif
-                            </div>
-                        @endif
+                        </div>
                     </div>
-                </div>
+                @endif
             </div>
 
             <div class="col-md-4">

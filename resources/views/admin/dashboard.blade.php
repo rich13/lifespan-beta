@@ -433,6 +433,22 @@
                         </div>
                     </div>
                 </div>
+                <div class="col-md-3 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-3">
+                                <i class="bi bi-images fs-2 text-primary me-3"></i>
+                                <div>
+                                    <h5 class="card-title mb-1">Wikimedia Commons</h5>
+                                    <p class="card-text text-muted">Import images from Wikimedia Commons</p>
+                                </div>
+                            </div>
+                            <a href="{{ route('admin.import.wikimedia-commons.index') }}" class="btn btn-outline-primary btn-sm w-100">
+                                <i class="bi bi-arrow-right"></i> Import
+                            </a>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 

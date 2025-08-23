@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use App\Models\SpanCapabilities\SpanCapabilityRegistry;
 use App\Models\SpanCapabilities\SpanCapability;
 use App\Models\Traits\HasSpanCapabilities;
@@ -1169,6 +1170,32 @@ class Span extends Model
                     });
             });
         });
+    }
+
+    /**
+     * Get the cached metrics for this span
+     */
+    public function metrics(): HasOne
+    {
+        return $this->hasOne(SpanMetric::class);
+    }
+
+    /**
+     * Get the cached metrics for this span, or calculate them if not cached
+     */
+    public function getMetrics(): ?SpanMetric
+    {
+        $metrics = $this->metrics()->fresh()->first();
+        
+        if (!$metrics || $metrics->isStale()) {
+            // Dispatch job to calculate metrics in background
+            \App\Jobs\CalculateSpanMetrics::dispatch($this->id);
+            
+            // Return stale metrics if available, otherwise null
+            return $metrics;
+        }
+        
+        return $metrics;
     }
 
     /**

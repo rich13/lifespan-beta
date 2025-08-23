@@ -10,25 +10,10 @@
         </div>
         <div class="card-body">
             <!-- Map Container -->
-            <div id="map-{{ $span->id }}" class="mb-3" style="height: 200px; width: 100%; border-radius: 0.375rem;"></div>
-            
-            <!-- Location Details -->
-            <div class="row">
-                <div class="col-6">
-                    <small class="text-muted d-block">Coordinates</small>
-                    <strong>{{ number_format($span->getCoordinates()['latitude'], 4) }}, {{ number_format($span->getCoordinates()['longitude'], 4) }}</strong>
-                </div>
-                @if($span->getOsmData())
-                    <div class="col-6">
-                        <small class="text-muted d-block">OSM Type</small>
-                        <strong>{{ ucfirst($span->getOsmData()['place_type'] ?? 'Unknown') }}</strong>
-                    </div>
-                @endif
-            </div>
+            <div id="map-{{ $span->id }}" class="mb-3" style="height: 300px; width: 100%; border-radius: 0.375rem;"></div>
             
             @if($span->getOsmData() && !empty($span->getOsmData()['hierarchy']))
                 <div class="mt-3">
-                    <small class="text-muted d-block">Administrative Hierarchy</small>
                     <div class="d-flex flex-wrap gap-1">
                         @foreach($span->getOsmData()['hierarchy'] as $level)
                             @php
@@ -55,19 +40,11 @@
                             @endif
                         @endforeach
                     </div>
-                    <small class="text-muted mt-1 d-block">
-                        <i class="bi bi-info-circle me-1"></i>
-                        Blue badges are clickable links to existing places
-                    </small>
+                    
                 </div>
             @endif
             
-            @if($span->getOsmData() && isset($span->getOsmData()['display_name']))
-                <div class="mt-2">
-                    <small class="text-muted d-block">Full OSM Name</small>
-                    <small>{{ $span->getOsmData()['display_name'] }}</small>
-                </div>
-            @endif
+
         </div>
     </div>
 

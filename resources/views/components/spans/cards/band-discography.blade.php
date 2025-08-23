@@ -25,11 +25,11 @@
         Discography
     </div>
     <div class="card-body">
-        <div class="d-flex flex-row overflow-auto gap-3">
+        <div class="row g-3">
             @foreach($albums as $album)
-                <a href="{{ route('spans.show', $album['id']) }}" class="text-decoration-none text-center">
-                    <div style="width: 120px;">
-                        <div class="ratio ratio-1x1 mb-2" style="background: #f8f9fa; border-radius: 8px; overflow: hidden;">
+                <div class="col-6 col-md-3 col-lg-3">
+                    <a href="{{ route('spans.show', $album['id']) }}" class="text-decoration-none">
+                        <div class="ratio ratio-1x1" style="background: #f8f9fa; border-radius: 8px; overflow: hidden;">
                             @if($album['has_cover_art'] && $album['cover_art_small_url'])
                                 <img src="{{ $album['cover_art_small_url'] }}" alt="{{ $album['name'] }} cover" class="img-fluid object-fit-cover w-100 h-100" style="object-fit: cover;" loading="lazy">
                             @else
@@ -38,10 +38,8 @@
                                 </div>
                             @endif
                         </div>
-                        <div class="small fw-semibold text-dark">{{ $album['name'] }}</div>
-                        <div class="text-muted small">{{ $album['year'] }}</div>
-                    </div>
-                </a>
+                    </a>
+                </div>
             @endforeach
         </div>
     </div>

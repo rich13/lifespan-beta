@@ -6,6 +6,12 @@
     $flickrUrl = $metadata['flickr_url'] ?? null;
     $description = $metadata['description'] ?? null;
     $tags = $metadata['tags'] ?? [];
+    $license = $metadata['license'] ?? null;
+    $licenseUrl = $metadata['license_url'] ?? null;
+    $requiresAttribution = $metadata['requires_attribution'] ?? true;
+    $author = $metadata['author'] ?? null;
+    $source = $metadata['source'] ?? null;
+    $descriptionUrl = $metadata['description_url'] ?? null;
 @endphp
 
 <div class="card mb-3">
@@ -35,6 +41,45 @@
 
         @if($description)
             <p class="card-text">{{ $description }}</p>
+        @endif
+
+        @if($license || $source || ($requiresAttribution && $author))
+            <div class="mb-3">
+                <div class="row g-2">
+                    @if($source)
+                        <div class="col-6">
+                            <small class="text-muted d-block">Source:</small>
+                            @if($descriptionUrl)
+                                <a href="{{ $descriptionUrl }}" target="_blank" class="text-decoration-none">
+                                    {{ $source }}
+                                    <i class="bi bi-external-link ms-1" style="font-size: 0.75rem;"></i>
+                                </a>
+                            @else
+                                <span class="text-body">{{ $source }}</span>
+                            @endif
+                        </div>
+                    @endif
+                    @if($license)
+                        <div class="col-6">
+                            <small class="text-muted d-block">License:</small>
+                            @if($licenseUrl)
+                                <a href="{{ $licenseUrl }}" target="_blank" class="text-decoration-none">
+                                    {{ $license }}
+                                    <i class="bi bi-external-link ms-1" style="font-size: 0.75rem;"></i>
+                                </a>
+                            @else
+                                <span class="text-body">{{ $license }}</span>
+                            @endif
+                        </div>
+                    @endif
+                    @if($requiresAttribution && $author)
+                        <div class="col-12">
+                            <small class="text-muted d-block">Author:</small>
+                            <span class="text-body">{{ $author }}</span>
+                        </div>
+                    @endif
+                </div>
+            </div>
         @endif
 
         @if(!empty($tags))

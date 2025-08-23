@@ -2602,8 +2602,22 @@ class SpanController extends Controller
                 }
             })
             ->with(['subject', 'object', 'connectionSpan'])
-            ->orderBy('created_at', 'desc')
             ->paginate(20);
+
+        // Sort the collection by connection span start date
+        $connections->getCollection()->sortBy(function($connection) {
+            $connectionSpan = $connection->connectionSpan;
+            if (!$connectionSpan || !$connectionSpan->start_year) {
+                return PHP_INT_MAX; // Put connections without dates at the end
+            }
+            
+            // Create a sortable date string (YYYYMMDD format)
+            $year = $connectionSpan->start_year;
+            $month = $connectionSpan->start_month ?? 1;
+            $day = $connectionSpan->start_day ?? 1;
+            
+            return sprintf('%04d%02d%02d', $year, $month, $day);
+        });
 
         // Transform connections to show the other span and relationship direction
         $connections->getCollection()->transform(function($connection) use ($subject, $connectionType) {
@@ -2618,7 +2632,98 @@ class SpanController extends Controller
             return $connection;
         });
 
-        return view('spans.connections', compact('subject', 'connectionType', 'connections', 'predicate'));
+        // Get all relevant connection types for this span with connection counts
+        $relevantConnectionTypes = ConnectionType::where(function($query) use ($subject) {
+            $query->whereJsonContains('allowed_span_types->parent', $subject->type_id)
+                  ->orWhereJsonContains('allowed_span_types->child', $subject->type_id);
+        })->orderBy('forward_predicate')->get();
+
+        // Add connection counts for each type
+        $relevantConnectionTypes->each(function($type) use ($subject) {
+            $count = Connection::where('type_id', $type->type)
+                ->where(function($query) use ($subject) {
+                    $query->where('parent_id', $subject->id)
+                          ->orWhere('child_id', $subject->id);
+                })->count();
+            
+            $type->connection_count = $count;
+        });
+
+        return view('spans.connections', compact('subject', 'connectionType', 'connections', 'predicate', 'relevantConnectionTypes'));
+    }
+
+    /**
+     * Show all connections for a span in a comprehensive Gantt chart view
+     */
+    public function allConnections(Request $request, Span $subject): View
+    {
+        // Get all relevant connection types for this span with connection counts
+        $relevantConnectionTypes = ConnectionType::where(function($query) use ($subject) {
+            $query->whereJsonContains('allowed_span_types->parent', $subject->type_id)
+                  ->orWhereJsonContains('allowed_span_types->child', $subject->type_id);
+        })->orderBy('forward_predicate')->get();
+
+        // Get all connections for this span, grouped by type
+        $allConnections = [];
+        $connectionCounts = [];
+        
+        foreach ($relevantConnectionTypes as $connectionType) {
+            $connections = Connection::where('type_id', $connectionType->type)
+                ->where(function($query) use ($subject) {
+                    $query->where('parent_id', $subject->id)
+                          ->orWhere('child_id', $subject->id);
+                })
+                ->with(['subject', 'object', 'connectionSpan'])
+                ->get();
+
+            // Transform connections to show the other span and relationship direction
+            $connections->transform(function($connection) use ($subject, $connectionType) {
+                $isParent = $connection->parent_id === $subject->id;
+                $otherSpan = $isParent ? $connection->object : $connection->subject;
+                $predicate = $isParent ? $connectionType->forward_predicate : $connectionType->inverse_predicate;
+                
+                $connection->other_span = $otherSpan;
+                $connection->is_parent = $isParent;
+                $connection->predicate = $predicate;
+                $connection->connection_type = $connectionType;
+                
+                return $connection;
+            });
+
+            // Filter out "created" connections to photos
+            $filteredConnections = $connections->filter(function($conn) use ($connectionType, $subject) {
+                if ($connectionType->type === 'created') {
+                    $otherSpan = $conn->parent_id === $subject->id ? $conn->object : $conn->subject;
+                    // Filter out connections to photos (type=thing, subtype=photo)
+                    if ($otherSpan->type_id === 'thing' && 
+                        isset($otherSpan->metadata['subtype']) && 
+                        $otherSpan->metadata['subtype'] === 'photo') {
+                        return false;
+                    }
+                }
+                return true;
+            });
+
+            // Sort connections by start year (earliest first)
+            $connectionsWithDates = $filteredConnections->filter(function($conn) {
+                return $conn->connectionSpan && $conn->connectionSpan->start_year;
+            })->sortBy(function($conn) {
+                return $conn->connectionSpan->start_year;
+            });
+
+            $connectionsWithoutDates = $filteredConnections->filter(function($conn) {
+                return !$conn->connectionSpan || !$conn->connectionSpan->start_year;
+            });
+
+            $sortedConnections = $connectionsWithDates->concat($connectionsWithoutDates);
+            
+            if ($sortedConnections->count() > 0) {
+                $allConnections[$connectionType->type] = $sortedConnections;
+                $connectionCounts[$connectionType->type] = $sortedConnections->count();
+            }
+        }
+
+        return view('spans.all-connections', compact('subject', 'allConnections', 'connectionCounts', 'relevantConnectionTypes'));
     }
 
     /**

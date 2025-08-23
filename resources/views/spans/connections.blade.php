@@ -26,69 +26,87 @@
 @endsection
 
 @section('content')
-<div class="container-fluid">
+<div class="py-4">
     <div class="row">
-       <p class="bg-warning text-muted">This page is a work in progress. It will be updated to show things in a more user-friendly way.</p>
-    </div>
-    <div class="row">
-        @if($connections->count() > 0)
-                <div class="row">
-                    @foreach($connections as $connection)
-                        <div class="col-md-6 col-lg-4 mb-4">
-                            <div class="card h-100">
-                                <div class="card-body">
-                                    <h5 class="card-title">
-                                        <a href="{{ route('spans.show', $connection->other_span) }}" class="text-decoration-none">
-                                            {{ $connection->other_span->name }}
-                                        </a>
-                                    </h5>
-                                    
-                                    <p class="card-text text-muted">
-                                        <i class="bi bi-arrow-right"></i> {{ $connection->predicate }}
-                                    </p>
-
-                                    @if($connection->connectionSpan)
-                                        <p class="card-text">
-                                            <small class="text-muted">
-                                                Connection: 
-                                                <a href="{{ route('spans.show', $connection->connectionSpan) }}" class="text-decoration-none">
-                                                    {{ $connection->connectionSpan->name }}
-                                                </a>
-                                            </small>
-                                        </p>
-                                    @endif
-
-                                    <div class="btn-group" role="group">
-                                        <a href="{{ route('spans.show', $connection->other_span) }}" 
-                                           class="btn btn-sm btn-outline-primary">
-                                            <i class="bi bi-eye"></i> View
-                                        </a>
-                                        <a href="{{ route('spans.connection', [$subject, $predicate, $connection->other_span]) }}" 
-                                           class="btn btn-sm btn-outline-info">
-                                            <i class="bi bi-link-45deg"></i> Connection
-                                        </a>
-                                        @if($connection->connectionSpan)
-                                            <a href="{{ route('spans.show', $connection->connectionSpan) }}" 
-                                               class="btn btn-sm btn-outline-secondary">
-                                                <i class="bi bi-arrow-left-right"></i> Span
-                                            </a>
-                                        @endif
-                                    </div>
-                                </div>
-                            </div>
+        <div class="col-12">
+            <!-- Connection Type Navigation -->
+            @if($relevantConnectionTypes->count() > 1)
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h5 class="card-title mb-3">
+                            <i class="bi bi-diagram-3 me-2"></i>
+                            Connection Types
+                        </h5>
+                        <div class="d-flex flex-wrap gap-2">
+                            <a href="{{ route('spans.all-connections', $subject) }}" 
+                               class="btn btn-sm btn-outline-secondary">
+                                All Connections
+                            </a>
+                            @foreach($relevantConnectionTypes as $type)
+                                @php
+                                    $isCurrent = $type->type === $connectionType->type;
+                                    $hasConnections = $type->connection_count > 0;
+                                    $routePredicate = str_replace(' ', '-', $type->forward_predicate);
+                                    $url = route('spans.connections', ['subject' => $subject, 'predicate' => $routePredicate]);
+                                @endphp
+                                @if($hasConnections)
+                                    <a href="{{ $url }}" 
+                                       class="btn btn-sm {{ $isCurrent ? 'btn-primary' : 'btn-secondary' }}"
+                                       style="{{ !$isCurrent ? 'background-color: var(--connection-' . $type->type . '-color, #007bff); border-color: var(--connection-' . $type->type . '-color, #007bff); color: white;' : '' }}">
+                                        {{ ucfirst($type->forward_predicate) }}
+                                        <span class="badge bg-secondary ms-1">{{ $type->connection_count }}</span>
+                                    </a>
+                                @else
+                                    <span class="btn btn-sm btn-outline-secondary disabled" style="opacity: 0.5;">
+                                        {{ ucfirst($type->forward_predicate) }}
+                                        <span class="badge bg-secondary ms-1">0</span>
+                                    </span>
+                                @endif
+                            @endforeach
                         </div>
-                    @endforeach
-                </div>
-
-                <div class="d-flex justify-content-center">
-                    {{ $connections->links() }}
-                </div>
-            @else
-                <div class="alert alert-info">
-                    <i class="bi bi-info-circle"></i>
-                    No {{ $connectionType->forward_predicate }} connections found for {{ $subject->name }}.
+                    </div>
                 </div>
             @endif
+
+            <!-- Timeline for this connection type -->
+            @if($connections->count() > 0)
+                <x-spans.connection-type-timeline :span="$subject" :connectionType="$connectionType" :connections="$connections" />
+            @endif
+            
+            <!-- Connections List -->
+            <div class="row mt-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h4 class="card-title mb-0">{{ ucfirst($connectionType->forward_predicate) }} Connections</h4>
+                            @auth
+                                @if(auth()->user()->can('update', $subject))
+                                    <button type="button" class="btn btn-sm btn-outline-primary" 
+                                            data-bs-toggle="modal" data-bs-target="#addConnectionModal"
+                                            data-span-id="{{ $subject->id }}" data-span-name="{{ $subject->name }}" data-span-type="{{ $subject->type_id }}">
+                                        <i class="bi bi-plus-lg"></i> Add Connection
+                                    </button>
+                                @endif
+                            @endauth
+                        </div>
+                        <div class="card-body">
+                            @if($connections->count() > 0)
+                                <div class="connection-spans">
+                                    @foreach($connections as $connection)
+                                        <x-connections.interactive-card :connection="$connection" :isIncoming="false" />
+                                    @endforeach
+                                </div>
+                                
+                                                                        <div class="d-flex justify-content-center mt-4">
+                                            <x-pagination :paginator="$connections" />
+                                        </div>
+                            @else
+                                <p class="text-muted mb-0">No {{ $connectionType->forward_predicate }} connections found for {{ $subject->name }}.</p>
+                            @endif
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>

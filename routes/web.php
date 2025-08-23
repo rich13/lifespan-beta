@@ -489,7 +489,8 @@ Route::middleware('web')->group(function () {
                 ->name('spans.at-date');
             
             // Connection routes
-            Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])->name('spans.connections');
+            Route::get('/{subject}/connections', [SpanController::class, 'allConnections'])->name('spans.all-connections');
+Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])->name('spans.connections');
             Route::get('/{subject}/{predicate}/{object}', [SpanController::class, 'showConnection'])->name('spans.connection');
             
             // Legacy connection type routes
@@ -601,6 +602,20 @@ Route::middleware('web')->group(function () {
             // Dashboard
             Route::get('/', [DashboardController::class, 'index'])
                 ->name('dashboard');
+
+            // Metrics routes
+            Route::prefix('metrics')->name('metrics.')->group(function () {
+    Route::get('/', [App\Http\Controllers\Admin\MetricsController::class, 'index'])->name('index');
+    Route::get('/low-completeness', [App\Http\Controllers\Admin\MetricsController::class, 'lowCompleteness'])->name('low-completeness');
+    Route::get('/residence-gaps', [App\Http\Controllers\Admin\MetricsController::class, 'residenceGaps'])->name('residence-gaps');
+    Route::get('/export', [App\Http\Controllers\Admin\MetricsController::class, 'export'])->name('export');
+            Route::get('/calculate-all', [App\Http\Controllers\Admin\MetricsController::class, 'calculateAll'])->name('calculate-all');
+        Route::get('/calculate-person-spans', [App\Http\Controllers\Admin\MetricsController::class, 'calculatePersonSpans'])->name('calculate-person-spans');
+        Route::get('/force-calculate-all', [App\Http\Controllers\Admin\MetricsController::class, 'forceCalculateAll'])->name('force-calculate-all');
+    Route::get('/api', [App\Http\Controllers\Admin\MetricsController::class, 'apiIndex'])->name('api.index');
+    Route::get('/api/{span}', [App\Http\Controllers\Admin\MetricsController::class, 'apiShow'])->name('api.show');
+    Route::get('/{span}', [App\Http\Controllers\Admin\MetricsController::class, 'show'])->name('show');
+});
 
             // AI YAML Generator routes
             Route::get('/ai-yaml-generator', [\App\Http\Controllers\AiYamlController::class, 'show'])->name('ai-yaml-generator.show');
@@ -718,6 +733,24 @@ Route::middleware('web')->group(function () {
                     Route::post('/import', [App\Http\Controllers\Admin\ScienceMuseumGroupImportController::class, 'import'])
                         ->name('import');
                     Route::post('/clear-cache', [App\Http\Controllers\Admin\ScienceMuseumGroupImportController::class, 'clearCache'])
+                        ->name('clear-cache');
+                });
+                
+                // Wikimedia Commons Import
+                Route::prefix('wikimedia-commons')->name('wikimedia-commons.')->group(function () {
+                    Route::get('/', [App\Http\Controllers\Admin\WikimediaCommonsImportController::class, 'index'])
+                        ->name('index');
+                    Route::post('/search', [App\Http\Controllers\Admin\WikimediaCommonsImportController::class, 'search'])
+                        ->name('search');
+                    Route::post('/search-by-year', [App\Http\Controllers\Admin\WikimediaCommonsImportController::class, 'searchByYear'])
+                        ->name('search-by-year');
+                    Route::post('/get-image-data', [App\Http\Controllers\Admin\WikimediaCommonsImportController::class, 'getImageData'])
+                        ->name('get-image-data');
+                    Route::post('/preview-import', [App\Http\Controllers\Admin\WikimediaCommonsImportController::class, 'previewImport'])
+                        ->name('preview-import');
+                    Route::post('/import-image', [App\Http\Controllers\Admin\WikimediaCommonsImportController::class, 'importImage'])
+                        ->name('import-image');
+                    Route::post('/clear-cache', [App\Http\Controllers\Admin\WikimediaCommonsImportController::class, 'clearCache'])
                         ->name('clear-cache');
                 });
                 
@@ -892,6 +925,18 @@ Route::middleware('web')->group(function () {
             // Admin Tools
             Route::get('/tools', [App\Http\Controllers\Admin\ToolsController::class, 'index'])
                 ->name('tools.index');
+            
+            // Span Merge Tool
+            Route::prefix('merge')->name('merge.')->group(function () {
+                Route::get('/', [App\Http\Controllers\Admin\MergeController::class, 'index'])
+                    ->name('index');
+                Route::get('/find-similar-spans', [App\Http\Controllers\Admin\MergeController::class, 'findSimilarSpans'])
+                    ->name('find-similar-spans');
+                Route::post('/merge-spans', [App\Http\Controllers\Admin\MergeController::class, 'mergeSpans'])
+                    ->name('merge-spans');
+                Route::get('/span-details', [App\Http\Controllers\Admin\MergeController::class, 'getSpanDetails'])
+                    ->name('span-details');
+            });
             
             // Family Connection Date Sync Tool
             Route::get('/tools/family-connection-date-sync', [App\Http\Controllers\Admin\ToolsController::class, 'familyConnectionDateSync'])

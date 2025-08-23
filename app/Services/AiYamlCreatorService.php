@@ -291,13 +291,38 @@ class AiYamlCreatorService
 - Any other text or formatting
 
 **YAML REQUIREMENTS**:
-- Use proper YAML indentation
+- Use proper YAML indentation (2 spaces per level)
 - Always quote dates in YAML format (e.g., '1939-09-01')
+- Quote any values containing special characters like /, :, {, }, [, ], ,, &, *, #, ?, |, -, >, !, %, @, or `
+- Quote values containing spaces and special characters (e.g., "Shiny and Oh So Bright, Vol. 1 / LP: No Past. No Future. No Sun.")
+- Always quote URLs and web addresses (e.g., "https://en.wikipedia.org/wiki/Example")
+- Quote location names with commas (e.g., "Chicago, Illinois, United States")
+- Quote album/song titles with special characters (e.g., "Mellon Collie and the Infinite Sadness")
+- Quote names containing punctuation or special characters (e.g., "D'arcy Wretzky", "Mary-Ann Phelan")
 - Include sources as a top-level field, not in metadata
 - If a value is not publicly known, omit that field entirely (no placeholders)
 - ONLY use the fields defined in the schema below - do not add additional fields like "significance", "importance", etc.
 - Put any additional commentary or context in the "description" or "notes" fields
 - Follow the exact field names and structure provided in the schema
+
+**YAML FORMATTING EXAMPLES**:
+```yaml
+# Correct - quoted values with special characters
+name: "Shiny and Oh So Bright, Vol. 1 / LP: No Past. No Future. No Sun."
+formation_location: "Chicago, Illinois, United States"
+sources:
+  - "https://en.wikipedia.org/wiki/The_Smashing_Pumpkins"
+
+# Correct - simple values unquoted
+type: band
+status: active
+start: '1988'
+end: null
+
+# Correct - names with punctuation quoted
+name: "D'arcy Wretzky"
+birth_name: "Mary-Ann Phelan"
+```
 
 **ACCURACY REQUIREMENTS**:
 - NEVER hallucinate or invent information
@@ -427,12 +452,32 @@ You may include the following groups:
 5. Include connections whenever you have reliable information - be thorough rather than selective
 6. For has_role, include all significant roles that are well-documented
 7. Always quote dates in YAML format
-8. Use proper YAML indentation
-9. Include sources as a top-level field, not in metadata
-10. Put has_role inside the connections block, not as a separate top-level field
-11. Do not include any explanatory text or sources outside the YAML structure - only return the YAML
-12. If a value (such as a name, date, or organisation) is not publicly known, do not include that field or connection at all. Do not use placeholders like "unnamed person", "unknown", or similar.
-13. Research thoroughly - read full source material, not just summaries or introductions
+8. Use proper YAML indentation (2 spaces per level)
+9. **CRITICAL**: Quote any values containing special characters like /, :, {, }, [, ], ,, &, *, #, ?, |, -, >, !, %, @, or `
+10. **CRITICAL**: Always quote URLs and web addresses (e.g., "https://en.wikipedia.org/wiki/Example")
+11. **CRITICAL**: Quote location names with commas (e.g., "Chicago, Illinois, United States", "Malibu, California")
+12. **CRITICAL**: Quote names containing punctuation (e.g., "D'arcy Wretzky", "Mary-Ann Phelan")
+13. **CRITICAL**: Quote birth names with special characters (e.g., "Ramón Gerard Antonio Estévez")
+14. Include sources as a top-level field, not in metadata
+15. Put has_role inside the connections block, not as a separate top-level field
+16. Do not include any explanatory text or sources outside the YAML structure - only return the YAML
+17. If a value (such as a name, date, or organisation) is not publicly known, do not include that field or connection at all. Do not use placeholders like "unnamed person", "unknown", or similar.
+18. Research thoroughly - read full source material, not just summaries or introductions
+
+**YAML FORMATTING EXAMPLES FOR PEOPLE**:
+```yaml
+# Names with special characters - MUST be quoted
+birth_name: "Ramón Gerard Antonio Estévez"
+name: "Mary-Ann Phelan"
+
+# Locations with commas - MUST be quoted
+- name: "Malibu, California"
+  type: place
+
+# Sources - MUST be quoted
+sources:
+  - "https://en.wikipedia.org/wiki/Martin_Sheen"
+```
 
 Return only the YAML content, no additional text or formatting.
 PROMPT;
@@ -583,11 +628,31 @@ You may include the following groups:
 8. Set end to null for living people
 9. Include connections whenever you have reliable information - be thorough rather than selective
 10. Always quote dates in YAML format
-11. Use proper YAML indentation
-12. Include sources as a top-level field, not in metadata
-13. Do not include any explanatory text or sources outside the YAML structure - only return the YAML
-14. If a value (such as a name, date, or organisation) is not publicly known, do not include that field or connection at all
-15. Research thoroughly - read full source material, not just summaries or introductions
+11. Use proper YAML indentation (2 spaces per level)
+12. **CRITICAL**: Quote any values containing special characters like /, :, {, }, [, ], ,, &, *, #, ?, |, -, >, !, %, @, or `
+13. **CRITICAL**: Always quote URLs and web addresses (e.g., "https://en.wikipedia.org/wiki/Example")
+14. **CRITICAL**: Quote location names with commas (e.g., "Chicago, Illinois, United States", "Malibu, California")
+15. **CRITICAL**: Quote names containing punctuation (e.g., "D'arcy Wretzky", "Mary-Ann Phelan")
+16. **CRITICAL**: Quote birth names with special characters (e.g., "Ramón Gerard Antonio Estévez")
+17. Include sources as a top-level field, not in metadata
+18. Do not include any explanatory text or sources outside the YAML structure - only return the YAML
+19. If a value (such as a name, date, or organisation) is not publicly known, do not include that field or connection at all
+20. Research thoroughly - read full source material, not just summaries or introductions
+
+**YAML FORMATTING EXAMPLES FOR PEOPLE**:
+```yaml
+# Names with special characters - MUST be quoted
+birth_name: "Ramón Gerard Antonio Estévez"
+name: "Mary-Ann Phelan"
+
+# Locations with commas - MUST be quoted
+- name: "Malibu, California"
+  type: place
+
+# Sources - MUST be quoted
+sources:
+  - "https://en.wikipedia.org/wiki/Martin_Sheen"
+```
 
 Return only the enhanced YAML content, no additional text or formatting.
 PROMPT;
@@ -1368,12 +1433,39 @@ You may include the following groups:
 4. Set end to null for active bands
 5. Include connections whenever you have reliable information - be thorough rather than selective
 6. Always quote dates in YAML format
-7. Use proper YAML indentation
-8. Include sources as a top-level field, not in metadata
-9. Do not include any explanatory text or sources outside the YAML structure - only return the YAML
-10. If a value (such as a name, date, or member) is not publicly known, do not include that field or connection at all. Do not use placeholders like "unknown" or similar.
-11. Research thoroughly - read full source material, not just summaries or introductions
-12. Focus on minimal but accurate information as requested
+7. Use proper YAML indentation (2 spaces per level)
+8. **CRITICAL**: Quote any values containing special characters like /, :, {, }, [, ], ,, &, *, #, ?, |, -, >, !, %, @, or `
+9. **CRITICAL**: Quote album/song titles with special characters (e.g., "Shiny and Oh So Bright, Vol. 1 / LP: No Past. No Future. No Sun.", "Machina/The Machines of God")
+10. **CRITICAL**: Always quote URLs and web addresses (e.g., "https://en.wikipedia.org/wiki/Example")
+11. **CRITICAL**: Quote location names with commas (e.g., "Chicago, Illinois, United States")
+12. **CRITICAL**: Quote names containing punctuation (e.g., "D'arcy Wretzky", "Mary-Ann Phelan")
+13. Include sources as a top-level field, not in metadata
+14. Do not include any explanatory text or sources outside the YAML structure - only return the YAML
+15. If a value (such as a name, date, or member) is not publicly known, do not include that field or connection at all. Do not use placeholders like "unknown" or similar.
+16. Research thoroughly - read full source material, not just summaries or introductions
+17. Focus on minimal but accurate information as requested
+
+**YAML FORMATTING EXAMPLES FOR BANDS**:
+```yaml
+# Album names with special characters - MUST be quoted
+- name: "Shiny and Oh So Bright, Vol. 1 / LP: No Past. No Future. No Sun."
+  type: album
+- name: "Machina/The Machines of God"
+  type: album
+- name: "Machina II/The Friends & Enemies of Modern Music"
+  type: album
+
+# Formation locations with commas - MUST be quoted
+formation_location: "Chicago, Illinois, United States"
+
+# Sources - MUST be quoted
+sources:
+  - "https://en.wikipedia.org/wiki/The_Smashing_Pumpkins"
+
+# Member names with punctuation - MUST be quoted
+- name: "D'arcy Wretzky"
+  type: person
+```
 
 Return only the YAML content, no additional text or formatting.
 PROMPT;
@@ -1463,11 +1555,38 @@ You may include the following groups:
 8. Set end to null for active bands
 9. Include connections whenever you have reliable information - be thorough rather than selective
 10. Always quote dates in YAML format
-11. Use proper YAML indentation
-12. Include sources as a top-level field, not in metadata
-13. Do not include any explanatory text or sources outside the YAML structure - only return the YAML
-14. If a value (such as a name, date, or member) is not publicly known, do not include that field or connection at all
-15. Research thoroughly - read full source material, not just summaries or introductions
+11. Use proper YAML indentation (2 spaces per level)
+12. **CRITICAL**: Quote any values containing special characters like /, :, {, }, [, ], ,, &, *, #, ?, |, -, >, !, %, @, or `
+13. **CRITICAL**: Quote album/song titles with special characters (e.g., "Shiny and Oh So Bright, Vol. 1 / LP: No Past. No Future. No Sun.", "Machina/The Machines of God")
+14. **CRITICAL**: Always quote URLs and web addresses (e.g., "https://en.wikipedia.org/wiki/Example")
+15. **CRITICAL**: Quote location names with commas (e.g., "Chicago, Illinois, United States")
+16. **CRITICAL**: Quote names containing punctuation (e.g., "D'arcy Wretzky", "Mary-Ann Phelan")
+17. Include sources as a top-level field, not in metadata
+18. Do not include any explanatory text or sources outside the YAML structure - only return the YAML
+19. If a value (such as a name, date, or member) is not publicly known, do not include that field or connection at all
+20. Research thoroughly - read full source material, not just summaries or introductions
+
+**YAML FORMATTING EXAMPLES FOR BANDS**:
+```yaml
+# Album names with special characters - MUST be quoted
+- name: "Shiny and Oh So Bright, Vol. 1 / LP: No Past. No Future. No Sun."
+  type: album
+- name: "Machina/The Machines of God"
+  type: album
+- name: "Machina II/The Friends & Enemies of Modern Music"
+  type: album
+
+# Formation locations with commas - MUST be quoted
+formation_location: "Chicago, Illinois, United States"
+
+# Sources - MUST be quoted
+sources:
+  - "https://en.wikipedia.org/wiki/The_Smashing_Pumpkins"
+
+# Member names with punctuation - MUST be quoted
+- name: "D'arcy Wretzky"
+  type: person
+```
 
 Return only the enhanced YAML content, no additional text or formatting.
 PROMPT;
@@ -1549,6 +1668,9 @@ PROMPT;
         $result = preg_replace('/\n\s*\n\s*\n/', "\n\n", $result); // Remove excessive blank lines
         $result = trim($result);
         
+        // Fix YAML syntax issues by properly quoting values with special characters
+        $result = $this->fixYamlQuoting($result);
+        
         Log::info('cleanYamlResponse result', [
             'result' => $result,
             'result_length' => strlen($result),
@@ -1556,6 +1678,128 @@ PROMPT;
         ]);
         
         return $result;
+    }
+
+    /**
+     * Fix YAML syntax by properly quoting values that contain special characters
+     */
+    private function fixYamlQuoting(string $yaml): string
+    {
+        $lines = explode("\n", $yaml);
+        $fixedLines = [];
+        
+        foreach ($lines as $line) {
+            // Skip lines that don't contain a colon (not key-value pairs)
+            if (strpos($line, ':') === false) {
+                $fixedLines[] = $line;
+                continue;
+            }
+            
+            // Find the first colon that's not inside quotes
+            $colonPos = $this->findUnquotedColon($line);
+            
+            if ($colonPos === false) {
+                $fixedLines[] = $line;
+                continue;
+            }
+            
+            // Split the line at the unquoted colon
+            $keyPart = substr($line, 0, $colonPos);
+            $valuePart = substr($line, $colonPos + 1);
+            
+            // Extract indentation and key
+            if (preg_match('/^(\s*)(.+)$/', $keyPart, $matches)) {
+                $indentation = $matches[1];
+                $key = $matches[2];
+            } else {
+                $fixedLines[] = $line;
+                continue;
+            }
+            
+            $value = trim($valuePart);
+            
+            // Skip if already quoted (check for both single and double quotes)
+            if (preg_match('/^["\'].*["\']$/', $value)) {
+                $fixedLines[] = $line;
+                continue;
+            }
+            
+            // Skip empty values and simple values like {}
+            if (empty($value) || $value === '{}' || $value === '[]') {
+                $fixedLines[] = $line;
+                continue;
+            }
+            
+            // Don't quote simple values like null, true, false, or numbers
+            if (in_array(strtolower($value), ['null', 'true', 'false']) || is_numeric($value)) {
+                $fixedLines[] = $line;
+                continue;
+            }
+            
+            // Check if value contains special characters that need quoting
+            $needsQuoting = false;
+            
+            // Characters that can cause YAML parsing issues
+            $specialChars = ['/', ':', '{', '}', '[', ']', ',', '&', '*', '#', '?', '|', '-', '>', '!', '%', '@', '`'];
+            
+            foreach ($specialChars as $char) {
+                if (strpos($value, $char) !== false) {
+                    $needsQuoting = true;
+                    break;
+                }
+            }
+            
+            // Also quote if value contains spaces and special patterns
+            if (strpos($value, ' ') !== false && (
+                strpos($value, '/') !== false || 
+                strpos($value, ':') !== false ||
+                strpos($value, ',') !== false
+            )) {
+                $needsQuoting = true;
+            }
+            
+            // Quote the value if needed
+            if ($needsQuoting) {
+                // Escape any existing quotes in the value
+                $escapedValue = str_replace('"', '\\"', $value);
+                $fixedLines[] = $indentation . $key . ': "' . $escapedValue . '"';
+            } else {
+                $fixedLines[] = $line;
+            }
+        }
+        
+        return implode("\n", $fixedLines);
+    }
+
+    /**
+     * Find the position of the first colon that's not inside quotes
+     */
+    private function findUnquotedColon(string $line): int|false
+    {
+        $length = strlen($line);
+        $inSingleQuote = false;
+        $inDoubleQuote = false;
+        
+        for ($i = 0; $i < $length; $i++) {
+            $char = $line[$i];
+            
+            // Handle escape sequences
+            if ($char === '\\' && $i + 1 < $length) {
+                $i++; // Skip the next character
+                continue;
+            }
+            
+            // Handle quote state changes
+            if ($char === '"' && !$inSingleQuote) {
+                $inDoubleQuote = !$inDoubleQuote;
+            } elseif ($char === "'" && !$inDoubleQuote) {
+                $inSingleQuote = !$inSingleQuote;
+            } elseif ($char === ':' && !$inSingleQuote && !$inDoubleQuote) {
+                return $i;
+            }
+        }
+        
+        return false;
     }
 
     /**

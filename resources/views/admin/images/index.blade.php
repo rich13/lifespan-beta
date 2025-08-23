@@ -40,7 +40,7 @@
                                                                 <th>Location</th>
                         <th>Nearest Place</th>
                         <th>Located Connection</th>
-                        <th>Connections</th>
+                        <th>Features</th>
                                         <th>Access</th>
                                         <th>Created</th>
                                         <th style="width: 100px;">Actions</th>
@@ -170,15 +170,36 @@
                                             </td>
                                             <td class="align-middle">
                                                 @php
-                                                    $incomingConnections = $image->connectionsAsObject->count();
-                                                    $outgoingConnections = $image->connectionsAsSubject->count();
-                                                    $totalConnections = $incomingConnections + $outgoingConnections;
+                                                    $subjectOfConnections = $image->connectionsAsSubject()
+                                                        ->whereHas('type', function($query) {
+                                                            $query->where('type', 'subject_of');
+                                                        })
+                                                        ->with(['child'])
+                                                        ->get();
                                                 @endphp
-                                                <div class="small">
-                                                    <div class="text-success">{{ $outgoingConnections }} outgoing</div>
-                                                    <div class="text-info">{{ $incomingConnections }} incoming</div>
-                                                    <div class="text-muted"><strong>{{ $totalConnections }} total</strong></div>
-                                                </div>
+                                                @if($subjectOfConnections->isNotEmpty())
+                                                    <div class="small">
+                                                        @foreach($subjectOfConnections->take(3) as $connection)
+                                                            <div class="mb-1">
+                                                                <i class="bi bi-person text-primary me-1"></i>
+                                                                <a href="{{ route('spans.show', $connection->child) }}" 
+                                                                   class="text-decoration-none">
+                                                                    {{ $connection->child->name }}
+                                                                </a>
+                                                            </div>
+                                                        @endforeach
+                                                        @if($subjectOfConnections->count() > 3)
+                                                            <small class="text-muted">
+                                                                +{{ $subjectOfConnections->count() - 3 }} more
+                                                            </small>
+                                                        @endif
+                                                    </div>
+                                                @else
+                                                    <span class="text-muted small">
+                                                        <i class="bi bi-person text-muted me-1"></i>
+                                                        No subjects
+                                                    </span>
+                                                @endif
                                             </td>
                                             <td class="align-middle">
                                                 @switch($image->access_level)

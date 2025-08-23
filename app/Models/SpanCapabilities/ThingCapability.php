@@ -36,13 +36,6 @@ class ThingCapability implements SpanCapability
                 'component' => 'select',
                 'options' => ['book', 'album', 'painting', 'sculpture', 'recording', 'photo', 'other'],
                 'required' => true
-            ],
-            'creator' => [
-                'type' => 'span',
-                'label' => 'Creator',
-                'component' => 'span-input',
-                'span_type' => 'person',
-                'required' => true
             ]
         ];
     }
@@ -54,11 +47,6 @@ class ThingCapability implements SpanCapability
         // Validate subtype
         if (!isset($metadata['subtype']) || !in_array($metadata['subtype'], ['book', 'album', 'painting', 'sculpture', 'recording', 'photo', 'other'])) {
             throw new \InvalidArgumentException('Invalid thing subtype');
-        }
-
-        // Validate creator
-        if (!isset($metadata['creator'])) {
-            throw new \InvalidArgumentException('Creator is required for things');
         }
     }
 

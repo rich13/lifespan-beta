@@ -19,5 +19,10 @@ use Illuminate\Support\Facades\Auth;
                 <i class="bi bi-cloud-upload me-1"></i> <span>Upload Photos</span>
             </a>
         </li>
+        <li class="nav-item">
+            <a class="nav-link {{ request()->routeIs('admin.metrics.*') ? 'active' : '' }}" href="{{ route('admin.metrics.index') }}">
+                <i class="bi bi-graph-up me-1"></i> <span>Span Metrics</span>
+            </a>
+        </li>
     </ul>
 @endif 

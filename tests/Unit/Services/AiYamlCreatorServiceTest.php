@@ -89,4 +89,38 @@ class AiYamlCreatorServiceTest extends TestCase
         
         $this->assertEquals("name: Test Person\ntype: person", $cleaned);
     }
+
+    public function test_fix_yaml_quoting()
+    {
+        Config::set('services.openai.api_key', 'test-key');
+        
+        $service = new AiYamlCreatorService();
+        
+        // Use reflection to access private method
+        $reflection = new \ReflectionClass($service);
+        $method = $reflection->getMethod('fixYamlQuoting');
+        $method->setAccessible(true);
+        
+        // Test YAML with special characters that need quoting
+        $yamlWithSpecialChars = "name: The Smashing Pumpkins\ntype: band\nmetadata:\n  genres:\n    - Alternative rock\n    - Grunge\n  formation_location: Chicago, Illinois, United States\nsources:\n  - \"https://en.wikipedia.org/wiki/The_Smashing_Pumpkins\"\nconnections:\n  created:\n    - name: Shiny and Oh So Bright, Vol. 1 / LP: No Past. No Future. No Sun.\n      type: album\n      start: '2018'\n      end: '2018'";
+        
+        $fixed = $method->invoke($service, $yamlWithSpecialChars);
+        
+        // Check that values with special characters are properly quoted
+        $this->assertStringContainsString('formation_location: "Chicago, Illinois, United States"', $fixed);
+        $this->assertStringContainsString('name: "Shiny and Oh So Bright, Vol. 1 / LP: No Past. No Future. No Sun."', $fixed);
+        
+        // Check that simple values are not quoted
+        $this->assertStringContainsString('name: The Smashing Pumpkins', $fixed);
+        $this->assertStringContainsString('type: band', $fixed);
+        $this->assertStringContainsString('start: \'2018\'', $fixed);
+        
+        // Test that already quoted values are preserved (including URLs with colons)
+        $this->assertStringContainsString('- "https://en.wikipedia.org/wiki/The_Smashing_Pumpkins"', $fixed);
+        
+        // Test that already quoted values are preserved
+        $yamlWithQuotes = "name: \"Already Quoted\"\ntype: band";
+        $fixed = $method->invoke($service, $yamlWithQuotes);
+        $this->assertEquals($yamlWithQuotes, $fixed);
+    }
 } 
