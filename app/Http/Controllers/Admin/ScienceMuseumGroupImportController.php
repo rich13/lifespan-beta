@@ -630,7 +630,7 @@ class ScienceMuseumGroupImportController extends Controller
                     
                     // Create connection between image and object (image is subject, object is object)
                     if ($result['object'] && $imageSpan) {
-                        $connection = $this->createConnection($imageSpan, $result['object'], 'subject_of', $user);
+                        $connection = $this->createConnection($imageSpan, $result['object'], 'features', $user);
                         $result['connections'][] = $connection;
                     }
                 } else {

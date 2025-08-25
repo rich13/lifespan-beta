@@ -845,7 +845,7 @@ function displayPreview(data) {
         previewHtml += `
             <tr>
                 <td><strong>${object.title}</strong> <span class="badge bg-primary">thing</span></td>
-                <td><span class="badge bg-secondary">subject_of</span></td>
+                                        <td><span class="badge bg-secondary">features</span></td>
                 <td><strong>${firstImage.title || 'Image'}</strong> <span class="badge bg-info">thing (photo)</span></td>
             </tr>
         `;

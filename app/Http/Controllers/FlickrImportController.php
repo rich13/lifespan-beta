@@ -620,7 +620,7 @@ class FlickrImportController extends Controller
     {
         // Get current subject connections for this photo
         $existingSubjectConnections = Connection::where('parent_id', $photoSpan->id)
-            ->where('type_id', 'subject_of')
+            ->where('type_id', 'features')
             ->with(['child', 'connectionSpan'])
             ->get();
 
@@ -701,7 +701,7 @@ class FlickrImportController extends Controller
                 ->get();
 
             foreach ($matchingSpans as $matchingSpan) {
-                // Create subject_of connection
+                // Create features connection
                 $this->createSubjectConnection($photoSpan, $matchingSpan);
             }
         }
@@ -867,14 +867,14 @@ class FlickrImportController extends Controller
     }
 
     /**
-     * Create a subject_of connection between photo and subject
+     * Create a features connection between photo and subject
      */
     private function createSubjectConnection(Span $photoSpan, Span $subjectSpan): void
     {
         // Check if connection already exists
         $existingConnection = Connection::where('parent_id', $photoSpan->id)
             ->where('child_id', $subjectSpan->id)
-            ->where('type_id', 'subject_of')
+            ->where('type_id', 'features')
             ->first();
 
         if ($existingConnection) {
@@ -888,7 +888,7 @@ class FlickrImportController extends Controller
             'access_level' => 'public',
             'state' => 'complete',
             'metadata' => [
-                'connection_type' => 'subject_of',
+                'connection_type' => 'features',
                 'timeless' => true
             ],
             'owner_id' => $photoSpan->owner_id,
@@ -901,7 +901,7 @@ class FlickrImportController extends Controller
         $connection = new Connection([
             'parent_id' => $photoSpan->id,
             'child_id' => $subjectSpan->id,
-            'type_id' => 'subject_of',
+            'type_id' => 'features',
             'connection_span_id' => $connectionSpan->id,
         ]);
 

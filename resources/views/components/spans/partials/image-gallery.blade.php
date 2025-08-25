@@ -28,7 +28,7 @@
     if ($isPhotoSpan) {
         // If this is a photo span, show related photos that share the same subjects
         $subjectConnections = $span->connectionsAsSubjectWithAccess()
-            ->where('type_id', 'subject_of')
+            ->where('type_id', 'features')
             ->whereNotNull('connection_span_id')
             ->whereHas('connectionSpan')
             ->with(['child', 'connectionSpan', 'type'])
@@ -39,7 +39,7 @@
             $subjectIds = $subjectConnections->pluck('child_id')->toArray();
             
             // Find other photos that also feature these subjects
-            $imageConnections = \App\Models\Connection::where('type_id', 'subject_of')
+            $imageConnections = \App\Models\Connection::where('type_id', 'features')
                 ->whereIn('child_id', $subjectIds) // Same subjects
                 ->where('parent_id', '!=', $span->id) // Not this photo
                 ->whereNotNull('connection_span_id')
@@ -58,10 +58,10 @@
             $imageConnections = collect();
         }
     } else {
-        // Get images connected to this span via subject_of connections
-        // The span is the object (child) in subject_of connections, so we use connectionsAsObjectWithAccess
+        // Get images connected to this span via features connections
+        // The span is the object (child) in features connections, so we use connectionsAsObjectWithAccess
         $imageConnections = $span->connectionsAsObjectWithAccess()
-            ->where('type_id', 'subject_of')
+            ->where('type_id', 'features')
             ->whereNotNull('connection_span_id')
             ->whereHas('connectionSpan')
             ->whereHas('parent', function($query) {
@@ -113,7 +113,7 @@
                                 @if($imageUrl)
                                     <a href="{{ route('spans.show', $imageSpan) }}" 
                                        class="text-decoration-none">
-                                                                            <img src="{{ $imageUrl }}" 
+                                        <img src="{{ $imageUrl }}" 
                                          alt="{{ $imageSpan->name }}" 
                                          class="card-img-top" 
                                          style="height: 200px; object-fit: cover; border-radius: 8px;"
@@ -126,7 +126,7 @@
                                     </div>
                                 @endif
                                 
-     
+
                             </div>
                         </div>
                     @endforeach

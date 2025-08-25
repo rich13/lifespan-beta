@@ -76,7 +76,12 @@ class WikimediaCommonsImportController extends Controller
             
             return response()->json([
                 'success' => true,
-                'data' => $results
+                'data' => [
+                    'images' => $results['data'] ?? [],
+                    'total' => $results['meta']['total'] ?? 0,
+                    'page' => $results['meta']['current_page'] ?? $page,
+                    'per_page' => $results['meta']['per_page'] ?? $perPage
+                ]
             ]);
         } catch (\Exception $e) {
             Log::error('Failed to search Wikimedia Commons images', [
@@ -113,7 +118,12 @@ class WikimediaCommonsImportController extends Controller
             
             return response()->json([
                 'success' => true,
-                'data' => $results
+                'data' => [
+                    'images' => $results['data'] ?? [],
+                    'total' => $results['meta']['total'] ?? 0,
+                    'page' => $results['meta']['current_page'] ?? $page,
+                    'per_page' => $results['meta']['per_page'] ?? $perPage
+                ]
             ]);
         } catch (\Exception $e) {
             Log::error('Failed to search Wikimedia Commons images by year', [
@@ -433,15 +443,15 @@ class WikimediaCommonsImportController extends Controller
     }
 
     /**
-     * Create a subject_of connection between image and target span
+     * Create a features connection between image and target span
      */
     protected function createSubjectOfConnection(Span $imageSpan, Span $targetSpan, User $user): void
     {
-        // Get subject_of connection type
-        $connectionType = ConnectionType::where('type', 'subject_of')->first();
+        // Get features connection type
+        $connectionType = ConnectionType::where('type', 'features')->first();
         
         if (!$connectionType) {
-            throw new \Exception('Subject_of connection type not found in database');
+            throw new \Exception('Features connection type not found in database');
         }
 
         // Create connection span
@@ -451,7 +461,7 @@ class WikimediaCommonsImportController extends Controller
             'access_level' => 'public',
             'state' => 'complete',
             'metadata' => [
-                'connection_type' => 'subject_of',
+                'connection_type' => 'features',
                 'timeless' => true
             ],
             'owner_id' => $user->id,
@@ -462,19 +472,19 @@ class WikimediaCommonsImportController extends Controller
         Connection::create([
             'parent_id' => $imageSpan->id,
             'child_id' => $targetSpan->id,
-            'type_id' => 'subject_of',
+            'type_id' => 'features',
             'connection_span_id' => $connectionSpan->id,
         ]);
     }
 
     /**
-     * Check if a subject_of connection already exists between two spans
+     * Check if a features connection already exists between two spans
      */
     protected function connectionExists(Span $imageSpan, Span $targetSpan): bool
     {
         return Connection::where('parent_id', $imageSpan->id)
             ->where('child_id', $targetSpan->id)
-            ->where('type_id', 'subject_of')
+            ->where('type_id', 'features')
             ->exists();
     }
 
@@ -583,98 +593,32 @@ class WikimediaCommonsImportController extends Controller
     }
 
     /**
-     * Clean MediaWiki markup from description text
+     * Clean MediaWiki markup from descriptions
      */
-    protected function cleanDescription(string $description): string
+    public function cleanDescription(?string $description): string
     {
         if (empty($description)) {
             return '';
         }
 
-        // First, extract content from simple templates
-        $description = $this->extractTemplateContent($description);
+        $cleaned = $description;
 
-        // Remove nested templates recursively
-        $description = $this->removeNestedTemplates($description);
+        // Remove language tags like {{en|1=text}} or {{en|text}}
+        $cleaned = preg_replace('/\{\{[^}]*\|1?=([^}]*)\}\}/', '$1', $cleaned);
+        $cleaned = preg_replace('/\{\{[^}]*\|([^}]*)\}\}/', '$1', $cleaned);
+        $cleaned = preg_replace('/\{\{[^}]*\}\}/', '', $cleaned);
 
-        // Remove language prefixes like "{{en|1=" and closing "}}"
-        $description = preg_replace('/\{\{[a-z]{2}\|1=(.*?)\}\}/', '$1', $description);
-        
-        // Remove simple language tags like "{{en|" and "}}"
-        $description = preg_replace('/\{\{[a-z]{2}\|(.*?)\}\}/', '$1', $description);
-        
-        // Remove any remaining language tags
-        $description = preg_replace('/\{\{[a-z]{2}\}\}/', '', $description);
-        
-        // Remove wiki links [[text]] -> text
-        $description = preg_replace('/\[\[([^|\]]*?)\]\]/', '$1', $description);
-        
-        // Remove wiki links with pipes [[text|display]] -> display
-        $description = preg_replace('/\[\[([^|]*?)\|([^\]]*?)\]\]/', '$2', $description);
-        
-        // Remove bold markup '''text''' -> text
-        $description = preg_replace('/\'\'\'(.*?)\'\'\'/', '$1', $description);
-        
-        // Remove italic markup ''text'' -> text
-        $description = preg_replace('/\'\'(.*?)\'\'/', '$1', $description);
-        
-        // Remove HTML tags
-        $description = strip_tags($description);
-        
-        // Clean up extra whitespace
-        $description = preg_replace('/\s+/', ' ', $description);
-        $description = trim($description);
-        
-        return $description;
-    }
+        // Remove wiki links like [[Page]] or [[Page|Display]]
+        $cleaned = preg_replace('/\[\[([^|\]]+)\|([^\]]+)\]\]/', '$2', $cleaned);
+        $cleaned = preg_replace('/\[\[([^\]]+)\]\]/', '$1', $cleaned);
 
-    /**
-     * Recursively remove nested MediaWiki templates
-     */
-    protected function removeNestedTemplates(string $text): string
-    {
-        $original = $text;
-        $maxIterations = 10; // Prevent infinite loops
-        $iteration = 0;
-        
-        while ($iteration < $maxIterations) {
-            // Find and remove the innermost templates first
-            $text = preg_replace('/\{\{[^}]*\{\{[^}]*\}\}[^}]*\}\}/', '', $text);
-            $text = preg_replace('/\{\{[^}]*\}\}/', '', $text);
-            
-            // If no changes were made, we're done
-            if ($text === $original) {
-                break;
-            }
-            
-            $original = $text;
-            $iteration++;
-        }
-        
-        return $text;
-    }
+        // Remove bold markup like '''text'''
+        $cleaned = preg_replace('/\'\'\'([^\']*)\'\'\'/', '$1', $cleaned);
 
-    /**
-     * Extract content from simple MediaWiki templates
-     */
-    protected function extractTemplateContent(string $text): string
-    {
-        // Handle specific cases first
-        // {{European Union|...}} -> European Union (handle nested templates)
-        $text = preg_replace('/\{\{European Union\|[^}]*\{\{[^}]*\}\}[^}]*\}\}/', 'European Union', $text);
-        $text = preg_replace('/\{\{European Union\|[^}]*\}\}/', 'European Union', $text);
-        
-        // Extract content from User templates {{User|John Doe}} -> John Doe
-        $text = preg_replace('/\{\{User\|([^}]*)\}\}/', '$1', $text);
-        
-        // For other simple templates, try to extract the meaningful part
-        // {{TemplateName|meaningful content|other params}} -> meaningful content
-        $text = preg_replace('/\{\{([^|}]+)\|([^|}]*)\|[^}]*\}\}/', '$2', $text);
-        
-        // For two-parameter templates {{TemplateName|content}} -> content
-        $text = preg_replace('/\{\{([^|}]+)\|([^}]*)\}\}/', '$2', $text);
-        
-        return $text;
+        // Remove italic markup like ''text''
+        $cleaned = preg_replace('/\'\'([^\']*)\'\'/', '$1', $cleaned);
+
+        return trim($cleaned);
     }
 }
 

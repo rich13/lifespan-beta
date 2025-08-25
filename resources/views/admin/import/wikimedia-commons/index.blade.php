@@ -91,7 +91,7 @@
                                <select class="form-select" id="targetSpanId">
                                    <option value="">No connection</option>
                                </select>
-                               <small class="text-muted">This image will be connected to the selected span via a 'subject_of' connection</small>
+                               <small class="text-muted">This image will be connected to the selected span via a 'features' connection</small>
                            </div>
                            
                            <!-- Hidden input to store originating span details -->
@@ -178,9 +178,9 @@ function searchImages() {
         console.log('hideLoading() called');
         
         if (data.success) {
-            currentSearchResults = data.data.data;
-            currentPage = data.data.meta.current_page;
-            totalPages = data.data.meta.last_page;
+            currentSearchResults = data.data.images;
+            currentPage = data.data.page;
+            totalPages = Math.ceil(data.data.total / data.data.per_page);
             
             displaySearchResults();
             showSearchResults();

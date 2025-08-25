@@ -172,7 +172,7 @@
                                                 @php
                                                     $subjectOfConnections = $image->connectionsAsSubject()
                                                         ->whereHas('type', function($query) {
-                                                            $query->where('type', 'subject_of');
+                                                            $query->where('type', 'features');
                                                         })
                                                         ->with(['child'])
                                                         ->get();

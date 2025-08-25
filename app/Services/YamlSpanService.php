@@ -3402,7 +3402,7 @@ class YamlSpanService
 
         // Add connections with depth limiting
         $connections = [];
-        $connectionTypes = ['has_role', 'at_organisation', 'during', 'contains', 'located', 'created', 'subject_of'];
+        $connectionTypes = ['has_role', 'at_organisation', 'during', 'contains', 'located', 'created', 'features'];
         
         foreach ($connectionTypes as $connectionType) {
             $typeConnections = $this->getConnectionsForType($span, $connectionType, $maxDepth, $currentDepth + 1);
