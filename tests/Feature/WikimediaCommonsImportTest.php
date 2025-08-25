@@ -27,14 +27,84 @@ class WikimediaCommonsImportTest extends TestCase
         SpanType::firstOrCreate(['type_id' => 'thing'], ['name' => 'Thing', 'description' => 'A thing']);
         SpanType::firstOrCreate(['type_id' => 'connection'], ['name' => 'Connection', 'description' => 'A connection']);
         
-        // Create subject_of connection type
-        ConnectionType::firstOrCreate(['type' => 'subject_of'], [
-            'forward_predicate' => 'subject_of',
+        // Create features connection type
+        ConnectionType::firstOrCreate(['type' => 'features'], [
+            'forward_predicate' => 'features',
             'forward_description' => 'Subject of',
             'inverse_predicate' => 'is subject of',
             'inverse_description' => 'Is subject of',
             'constraint_type' => 'single'
         ]);
+
+        // Mock the WikimediaCommonsApiService
+        $this->mock(\App\Services\WikimediaCommonsApiService::class, function ($mock) {
+            // Mock searchImages method
+            $mock->shouldReceive('searchImages')
+                ->andReturn([
+                    'data' => [
+                        [
+                            'id' => '12345',
+                            'title' => 'Test Image',
+                            'snippet' => 'Test image description',
+                            'timestamp' => '2020-01-01T00:00:00Z'
+                        ]
+                    ],
+                    'meta' => [
+                        'total' => 1,
+                        'current_page' => 1,
+                        'per_page' => 20,
+                        'last_page' => 1
+                    ]
+                ]);
+
+            // Mock searchImagesByYear method
+            $mock->shouldReceive('searchImagesByYear')
+                ->andReturn([
+                    'data' => [
+                        [
+                            'id' => '12345',
+                            'title' => 'Test Image 2020',
+                            'snippet' => 'Test image from 2020',
+                            'timestamp' => '2020-01-01T00:00:00Z'
+                        ]
+                    ],
+                    'meta' => [
+                        'total' => 1,
+                        'current_page' => 1,
+                        'per_page' => 20,
+                        'last_page' => 1
+                    ]
+                ]);
+
+            // Mock getImage method
+            $mock->shouldReceive('getImage')
+                ->with('12345')
+                ->andReturn([
+                    'id' => '12345',
+                    'title' => 'Test Image',
+                    'url' => 'https://example.com/test-image.jpg',
+                    'description_url' => 'https://commons.wikimedia.org/wiki/File:Test_Image.jpg',
+                    'width' => 800,
+                    'height' => 600,
+                    'size' => 1024000,
+                    'mime' => 'image/jpeg',
+                    'timestamp' => '2020-01-01T00:00:00Z',
+                    'user' => 'TestUser',
+                    'comment' => 'Test image upload',
+                    'description' => 'A test image for Wikimedia Commons',
+                    'metadata' => [
+                        'date' => '2020-01-01',
+                        'license' => 'CC BY-SA 4.0',
+                        'categories' => ['Test Category'],
+                        'depicts' => ['Test Subject'],
+                        'location' => 'Test Location'
+                    ]
+                ]);
+
+            // Mock clearCache method
+            $mock->shouldReceive('clearCache')
+                ->andReturn(true);
+        });
     }
 
     /** @test */
@@ -156,7 +226,8 @@ class WikimediaCommonsImportTest extends TestCase
             'owner_id' => $this->adminUser->id,
             'updater_id' => $this->adminUser->id,
             'access_level' => 'public',
-            'state' => 'complete'
+            'state' => 'complete',
+            'start_year' => 1990
         ]);
 
         $response = $this->actingAs($this->adminUser)
@@ -231,7 +302,8 @@ class WikimediaCommonsImportTest extends TestCase
             'owner_id' => $this->adminUser->id,
             'updater_id' => $this->adminUser->id,
             'access_level' => 'public',
-            'state' => 'complete'
+            'state' => 'complete',
+            'start_year' => 1990
         ]);
 
         // First import with connection
@@ -251,7 +323,7 @@ class WikimediaCommonsImportTest extends TestCase
         $response->assertStatus(200);
         
         // Should not create duplicate connections
-        $connections = \App\Models\Connection::where('type_id', 'subject_of')
+        $connections = \App\Models\Connection::where('type_id', 'features')
             ->where('child_id', $targetSpan->id)
             ->get();
             

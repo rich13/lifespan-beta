@@ -207,13 +207,13 @@ class FlickrImportControllerTest extends TestCase
             'type_id' => 'connection',
             'owner_id' => $this->user->id,
             'updater_id' => $this->user->id,
-            'metadata' => ['connection_type' => 'subject_of'],
+            'metadata' => ['connection_type' => 'features'],
         ]);
 
         Connection::create([
             'parent_id' => $existingPhoto->id,
             'child_id' => $oldSubjectSpan->id,
-            'type_id' => 'subject_of',
+            'type_id' => 'features',
             'connection_span_id' => $connectionSpan->id,
         ]);
 
@@ -252,14 +252,14 @@ class FlickrImportControllerTest extends TestCase
         // Check that old connection was removed
         $oldConnection = Connection::where('parent_id', $existingPhoto->id)
             ->where('child_id', $oldSubjectSpan->id)
-            ->where('type_id', 'subject_of')
+            ->where('type_id', 'features')
             ->first();
         $this->assertNull($oldConnection);
 
         // Check that new connection was created
         $newConnection = Connection::where('parent_id', $existingPhoto->id)
             ->where('child_id', $subjectSpan->id)
-            ->where('type_id', 'subject_of')
+            ->where('type_id', 'features')
             ->first();
         $this->assertNotNull($newConnection);
     }

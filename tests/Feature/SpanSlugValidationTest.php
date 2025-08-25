@@ -66,9 +66,8 @@ class SpanSlugValidationTest extends TestCase
         ]);
 
         $response->assertSessionHasErrors(['slug']);
-        $errorMessage = session('errors')->first('slug');
-        $this->assertStringContainsString('conflicts with a reserved route name', $errorMessage);
-        $this->assertStringContainsString('shared-with-me', $errorMessage);
+        $this->assertStringContainsString('conflicts with a reserved route name', $response->getSession()->get('errors')->first('slug'));
+        $this->assertStringContainsString('shared-with-me', $response->getSession()->get('errors')->first('slug'));
     }
 
     /** @test */
@@ -92,9 +91,8 @@ class SpanSlugValidationTest extends TestCase
             ]);
 
             $response->assertSessionHasErrors(['slug']);
-            $errorMessage = session('errors')->first('slug');
-            $this->assertStringContainsString('conflicts with a reserved route name', $errorMessage);
-            $this->assertStringContainsString($slug, $errorMessage);
+            $this->assertStringContainsString('conflicts with a reserved route name', $response->getSession()->get('errors')->first('slug'));
+            $this->assertStringContainsString($slug, $response->getSession()->get('errors')->first('slug'));
         }
     }
 
@@ -154,9 +152,8 @@ class SpanSlugValidationTest extends TestCase
         ]);
 
         $response->assertSessionHasErrors(['slug']);
-        $errorMessage = session('errors')->first('slug');
-        $this->assertStringContainsString('conflicts with a reserved route name', $errorMessage);
-        $this->assertStringContainsString('shared-with-me', $errorMessage);
+        $this->assertStringContainsString('conflicts with a reserved route name', $response->getSession()->get('errors')->first('slug'));
+        $this->assertStringContainsString('shared-with-me', $response->getSession()->get('errors')->first('slug'));
     }
 
     /** @test */
@@ -171,8 +168,7 @@ class SpanSlugValidationTest extends TestCase
         ]);
 
         $response->assertSessionHasErrors(['slug']);
-        $errorMessage = session('errors')->first('slug');
-        $this->assertStringContainsString('conflicts with a reserved route name', $errorMessage);
-        $this->assertStringContainsString('shared-with-me', $errorMessage);
+        $this->assertStringContainsString('conflicts with a reserved route name', $response->getSession()->get('errors')->first('slug'));
+        $this->assertStringContainsString('shared-with-me', $response->getSession()->get('errors')->first('slug'));
     }
 } 

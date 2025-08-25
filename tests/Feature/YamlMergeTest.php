@@ -58,6 +58,9 @@ sources:
         // Store YAML content in session
         session(['yaml_content' => $yamlContent]);
 
+        // Debug: Verify session data is set
+        $this->assertEquals($yamlContent, session('yaml_content'), 'Session data should be set');
+
         // Debug: Check if the span exists in the database
         $span = Span::find($existingSpan->id);
         if (!$span) {
@@ -66,6 +69,12 @@ sources:
         
         // Debug: Check if the user has permission to update the span
         $this->assertTrue($user->can('update', $span), 'User should have update permission for the span. Span owner: ' . $span->owner_id . ', Current user: ' . $user->id);
+        
+        // Debug: Test findExistingSpan directly
+        $yamlService = app(\App\Services\YamlSpanService::class);
+        $foundSpan = $yamlService->findExistingSpan('John Doe', 'person');
+        $this->assertNotNull($foundSpan, 'findExistingSpan should find the span');
+        $this->assertEquals($existingSpan->id, $foundSpan->id, 'Found span should match the created span');
         
         // Access the YAML editor
         $response = $this->get('/spans/editor/new');
