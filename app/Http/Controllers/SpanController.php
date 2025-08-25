@@ -40,8 +40,8 @@ class SpanController extends Controller
      */
     public function __construct(YamlSpanService $yamlService, RouteReservationService $routeReservationService)
     {
-        // Require auth for all routes except show, index, search, desertIslandDiscs, connectionTypes, connectionsByType, showConnection, and listConnections
-        $this->middleware('auth')->except(['show', 'index', 'search', 'desertIslandDiscs', 'connectionTypes', 'connectionsByType', 'showConnection', 'listConnections']);
+        // Require auth for all routes except show, index, search, explore, desertIslandDiscs, explorePlaques, connectionTypes, connectionsByType, showConnection, and listConnections
+        $this->middleware('auth')->except(['show', 'index', 'search', 'explore', 'desertIslandDiscs', 'explorePlaques', 'connectionTypes', 'connectionsByType', 'showConnection', 'listConnections']);
         $this->yamlService = $yamlService;
         $this->routeReservationService = $routeReservationService;
     }
@@ -2307,6 +2307,14 @@ class SpanController extends Controller
     }
 
     /**
+     * Display the explore showcase page.
+     */
+    public function explore(Request $request): View
+    {
+        return view('explore.index');
+    }
+
+    /**
      * Display all Desert Island Discs sets.
      */
     public function desertIslandDiscs(Request $request): View
@@ -2364,6 +2372,75 @@ class SpanController extends Controller
 
         return view('desert-island-discs.index', compact('sets'));
     }
+
+    /**
+     * Display all plaques on a map.
+     */
+    public function explorePlaques(Request $request): View
+    {
+        // Get all plaque spans
+        $query = Span::query()
+            ->where('type_id', 'thing')
+            ->whereJsonContains('metadata->subtype', 'plaque')
+            ->orderBy('name');
+
+        // Apply access filtering
+        if (!Auth::check()) {
+            $query->where('access_level', 'public');
+        } else {
+            $user = Auth::user();
+            if (!$user->is_admin) {
+                $query->where(function ($query) use ($user) {
+                    $query->where('access_level', 'public')
+                        ->orWhere('owner_id', $user->id)
+                        ->orWhere(function ($query) use ($user) {
+                            $query->where('access_level', 'shared')
+                                ->whereExists(function ($subquery) use ($user) {
+                                    $subquery->select('id')
+                                        ->from('span_permissions')
+                                        ->whereColumn('span_permissions.span_id', 'spans.id')
+                                        ->where('span_permissions.user_id', $user->id);
+                                });
+                        });
+                });
+            }
+        }
+
+        $plaques = $query->get();
+
+        // Get location data for each plaque
+        $plaquesWithLocations = [];
+        foreach ($plaques as $plaque) {
+            // Find the location connection for this plaque
+            $locationConnection = Connection::where('type_id', 'located')
+                ->where('parent_id', $plaque->id)
+                ->with(['child'])
+                ->first();
+
+            if ($locationConnection && $locationConnection->child) {
+                $location = $locationConnection->child;
+                $metadata = $location->metadata ?? [];
+                
+                // Check if location has coordinates
+                $coordinates = $metadata['coordinates'] ?? null;
+                if ($coordinates && isset($coordinates['latitude']) && isset($coordinates['longitude'])) {
+                    $plaquesWithLocations[] = [
+                        'plaque' => $plaque,
+                        'location' => $location,
+                        'latitude' => (float) $coordinates['latitude'],
+                        'longitude' => (float) $coordinates['longitude'],
+                        'name' => $plaque->name,
+                        'description' => $plaque->description,
+                        'url' => route('spans.show', $plaque)
+                    ];
+                }
+            }
+        }
+
+        return view('plaques.index', compact('plaquesWithLocations'));
+    }
+
+
 
     /**
      * Display all connection types for a span.

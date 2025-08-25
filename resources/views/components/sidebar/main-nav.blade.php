@@ -22,34 +22,21 @@
             </a>
         </li>
     @endif
-    <li class="nav-item">
-        <a class="nav-link {{ request()->routeIs('spans.index') ? 'active' : '' }}" href="{{ route('spans.index') }}">
-            <i class="bi bi-bar-chart-steps me-1"></i> <span>Spans</span>
-        </a>
-    </li>
+
     <li class="nav-item">
         <a class="nav-link {{ request()->routeIs('spans.shared-with-me') ? 'active' : '' }}" href="{{ route('spans.shared-with-me') }}">
             <i class="bi bi-share me-1"></i> <span>Shared</span>
         </a>
     </li>
-    <li class="nav-item">
-        <a class="nav-link {{ request()->routeIs('spans.types') ? 'active' : '' }}" href="{{ route('spans.types') }}">
-            <i class="bi bi-collection me-1"></i> <span>Types</span>
-        </a>
-    </li>
-    <li class="nav-item">
-                        <a class="nav-link {{ request()->routeIs('family.*') ? 'active' : '' }}" href="{{ auth()->user()->personalSpan ? route('family.show', auth()->user()->personalSpan) : route('family.index') }}">
-            <i class="bi bi-people-fill me-1"></i> <span>Family</span>
-        </a>
-    </li>
+        
     <li class="nav-item">
         <a class="nav-link {{ request()->routeIs('sets.*') ? 'active' : '' }}" href="{{ route('sets.index') }}">
             <i class="bi bi-archive me-1"></i> <span>Sets</span>
         </a>
     </li>
     <li class="nav-item">
-        <a class="nav-link {{ request()->routeIs('desert-island-discs.*') ? 'active' : '' }}" href="{{ route('desert-island-discs.index') }}">
-            <i class="bi bi-vinyl-fill me-1"></i> <span>Desert Island Discs</span>
+        <a class="nav-link {{ request()->routeIs('explore.*') ? 'active' : '' }}" href="{{ route('explore.index') }}">
+            <i class="bi bi-compass me-1"></i> <span>Explore</span>
         </a>
     </li>
 

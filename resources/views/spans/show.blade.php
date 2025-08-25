@@ -166,6 +166,9 @@
                 <!-- Place Map Card -->
                 <x-spans.cards.place-map-card :span="$span" />
                 
+                <!-- Location Card -->
+                <x-spans.cards.location-card :span="$span" />
+                
                 <!-- Band Discography Card -->
                 @if($span->type_id === 'band')
                     @includeIf('components.spans.cards.band-discography', ['span' => $span])
