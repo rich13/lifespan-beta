@@ -278,7 +278,7 @@
             })
             .then(response => response.json())
             .then(data => {
-                displaySearchResults(data.spans || [], searchTerm, input, connectionType);
+                displaySearchResults(data || [], searchTerm, input, connectionType);
             })
             .catch(error => {
                 console.error('Search error:', error);
@@ -683,18 +683,85 @@
                     
                     $hasAnyConnections = ($userConnectionsAsSubject + $userConnectionsAsObject) > 0;
                 }
+                
+                // Check if we should show completion modal (all questions answered but haven't seen modal)
+                $shouldShowCompletionModal = false;
+                if ($personalSpan && $hasAnyConnections) {
+                    // Define the questions that should be answered
+                    $questions = [
+                        'residence' => [
+                            'Where were you born?',
+                            'Where do you currently live?'
+                        ],
+                        'education' => [
+                            'What primary school did you go to?',
+                            'What secondary school did you go to?'
+                        ],
+                        'family' => [
+                            'What\'s your mother\'s name?',
+                            'What\'s your father\'s name?'
+                        ]
+                    ];
+                    
+                    // Calculate total questions and answered questions
+                    $totalQuestions = 0;
+                    $answeredQuestions = 0;
+                    $connectionsByType = collect();
+                    
+                    if ($personalSpan) {
+                        $userConnectionsAsSubject = $personalSpan->connectionsAsSubject()
+                            ->whereNotNull('connection_span_id')
+                            ->whereHas('connectionSpan', function($query) {
+                                $query->whereNotNull('start_year');
+                            })
+                            ->where('child_id', '!=', $personalSpan->id)
+                            ->with(['connectionSpan', 'child', 'type'])
+                            ->get();
+
+                        $userConnectionsAsObject = $personalSpan->connectionsAsObject()
+                            ->whereNotNull('connection_span_id')
+                            ->whereHas('connectionSpan', function($query) {
+                                $query->whereNotNull('start_year');
+                            })
+                            ->where('parent_id', '!=', $personalSpan->id)
+                            ->with(['connectionSpan', 'parent', 'type'])
+                            ->get();
+
+                        $allUserConnections = $userConnectionsAsSubject->concat($userConnectionsAsObject);
+                        $connectionsByType = $allUserConnections->groupBy('type_id');
+                    }
+                    
+                    foreach ($questions as $type => $typeQuestions) {
+                        $totalQuestions += count($typeQuestions);
+                        $currentCount = $connectionsByType->get($type, collect())->count();
+                        $answeredQuestions += min($currentCount, count($typeQuestions));
+                    }
+                    
+                    // Check if all questions are answered
+                    $allQuestionsAnswered = $answeredQuestions >= $totalQuestions;
+                    
+                    // Check if completion modal has been seen (we'll check localStorage in JavaScript)
+                    $shouldShowCompletionModal = $allQuestionsAnswered;
+                    
+                    echo "<!-- Debug: totalQuestions = $totalQuestions, answeredQuestions = $answeredQuestions, allQuestionsAnswered = " . ($allQuestionsAnswered ? 'true' : 'false') . ", shouldShowCompletionModal = " . ($shouldShowCompletionModal ? 'true' : 'false') . " -->";
+                }
             @endphp
 
             <script>
                 document.addEventListener('DOMContentLoaded', function() {
                     const hasAnyConnections = {{ $hasAnyConnections ? 'true' : 'false' }};
-                    const hasSeenWelcomeModal = localStorage.getItem('hasSeenWelcomeModal') === 'true';
+                    const userId = '{{ auth()->user()->id }}';
+                    const welcomeModalKey = `hasSeenWelcomeModal_${userId}`;
+                    const hasSeenWelcomeModal = localStorage.getItem(welcomeModalKey) === 'true';
                     const shouldShowWelcomeModal = !hasAnyConnections && !hasSeenWelcomeModal;
                     
                     console.log('Welcome modal check:', {
                         hasAnyConnections: hasAnyConnections,
+                        userId: userId,
+                        welcomeModalKey: welcomeModalKey,
                         hasSeenWelcomeModal: hasSeenWelcomeModal,
-                        shouldShowWelcomeModal: shouldShowWelcomeModal
+                        shouldShowWelcomeModal: shouldShowWelcomeModal,
+                        localStorageValue: localStorage.getItem(welcomeModalKey)
                     });
                     
                     if (shouldShowWelcomeModal) {
@@ -705,7 +772,7 @@
                             
                             // Set the flag only when the modal is dismissed
                             modalElement.addEventListener('hidden.bs.modal', function() {
-                                localStorage.setItem('hasSeenWelcomeModal', 'true');
+                                localStorage.setItem(welcomeModalKey, 'true');
                                 console.log('Welcome modal dismissed and flag set');
                             });
                             
@@ -714,6 +781,49 @@
                         }
                     } else {
                         console.log('Not showing welcome modal');
+                    }
+                    
+                    // Check if we should show completion modal
+                    const shouldShowCompletionModal = {{ $shouldShowCompletionModal ? 'true' : 'false' }};
+                    const completionModalKey = `hasSeenCompletionModal_${userId}`;
+                    const hasSeenCompletionModal = localStorage.getItem(completionModalKey) === 'true';
+                    
+                    console.log('Completion modal check:', {
+                        shouldShowCompletionModal: shouldShowCompletionModal,
+                        hasSeenCompletionModal: hasSeenCompletionModal,
+                        completionModalKey: completionModalKey
+                    });
+                    
+                    if (shouldShowCompletionModal && !hasSeenCompletionModal) {
+                        console.log('Showing completion modal');
+                        const modalElement = document.getElementById('completionModal');
+                        console.log('Modal element found:', modalElement);
+                        
+                        if (modalElement) {
+                            const modal = new bootstrap.Modal(modalElement);
+                            console.log('Bootstrap modal created:', modal);
+                            
+                            // Set the flag and redirect when the modal is dismissed
+                            modalElement.addEventListener('hidden.bs.modal', function() {
+                                localStorage.setItem(completionModalKey, 'true');
+                                console.log('Completion modal dismissed and flag set');
+                                
+                                // Redirect to user's personal span
+                                const personalSpanUrl = '{{ route("spans.show", auth()->user()->personalSpan) }}';
+                                console.log('Redirecting to personal span:', personalSpanUrl);
+                                window.location.href = personalSpanUrl;
+                            });
+                            
+                            // Add a small delay to ensure everything is ready
+                            setTimeout(() => {
+                                modal.show();
+                                console.log('Completion modal show() called');
+                            }, 100);
+                        } else {
+                            console.error('Completion modal element not found!');
+                        }
+                    } else {
+                        console.log('Not showing completion modal');
                     }
                 });
             </script>
@@ -930,6 +1040,39 @@
     </div>
 </div>
 
-
+<!-- Completion Modal -->
+<div class="modal fade" id="completionModal" tabindex="-1" aria-labelledby="completionModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="completionModalLabel">
+                    <i class="bi bi-check-circle-fill me-2"></i>
+                    OK, that worked!
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-3">
+                    You've now got a span, and some placeholders.
+                </p>
+                <p class="mb-0">
+                    You can now:
+                </p>
+                <ul class="mb-3">
+                    <li>Explore generally...</li>
+                    <li>Add more connections...</li>
+                    <li>Edit the placeholders you just created...</li>
+                    <li>...and dismiss this message <i class="bi bi-emoji-smile"></i></li>
+                </ul>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-success" data-bs-dismiss="modal">
+                    <i class="bi bi-check me-1"></i>
+                    Go to your span...
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
 @endsection 

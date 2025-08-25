@@ -3,6 +3,7 @@
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SpanController;
 use App\Http\Controllers\FamilyController;
+use App\Http\Controllers\JourneyController;
 use App\Http\Controllers\Auth\EmailFirstAuthController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\SpanController as AdminSpanController;
@@ -146,8 +147,16 @@ Route::middleware('web')->group(function () {
         return view('home');
     })->name('home');
 
-    // Desert Island Discs route
-    Route::get('/desert-island-discs', [SpanController::class, 'desertIslandDiscs'])->name('desert-island-discs.index');
+    // Explore routes
+    Route::prefix('explore')->group(function () {
+        Route::get('/', [SpanController::class, 'explore'])->name('explore.index');
+        Route::get('/desert-island-discs', [SpanController::class, 'desertIslandDiscs'])->name('explore.desert-island-discs');
+        Route::get('/plaques', [SpanController::class, 'explorePlaques'])->name('explore.plaques');
+        Route::get('/family', [SpanController::class, 'exploreFamily'])->name('explore.family');
+        Route::get('/journeys', [JourneyController::class, 'index'])->name('explore.journeys');
+        Route::post('/journeys/discover', [JourneyController::class, 'discover'])->name('explore.journeys.discover');
+        Route::get('/journeys/random', [JourneyController::class, 'random'])->name('explore.journeys.random');
+    });
 
     // Date exploration route - supports YYYY, YYYY-MM, and YYYY-MM-DD formats
     Route::get('/date/{date}', [SpanController::class, 'exploreDate'])
@@ -258,7 +267,7 @@ Route::middleware('web')->group(function () {
                     'owner_id' => auth()->id(),
                     'updater_id' => auth()->id(),
                     'access_level' => 'private',
-                    'state' => $validated['is_placeholder'] ? 'placeholder' : 'normal'
+                    'state' => 'placeholder'
                 ];
                 
                 // Add start date fields if provided
@@ -273,11 +282,24 @@ Route::middleware('web')->group(function () {
                 
                 $connectionSpan = \App\Models\Span::create($connectionSpanData);
                 
+                // Check for existing connection to prevent duplicates
+                $existingConnection = \App\Models\Connection::where('parent_id', $validated['parent_id'])
+                    ->where('child_id', $validated['child_id'])
+                    ->where('type_id', $validated['type_id'])
+                    ->first();
+                
+                if ($existingConnection) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'A connection of this type already exists between these spans'
+                    ], 422);
+                }
+                
                 // Create the connection
                 $connection = \App\Models\Connection::create([
-                    'parent_id' => $validated['subject_id'],
-                    'child_id' => $validated['object_id'],
-                    'type_id' => $validated['predicate'],
+                    'parent_id' => $validated['parent_id'],
+                    'child_id' => $validated['child_id'],
+                    'type_id' => $validated['type_id'],
                     'connection_span_id' => $connectionSpan->id
                 ]);
                 
@@ -298,7 +320,7 @@ Route::middleware('web')->group(function () {
                 $user = auth()->user();
                 
                 $spansQuery = \App\Models\Span::query()
-                    ->where('name', 'like', "%{$query}%")
+                    ->where('name', 'ilike', "%{$query}%")
                     ->where('type_id', '!=', 'connection');
                 
                 // Apply access control
@@ -338,7 +360,13 @@ Route::middleware('web')->group(function () {
                 
                 $spans = $spansQuery->limit(10)->get(['id', 'name', 'type_id', 'start_year']);
                 
-                return response()->json($spans);
+                // Add type_name to each span
+                $spansWithTypeName = $spans->map(function($span) {
+                    $span->type_name = ucfirst($span->type_id);
+                    return $span;
+                });
+                
+                return response()->json($spansWithTypeName);
             });
 
             // New connection creation endpoint
@@ -734,6 +762,24 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
                         ->name('import');
                     Route::post('/clear-cache', [App\Http\Controllers\Admin\ScienceMuseumGroupImportController::class, 'clearCache'])
                         ->name('clear-cache');
+                });
+                
+                // Blue Plaque Import
+                Route::prefix('blue-plaques')->name('blue-plaques.')->group(function () {
+                    Route::get('/', [App\Http\Controllers\Admin\BluePlaqueImportController::class, 'index'])
+                        ->name('index');
+                    Route::post('/preview', [App\Http\Controllers\Admin\BluePlaqueImportController::class, 'preview'])
+                        ->name('preview');
+                                    Route::post('/validate-single', [App\Http\Controllers\Admin\BluePlaqueImportController::class, 'validateSingle'])
+                    ->name('validate-single');
+                Route::post('/process-single', [App\Http\Controllers\Admin\BluePlaqueImportController::class, 'processSingle'])
+                    ->name('process-single');
+                Route::post('/process-batch', [App\Http\Controllers\Admin\BluePlaqueImportController::class, 'processBatch'])
+                    ->name('process-batch');
+                    Route::post('/process-all', [App\Http\Controllers\Admin\BluePlaqueImportController::class, 'processAll'])
+                        ->name('process-all');
+                    Route::get('/stats', [App\Http\Controllers\Admin\BluePlaqueImportController::class, 'stats'])
+                        ->name('stats');
                 });
                 
                 // Wikimedia Commons Import

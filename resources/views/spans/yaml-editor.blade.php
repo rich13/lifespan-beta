@@ -1795,7 +1795,7 @@ ${currentConnectionType}:
         console.log('Search URL:', `/api/spans/search?${searchParams.toString()}`);
         
         // Make AJAX request to search for spans
-        fetch(`/spans/search?${searchParams.toString()}`, {
+                    fetch(`/spans/api/spans/search?${searchParams.toString()}`, {
             headers: {
                 'Accept': 'application/json',
                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
@@ -1807,7 +1807,7 @@ ${currentConnectionType}:
         })
         .then(data => {
             console.log('Search response data:', data);
-            displaySearchResults(data.spans || [], searchTerm);
+            displaySearchResults(data || [], searchTerm);
         })
         .catch(error => {
             console.error('Search error:', error);

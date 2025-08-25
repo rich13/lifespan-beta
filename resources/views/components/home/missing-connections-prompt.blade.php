@@ -33,15 +33,6 @@
     // Check if this is the first time showing the component (no connections yet)
     $hasAnyConnections = $allUserConnections->count() > 0;
     
-    // Check if we should show completion modal (exactly 8 connections and haven't shown it yet)
-    $totalConnections = $allUserConnections->count();
-    $hasSeenCompletionModal = session('has_seen_completion_modal', false);
-    $shouldShowCompletionModal = $totalConnections === 8 && !$hasSeenCompletionModal;
-    
-    if ($shouldShowCompletionModal) {
-        session(['has_seen_completion_modal' => true]);
-    }
-    
     // Check which types need more connections (less than 2)
     $missingTypes = [];
     $targetTypes = ['residence', 'education', 'family'];
@@ -62,20 +53,26 @@
     $questions = [
         'residence' => [
             'Where were you born?',
-            'Where do you currently live?',
-            'Where have you lived?'
+            'Where do you currently live?'
         ],
         'education' => [
-            'Where did you go to primary school?',
-            'Where did you go to secondary school?',
-            'Where did you study next?',
+            'What primary school did you go to?',
+            'What secondary school did you go to?'
         ],
         'family' => [
             'What\'s your mother\'s name?',
             'What\'s your father\'s name?'
-      
         ]
     ];
+    
+    // Calculate total questions and answered questions for completion modal logic
+    $totalQuestions = 0;
+    $answeredQuestions = 0;
+    foreach ($questions as $type => $typeQuestions) {
+        $totalQuestions += count($typeQuestions);
+        $currentCount = $connectionsByType->get($type, collect())->count();
+        $answeredQuestions += min($currentCount, count($typeQuestions));
+    }
     
     // Flatten all questions into a single array with type info
     $allQuestions = [];
@@ -162,6 +159,24 @@
                 $type = $nextQuestion['type'];
                 $question = $nextQuestion['question'];
                 $connectionType = \App\Models\ConnectionType::where('type', $type)->first();
+                
+                // Define explanations for each question type
+                $explanations = [
+                    'residence' => [
+                        'Where were you born?' => 'This will create a "residence" connection starting on your date of birth.',
+                        'Where do you currently live?' => 'This will create a "residence" connection starting from when you moved there.'
+                    ],
+                    'education' => [
+                        'What primary school did you go to?' => 'This will create an "education" connection starting when you began primary school.',
+                        'What secondary school did you go to?' => 'This will create an "education" connection starting when you began secondary school.'
+                    ],
+                    'family' => [
+                        'What\'s your mother\'s name?' => 'This will create a "family" connection to your mother.',
+                        'What\'s your father\'s name?' => 'This will create a "family" connection to your father.'
+                    ]
+                ];
+                
+                $explanation = $explanations[$type][$question] ?? 'This will create a connection to help you get started.';
             @endphp
                 
                 <div class="mb-3">
@@ -199,6 +214,14 @@
                                 </button>
                             </div>
                         </div>
+                    </div>
+                    
+                    <!-- Explanation text -->
+                    <div class="mt-2">
+                        <small class="text-muted">
+                            <i class="bi bi-info-circle me-1"></i>
+                            {{ $explanation }}
+                        </small>
                     </div>
                 </div>
         </div>
@@ -306,6 +329,50 @@ $(document).ready(function() {
         }
     });
     
+    // Function to estimate primary school start date
+    function estimatePrimarySchoolStart(birthYear, birthMonth, birthDay) {
+        if (!birthYear || birthYear === '0') return null;
+        
+        const yearOfBirth = parseInt(birthYear);
+        const monthOfBirth = birthMonth && birthMonth !== '0' ? parseInt(birthMonth) : 1;
+        
+        // If birthday is between Sept 1 and Dec 31, start school the following year
+        let startYear;
+        if (monthOfBirth >= 9) {
+            startYear = yearOfBirth + 5;
+        } else {
+            startYear = yearOfBirth + 4;
+        }
+        
+        return {
+            start_year: startYear,
+            start_month: 9,
+            start_day: 1
+        };
+    }
+    
+    // Function to estimate secondary school start date
+    function estimateSecondarySchoolStart(birthYear, birthMonth, birthDay) {
+        if (!birthYear || birthYear === '0') return null;
+        
+        const yearOfBirth = parseInt(birthYear);
+        const monthOfBirth = birthMonth && birthMonth !== '0' ? parseInt(birthMonth) : 1;
+        
+        // If birthday is Sept–Dec, start school the following year
+        let startYear;
+        if (monthOfBirth >= 9) {
+            startYear = yearOfBirth + 12;
+        } else {
+            startYear = yearOfBirth + 11;
+        }
+        
+        return {
+            start_year: startYear,
+            start_month: 9,
+            start_day: 1
+        };
+    }
+    
     // Handle submit button clicks
     $(document).on('click', '.submit-answer', function() {
         const button = $(this);
@@ -325,14 +392,14 @@ $(document).ready(function() {
             return;
         }
         
+        // Get birth date data
+        const birthYear = button.data('birth-year');
+        const birthMonth = button.data('birth-month');
+        const birthDay = button.data('birth-day');
+        
         // Check if this is a question that should use birth date automatically
         if (question === 'Where were you born?' || question === 'What\'s your mother\'s name?' || question === 'What\'s your father\'s name?') {
             // Use the person's birth date automatically
-            const birthYear = button.data('birth-year');
-            const birthMonth = button.data('birth-month');
-            const birthDay = button.data('birth-day');
-            
-            // Only create dateData if there's actually a birth year
             let dateData = null;
             if (birthYear && birthYear.toString().trim() !== '' && birthYear !== '0') {
                 dateData = {
@@ -343,6 +410,30 @@ $(document).ready(function() {
             }
             
             // Create connection with birth date
+            createConnectionWithNewSpan(searchTerm, getAllowedSpanTypes(connectionType)[0], {
+                data: function(key) {
+                    if (key === 'span-id') return parentSpanId;
+                    if (key === 'age') return age;
+                    return null;
+                }
+            }, connectionType, dateData, question);
+        } else if (question === 'What primary school did you go to?') {
+            // Use estimated primary school start date
+            const dateData = estimatePrimarySchoolStart(birthYear, birthMonth, birthDay);
+            
+            // Create connection with estimated primary school start date
+            createConnectionWithNewSpan(searchTerm, getAllowedSpanTypes(connectionType)[0], {
+                data: function(key) {
+                    if (key === 'span-id') return parentSpanId;
+                    if (key === 'age') return age;
+                    return null;
+                }
+            }, connectionType, dateData, question);
+        } else if (question === 'What secondary school did you go to?') {
+            // Use estimated secondary school start date
+            const dateData = estimateSecondarySchoolStart(birthYear, birthMonth, birthDay);
+            
+            // Create connection with estimated secondary school start date
             createConnectionWithNewSpan(searchTerm, getAllowedSpanTypes(connectionType)[0], {
                 data: function(key) {
                     if (key === 'span-id') return parentSpanId;
@@ -382,7 +473,7 @@ $(document).ready(function() {
             types: allowedTypes.join(',')
         });
         
-        const searchUrl = `/spans/search?${searchParams.toString()}`;
+        const searchUrl = `/spans/api/spans/search?${searchParams.toString()}`;
         
         fetch(searchUrl, {
             headers: {
@@ -392,7 +483,7 @@ $(document).ready(function() {
         })
         .then(response => response.json())
         .then(data => {
-            displaySearchResults(data.spans || [], searchTerm, input, connectionType);
+            displaySearchResults(data || [], searchTerm, input, connectionType);
         })
         .catch(error => {
             console.error('Search error:', error);
@@ -471,6 +562,14 @@ $(document).ready(function() {
     }
     
     function createConnectionWithExistingSpan(spanId, spanName, spanType, input, connectionType, dateData = null, question = null) {
+        // Prevent duplicate submissions
+        if (window.isCreatingConnection) {
+            console.log('Connection creation already in progress, ignoring duplicate request');
+            return;
+        }
+        
+        window.isCreatingConnection = true;
+        
         const parentSpanId = input.data('span-id');
         const age = input.data('age');
         
@@ -492,6 +591,8 @@ $(document).ready(function() {
             if (dateData.start_day) connectionData.start_day = parseInt(dateData.start_day);
         }
         
+        console.log('Creating connection:', connectionData);
+        
         fetch('/spans/api/connections', {
             method: 'POST',
             headers: {
@@ -503,6 +604,7 @@ $(document).ready(function() {
         })
         .then(response => response.json())
         .then(data => {
+            window.isCreatingConnection = false;
             if (data.success) {
                 showFeedback('Connection created successfully!', 'success');
                 setTimeout(() => {
@@ -513,6 +615,7 @@ $(document).ready(function() {
             }
         })
         .catch(error => {
+            window.isCreatingConnection = false;
             console.error('Error creating connection:', error);
             showFeedback('Error creating connection', 'error');
         });
@@ -604,6 +707,14 @@ $(document).ready(function() {
             return;
         }
         
+        // Get estimated dates for education questions
+        let estimatedDate = null;
+        if (question === 'What primary school did you go to?') {
+            estimatedDate = estimatePrimarySchoolStart(input.data('birth-year'), input.data('birth-month'), input.data('birth-day'));
+        } else if (question === 'What secondary school did you go to?') {
+            estimatedDate = estimateSecondarySchoolStart(input.data('birth-year'), input.data('birth-month'), input.data('birth-day'));
+        }
+        
         // For other questions, show the date input form
         const previewHtml = `
             <div class="interactive-card-base">
@@ -620,30 +731,32 @@ $(document).ready(function() {
                     <label class="form-label small">When did this ${connectionType} start? <span class="text-danger">*</span></label>
                     <div class="row g-2">
                         <div class="col-4">
-                            <input type="number" class="form-control form-control-sm" id="start-year" placeholder="Year" min="1000" max="2100" required>
+                            <input type="number" class="form-control form-control-sm" id="start-year" placeholder="Year" min="1000" max="2100" required value="${estimatedDate ? estimatedDate.start_year : ''}">
                         </div>
                         <div class="col-4">
                             <select class="form-select form-select-sm" id="start-month">
                                 <option value="">Month (optional)</option>
-                                <option value="1">January</option>
-                                <option value="2">February</option>
-                                <option value="3">March</option>
-                                <option value="4">April</option>
-                                <option value="5">May</option>
-                                <option value="6">June</option>
-                                <option value="7">July</option>
-                                <option value="8">August</option>
-                                <option value="9">September</option>
-                                <option value="10">October</option>
-                                <option value="11">November</option>
-                                <option value="12">December</option>
+                                <option value="1" ${estimatedDate && estimatedDate.start_month === 1 ? 'selected' : ''}>January</option>
+                                <option value="2" ${estimatedDate && estimatedDate.start_month === 2 ? 'selected' : ''}>February</option>
+                                <option value="3" ${estimatedDate && estimatedDate.start_month === 3 ? 'selected' : ''}>March</option>
+                                <option value="4" ${estimatedDate && estimatedDate.start_month === 4 ? 'selected' : ''}>April</option>
+                                <option value="5" ${estimatedDate && estimatedDate.start_month === 5 ? 'selected' : ''}>May</option>
+                                <option value="6" ${estimatedDate && estimatedDate.start_month === 6 ? 'selected' : ''}>June</option>
+                                <option value="7" ${estimatedDate && estimatedDate.start_month === 7 ? 'selected' : ''}>July</option>
+                                <option value="8" ${estimatedDate && estimatedDate.start_month === 8 ? 'selected' : ''}>August</option>
+                                <option value="9" ${estimatedDate && estimatedDate.start_month === 9 ? 'selected' : ''}>September</option>
+                                <option value="10" ${estimatedDate && estimatedDate.start_month === 10 ? 'selected' : ''}>October</option>
+                                <option value="11" ${estimatedDate && estimatedDate.start_month === 11 ? 'selected' : ''}>November</option>
+                                <option value="12" ${estimatedDate && estimatedDate.start_month === 12 ? 'selected' : ''}>December</option>
                             </select>
                         </div>
                         <div class="col-4">
-                            <input type="number" class="form-control form-control-sm" id="start-day" placeholder="Day (optional)" min="1" max="31">
+                            <input type="number" class="form-control form-control-sm" id="start-day" placeholder="Day (optional)" min="1" max="31" value="${estimatedDate ? estimatedDate.start_day : ''}">
                         </div>
                     </div>
-                    <div class="form-text small">Just the year is fine, or year and month if you know it</div>
+                    <div class="form-text small">
+                        ${estimatedDate ? 'Estimated start date based on your birth date. You can adjust if needed.' : 'Just the year is fine, or year and month if you know it'}
+                    </div>
                 </div>
                 
                 <div class="btn-group btn-group-sm" role="group">
@@ -929,4 +1042,6 @@ $(document).ready(function() {
     window.cancelConnection = cancelConnection;
 });
 </script>
+
+
 @endpush 

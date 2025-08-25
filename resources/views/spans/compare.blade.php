@@ -138,7 +138,7 @@ $(document).ready(function() {
             types: allowedTypes.join(',')
         });
         
-        const searchUrl = `/spans/search?${searchParams.toString()}`;
+                    const searchUrl = `/spans/api/spans/search?${searchParams.toString()}`;
         console.log('Making search request to:', searchUrl);
         console.log('Search parameters:', {
             q: searchTerm,
@@ -158,7 +158,7 @@ $(document).ready(function() {
         })
         .then(data => {
             console.log('Search response data:', data);
-            displaySearchResults(data.spans || [], searchTerm, input, connectionType);
+            displaySearchResults(data || [], searchTerm, input, connectionType);
         })
         .catch(error => {
             console.error('Search error:', error);
@@ -224,7 +224,7 @@ $(document).ready(function() {
         console.log('Creating connection with existing span:', { spanId, spanName, spanType, parentSpanId, age, connectionType });
         
         // Create the connection via AJAX
-        fetch('/spans/api/connections', {
+                    fetch('/spans/api/connections', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -266,7 +266,7 @@ $(document).ready(function() {
         console.log('Creating connection with new span:', { spanName, spanType, parentSpanId, age, connectionType });
         
         // First create the new span, then create the connection
-        fetch('/spans/api/spans', {
+                    fetch('/spans/api/spans', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

@@ -23,7 +23,7 @@
         
         this.isSearching = true;
         try {
-            const response = await fetch(`/api/spans/search?q=${encodeURIComponent(this.searchQuery)}${this.spanType ? '&type=' + this.spanType : ''}`, {
+            const response = await fetch(`/spans/api/spans/search?q=${encodeURIComponent(this.searchQuery)}${this.spanType ? '&type=' + this.spanType : ''}`, {
                 credentials: 'same-origin',
                 headers: { 'Accept': 'application/json' }
             });
@@ -40,7 +40,7 @@
         if (!this.spanName.trim()) return;
         
         try {
-            const response = await fetch('/api/spans', {
+            const response = await fetch('/spans/api/spans', {
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: {
