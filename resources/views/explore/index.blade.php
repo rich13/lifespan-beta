@@ -2,16 +2,17 @@
 
 @section('title', 'Explore - Lifespan')
 
+@section('page_title')
+    <x-breadcrumb :items="[
+        [
+            'text' => 'Explore',
+            'icon' => 'view',
+            'icon_category' => 'action'
+        ]
+    ]" />
+@endsection
 @section('content')
 <div class="container py-4">
-    <div class="row">
-        <div class="col-12">
-            <div class="text-center mb-5">
-                <h1 class="display-4 mb-3">Explore</h1>
-                <p class="lead text-muted">Some ideas for exploring different sides of Lifespan</p>
-            </div>
-        </div>
-    </div>
 
     <div class="row g-4">
 
@@ -110,7 +111,7 @@
                         <i class="bi bi-arrow-right-circle display-4 text-warning"></i>
                     </div>
                     <h5 class="card-title">Journeys</h5>
-                    <p class="card-text">Discover fascinating connection paths between people through multiple degrees of separation.</p>
+                    <p class="card-text">Discover connection paths between people, a bit like "6 degrees of Kevin Bacon".</p>
                     <a href="{{ route('explore.journeys') }}" class="btn btn-warning">
                         <i class="bi bi-arrow-right me-2"></i>
                         Explore Journeys
@@ -141,5 +142,3 @@
 }
 </style>
 @endsection
-b
- oly

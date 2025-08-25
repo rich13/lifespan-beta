@@ -20,18 +20,6 @@
 
 @section('content')
 <div class="container-fluid">
-    <div class="row">
-        <div class="col-md-12 mb-4">
-            <div class="card">
-                <div class="card-body bg-warning-subtle">
-                    <div class="text-center py-3">
-                        <i class="bi bi-vinyl-fill text-muted mb-3" style="font-size: 3rem;"></i>
-                        <h3>This is a work in progress</h3>
-                        <p class="text-muted">And yes, everything is a span.</p>
-                    </div>
-                </div>
-            </div>
-        </div>
     
     @if($sets->isEmpty())
         <div class="card">
