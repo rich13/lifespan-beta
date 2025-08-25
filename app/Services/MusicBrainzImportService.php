@@ -1199,28 +1199,28 @@ class MusicBrainzImportService
     private function createBandMemberConnection(Span $band, Span $member, array $memberData, string $ownerId): void
     {
         // Check if connection already exists
-        $existingConnection = Connection::where('parent_id', $band->id)
-            ->where('child_id', $member->id)
-            ->where('type_id', 'has_role')
+        $existingConnection = Connection::where('parent_id', $member->id)
+            ->where('child_id', $band->id)
+            ->where('type_id', 'membership')
             ->first();
             
         if ($existingConnection) {
-            Log::info('Band-member connection already exists', [
-                'band_id' => $band->id,
-                'member_id' => $member->id,
-                'connection_id' => $existingConnection->id
-            ]);
+                    Log::info('Band-member connection already exists', [
+            'member_id' => $member->id,
+            'band_id' => $band->id,
+            'connection_id' => $existingConnection->id
+        ]);
             return;
         }
         
         // Create connection span
         $connectionData = [
-            'name' => "{$band->name} has member {$member->name}",
+            'name' => "{$member->name} is member of {$band->name}",
             'type_id' => 'connection',
             'state' => 'placeholder',
             'access_level' => 'private',
             'metadata' => [
-                'connection_type' => 'has_role',
+                'connection_type' => 'membership',
                 'member_role' => 'member'
             ],
             'owner_id' => $ownerId,
@@ -1273,15 +1273,15 @@ class MusicBrainzImportService
         
         // Create the connection
         Connection::create([
-            'parent_id' => $band->id,
-            'child_id' => $member->id,
-            'type_id' => 'has_role',
+            'parent_id' => $member->id,
+            'child_id' => $band->id,
+            'type_id' => 'membership',
             'connection_span_id' => $connectionSpan->id
         ]);
         
         Log::info('Created band-member connection', [
-            'band_id' => $band->id,
             'member_id' => $member->id,
+            'band_id' => $band->id,
             'connection_span_id' => $connectionSpan->id,
             'has_dates' => !empty($connectionSpan->start_year) || !empty($connectionSpan->end_year)
         ]);
