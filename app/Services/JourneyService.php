@@ -152,7 +152,7 @@ class JourneyService
             }
 
             // Explore connections from this span
-            $this->exploreConnections($span, $path, $connections, $degrees, $queue, $visited);
+            $this->exploreConnections($span, $path, $connections, $degrees, $queue, $visited, true);
         }
 
         \Log::info('Journey search complete', [
@@ -168,13 +168,18 @@ class JourneyService
     /**
      * Explore all connections from a span
      */
-    private function exploreConnections(Span $span, array $path, array $connections, int $degrees, Collection $queue, Collection $visited): void
+    private function exploreConnections(Span $span, array $path, array $connections, int $degrees, Collection $queue, Collection $visited, bool $randomize = true): void
     {
         // Get all connections where this span is either parent or child
         $spanConnections = Connection::where('parent_id', $span->id)
             ->orWhere('child_id', $span->id)
             ->with(['parent', 'child', 'type'])
             ->get();
+
+        // Shuffle connections to add randomness to path discovery
+        if ($randomize) {
+            $spanConnections = $spanConnections->shuffle();
+        }
 
         foreach ($spanConnections as $connection) {
             // Determine which span is the "next" one in the path
@@ -259,5 +264,96 @@ class JourneyService
         }
 
         return true;
+    }
+
+    /**
+     * Find a path between the user's personal span and any target span
+     */
+    public function findPathToSpan(Span $sourcePerson, Span $targetSpan, int $maxDegrees = 6, bool $randomize = true): ?array
+    {
+        \Log::info('Finding path to span', [
+            'source_person_id' => $sourcePerson->id,
+            'source_person_name' => $sourcePerson->name,
+            'target_span_id' => $targetSpan->id,
+            'target_span_name' => $targetSpan->name,
+            'target_span_type' => $targetSpan->type_id,
+            'max_degrees' => $maxDegrees
+        ]);
+
+        // If they're the same span, return null
+        if ($sourcePerson->id === $targetSpan->id) {
+            return null;
+        }
+
+        $visited = new Collection();
+        $queue = new Collection();
+        $bestJourney = null;
+
+        // Start with the source person
+        $queue->push([
+            'span' => $sourcePerson,
+            'path' => [$sourcePerson],
+            'connections' => [],
+            'degrees' => 0
+        ]);
+
+        $iterations = 0;
+        $maxIterations = 2000; // Increased for better path finding
+        $shuffleInterval = 50; // Shuffle queue every 50 iterations for more randomization
+
+        while ($queue->isNotEmpty() && $visited->count() < 2000 && $iterations < $maxIterations) {
+            $iterations++;
+            
+            // Periodically shuffle the queue for more randomization
+            if ($randomize && $iterations % $shuffleInterval === 0 && $queue->count() > 1) {
+                $queue = $queue->shuffle();
+            }
+            
+            $current = $queue->shift();
+            $span = $current['span'];
+            $path = $current['path'];
+            $connections = $current['connections'];
+            $degrees = $current['degrees'];
+
+            // Skip if we've visited this span or exceeded max degrees
+            if ($visited->contains($span->id) || $degrees >= $maxDegrees) {
+                continue;
+            }
+
+            $visited->push($span->id);
+
+            // If we found the target span, we have a journey
+            if ($span->id === $targetSpan->id) {
+                $journey = [
+                    'source_person' => $sourcePerson,
+                    'target_span' => $targetSpan,
+                    'path' => $path,
+                    'connections' => $connections,
+                    'degrees' => $degrees,
+                    'iterations' => $iterations,
+                    'interestingness_score' => $this->calculateInterestingnessScore($path, $connections)
+                ];
+
+                // Since we're using BFS, the first time we find the target is the shortest path
+                \Log::info('Found shortest path', [
+                    'iterations' => $iterations,
+                    'visited_count' => $visited->count(),
+                    'path_length' => count($path),
+                    'degrees' => $degrees
+                ]);
+                return $journey;
+            }
+
+            // Explore connections from this span using the same method as the original journey code
+            $this->exploreConnections($span, $path, $connections, $degrees, $queue, $visited, $randomize);
+        }
+
+        \Log::info('Path search complete - no path found', [
+            'iterations' => $iterations,
+            'visited_count' => $visited->count(),
+            'queue_size' => $queue->count()
+        ]);
+
+        return null;
     }
 }
