@@ -11,6 +11,7 @@ use Illuminate\Support\Str;
 class BluePlaqueService
 {
     protected array $config;
+    private static array $processedPlaques = [];
     
     public function __construct(array $config = [])
     {
@@ -40,6 +41,33 @@ class BluePlaqueService
                 'person_wikipedia' => 'lead_subject_wikipedia'
             ]
         ], $config);
+    }
+    
+    /**
+     * Clear processed plaques tracking (call this when starting a new import session)
+     */
+    public static function clearProcessedPlaques(): void
+    {
+        self::$processedPlaques = [];
+    }
+    
+    /**
+     * Clean up memory and database connections after batch processing
+     */
+    public function cleanupAfterBatch(): void
+    {
+        // Clear the processed plaques array to prevent memory buildup
+        self::$processedPlaques = [];
+        
+        // Force garbage collection
+        if (function_exists('gc_collect_cycles')) {
+            gc_collect_cycles();
+        }
+        
+        // Clear any cached database connections
+        \DB::disconnect();
+        
+        Log::info('Batch cleanup completed');
     }
     
     /**
@@ -238,32 +266,141 @@ class BluePlaqueService
     /**
      * Process a batch of plaques
      */
-    public function processBatch(array $plaques, int $batchSize = 50): array
+    public function processBatch(array $plaques, int $batchSize = 1): array // Reduced default batch size to prevent PHP timeout
     {
+        // Reset processed plaques tracking for new batch
+        self::$processedPlaques = [];
+        
         $results = [
             'processed' => 0,
             'created' => 0,
+            'skipped' => 0,
             'errors' => [],
-            'details' => []
+            'details' => [],
+            'current_item' => null,
+            'activity_log' => []
         ];
         
-        foreach (array_slice($plaques, 0, $batchSize) as $plaque) {
+        $startTime = now();
+        
+        foreach ($plaques as $index => $plaque) {
+            $plaqueId = $plaque[$this->config['field_mapping']['id']] ?? $plaque['id'] ?? 'unknown';
+            $plaqueName = $plaque[$this->config['field_mapping']['title']] ?? 'Unknown Plaque';
+            $personName = $plaque[$this->config['field_mapping']['person_name']] ?? 'N/A';
+            $locationName = $plaque[$this->config['field_mapping']['address']] ?? 'N/A';
+            
+            // Reduced logging to minimize overhead
+            if ($index % 5 === 0) { // Only log every 5th plaque
+                Log::info('Processing plaque in batch', [
+                    'batch_index' => $index,
+                    'plaque_id' => $plaqueId,
+                    'plaque_name' => $plaqueName,
+                    'data_source' => $this->config['data_source']
+                ]);
+            }
+            
+            // Update current item being processed
+            $results['current_item'] = [
+                'plaque_name' => $plaqueName,
+                'person_name' => $personName,
+                'location_name' => $locationName,
+                'status' => 'Processing...'
+            ];
+            
+            // Add to activity log
+            $results['activity_log'][] = [
+                'timestamp' => now()->format('H:i:s'),
+                'message' => "Processing plaque: {$plaqueName}"
+            ];
+            
             try {
                 $result = $this->processPlaque($plaque);
                 $results['processed']++;
                 
                 if ($result['success']) {
-                    $results['created']++;
+                    // Check if this was a skipped plaque (already exists)
+                    if (isset($result['details']['skipped']) && $result['details']['skipped']) {
+                        $results['skipped']++;
+                        $results['activity_log'][] = [
+                            'timestamp' => now()->format('H:i:s'),
+                            'message' => "⏭️ Skipped existing plaque: {$plaqueName}"
+                        ];
+                    } else {
+                        // New plaque processed
+                        $results['created']++;
+                        $results['activity_log'][] = [
+                            'timestamp' => now()->format('H:i:s'),
+                            'message' => "✅ Created new plaque: {$plaqueName}"
+                        ];
+                    }
                     $results['details'][] = $result['details'];
                 } else {
-                    $results['errors'][] = $result['error'];
+                    $results['errors'][] = $result['message'];
+                    $results['activity_log'][] = [
+                        'timestamp' => now()->format('H:i:s'),
+                        'message' => "❌ Error processing plaque: {$plaqueName} - {$result['message']}"
+                    ];
                 }
             } catch (\Exception $e) {
-                $results['errors'][] = "Error processing plaque {$plaque['id']}: " . $e->getMessage();
+                $results['errors'][] = "Error processing plaque {$plaqueId}: " . $e->getMessage();
+                $results['activity_log'][] = [
+                    'timestamp' => now()->format('H:i:s'),
+                    'message' => "❌ Exception processing plaque: {$plaqueName} - " . $e->getMessage()
+                ];
+            }
+            
+            // Keep only last 20 activity log entries
+            if (count($results['activity_log']) > 20) {
+                $results['activity_log'] = array_slice($results['activity_log'], -20);
             }
         }
         
+        // Clear current item when done
+        $results['current_item'] = null;
+        
+        // Add completion message
+        $duration = now()->diffInSeconds($startTime);
+        $results['activity_log'][] = [
+            'timestamp' => now()->format('H:i:s'),
+            'message' => "Batch completed in {$duration}s - Processed: {$results['processed']}, Created: {$results['created']}, Skipped: {$results['skipped']}, Errors: " . count($results['errors'])
+        ];
+        
+        // Clean up after batch processing
+        $this->cleanupAfterBatch();
+        
         return $results;
+    }
+    
+    /**
+     * Check if the plaque was newly created (not existing)
+     * This is a simplified approach - we'll assume if the plaque was processed successfully,
+     * it was either created or already existed. The actual counting will be done by
+     * checking the database after the import is complete.
+     */
+    private function wasNewlyCreated(array $details): bool
+    {
+        // For now, we'll use a simpler approach: if we have details, assume it was processed
+        // The actual counting of new vs existing items should be done by comparing
+        // the database state before and after the import, or by checking if the
+        // external_id already exists in the database.
+        
+        // Check if the plaque already existed by looking for the external_id
+        if (isset($details['plaque_id'])) {
+            $plaqueSpan = Span::find($details['plaque_id']);
+            if ($plaqueSpan) {
+                // Check if this span was created in this import session
+                // We'll use a more reliable method: check if the external_id was already in the database
+                $externalId = $plaqueSpan->metadata['external_id'] ?? null;
+                if ($externalId) {
+                    // Check if this external_id existed before this import session
+                    // For now, we'll assume it's new if it was created recently
+                    return $plaqueSpan->created_at->diffInSeconds(now()) < 30;
+                }
+            }
+        }
+        
+        // Default to assuming it's new if we can't determine
+        return true;
     }
     
     /**
@@ -707,10 +844,52 @@ class BluePlaqueService
     public function processPlaque(array $plaque, $user = null): array
     {
         try {
+            $plaqueId = $plaque[$this->config['field_mapping']['id']] ?? 'unknown';
+            $plaqueTitle = $plaque[$this->config['field_mapping']['title']] ?? 'unknown';
+            
             Log::info('Starting plaque import', [
-                'plaque_id' => $plaque[$this->config['field_mapping']['id']] ?? 'unknown',
-                'title' => $plaque[$this->config['field_mapping']['title']] ?? 'unknown'
+                'plaque_id' => $plaqueId,
+                'title' => $plaqueTitle
             ]);
+            
+            // Quick check: Has this plaque already been imported in a previous session?
+            $existingPlaque = Span::where('metadata->data_source', $this->config['data_source'])
+                ->where('metadata->external_id', $plaqueId)
+                ->first();
+                
+            if ($existingPlaque) {
+                Log::info('Plaque already exists in database, skipping', [
+                    'plaque_id' => $plaqueId,
+                    'title' => $plaqueTitle,
+                    'existing_span_id' => $existingPlaque->id
+                ]);
+                return [
+                    'success' => true,
+                    'message' => 'Plaque already exists in database',
+                    'details' => [
+                        'plaque_id' => $plaqueId,
+                        'plaque_name' => $plaqueTitle,
+                        'skipped' => true,
+                        'existing_span_id' => $existingPlaque->id
+                    ]
+                ];
+            }
+            
+            // Check if we've already processed this plaque in this import session
+            if (in_array($plaqueId, self::$processedPlaques)) {
+                Log::warning('Plaque already processed in this session, skipping', [
+                    'plaque_id' => $plaqueId,
+                    'title' => $plaqueTitle
+                ]);
+                return [
+                    'success' => false,
+                    'message' => 'Plaque already processed in this session',
+                    'details' => ['plaque_id' => $plaqueId]
+                ];
+            }
+            
+            // Mark this plaque as processed
+            self::$processedPlaques[] = $plaqueId;
             
             // Step 1: Create all spans first (with duplicate checking)
             $spans = [];
@@ -718,7 +897,8 @@ class BluePlaqueService
             
             // Create or find the plaque span
             $plaqueSpan = $this->createPlaqueSpan($plaque, $user);
-            Log::info('Plaque span created/found', ['plaque_id' => $plaqueSpan->id]);
+            // Reduced logging to minimize overhead
+            // Log::info('Plaque span created/found', ['plaque_id' => $plaqueSpan->id]);
             $spans['plaque'] = $plaqueSpan;
             
             // Process the lead subject (main person)
@@ -726,14 +906,16 @@ class BluePlaqueService
             if (!empty($plaque[$this->config['field_mapping']['person_name']])) {
                 $personSpan = $this->createOrFindPersonSpan($plaque, $user);
                 $spans['person'] = $personSpan;
-                Log::info('Person span created/found', ['person_id' => $personSpan->id]);
+                // Reduced logging to minimize overhead
+                // Log::info('Person span created/found', ['person_id' => $personSpan->id]);
             }
             
             // Create or find the location span
             $locationSpan = $this->createOrFindLocationSpan($plaque, $user);
             $spans['location'] = $locationSpan;
             if ($locationSpan) {
-                Log::info('Location span created/found', ['location_id' => $locationSpan->id]);
+                // Reduced logging to minimize overhead
+                // Log::info('Location span created/found', ['location_id' => $locationSpan->id]);
             }
             
             // Create photo span if main_photo is available
@@ -1182,14 +1364,14 @@ class BluePlaqueService
      */
     private function createConnection(Span $parent, Span $child, string $type): ?Connection
     {
-        // Log connection attempt
-        Log::info('Creating connection', [
-            'parent_id' => $parent->id,
-            'parent_name' => $parent->name,
-            'child_id' => $child->id,
-            'child_name' => $child->name,
-            'type' => $type
-        ]);
+        // Reduced logging to minimize overhead
+        // Log::info('Creating connection', [
+        //     'parent_id' => $parent->id,
+        //     'parent_name' => $parent->name,
+        //     'child_id' => $child->id,
+        //     'child_name' => $child->name,
+        //     'type' => $type
+        // ]);
         
         // Check if connection already exists
         $existing = Connection::where('parent_id', $parent->id)

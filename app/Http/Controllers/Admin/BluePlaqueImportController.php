@@ -297,24 +297,20 @@ class BluePlaqueImportController extends Controller
     }
     
     /**
-     * Process a batch of plaques
+     * Process a batch of plaques (frontend approach)
      */
     public function processBatch(Request $request)
     {
         $request->validate([
             'plaque_type' => 'required|string|in:london_blue,london_green,custom',
-            'batch_size' => 'integer|min:1|max:100',
-            'offset' => 'integer|min:0'
+            'offset' => 'required|integer|min:0',
+            'batch_size' => 'required|integer|min:1|max:50'
         ]);
-        
-        $batchSize = $request->get('batch_size', 50);
-        $offset = $request->get('offset', 0);
         
         try {
             $config = BluePlaqueService::getConfigForType($request->plaque_type);
             $service = new BluePlaqueService($config);
             
-            // Download and parse data
             $csvData = $service->downloadData();
             $allPlaques = $service->parseCsvData($csvData);
             
@@ -323,44 +319,42 @@ class BluePlaqueImportController extends Controller
                 $allPlaques = array_filter($allPlaques, function($plaque) {
                     return ($plaque['colour'] ?? 'blue') === 'green';
                 });
+                $allPlaques = array_values($allPlaques); // Re-index array
             }
             
-            // Get the batch slice
+            $totalPlaques = count($allPlaques);
+            $offset = $request->offset;
+            $batchSize = $request->batch_size;
+            
+            // Get the current batch
             $batchPlaques = array_slice($allPlaques, $offset, $batchSize);
             
-            if (empty($batchPlaques)) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'No more plaques to process',
-                    'completed' => true,
-                    'processed' => 0,
-                    'created' => 0,
-                    'errors' => []
-                ]);
-            }
-            
             // Process the batch
-            $results = $service->processBatch($batchPlaques, $batchSize);
+            $results = $service->processBatch($batchPlaques, count($batchPlaques));
             
-            $isCompleted = ($offset + $batchSize) >= count($allPlaques);
+            $isLastBatch = ($offset + $batchSize) >= $totalPlaques;
             
             return response()->json([
                 'success' => true,
-                'message' => "Processed batch of " . count($batchPlaques) . " plaques",
-                'completed' => $isCompleted,
-                'offset' => $offset + $batchSize,
-                'total_plaques' => count($allPlaques),
-                'processed' => $results['processed'],
-                'created' => $results['created'],
-                'errors' => $results['errors'],
-                'details' => array_slice($results['details'], 0, 5) // Show first 5 details
+                'data' => [
+                    'processed' => $results['processed'],
+                    'created' => $results['created'],
+                    'skipped' => $results['skipped'] ?? 0,
+                    'errors' => $results['errors'] ?? [],
+                    'total_plaques' => $totalPlaques,
+                    'current_offset' => $offset,
+                    'batch_size' => $batchSize,
+                    'is_last_batch' => $isLastBatch,
+                    'next_offset' => $isLastBatch ? null : $offset + $batchSize,
+                    'progress_percentage' => min(100, round((($offset + $batchSize) / $totalPlaques) * 100, 1))
+                ]
             ]);
             
         } catch (\Exception $e) {
-            Log::error('Plaque batch processing failed: ' . $e->getMessage());
+            Log::error('Batch processing failed: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to process batch: ' . $e->getMessage()
+                'message' => 'Batch processing failed: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -386,23 +380,109 @@ class BluePlaqueImportController extends Controller
                 $plaques = array_filter($plaques, function($plaque) {
                     return ($plaque['colour'] ?? 'blue') === 'green';
                 });
+                $plaques = array_values($plaques); // Re-index array
             }
             
-            $results = $service->processBatch($plaques, count($plaques));
+            $totalPlaques = count($plaques);
+            
+            // Process all plaques
+            $results = $service->processBatch($plaques, $totalPlaques);
             
             return response()->json([
                 'success' => true,
-                'message' => "Processed all " . count($plaques) . " plaques",
-                'processed' => $results['processed'],
-                'created' => $results['created'],
-                'errors' => $results['errors']
+                'data' => [
+                    'processed' => $results['processed'],
+                    'created' => $results['created'],
+                    'skipped' => $results['skipped'] ?? 0,
+                    'errors' => $results['errors'] ?? [],
+                    'total_plaques' => $totalPlaques,
+                    'progress_percentage' => 100
+                ]
             ]);
             
         } catch (\Exception $e) {
-            Log::error('Plaque full import failed: ' . $e->getMessage());
+            Log::error('Full import failed: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to process all plaques: ' . $e->getMessage()
+                'message' => 'Import failed: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Get current import status
+     */
+    public function status(Request $request)
+    {
+        $request->validate([
+            'plaque_type' => 'required|string|in:london_blue,london_green,custom'
+        ]);
+        
+        try {
+            $config = BluePlaqueService::getConfigForType($request->plaque_type);
+            
+            // Check if there are any recent import activities
+            $recentImports = \App\Models\Span::where('metadata->data_source', $config['data_source'])
+                ->where('created_at', '>=', now()->subMinutes(30))
+                ->count();
+            
+            // Also check for recent connections from the same data source
+            $recentConnections = \App\Models\Connection::whereHas('parent', function($q) use ($config) {
+                $q->where('metadata->data_source', $config['data_source']);
+            })->orWhereHas('child', function($q) use ($config) {
+                $q->where('metadata->data_source', $config['data_source']);
+            })->where('created_at', '>=', now()->subMinutes(30))
+            ->count();
+            
+            $isImporting = $recentImports > 0 || $recentConnections > 0;
+            
+            // Get total counts for progress calculation
+            $totalPlaques = \App\Models\Span::where('metadata->data_source', $config['data_source'])->count();
+            $totalConnections = \App\Models\Connection::whereHas('parent', function($q) use ($config) {
+                $q->where('metadata->data_source', $config['data_source']);
+            })->orWhereHas('child', function($q) use ($config) {
+                $q->where('metadata->data_source', $config['data_source']);
+            })->count();
+            
+            // Get total available plaques from the data source (not just imported ones)
+            $totalAvailablePlaques = 0;
+            try {
+                $service = new BluePlaqueService($config);
+                $csvData = $service->downloadData();
+                $allPlaques = $service->parseCsvData($csvData);
+                
+                // Filter by plaque type if needed
+                if ($request->plaque_type === 'london_green') {
+                    $allPlaques = array_filter($allPlaques, function($plaque) {
+                        return ($plaque['colour'] ?? 'blue') === 'green';
+                    });
+                }
+                
+                $totalAvailablePlaques = count($allPlaques);
+            } catch (\Exception $e) {
+                // If we can't get the total, use estimates
+                $totalAvailablePlaques = ($request->plaque_type === 'london_blue') ? 3635 : 
+                                       (($request->plaque_type === 'london_green') ? 500 : 1000);
+            }
+            
+            return response()->json([
+                'success' => true,
+                'is_importing' => $isImporting,
+                'recent_imports' => $recentImports,
+                'recent_connections' => $recentConnections,
+                'total_plaques' => $totalPlaques,
+                'total_connections' => $totalConnections,
+                'total_available_plaques' => $totalAvailablePlaques,
+                'last_import_time' => $isImporting ? \App\Models\Span::where('metadata->data_source', $config['data_source'])
+                    ->latest('created_at')
+                    ->value('created_at') : null
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Failed to get import status: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to get import status: ' . $e->getMessage()
             ], 500);
         }
     }
