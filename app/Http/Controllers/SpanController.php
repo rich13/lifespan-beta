@@ -2440,6 +2440,20 @@ class SpanController extends Controller
                 // Check if location has coordinates
                 $coordinates = $metadata['coordinates'] ?? null;
                 if ($coordinates && isset($coordinates['latitude']) && isset($coordinates['longitude'])) {
+                    // Get connections to people/organisations
+                    $personConnections = Connection::where('type_id', 'features')
+                        ->where('child_id', $plaque->id)
+                        ->with(['parent'])
+                        ->get();
+                    
+                    $organisationConnections = Connection::where('type_id', 'features')
+                        ->where('child_id', $plaque->id)
+                        ->with(['parent'])
+                        ->whereHas('parent', function($query) {
+                            $query->where('type_id', 'organisation');
+                        })
+                        ->get();
+                    
                     $plaquesWithLocations[] = [
                         'plaque' => $plaque,
                         'location' => $location,
@@ -2447,7 +2461,23 @@ class SpanController extends Controller
                         'longitude' => (float) $coordinates['longitude'],
                         'name' => $plaque->name,
                         'description' => $plaque->description,
-                        'url' => route('spans.show', $plaque)
+                        'url' => route('spans.show', $plaque),
+                        'person_connections' => $personConnections->map(function($conn) {
+                            return [
+                                'id' => $conn->parent->id,
+                                'name' => $conn->parent->name,
+                                'type' => $conn->parent->type_id,
+                                'url' => route('spans.show', $conn->parent)
+                            ];
+                        })->toArray(),
+                        'organisation_connections' => $organisationConnections->map(function($conn) {
+                            return [
+                                'id' => $conn->parent->id,
+                                'name' => $conn->parent->name,
+                                'type' => $conn->parent->type_id,
+                                'url' => route('spans.show', $conn->parent)
+                            ];
+                        })->toArray()
                     ];
                 }
             }
@@ -2456,7 +2486,191 @@ class SpanController extends Controller
         return view('plaques.index', compact('plaquesWithLocations'));
     }
 
+    /**
+     * Display "At Your Age" comparisons for the authenticated user.
+     */
+    public function atYourAge(Request $request): View
+    {
+        $user = Auth::user();
+        
+        if (!$user || !$user->personalSpan) {
+            abort(403, 'You must have a personal span to view this page.');
+        }
 
+        $personalSpan = $user->personalSpan;
+        $today = \Carbon\Carbon::now();
+        
+        // Calculate age
+        $birthDate = \Carbon\Carbon::createFromDate(
+            $personalSpan->start_year,
+            $personalSpan->start_month ?? 1,
+            $personalSpan->start_day ?? 1
+        );
+        
+        $age = $birthDate->diff($today);
+
+        // Get random person spans that the user can see (excluding the user themselves)
+        $randomSpans = Span::where('type_id', 'person')
+            ->where('id', '!=', $personalSpan->id) // Exclude the user
+            ->where('access_level', 'public') // Only public spans
+            ->where('state', 'complete') // Only complete spans (includes living and deceased)
+            ->whereNotNull('start_year') // Only spans with birth dates
+            ->whereNotNull('start_month')
+            ->whereNotNull('start_day')
+            ->where('start_year', '<', $personalSpan->start_year) // Only people older than the user
+            ->inRandomOrder()
+            ->limit(100) // Increased significantly to ensure we find 9 people with sufficient connections
+            ->get();
+        
+        $randomComparisons = [];
+        $connectionThreshold = 5; // Start with requiring 5+ connections
+        
+        foreach ($randomSpans as $randomSpan) {
+            $randomBirthDate = \Carbon\Carbon::createFromDate(
+                $randomSpan->start_year,
+                $randomSpan->start_month ?? 1,
+                $randomSpan->start_day ?? 1
+            );
+            
+            // Calculate the date when this person was the user's current age
+            $randomAgeDate = $randomBirthDate->copy()->addYears($age->y)
+                ->addMonths($age->m)
+                ->addDays($age->d);
+            
+            // Check if this person was already dead when they were the user's current age
+            $wasDeadAtUserAge = false;
+            if ($randomSpan->end_year && $randomSpan->end_month && $randomSpan->end_day) {
+                $deathDate = \Carbon\Carbon::createFromDate(
+                    $randomSpan->end_year,
+                    $randomSpan->end_month,
+                    $randomSpan->end_day
+                );
+                
+                // If they died before reaching the user's current age, exclude them
+                if ($deathDate->lt($randomAgeDate)) {
+                    $wasDeadAtUserAge = true;
+                }
+            }
+            
+            // Skip if they were dead at the user's age
+            if ($wasDeadAtUserAge) {
+                continue;
+            }
+            
+            // Check if this person has enough connections that will be visible at the target date
+            $connectionsAtDate = \App\Models\Connection::where(function($query) use ($randomSpan) {
+                $query->where('parent_id', $randomSpan->id)
+                      ->orWhere('child_id', $randomSpan->id);
+            })
+            ->where('parent_id', '!=', $randomSpan->id) // Exclude self-referential connections
+            ->where('child_id', '!=', $randomSpan->id) // Exclude self-referential connections
+            ->where('type_id', '!=', 'contains') // Exclude contains connections
+            ->whereHas('connectionSpan', function($query) use ($randomAgeDate) {
+                $query->where('start_year', '<=', $randomAgeDate->year)
+                      ->where(function($q) use ($randomAgeDate) {
+                          $q->whereNull('end_year')
+                            ->orWhere('end_year', '>=', $randomAgeDate->year);
+                      });
+            })
+            ->count();
+            
+            if ($connectionsAtDate < $connectionThreshold) {
+                continue; // Skip people with insufficient connections at the target date
+            }
+            
+            // Add this person to our comparisons since they passed all checks
+            $randomComparisons[] = [
+                'span' => $randomSpan,
+                'date' => $randomAgeDate
+            ];
+            
+            // Stop once we have 9 valid comparisons (3 columns of 3)
+            if (count($randomComparisons) >= 9) {
+                break;
+            }
+        }
+        
+        // If we didn't find enough people with 5+ connections, try with 3+ connections
+        if (count($randomComparisons) < 6 && $connectionThreshold == 5) {
+            $connectionThreshold = 3;
+            
+            // Reset and try again with lower threshold
+            $randomComparisons = [];
+            foreach ($randomSpans as $randomSpan) {
+                $randomBirthDate = \Carbon\Carbon::createFromDate(
+                    $randomSpan->start_year,
+                    $randomSpan->start_month ?? 1,
+                    $randomSpan->start_day ?? 1
+                );
+                
+                $randomAgeDate = $randomBirthDate->copy()->addYears($age->y)
+                    ->addMonths($age->m)
+                    ->addDays($age->d);
+                
+                // Check if this person was already dead when they were the user's current age
+                $wasDeadAtUserAge = false;
+                if ($randomSpan->end_year && $randomSpan->end_month && $randomSpan->end_day) {
+                    $deathDate = \Carbon\Carbon::createFromDate(
+                        $randomSpan->end_year,
+                        $randomSpan->end_month,
+                        $randomSpan->end_day
+                    );
+                    
+                    if ($deathDate->lt($randomAgeDate)) {
+                        $wasDeadAtUserAge = true;
+                    }
+                }
+                
+                // Skip if they were dead at the user's age
+                if ($wasDeadAtUserAge) {
+                    continue;
+                }
+                
+                // Check if this person has enough connections that will be visible at the target date
+                $connectionsAtDate = \App\Models\Connection::where(function($query) use ($randomSpan) {
+                    $query->where('parent_id', $randomSpan->id)
+                          ->orWhere('child_id', $randomSpan->id);
+                })
+                ->where('child_id', '!=', $randomSpan->id) // Exclude self-referential connections
+                ->where('type_id', '!=', 'contains') // Exclude contains connections
+                ->whereHas('connectionSpan', function($query) use ($randomAgeDate) {
+                    $query->where('start_year', '<=', $randomAgeDate->year)
+                          ->where(function($q) use ($randomAgeDate) {
+                              $q->whereNull('end_year')
+                                ->orWhere('end_year', '>=', $randomAgeDate->year);
+                          });
+                })
+                ->count();
+                
+                if ($connectionsAtDate < $connectionThreshold) {
+                    continue; // Skip people with insufficient connections at the target date
+                }
+                
+                // Add this person to our comparisons since they passed all checks
+                $randomComparisons[] = [
+                    'span' => $randomSpan,
+                    'date' => $randomAgeDate
+                ];
+                
+                if (count($randomComparisons) >= 9) {
+                    break;
+                }
+            }
+        }
+
+        // Log the results for debugging
+        \Illuminate\Support\Facades\Log::info('At Your Age search results', [
+            'user_id' => $user->id,
+            'user_age' => $age->y . 'y ' . $age->m . 'm ' . $age->d . 'd',
+            'candidates_searched' => $randomSpans->count(),
+            'valid_comparisons_found' => count($randomComparisons),
+            'target_count' => 6,
+            'connection_threshold_used' => $connectionThreshold,
+            'connection_check_type' => 'connections_at_target_date'
+        ]);
+
+        return view('explore.at-your-age', compact('randomComparisons', 'age', 'personalSpan'));
+    }
 
     /**
      * Display all connection types for a span.
