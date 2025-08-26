@@ -2,6 +2,22 @@
 
 @section('title', 'Explore Family - Lifespan')
 
+@section('page_title')
+    <x-breadcrumb :items="[
+        [
+            'text' => 'Explore',
+            'icon' => 'view',
+            'icon_category' => 'action',
+            'url' => route('explore.index')
+        ],
+        [
+            'text' => 'Family',
+            'icon' => 'people-fill',
+            'icon_category' => 'bootstrap'
+        ]
+    ]" />
+@endsection
+
 @section('content')
 <div class="container py-4">
     <div class="row">

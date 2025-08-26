@@ -120,6 +120,27 @@
             </div>
         </div>
 
+        <!-- At Your Age -->
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body text-center">
+                    <div class="mb-3">
+                        <i class="bi bi-arrow-left-right display-4 text-secondary"></i>
+                    </div>
+                    <h5 class="card-title">At Your Age</h5>
+                    <p class="card-text">Discover what historical figures were doing when they were your current age.</p>
+                    @if(auth()->check() && auth()->user()->personalSpan)
+                        <a href="{{ route('explore.at-your-age') }}" class="btn btn-secondary">
+                            <i class="bi bi-arrow-right me-2"></i>
+                            Explore At Your Age
+                        </a>
+                    @else
+                        <span class="text-muted small">Sign in with a personal span to explore</span>
+                    @endif
+                </div>
+            </div>
+        </div>
+
         <!-- Coming Soon -->
         <div class="col-md-6 col-lg-4">
             <div class="card h-100 shadow-sm border-dashed">

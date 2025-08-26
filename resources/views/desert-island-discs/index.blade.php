@@ -3,6 +3,12 @@
 @section('page_title')
     <x-breadcrumb :items="[
         [
+            'text' => 'Explore',
+            'icon' => 'view',
+            'icon_category' => 'action',
+            'url' => route('explore.index')
+        ],
+        [
             'text' => 'Desert Island Discs',
             'icon' => 'vinyl-fill',
             'icon_category' => 'bootstrap'

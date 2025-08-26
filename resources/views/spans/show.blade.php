@@ -130,6 +130,10 @@
                         <x-spans.partials.story :span="$span" />
                     </div>
                 </div>
+                
+                <!-- Description Card -->
+                <x-spans.cards.description-card :span="$span" />
+                
                 <x-spans.partials.connections :span="$span" />
             </div>
 
@@ -162,6 +166,9 @@
 
             <div class="col-md-4">
                 <!-- Sidebar Content -->
+                
+                <!-- User Connection Card -->
+                <x-spans.cards.user-connection-card :span="$span" />
                 
                 <!-- Place Map Card -->
                 <x-spans.cards.place-map-card :span="$span" />

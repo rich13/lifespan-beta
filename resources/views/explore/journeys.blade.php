@@ -2,13 +2,29 @@
 
 @section('title', 'Journeys - Explore Lifespan')
 
+@section('page_title')
+    <x-breadcrumb :items="[
+        [
+            'text' => 'Explore',
+            'icon' => 'view',
+            'icon_category' => 'action',
+            'url' => route('explore.index')
+        ],
+        [
+            'text' => 'Journeys',
+            'icon' => 'arrow-right-circle',
+            'icon_category' => 'bootstrap'
+        ]
+    ]" />
+@endsection
+
 @section('content')
 <div class="container py-4">
     <div class="row">
         <div class="col-12">
             <div class="text-center mb-5">
                 <h1 class="display-4 mb-3">Journeys</h1>
-                <p class="lead text-muted">Discover fascinating connection paths between people in Lifespan</p>
+                <p class="lead text-muted">Discover connections between people in Lifespan, a bit like "6 degrees of Kevin Bacon".</p>
             </div>
         </div>
     </div>

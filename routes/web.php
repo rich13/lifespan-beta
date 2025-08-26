@@ -156,6 +156,7 @@ Route::middleware('web')->group(function () {
         Route::get('/journeys', [JourneyController::class, 'index'])->name('explore.journeys');
         Route::post('/journeys/discover', [JourneyController::class, 'discover'])->name('explore.journeys.discover');
         Route::get('/journeys/random', [JourneyController::class, 'random'])->name('explore.journeys.random');
+        Route::get('/at-your-age', [SpanController::class, 'atYourAge'])->name('explore.at-your-age');
     });
 
     // Date exploration route - supports YYYY, YYYY-MM, and YYYY-MM-DD formats
@@ -241,7 +242,7 @@ Route::middleware('web')->group(function () {
             Route::post('/api/connections', function (Request $request) {
                 $validated = $request->validate([
                     'parent_id' => 'required|uuid|exists:spans,id',
-                    'child_id' => 'required|uuid|exists:spans,id',
+                    'child_id' => 'required|uuid|exists:spans,id|different:parent_id',
                     'type_id' => 'required|string|exists:connection_types,type',
                     'age' => 'nullable|integer|min:0',
                     'start_year' => 'nullable|integer|min:1000|max:2100',
@@ -373,7 +374,7 @@ Route::middleware('web')->group(function () {
             Route::post('/api/connections/create', function (Request $request) {
                 $validated = $request->validate([
                     'subject_id' => 'required|uuid|exists:spans,id',
-                    'object_id' => 'required|uuid|exists:spans,id',
+                    'object_id' => 'required|uuid|exists:spans,id|different:subject_id',
                     'predicate' => 'required|string|exists:connection_types,type',
                     'state' => 'required|in:placeholder,draft,complete',
                     'start_year' => 'nullable|integer|min:1000|max:2100',
@@ -770,14 +771,18 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
                         ->name('index');
                     Route::post('/preview', [App\Http\Controllers\Admin\BluePlaqueImportController::class, 'preview'])
                         ->name('preview');
-                                    Route::post('/validate-single', [App\Http\Controllers\Admin\BluePlaqueImportController::class, 'validateSingle'])
-                    ->name('validate-single');
-                Route::post('/process-single', [App\Http\Controllers\Admin\BluePlaqueImportController::class, 'processSingle'])
-                    ->name('process-single');
-                Route::post('/process-batch', [App\Http\Controllers\Admin\BluePlaqueImportController::class, 'processBatch'])
-                    ->name('process-batch');
+                    Route::post('/validate-single', [App\Http\Controllers\Admin\BluePlaqueImportController::class, 'validateSingle'])
+                        ->name('validate-single');
+                    Route::post('/process-single', [App\Http\Controllers\Admin\BluePlaqueImportController::class, 'processSingle'])
+                        ->name('process-single');
+                    
+                    // Frontend batch processing routes
+                    Route::post('/process-batch', [App\Http\Controllers\Admin\BluePlaqueImportController::class, 'processBatch'])
+                        ->name('process-batch');
                     Route::post('/process-all', [App\Http\Controllers\Admin\BluePlaqueImportController::class, 'processAll'])
                         ->name('process-all');
+                    Route::get('/status', [App\Http\Controllers\Admin\BluePlaqueImportController::class, 'status'])
+                        ->name('status');
                     Route::get('/stats', [App\Http\Controllers\Admin\BluePlaqueImportController::class, 'stats'])
                         ->name('stats');
                 });
@@ -792,13 +797,27 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
                         ->name('search-by-year');
                     Route::post('/get-image-data', [App\Http\Controllers\Admin\WikimediaCommonsImportController::class, 'getImageData'])
                         ->name('get-image-data');
-                    Route::post('/preview-import', [App\Http\Controllers\Admin\WikimediaCommonsImportController::class, 'previewImport'])
-                        ->name('preview-import');
-                    Route::post('/import-image', [App\Http\Controllers\Admin\WikimediaCommonsImportController::class, 'importImage'])
-                        ->name('import-image');
-                    Route::post('/clear-cache', [App\Http\Controllers\Admin\WikimediaCommonsImportController::class, 'clearCache'])
-                        ->name('clear-cache');
                 });
+                
+                // Wikipedia Import
+                Route::prefix('wikipedia')->name('wikipedia.')->group(function () {
+                    Route::get('/', [App\Http\Controllers\Admin\WikipediaImportController::class, 'index'])
+                        ->name('index');
+                    Route::post('/process-person', [App\Http\Controllers\Admin\WikipediaImportController::class, 'processPerson'])
+                        ->name('process-person');
+                    Route::post('/skip-person', [App\Http\Controllers\Admin\WikipediaImportController::class, 'skipPerson'])
+                        ->name('skip-person');
+                    Route::get('/stats', [App\Http\Controllers\Admin\WikipediaImportController::class, 'getStats'])
+                        ->name('stats');
+                });
+                
+                // Additional Wikimedia Commons routes
+                Route::post('/wikimedia-commons/preview-import', [App\Http\Controllers\Admin\WikimediaCommonsImportController::class, 'previewImport'])
+                    ->name('wikimedia-commons.preview-import');
+                Route::post('/wikimedia-commons/import-image', [App\Http\Controllers\Admin\WikimediaCommonsImportController::class, 'importImage'])
+                    ->name('wikimedia-commons.import-image');
+                Route::post('/wikimedia-commons/clear-cache', [App\Http\Controllers\Admin\WikimediaCommonsImportController::class, 'clearCache'])
+                    ->name('wikimedia-commons.clear-cache');
                 
                 // Legacy YAML Import (must come last to avoid catching other routes)
                 Route::get('/', [ImportController::class, 'index'])
