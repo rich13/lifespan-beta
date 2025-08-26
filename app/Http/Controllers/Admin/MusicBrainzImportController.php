@@ -1362,4 +1362,313 @@ class MusicBrainzImportController extends Controller
         $name = preg_replace('/\s+/', ' ', $name); // collapse multiple spaces
         return $name;
     }
+
+    /**
+     * Preview a MusicBrainz release by URL
+     */
+    public function previewByUrl(Request $request)
+    {
+        $request->validate([
+            'url' => 'required|url'
+        ]);
+
+        try {
+            $url = $request->input('url');
+            
+            // Extract MusicBrainz release ID from URL
+            if (preg_match('/musicbrainz\.org\/release\/([a-f0-9-]+)/', $url, $matches)) {
+                $releaseId = $matches[1];
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Invalid MusicBrainz release URL. Please provide a valid MusicBrainz release URL.'
+                ], 400);
+            }
+
+            // Fetch release data from MusicBrainz API
+            $response = Http::get("https://musicbrainz.org/ws/2/release/{$releaseId}", [
+                'fmt' => 'json',
+                'inc' => 'artists+recordings'
+            ]);
+
+            if (!$response->successful()) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Failed to fetch release data from MusicBrainz'
+                ], 500);
+            }
+
+            $releaseData = $response->json();
+            
+            // Parse release date
+            $releaseDate = null;
+            $startYear = null;
+            $startMonth = null;
+            $startDay = null;
+            
+            if (!empty($releaseData['date'])) {
+                $releaseDate = $releaseData['date'];
+                $startYear = $this->extractYearFromDate($releaseDate);
+                
+                if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $releaseDate)) {
+                    $startMonth = date('m', strtotime($releaseDate));
+                    $startDay = date('d', strtotime($releaseDate));
+                } elseif (preg_match('/^\d{4}-\d{2}$/', $releaseDate)) {
+                    $startMonth = date('m', strtotime($releaseDate));
+                }
+            }
+
+            // Get artist name
+            $artistName = null;
+            if (!empty($releaseData['artist-credit']) && count($releaseData['artist-credit']) > 0) {
+                $artistName = $releaseData['artist-credit'][0]['name'];
+            }
+
+            // Get tracks
+            $tracks = [];
+            if (!empty($releaseData['media']) && count($releaseData['media']) > 0) {
+                foreach ($releaseData['media'] as $medium) {
+                    if (!empty($medium['tracks'])) {
+                        foreach ($medium['tracks'] as $track) {
+                            $tracks[] = [
+                                'title' => $track['title'] ?? null,
+                                'length' => $track['length'] ?? null,
+                                'id' => $track['id'] ?? null
+                            ];
+                        }
+                    }
+                }
+            }
+
+            $preview = [
+                'title' => $releaseData['title'] ?? null,
+                'artist_name' => $artistName,
+                'date' => $releaseDate,
+                'start_year' => $startYear,
+                'start_month' => $startMonth,
+                'start_day' => $startDay,
+                'tracks' => $tracks,
+                'release_id' => $releaseId
+            ];
+
+            return response()->json([
+                'success' => true,
+                'preview' => $preview
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('MusicBrainz preview by URL failed', [
+                'url' => $request->input('url'),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to preview release: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Import a MusicBrainz release by URL
+     */
+    public function importByUrl(Request $request)
+    {
+        $request->validate([
+            'url' => 'required|url'
+        ]);
+
+        try {
+            $url = $request->input('url');
+            
+            // Extract MusicBrainz release ID from URL
+            if (preg_match('/musicbrainz\.org\/release\/([a-f0-9-]+)/', $url, $matches)) {
+                $releaseId = $matches[1];
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Invalid MusicBrainz release URL. Please provide a valid MusicBrainz release URL.'
+                ], 400);
+            }
+
+            // Fetch release data from MusicBrainz API
+            $response = Http::get("https://musicbrainz.org/ws/2/release/{$releaseId}", [
+                'fmt' => 'json',
+                'inc' => 'artists+recordings'
+            ]);
+
+            if (!$response->successful()) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Failed to fetch release data from MusicBrainz'
+                ], 500);
+            }
+
+            $releaseData = $response->json();
+            
+            // Get artist name and find/create artist span
+            $artistName = null;
+            if (!empty($releaseData['artist-credit']) && count($releaseData['artist-credit']) > 0) {
+                $artistName = $releaseData['artist-credit'][0]['name'];
+            }
+
+            if (!$artistName) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'No artist found in release data'
+                ], 400);
+            }
+
+            // Find or create artist span
+            $artistSpan = Span::where('name', $artistName)
+                ->where('type_id', 'person')
+                ->first();
+
+            if (!$artistSpan) {
+                // Create artist span
+                $artistSpan = Span::create([
+                    'name' => $artistName,
+                    'type_id' => 'person',
+                    'state' => 'placeholder',
+                    'access_level' => 'private',
+                    'owner_id' => $request->user()->id,
+                    'updater_id' => $request->user()->id,
+                ]);
+            }
+
+            // Parse release date
+            $releaseDate = $releaseData['date'] ?? null;
+            $startYear = null;
+            $startMonth = null;
+            $startDay = null;
+            
+            if ($releaseDate) {
+                $startYear = $this->extractYearFromDate($releaseDate);
+                
+                if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $releaseDate)) {
+                    $startMonth = date('m', strtotime($releaseDate));
+                    $startDay = date('d', strtotime($releaseDate));
+                } elseif (preg_match('/^\d{4}-\d{2}$/', $releaseDate)) {
+                    $startMonth = date('m', strtotime($releaseDate));
+                }
+            }
+
+            // Determine album state
+            $albumState = 'placeholder';
+            if ($startYear) {
+                $albumState = 'complete';
+            }
+
+            // Create album span
+            $albumSpan = Span::create([
+                'name' => $releaseData['title'],
+                'type_id' => 'thing',
+                'state' => $albumState,
+                'access_level' => 'private',
+                'metadata' => [
+                    'musicbrainz_id' => $releaseId,
+                    'subtype' => 'album'
+                ],
+                'start_year' => $startYear,
+                'start_month' => $startMonth,
+                'start_day' => $startDay,
+                'owner_id' => $request->user()->id,
+                'updater_id' => $request->user()->id,
+            ]);
+
+            // Create connection between artist and album
+            $connectionSpan = Span::create([
+                'name' => "{$artistSpan->name} created {$albumSpan->name}",
+                'type_id' => 'connection',
+                'state' => $albumState,
+                'access_level' => 'private',
+                'metadata' => [
+                    'connection_type' => 'created'
+                ],
+                'start_year' => $startYear,
+                'start_month' => $startMonth,
+                'start_day' => $startDay,
+                'owner_id' => $request->user()->id,
+                'updater_id' => $request->user()->id,
+            ]);
+
+            Connection::create([
+                'parent_id' => $artistSpan->id,
+                'child_id' => $albumSpan->id,
+                'type_id' => 'created',
+                'connection_span_id' => $connectionSpan->id
+            ]);
+
+            // Import tracks if available
+            $tracksImported = 0;
+            if (!empty($releaseData['media']) && count($releaseData['media']) > 0) {
+                foreach ($releaseData['media'] as $medium) {
+                    if (!empty($medium['tracks'])) {
+                        foreach ($medium['tracks'] as $track) {
+                            // Create track span
+                            $trackSpan = Span::create([
+                                'name' => $track['title'],
+                                'type_id' => 'thing',
+                                'state' => 'placeholder',
+                                'access_level' => 'private',
+                                'metadata' => [
+                                    'musicbrainz_id' => $track['id'],
+                                    'subtype' => 'track'
+                                ],
+                                'owner_id' => $request->user()->id,
+                                'updater_id' => $request->user()->id,
+                            ]);
+
+                            // Create connection between album and track
+                            $trackConnectionSpan = Span::create([
+                                'name' => "{$albumSpan->name} contains {$trackSpan->name}",
+                                'type_id' => 'connection',
+                                'state' => 'placeholder',
+                                'access_level' => 'private',
+                                'metadata' => [
+                                    'connection_type' => 'contains'
+                                ],
+                                'owner_id' => $request->user()->id,
+                                'updater_id' => $request->user()->id,
+                            ]);
+
+                            Connection::create([
+                                'parent_id' => $albumSpan->id,
+                                'child_id' => $trackSpan->id,
+                                'type_id' => 'contains',
+                                'connection_span_id' => $trackConnectionSpan->id
+                            ]);
+
+                            $tracksImported++;
+                        }
+                    }
+                }
+            }
+
+            Log::info('MusicBrainz import by URL completed', [
+                'release_id' => $releaseId,
+                'artist_name' => $artistName,
+                'album_title' => $releaseData['title'],
+                'tracks_imported' => $tracksImported
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => "Successfully imported '{$releaseData['title']}' by {$artistName} with {$tracksImported} tracks"
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('MusicBrainz import by URL failed', [
+                'url' => $request->input('url'),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to import release: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 } 

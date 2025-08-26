@@ -190,15 +190,15 @@ class MusicBrainzArtistTypeTest extends TestCase
         }
 
         // Verify connections were created
-        $connections = Connection::where('parent_id', $band->id)
-            ->where('type_id', 'has_role')
+        $connections = Connection::where('child_id', $band->id)
+            ->where('type_id', 'membership')
             ->get();
         
         $this->assertCount(2, $connections);
 
         // Verify connection spans were created
         $connectionSpans = Span::where('type_id', 'connection')
-            ->where('metadata->connection_type', 'has_role')
+            ->where('metadata->connection_type', 'membership')
             ->get();
         
         $this->assertCount(2, $connectionSpans);
