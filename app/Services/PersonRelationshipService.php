@@ -63,7 +63,7 @@ class PersonRelationshipService
     /**
      * Check if person has musician role
      */
-    private function hasMusicianRole(Span $person): bool
+    public function hasMusicianRole(Span $person): bool
     {
         // Check if person has a 'has_role' connection FROM them TO a 'musician' role span
         return $person->connectionsAsSubject()
@@ -71,7 +71,7 @@ class PersonRelationshipService
                 $query->where('type', 'has_role');
             })
             ->whereHas('child', function ($query) {
-                $query->where('name', 'musician');
+                $query->where('name', 'Musician');
             })
             ->exists();
     }

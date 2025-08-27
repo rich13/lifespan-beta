@@ -181,6 +181,17 @@
                     @includeIf('components.spans.cards.band-discography', ['span' => $span])
                 @endif
                 
+                <!-- Musician Discography Card -->
+                @if($span->type_id === 'person')
+                    @php
+                        $personRelationshipService = app(\App\Services\PersonRelationshipService::class);
+                        $hasMusicianRole = $personRelationshipService->hasMusicianRole($span);
+                    @endphp
+                    @if($hasMusicianRole)
+                        @includeIf('components.spans.cards.musician-discography', ['span' => $span])
+                    @endif
+                @endif
+                
                 <!-- Photo Display Card -->
                 @if($span->type_id === 'thing' && isset($span->metadata['subtype']) && $span->metadata['subtype'] === 'photo')
                     <x-spans.display.photo-card :span="$span" />
