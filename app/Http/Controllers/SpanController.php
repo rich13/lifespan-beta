@@ -2775,7 +2775,7 @@ class SpanController extends Controller
     /**
      * Display a specific connection between a subject and object of a particular type.
      */
-    public function showConnection(Request $request, Span $subject, string $predicate, Span $object): View
+    public function showConnection(Request $request, Span $subject, string $predicate, Span $object): View|\Illuminate\Http\RedirectResponse
     {
         // Find the connection type based on the predicate
         $predicateWithSpaces = str_replace('-', ' ', $predicate);
