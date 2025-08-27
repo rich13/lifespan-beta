@@ -8,7 +8,7 @@ use Illuminate\Support\Str;
 class WikipediaSpanMatcherService
 {
     /**
-     * Parse Wikipedia text and find matching spans
+     * Parse Wikipedia text and find matching spans and dates
      */
     public function findMatchingSpans(string $text): array
     {
@@ -20,17 +20,46 @@ class WikipediaSpanMatcherService
         foreach ($entities as $entity) {
             $spans = $this->findSpansByName($entity);
             if (!empty($spans)) {
+                $positions = $this->findTextPosition($text, $entity);
+                foreach ($positions as $position) {
+                    $matches[] = [
+                        'entity' => $entity,
+                        'spans' => $spans,
+                        'text_position' => $position,
+                        'type' => 'span'
+                    ];
+                }
+            }
+        }
+        
+        return $matches;
+    }
+
+    /**
+     * Find years in text and create date links
+     */
+    public function findYears(string $text): array
+    {
+        $matches = [];
+        
+        // Look for 4-digit years (1000-2999)
+        preg_match_all('/\b(1[0-9]{3}|2[0-9]{3})\b/', $text, $yearMatches);
+        
+        foreach ($yearMatches[0] as $year) {
+            $positions = $this->findTextPosition($text, $year);
+            foreach ($positions as $position) {
                 $matches[] = [
-                    'entity' => $entity,
-                    'spans' => $spans,
-                    'text_position' => $this->findTextPosition($text, $entity)
+                    'entity' => $year,
+                    'text_position' => $position,
+                    'type' => 'year',
+                    'year' => (int) $year
                 ];
             }
         }
         
         return $matches;
     }
-    
+
     /**
      * Extract potential entity names from text
      */
@@ -44,7 +73,10 @@ class WikipediaSpanMatcherService
         // Look for single capitalized words that are at least 4 characters (e.g., "London", "Trump")
         preg_match_all('/\b[A-Z][a-z]{3,}\b/', $text, $singleWordMatches);
         
-        $allMatches = array_merge($multiWordMatches[0], $singleWordMatches[0]);
+        // Look for quoted phrases (e.g., "Nevermind", "Foo Fighters")
+        preg_match_all('/"([^"]+)"/', $text, $quotedMatches);
+        
+        $allMatches = array_merge($multiWordMatches[0], $singleWordMatches[0], $quotedMatches[1] ?? []);
         
         foreach ($allMatches as $match) {
             // Filter out common words that aren't likely to be entities
@@ -59,9 +91,9 @@ class WikipediaSpanMatcherService
             return strlen($b) - strlen($a);
         });
         
-        return array_slice($entities, 0, 10); // Limit to top 10
+        return array_slice($entities, 0, 15); // Limit to top 15
     }
-    
+
     /**
      * Check if a word/phrase is likely to be an entity
      */
@@ -108,48 +140,59 @@ class WikipediaSpanMatcherService
         
         return true;
     }
-    
+
     /**
      * Find spans by name (searching in name and metadata)
      */
     private function findSpansByName(string $name): array
     {
-        // Only match exact names or alternate names
+        // Use exact matching to avoid finding partial matches
         return Span::where(function($query) use ($name) {
                 // Exact match on name
                 $query->where('name', 'ILIKE', $name)
                       // Or exact match on alternate names
                       ->orWhere('metadata->alternate_names', 'ILIKE', $name);
             })
+            ->where('access_level', 'public') // Only match public spans
             ->limit(5)
             ->get()
             ->toArray();
     }
-    
+
     /**
-     * Find the position of an entity in the text
+     * Find all positions of an entity in the text
      */
     private function findTextPosition(string $text, string $entity): array
     {
-        $position = stripos($text, $entity);
-        if ($position === false) {
-            return [];
+        $positions = [];
+        $offset = 0;
+        
+        while (($position = stripos($text, $entity, $offset)) !== false) {
+            $positions[] = [
+                'start' => $position,
+                'end' => $position + strlen($entity),
+                'length' => strlen($entity)
+            ];
+            $offset = $position + 1; // Move past this occurrence to find the next one
         }
         
-        return [
-            'start' => $position,
-            'end' => $position + strlen($entity),
-            'length' => strlen($entity)
-        ];
+        return $positions;
     }
-    
+
     /**
-     * Highlight matching entities in text with links to spans
+     * Highlight matching entities and years in text with links
      */
-    public function highlightMatches(string $text, array $matches): string
+    public function highlightMatches(string $text): string
     {
+        // Find both spans and years
+        $spanMatches = $this->findMatchingSpans($text);
+        $yearMatches = $this->findYears($text);
+        
+        // Combine all matches
+        $allMatches = array_merge($spanMatches, $yearMatches);
+        
         // Sort matches by position (earliest first) and length (longest first to avoid partial matches)
-        usort($matches, function($a, $b) {
+        usort($allMatches, function($a, $b) {
             if ($a['text_position']['start'] !== $b['text_position']['start']) {
                 return $a['text_position']['start'] - $b['text_position']['start'];
             }
@@ -160,10 +203,10 @@ class WikipediaSpanMatcherService
         $offset = 0;
         $processedPositions = [];
         
-        foreach ($matches as $match) {
+        foreach ($allMatches as $match) {
             $entity = $match['entity'];
             $position = $match['text_position'];
-            $spans = $match['spans'];
+            $type = $match['type'];
             
             // Skip if this position has already been processed (to avoid overlapping matches)
             $positionKey = $position['start'] . '-' . $position['end'];
@@ -171,22 +214,29 @@ class WikipediaSpanMatcherService
                 continue;
             }
             
-            if (!empty($spans)) {
-                $span = $spans[0]; // Use the first matching span
+            if ($type === 'span' && !empty($match['spans'])) {
+                $span = $match['spans'][0]; // Use the first matching span
                 $link = route('spans.show', $span['id']);
                 
                 $replacement = "<a href=\"{$link}\" class=\"text-decoration-none\" title=\"{$span['name']}\">{$entity}</a>";
+            } elseif ($type === 'year') {
+                $year = $match['year'];
+                $link = route('date.explore', ['date' => $year]);
                 
-                $highlightedText = substr_replace(
-                    $highlightedText,
-                    $replacement,
-                    $position['start'] + $offset,
-                    $position['length']
-                );
-                
-                $offset += strlen($replacement) - $position['length'];
-                $processedPositions[] = $positionKey;
+                $replacement = "<a href=\"{$link}\" class=\"text-decoration-none\">{$entity}</a>";
+            } else {
+                continue; // Skip if no valid match
             }
+            
+            $highlightedText = substr_replace(
+                $highlightedText,
+                $replacement,
+                $position['start'] + $offset,
+                $position['length']
+            );
+            
+            $offset += strlen($replacement) - $position['length'];
+            $processedPositions[] = $positionKey;
         }
         
         return $highlightedText;
