@@ -1,5 +1,11 @@
 @props(['span'])
 
+@php
+    // Use the WikipediaSpanMatcherService to add links to the description
+    $matcherService = new \App\Services\WikipediaSpanMatcherService();
+    $linkedDescription = $span->description ? $matcherService->highlightMatches($span->description) : null;
+@endphp
+
 <div class="card mb-4">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h6 class="card-title mb-0">
@@ -19,7 +25,7 @@
         @if($span->description)
             <div class="description-content">               
                 <div class="description-text">
-                    {!! nl2br(e($span->description)) !!}
+                    {!! nl2br($linkedDescription) !!}
                 </div>
             </div>
         @else
@@ -135,5 +141,23 @@
 
 .description-text p:last-child {
     margin-bottom: 0;
+}
+
+.description-text a {
+    color: #0d6efd;
+    text-decoration: none;
+    border-bottom: 1px dotted #0d6efd;
+    transition: all 0.2s ease;
+}
+
+.description-text a:hover {
+    color: #0a58ca;
+    border-bottom-color: #0a58ca;
+    text-decoration: none;
+}
+
+.description-text a:focus {
+    outline: 2px solid #0d6efd;
+    outline-offset: 2px;
 }
 </style>

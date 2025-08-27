@@ -31,7 +31,7 @@
 <x-shared.interactive-card-base 
     :model="$connection" 
     :customDescription="$connection->connectionSpan ? Str::limit($connection->connectionSpan->description, 150) : null"
-    :showDescription="true">
+    :showDescription="false">
     
     <x-slot name="iconButton">
         <!-- Connection type icon button -->

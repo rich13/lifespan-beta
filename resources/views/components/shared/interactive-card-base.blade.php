@@ -19,7 +19,7 @@
     'model' => null,
     'showTimeline' => false,
     'showTooltips' => true,
-    'showDescription' => true,
+    'showDescription' => false,
     'containerId' => null,
     'additionalClasses' => '',
     'customDescription' => null,

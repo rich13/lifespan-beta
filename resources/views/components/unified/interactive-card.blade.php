@@ -49,7 +49,7 @@
 <x-shared.interactive-card-base 
     :model="$model" 
     :customDescription="$description"
-    :showDescription="true">
+    :showDescription="false">
     
     @if($isSpan)
         <x-slot name="iconButton">
