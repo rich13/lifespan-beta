@@ -883,6 +883,18 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
             Route::post('/tools/fix-private-individual-connections', [\App\Http\Controllers\Admin\ToolsController::class, 'fixPrivateIndividualConnectionsAction'])
                 ->name('tools.fix-private-individual-connections-action');
             
+            // Data Fixer Tool
+            Route::get('/tools/fixer', [\App\Http\Controllers\Admin\DataFixerController::class, 'index'])
+                ->name('tools.fixer');
+            Route::get('/tools/fixer/invalid-date-ranges', [\App\Http\Controllers\Admin\DataFixerController::class, 'findInvalidDateRanges'])
+                ->name('tools.fixer.invalid-date-ranges');
+            Route::post('/tools/fixer/fix-date-range', [\App\Http\Controllers\Admin\DataFixerController::class, 'fixSpanDateRange'])
+                ->name('tools.fixer.fix-date-range');
+            Route::get('/tools/fixer/stats', [\App\Http\Controllers\Admin\DataFixerController::class, 'getStats'])
+                ->name('tools.fixer.stats');
+            Route::get('/tools/fixer/parents-died-before-children', [\App\Http\Controllers\Admin\DataFixerController::class, 'findParentsDiedBeforeChildren'])
+                ->name('tools.fixer.parents-died-before-children');
+            
             // Span Permissions (Legacy - removed in favor of new group-based system)
                 
             // Span Access
@@ -925,6 +937,19 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
             // User Management
             Route::get('/users', [UserController::class, 'index'])
                 ->name('users.index');
+            
+            // Create User from Span (must come before parameterized routes)
+            Route::get('/users/create-from-span', [UserController::class, 'createFromSpan'])
+                ->name('users.create-from-span');
+            Route::post('/users/create-from-span', [UserController::class, 'storeFromSpan'])
+                ->name('users.store-from-span');
+            
+            Route::post('/users/generate-invitation-codes', [UserController::class, 'generateInvitationCodes'])
+                ->name('users.generate-invitation-codes');
+            Route::delete('/users/invitation-codes', [UserController::class, 'deleteAllInvitationCodes'])
+                ->name('users.delete-all-invitation-codes');
+            
+            // Parameterized user routes (must come after specific routes)
             Route::get('/users/{user}', [UserController::class, 'show'])
                 ->name('users.show');
             Route::get('/users/{user}/edit', [UserController::class, 'edit'])
@@ -933,10 +958,6 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
                 ->name('users.update');
             Route::delete('/users/{user}', [UserController::class, 'destroy'])
                 ->name('users.destroy');
-            Route::post('/users/generate-invitation-codes', [UserController::class, 'generateInvitationCodes'])
-                ->name('users.generate-invitation-codes');
-            Route::delete('/users/invitation-codes', [UserController::class, 'deleteAllInvitationCodes'])
-                ->name('users.delete-all-invitation-codes');
 
             // Group Management
             Route::resource('groups', \App\Http\Controllers\Admin\GroupController::class);
@@ -1148,6 +1169,10 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
             $request->user()->sendEmailVerificationNotification();
             return back()->with('message', 'Verification link sent!');
         })->middleware('throttle:6,1')->name('verification.send');
+
+        // Timeline Viewer
+        Route::get('/viewer', [App\Http\Controllers\TimelineViewerController::class, 'index'])->name('viewer.index');
+        Route::get('/viewer/spans', [App\Http\Controllers\TimelineViewerController::class, 'getSpansInViewport'])->name('viewer.spans');
     });
 });
 
