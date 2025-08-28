@@ -5,6 +5,7 @@ namespace Database\Factories;
 use App\Models\Span;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
 class SpanFactory extends Factory
@@ -20,23 +21,34 @@ class SpanFactory extends Factory
         $hasEndDate = fake()->boolean();
         $endYear = $hasEndDate ? fake()->numberBetween($startYear, 2024) : null;
         
+        // Ensure end_year is never before start_year
+        if ($endYear !== null && $endYear < $startYear) {
+            $endYear = fake()->numberBetween($startYear, 2024);
+        }
+        
         $startMonth = fake()->numberBetween(1, 12);
         $startDay = fake()->numberBetween(1, 28); // Using 28 to avoid invalid dates
         
         // If end year is the same as start year, ensure end month is after start month
         $endMonth = null;
         if ($endYear !== null) {
-            $endMonth = $endYear > $startYear 
-                ? fake()->numberBetween(1, 12)
-                : fake()->numberBetween($startMonth, 12);
+            if ($endYear > $startYear) {
+                $endMonth = fake()->numberBetween(1, 12);
+            } else {
+                // Same year, ensure end month is >= start month
+                $endMonth = fake()->numberBetween($startMonth, 12);
+            }
         }
         
         // If end year and month are the same as start, ensure end day is after start day
         $endDay = null;
         if ($endMonth !== null) {
-            $endDay = ($endYear === $startYear && $endMonth === $startMonth)
-                ? fake()->numberBetween($startDay, 28)
-                : fake()->numberBetween(1, 28);
+            if ($endYear === $startYear && $endMonth === $startMonth) {
+                // Same year and month, ensure end day is >= start day
+                $endDay = fake()->numberBetween($startDay, 28);
+            } else {
+                $endDay = fake()->numberBetween(1, 28);
+            }
         }
 
         // Determine start precision based on provided fields
@@ -60,7 +72,7 @@ class SpanFactory extends Factory
             }
         }
         
-        return [
+        $attributes = [
             'id' => Str::uuid(),
             'name' => fake()->name(),
             'type_id' => fake()->randomElement(['person', 'organisation', 'event', 'place']),
@@ -78,7 +90,11 @@ class SpanFactory extends Factory
             'slug' => null, // Don't generate a slug by default
             'access_level' => 'public',
         ];
+
+        return $attributes;
     }
+
+
 
     /**
      * Configure the span as a personal span.
