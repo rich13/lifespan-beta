@@ -58,6 +58,9 @@ class StoryFeatureTest extends TestCase
             'type_id' => 'person',
             'name' => 'Jane Smith',
             'start_year' => 1985,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
             'metadata' => ['gender' => 'female'],
             'access_level' => 'public'
         ]);
@@ -79,6 +82,9 @@ class StoryFeatureTest extends TestCase
             'type_id' => 'band',
             'name' => 'The Beatles',
             'start_year' => 1960,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
             'access_level' => 'public'
         ]);
 
@@ -119,6 +125,9 @@ class StoryFeatureTest extends TestCase
             'type_id' => 'person',
             'name' => 'Alex Johnson',
             'start_year' => 1995,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
             'access_level' => 'public'
         ]);
 
@@ -136,6 +145,9 @@ class StoryFeatureTest extends TestCase
             'type_id' => 'person',
             'name' => 'Empty Person',
             'start_year' => 2011,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
             'owner_id' => $user->id,
             'access_level' => 'public'
         ]);
@@ -150,11 +162,12 @@ class StoryFeatureTest extends TestCase
     public function test_debug_span_access(): void
     {
         $user = User::factory()->create();
-        $span = Span::factory()->create([
-            'type_id' => 'person',
+        $span = Span::create([
             'name' => 'John Doe',
-            'start_year' => 1990,
+            'type_id' => 'person',
             'owner_id' => $user->id,
+            'updater_id' => $user->id,
+            'start_year' => 1990,
             'access_level' => 'public'
         ]);
 
