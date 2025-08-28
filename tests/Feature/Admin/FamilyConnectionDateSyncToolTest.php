@@ -53,26 +53,38 @@ class FamilyConnectionDateSyncToolTest extends TestCase
     public function test_family_connection_date_sync_dry_run(): void
     {
         // Create test data
-        $person1 = Span::factory()->create([
+        $person1 = Span::create([
+            'name' => 'Parent Person Dry Run',
             'type_id' => 'person',
+            'owner_id' => $this->admin->id,
+            'updater_id' => $this->admin->id,
             'start_year' => 1980,
             'start_month' => 1,
             'start_day' => 1,
+            'access_level' => 'public'
         ]);
 
-        $person2 = Span::factory()->create([
+        $person2 = Span::create([
+            'name' => 'Child Person Dry Run',
             'type_id' => 'person',
+            'owner_id' => $this->admin->id,
+            'updater_id' => $this->admin->id,
             'start_year' => 2010,
             'start_month' => 1,
             'start_day' => 1,
+            'access_level' => 'public'
         ]);
 
-        $connectionSpan = Span::factory()->create([
+        $connectionSpan = Span::create([
+            'name' => 'Family Connection Dry Run',
             'type_id' => 'connection',
+            'owner_id' => $this->admin->id,
+            'updater_id' => $this->admin->id,
             'start_year' => null, // No dates set
             'start_month' => null,
             'start_day' => null,
             'metadata' => ['timeless' => true], // Mark as timeless to avoid validation error
+            'access_level' => 'public'
         ]);
 
         $connection = Connection::factory()->create([
@@ -100,26 +112,38 @@ class FamilyConnectionDateSyncToolTest extends TestCase
     public function test_family_connection_date_sync_apply_changes(): void
     {
         // Create test data
-        $person1 = Span::factory()->create([
+        $person1 = Span::create([
+            'name' => 'Parent Person',
             'type_id' => 'person',
+            'owner_id' => $this->admin->id,
+            'updater_id' => $this->admin->id,
             'start_year' => 1980,
             'start_month' => 1,
             'start_day' => 1,
+            'access_level' => 'public'
         ]);
 
-        $person2 = Span::factory()->create([
+        $person2 = Span::create([
+            'name' => 'Child Person',
             'type_id' => 'person',
+            'owner_id' => $this->admin->id,
+            'updater_id' => $this->admin->id,
             'start_year' => 2010,
             'start_month' => 1,
             'start_day' => 1,
+            'access_level' => 'public'
         ]);
 
-        $connectionSpan = Span::factory()->create([
+        $connectionSpan = Span::create([
+            'name' => 'Family Connection',
             'type_id' => 'connection',
+            'owner_id' => $this->admin->id,
+            'updater_id' => $this->admin->id,
             'start_year' => null, // No dates set
             'start_month' => null,
             'start_day' => null,
             'metadata' => ['timeless' => true], // Mark as timeless to avoid validation error
+            'access_level' => 'public'
         ]);
 
         $connection = Connection::factory()->create([
@@ -149,26 +173,38 @@ class FamilyConnectionDateSyncToolTest extends TestCase
     public function test_family_connection_date_sync_specific_connection(): void
     {
         // Create test data
-        $person1 = Span::factory()->create([
+        $person1 = Span::create([
+            'name' => 'Parent Person 2',
             'type_id' => 'person',
+            'owner_id' => $this->admin->id,
+            'updater_id' => $this->admin->id,
             'start_year' => 1980,
             'start_month' => 1,
             'start_day' => 1,
+            'access_level' => 'public'
         ]);
 
-        $person2 = Span::factory()->create([
+        $person2 = Span::create([
+            'name' => 'Child Person 2',
             'type_id' => 'person',
+            'owner_id' => $this->admin->id,
+            'updater_id' => $this->admin->id,
             'start_year' => 2010,
             'start_month' => 1,
             'start_day' => 1,
+            'access_level' => 'public'
         ]);
 
-        $connectionSpan = Span::factory()->create([
+        $connectionSpan = Span::create([
+            'name' => 'Family Connection 2',
             'type_id' => 'connection',
+            'owner_id' => $this->admin->id,
+            'updater_id' => $this->admin->id,
             'start_year' => null,
             'start_month' => null,
             'start_day' => null,
             'metadata' => ['timeless' => true], // Mark as timeless to avoid validation error
+            'access_level' => 'public'
         ]);
 
         $connection = Connection::factory()->create([
@@ -196,26 +232,38 @@ class FamilyConnectionDateSyncToolTest extends TestCase
     public function test_family_connection_date_sync_ignores_relationship_connections(): void
     {
         // Create test data for a relationship connection
-        $person1 = Span::factory()->create([
+        $person1 = Span::create([
+            'name' => 'Person 1',
             'type_id' => 'person',
+            'owner_id' => $this->admin->id,
+            'updater_id' => $this->admin->id,
             'start_year' => 1980,
             'start_month' => 1,
             'start_day' => 1,
+            'access_level' => 'public'
         ]);
 
-        $person2 = Span::factory()->create([
+        $person2 = Span::create([
+            'name' => 'Person 2',
             'type_id' => 'person',
+            'owner_id' => $this->admin->id,
+            'updater_id' => $this->admin->id,
             'start_year' => 1985,
             'start_month' => 1,
             'start_day' => 1,
+            'access_level' => 'public'
         ]);
 
-        $connectionSpan = Span::factory()->create([
+        $connectionSpan = Span::create([
+            'name' => 'Relationship Connection',
             'type_id' => 'connection',
+            'owner_id' => $this->admin->id,
+            'updater_id' => $this->admin->id,
             'start_year' => null, // No dates set
             'start_month' => null,
             'start_day' => null,
             'metadata' => ['timeless' => true], // Mark as timeless to avoid validation error
+            'access_level' => 'public'
         ]);
 
         $connection = Connection::factory()->create([

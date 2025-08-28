@@ -12,12 +12,15 @@ class SpanTest extends TestCase
     public function test_span_dates_are_properly_formatted()
     {
         $user = User::factory()->create();
-        $span = Span::factory()->create([
+        $span = Span::create([
+            'name' => 'Test Span',
+            'type_id' => 'person',
             'owner_id' => $user->id,
             'updater_id' => $user->id,
             'start_year' => 2024,
             'start_month' => 3,
             'start_day' => 15,
+            'access_level' => 'public'
         ]);
 
         // Assert the date is formatted correctly
@@ -30,13 +33,16 @@ class SpanTest extends TestCase
     public function test_span_can_be_ongoing()
     {
         $user = User::factory()->create();
-        $span = Span::factory()->create([
+        $span = Span::create([
+            'name' => 'Ongoing Span',
+            'type_id' => 'person',
             'owner_id' => $user->id,
             'updater_id' => $user->id,
             'start_year' => 2024,
             'end_year' => null,
             'end_month' => null,
-            'end_day' => null
+            'end_day' => null,
+            'access_level' => 'public'
         ]);
 
         // Assert the span is marked as ongoing

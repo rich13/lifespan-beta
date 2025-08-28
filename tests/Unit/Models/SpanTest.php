@@ -110,11 +110,15 @@ class SpanTest extends TestCase
     public function test_get_or_create_public_desert_island_discs_set()
     {
         // Create a person span
-        $person = Span::factory()->create([
+        $user = User::factory()->create();
+        $person = Span::create([
             'name' => 'John Doe',
             'type_id' => 'person',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
             'start_year' => 1980,
-            'state' => 'complete'
+            'state' => 'complete',
+            'access_level' => 'public'
         ]);
 
         // Get or create the Desert Island Discs set

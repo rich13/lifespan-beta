@@ -4,6 +4,7 @@ namespace App\Observers;
 
 use App\Models\Span;
 use App\Services\SlackNotificationService;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -204,6 +205,22 @@ class SpanObserver
                 // Only update if the connection doesn't already have an end date
                 // or if the current end date is after the person's death
                 if (!$connectionSpan->end_year || $connectionSpan->end_year > $deathYear) {
+                    // Validate that setting the death date won't create an invalid range
+                    $deathDate = Carbon::createFromDate($deathYear, $deathMonth ?: 12, $deathDay ?: 31);
+                    $startDate = $this->getBirthDate($connectionSpan);
+                    
+                    if ($startDate && $deathDate->lt($startDate)) {
+                        Log::warning('Skipping family connection end date - would create invalid range', [
+                            'connection_id' => $connection->id,
+                            'connection_span_id' => $connectionSpan->id,
+                            'person_name' => $span->name,
+                            'death_date' => $deathDate->format('Y-m-d'),
+                            'connection_start_date' => $startDate->format('Y-m-d'),
+                            'reason' => 'Death date is before connection start date'
+                        ]);
+                        continue; // Skip this update
+                    }
+                    
                     Log::info('Ending family connection on person\'s death', [
                         'connection_id' => $connection->id,
                         'connection_span_id' => $connectionSpan->id,
@@ -325,6 +342,23 @@ class SpanObserver
             $connectionSpan = $connection->connectionSpan;
             $updated = false;
             
+            // Validate that the suggested dates would create a valid range
+            $wouldBeValid = $this->validateDateRange($suggestedStartDate, $suggestedEndDate, $connectionSpan);
+            
+            if (!$wouldBeValid) {
+                Log::warning('Skipping connection date update - would create invalid date range', [
+                    'connection_id' => $connection->id,
+                    'connection_type' => $connection->type_id,
+                    'span1_name' => $span1->name,
+                    'span2_name' => $span2->name,
+                    'suggested_start' => $suggestedStartDate ? $suggestedStartDate->format('Y-m-d') : 'null',
+                    'suggested_end' => $suggestedEndDate ? $suggestedEndDate->format('Y-m-d') : 'null',
+                    'current_start' => $connectionSpan->start_year ? "{$connectionSpan->start_year}-{$connectionSpan->start_month}-{$connectionSpan->start_day}" : 'null',
+                    'current_end' => $connectionSpan->end_year ? "{$connectionSpan->end_year}-{$connectionSpan->end_month}-{$connectionSpan->end_day}" : 'null'
+                ]);
+                return; // Skip this update to avoid creating invalid data
+            }
+            
             if ($suggestedStartDate) {
                 $currentStart = $this->getBirthDate($connectionSpan);
                 if (!$currentStart || $currentStart->format('Y-m-d') !== $suggestedStartDate->format('Y-m-d')) {
@@ -389,6 +423,40 @@ class SpanObserver
             );
         }
         return null;
+    }
+
+    /**
+     * Validate that a date range would be valid (end not before start)
+     */
+    private function validateDateRange(?Carbon $startDate, ?Carbon $endDate, Span $currentSpan): bool
+    {
+        // If we don't have both dates, it's valid
+        if (!$startDate || !$endDate) {
+            return true;
+        }
+
+        // Check if end date is before start date
+        if ($endDate->lt($startDate)) {
+            return false;
+        }
+
+        // Additional validation: if we're updating an existing span, check against current dates
+        if ($currentSpan->start_year && $currentSpan->end_year) {
+            $currentStart = $this->getBirthDate($currentSpan);
+            $currentEnd = $this->getDeathDate($currentSpan);
+            
+            if ($currentStart && $currentEnd) {
+                // If we're only updating one date, validate against the other current date
+                if ($startDate && !$endDate && $currentEnd && $startDate->gt($currentEnd)) {
+                    return false; // New start date is after current end date
+                }
+                if ($endDate && !$startDate && $currentStart && $endDate->lt($currentStart)) {
+                    return false; // New end date is before current start date
+                }
+            }
+        }
+
+        return true;
     }
 
     /**

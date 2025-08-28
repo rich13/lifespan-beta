@@ -242,7 +242,7 @@ class User extends Authenticatable
     /**
      * Create default sets for the user with proper connections
      */
-    private function createDefaultSets(Span $personalSpan): void
+    public function createDefaultSets(Span $personalSpan): void
     {
         Log::info('Creating default sets for user', [
             'user_id' => $this->id,

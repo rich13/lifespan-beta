@@ -108,32 +108,38 @@ class SpanObserverTest extends TestCase
     public function it_syncs_family_connection_dates_when_person_birth_date_changes()
     {
         // Create two people
-        $parent = Span::factory()->create([
+        $parent = Span::create([
             'name' => 'Parent',
             'type_id' => 'person',
             'owner_id' => $this->user->id,
+            'updater_id' => $this->user->id,
             'start_year' => 1950,
             'start_month' => 1,
             'start_day' => 1,
+            'access_level' => 'public'
         ]);
 
-        $child = Span::factory()->create([
+        $child = Span::create([
             'name' => 'Child',
             'type_id' => 'person',
             'owner_id' => $this->user->id,
+            'updater_id' => $this->user->id,
             'start_year' => 1980,
             'start_month' => 1,
             'start_day' => 1,
+            'access_level' => 'public'
         ]);
 
         // Create a family connection between them
-        $connectionSpan = Span::factory()->create([
+        $connectionSpan = Span::create([
             'name' => 'Parent-Child Connection',
             'type_id' => 'connection',
             'owner_id' => $this->user->id,
+            'updater_id' => $this->user->id,
             'start_year' => 1980, // Child's birth year
             'start_month' => 1,
             'start_day' => 1,
+            'access_level' => 'public'
         ]);
 
         $connection = Connection::factory()->create([
@@ -165,26 +171,32 @@ class SpanObserverTest extends TestCase
     public function it_does_not_sync_non_family_connections()
     {
         // Create two people
-        $person1 = Span::factory()->create([
+        $person1 = Span::create([
             'name' => 'Person 1',
             'type_id' => 'person',
             'owner_id' => $this->user->id,
+            'updater_id' => $this->user->id,
             'start_year' => 1950,
+            'access_level' => 'public'
         ]);
 
-        $person2 = Span::factory()->create([
+        $person2 = Span::create([
             'name' => 'Person 2',
             'type_id' => 'person',
             'owner_id' => $this->user->id,
+            'updater_id' => $this->user->id,
             'start_year' => 1980,
+            'access_level' => 'public'
         ]);
 
         // Create a non-family connection between them
-        $connectionSpan = Span::factory()->create([
+        $connectionSpan = Span::create([
             'name' => 'Person1-Person2 Connection',
             'type_id' => 'connection',
             'owner_id' => $this->user->id,
+            'updater_id' => $this->user->id,
             'start_year' => 2000,
+            'access_level' => 'public'
         ]);
 
         $connection = Connection::factory()->create([
