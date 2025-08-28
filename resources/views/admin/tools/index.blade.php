@@ -204,6 +204,27 @@
             </div>
         </div>
 
+        <!-- Data Fixer Tool -->
+        <div class="col-lg-3 col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-wrench"></i>
+                        Data Fixer Tool
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">Find and fix data quality issues like invalid date ranges and other inconsistencies.</p>
+                    
+                    <div class="d-grid">
+                        <a href="{{ route('admin.tools.fixer') }}" class="btn btn-warning btn-sm">
+                            <i class="bi bi-wrench me-1"></i>Fix Data Issues
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Family Connection Date Sync -->
         <div class="col-lg-3 col-md-6 mb-4">
             <div class="card h-100">
