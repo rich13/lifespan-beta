@@ -272,6 +272,9 @@ class ConnectionConstraintServiceTest extends TestCase
             'start_year' => 2000,
             'start_month' => null,
             'start_day' => null,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
             'start_precision' => 'year'
         ]);
 

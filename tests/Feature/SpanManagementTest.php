@@ -153,6 +153,9 @@ class SpanManagementTest extends TestCase
             'access_level' => 'private',
             'name' => 'Original Name',
             'type_id' => 'person',
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
         ]);
         
         $sharedSpan = Span::factory()->create([
@@ -161,6 +164,9 @@ class SpanManagementTest extends TestCase
             'access_level' => 'shared',
             'name' => 'Shared Span',
             'type_id' => 'person',
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
         ]);
         
         // Grant edit permission to other user for shared span
@@ -226,6 +232,9 @@ class SpanManagementTest extends TestCase
             'access_level' => 'private',
             'name' => 'Private Span',
             'type_id' => 'person',
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
         ]);
         
         $sharedSpan = Span::factory()->create([
@@ -234,6 +243,9 @@ class SpanManagementTest extends TestCase
             'access_level' => 'shared',
             'name' => 'Shared Span',
             'type_id' => 'person',
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
         ]);
         
         // Grant edit permission to other user for shared span
