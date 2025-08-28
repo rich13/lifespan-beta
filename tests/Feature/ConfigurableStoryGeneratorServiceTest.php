@@ -153,6 +153,9 @@ class ConfigurableStoryGeneratorServiceTest extends TestCase
             'type_id' => 'thing',
             'metadata' => ['subtype' => 'album'],
             'start_year' => 1997,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
         ]);
 
         // Create a track
@@ -161,6 +164,9 @@ class ConfigurableStoryGeneratorServiceTest extends TestCase
             'type_id' => 'thing',
             'metadata' => ['subtype' => 'track', 'duration' => '4:10'],
             'start_year' => 1997,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
         ]);
 
         // Connect artist to album
@@ -209,6 +215,9 @@ class ConfigurableStoryGeneratorServiceTest extends TestCase
             'type_id' => 'thing',
             'metadata' => ['subtype' => 'track', 'duration' => '4:10'],
             'start_year' => 1997,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
         ]);
 
         // Connect artist directly to track

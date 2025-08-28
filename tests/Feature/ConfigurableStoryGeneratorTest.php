@@ -90,6 +90,9 @@ class ConfigurableStoryGeneratorTest extends TestCase
             'start_year' => 1990,
             'start_month' => 4,
             'start_day' => 15,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
             'metadata' => ['gender' => 'male']
         ]);
 
@@ -110,6 +113,9 @@ class ConfigurableStoryGeneratorTest extends TestCase
             'start_year' => 1990,
             'start_month' => 6,
             'start_day' => 20,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
             'metadata' => ['gender' => 'female']
         ]);
 
@@ -126,7 +132,10 @@ class ConfigurableStoryGeneratorTest extends TestCase
             'name' => 'Alex Johnson',
             'start_year' => 1990,
             'start_month' => 8,
-            'start_day' => 10
+            'start_day' => 10,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null
             // No gender metadata
         ]);
 
