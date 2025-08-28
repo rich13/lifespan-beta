@@ -83,3 +83,4 @@ class UpdatePlaceTypeSchema extends Command
 
 
 
+

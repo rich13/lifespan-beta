@@ -141,9 +141,17 @@ class SyncFamilyConnectionDates extends Command
                 }
                 
                 if (isset($changes['end_date'])) {
-                    $connectionSpan->end_year = $changes['end_date']->year;
-                    $connectionSpan->end_month = $changes['end_date']->month;
-                    $connectionSpan->end_day = $changes['end_date']->day;
+                    if ($changes['end_date'] === null) {
+                        // Clear the end date
+                        $connectionSpan->end_year = null;
+                        $connectionSpan->end_month = null;
+                        $connectionSpan->end_day = null;
+                    } else {
+                        // Set the end date
+                        $connectionSpan->end_year = $changes['end_date']->year;
+                        $connectionSpan->end_month = $changes['end_date']->month;
+                        $connectionSpan->end_day = $changes['end_date']->day;
+                    }
                     $connectionUpdated = true;
                 }
                 
@@ -202,13 +210,25 @@ class SyncFamilyConnectionDates extends Command
             $currentStartDate = $this->getBirthDate($connectionSpan);
             $currentEndDate = $this->getDeathDate($connectionSpan);
             
+            // Validate that suggested dates make logical sense
+            $validStartDate = $suggestedStartDate;
+            $validEndDate = $suggestedEndDate;
+            
+            // If we have both start and end dates, ensure end_date >= start_date
+            if ($validStartDate && $validEndDate && $validEndDate->lt($validStartDate)) {
+                // The suggested dates are invalid (end before start)
+                // This could happen if parent died before child was born
+                // In this case, we should only set the start date and leave end date as null
+                $validEndDate = null;
+            }
+            
             // Only suggest changes if we have actual dates to work with
-            if ($suggestedStartDate && (!$currentStartDate || $currentStartDate->format('Y-m-d') !== $suggestedStartDate->format('Y-m-d'))) {
-                $changes['start_date'] = $suggestedStartDate;
+            if ($validStartDate && (!$currentStartDate || $currentStartDate->format('Y-m-d') !== $validStartDate->format('Y-m-d'))) {
+                $changes['start_date'] = $validStartDate;
             }
 
-            if ($suggestedEndDate && (!$currentEndDate || $currentEndDate->format('Y-m-d') !== $suggestedEndDate->format('Y-m-d'))) {
-                $changes['end_date'] = $suggestedEndDate;
+            if ($validEndDate && (!$currentEndDate || $currentEndDate->format('Y-m-d') !== $validEndDate->format('Y-m-d'))) {
+                $changes['end_date'] = $validEndDate;
             }
         }
 

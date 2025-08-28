@@ -4,6 +4,7 @@ namespace Tests\Unit\Services\Temporal;
 
 use App\Models\Connection;
 use App\Models\Span;
+use App\Models\User;
 use App\Services\Temporal\TemporalService;
 use App\Services\Temporal\PrecisionValidator;
 use Tests\TestCase;
@@ -24,14 +25,33 @@ class TemporalServiceTest extends TestCase
     public function test_detects_overlap_with_existing_connections(): void
     {
         // Create parent and child spans
-        $parent = Span::factory()->create(['type_id' => 'person']);
-        $child = Span::factory()->create(['type_id' => 'organisation']);
+        $user = User::factory()->create();
+        $parent = Span::create([
+            'name' => 'Parent',
+            'type_id' => 'person',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+            'start_year' => 1950,
+            'access_level' => 'public'
+        ]);
+        $child = Span::create([
+            'name' => 'Child',
+            'type_id' => 'organisation',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+            'start_year' => 1980,
+            'access_level' => 'public'
+        ]);
 
         // Create an existing connection span
-        $existingSpan = Span::factory()->create([
+        $existingSpan = Span::create([
+            'name' => 'Existing Connection',
             'type_id' => 'connection',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
             'start_year' => 2000,
-            'end_year' => 2005
+            'end_year' => 2005,
+            'access_level' => 'public'
         ]);
 
         // Create the existing connection
@@ -43,10 +63,14 @@ class TemporalServiceTest extends TestCase
         ]);
 
         // Test overlapping span
-        $overlappingSpan = Span::factory()->create([
+        $overlappingSpan = Span::create([
+            'name' => 'Overlapping Connection',
             'type_id' => 'connection',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
             'start_year' => 2004,
-            'end_year' => 2006
+            'end_year' => 2006,
+            'access_level' => 'public'
         ]);
 
         $this->assertTrue(
@@ -54,10 +78,14 @@ class TemporalServiceTest extends TestCase
         );
 
         // Test non-overlapping span
-        $nonOverlappingSpan = Span::factory()->create([
+        $nonOverlappingSpan = Span::create([
+            'name' => 'Non-Overlapping Connection',
             'type_id' => 'connection',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
             'start_year' => 2006,
-            'end_year' => 2007
+            'end_year' => 2007,
+            'access_level' => 'public'
         ]);
 
         $this->assertFalse(
@@ -67,7 +95,12 @@ class TemporalServiceTest extends TestCase
 
     public function test_detects_adjacent_spans(): void
     {
-        $span1 = Span::factory()->create([
+        $user = User::factory()->create();
+        $span1 = Span::create([
+            'name' => 'Span 1',
+            'type_id' => 'person',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
             'start_year' => 2000,
             'start_month' => 1,
             'start_day' => 1,
@@ -75,10 +108,15 @@ class TemporalServiceTest extends TestCase
             'end_year' => 2005,
             'end_month' => 12,
             'end_day' => 31,
-            'end_precision' => 'day'
+            'end_precision' => 'day',
+            'access_level' => 'public'
         ]);
 
-        $span2 = Span::factory()->create([
+        $span2 = Span::create([
+            'name' => 'Span 2',
+            'type_id' => 'person',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
             'start_year' => 2006,
             'start_month' => 1,
             'start_day' => 1,
@@ -86,12 +124,18 @@ class TemporalServiceTest extends TestCase
             'end_year' => 2006,
             'end_month' => 12,
             'end_day' => 31,
-            'end_precision' => 'day'
+            'end_precision' => 'day',
+            'access_level' => 'public'
         ]);
 
         $this->assertTrue($this->service->areAdjacent($span1, $span2));
 
-        $span3 = Span::factory()->create([
+        $user = User::factory()->create();
+        $span3 = Span::create([
+            'name' => 'Test Span 3',
+            'type_id' => 'person',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
             'start_year' => 2007,
             'start_month' => 1,
             'start_day' => 1,
@@ -99,7 +143,8 @@ class TemporalServiceTest extends TestCase
             'end_year' => 2007,
             'end_month' => 12,
             'end_day' => 31,
-            'end_precision' => 'day'
+            'end_precision' => 'day',
+            'access_level' => 'public'
         ]);
 
         $this->assertFalse($this->service->areAdjacent($span1, $span3));
@@ -107,38 +152,56 @@ class TemporalServiceTest extends TestCase
 
     public function test_validates_span_dates(): void
     {
+        $user = User::factory()->create();
+        
         // Valid dates
-        $span1 = Span::factory()->create([
+        $span1 = Span::create([
+            'name' => 'Valid Span',
+            'type_id' => 'person',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
             'start_year' => 2000,
-            'end_year' => 2001
+            'end_year' => 2001,
+            'access_level' => 'public'
         ]);
         $this->assertTrue($this->service->validateSpanDates($span1));
 
-        // Invalid dates
-        $span2 = Span::factory()->create([
+        // Test invalid dates by testing the validation logic directly without creating invalid data
+        $invalidSpan = new Span([
             'start_year' => 2001,
             'end_year' => 2000
         ]);
-        $this->assertFalse($this->service->validateSpanDates($span2));
+        $this->assertFalse($this->service->validateSpanDates($invalidSpan));
 
         // Open-ended span
-        $span3 = Span::factory()->create([
+        $span3 = Span::create([
+            'name' => 'Open Span',
+            'type_id' => 'person',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
             'start_year' => 2000,
-            'end_year' => null
+            'end_year' => null,
+            'access_level' => 'public'
         ]);
         $this->assertTrue($this->service->validateSpanDates($span3));
     }
 
     public function test_normalizes_dates_based_on_precision(): void
     {
+        $user = User::factory()->create();
         // Year precision
-        $span1 = Span::factory()->create([
+        $span1 = Span::create([
+            'name' => 'Year Span',
+            'type_id' => 'person',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
             'start_year' => 2000,
             'start_month' => 0,
             'start_day' => 0,
             'end_year' => 2000,
             'end_month' => 0,
-            'end_day' => 0
+            'end_day' => 0,
+            'access_level' => 'public'
         ]);
 
         $this->assertEquals(
@@ -151,13 +214,18 @@ class TemporalServiceTest extends TestCase
         );
 
         // Month precision
-        $span2 = Span::factory()->create([
+        $span2 = Span::create([
+            'name' => 'Month Span',
+            'type_id' => 'person',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
             'start_year' => 2000,
             'start_month' => 6,
             'start_day' => 0,
             'end_year' => 2000,
             'end_month' => 6,
-            'end_day' => 0
+            'end_day' => 0,
+            'access_level' => 'public'
         ]);
 
         $this->assertEquals(
@@ -170,13 +238,18 @@ class TemporalServiceTest extends TestCase
         );
 
         // Day precision
-        $span3 = Span::factory()->create([
+        $span3 = Span::create([
+            'name' => 'Day Span',
+            'type_id' => 'person',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
             'start_year' => 2000,
             'start_month' => 6,
             'start_day' => 15,
             'end_year' => 2000,
             'end_month' => 6,
-            'end_day' => 15
+            'end_day' => 15,
+            'access_level' => 'public'
         ]);
 
         $this->assertEquals(

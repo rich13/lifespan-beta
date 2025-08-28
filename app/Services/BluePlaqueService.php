@@ -1062,9 +1062,9 @@ class BluePlaqueService
             'start_year' => $erectedYear,
             'start_month' => $erectedYear ? 1 : null,
             'start_day' => $erectedYear ? 1 : null,
-            'end_year' => $plaque['extracted_end_year'] ?? null,
-            'end_month' => $plaque['extracted_end_year'] ? 1 : null,
-            'end_day' => $plaque['extracted_end_year'] ? 1 : null,
+            'end_year' => null, // Plaques don't have end dates unless removed
+            'end_month' => null,
+            'end_day' => null,
             'metadata' => [
                 'subtype' => $this->config['plaque_type'],
                 'external_id' => $plaqueId,

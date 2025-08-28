@@ -27,14 +27,22 @@ class ConnectionTemporalConstraintTest extends TestCase
         $this->user = User::factory()->create(['is_admin' => true]);
 
         // Create test spans with required start years
-        $this->parent = Span::factory()->create([
+        $this->parent = Span::create([
+            'name' => 'Test Parent',
             'type_id' => 'person',
-            'start_year' => 1990
+            'owner_id' => $this->user->id,
+            'updater_id' => $this->user->id,
+            'start_year' => 1990,
+            'access_level' => 'public'
         ]);
         
-        $this->child = Span::factory()->create([
+        $this->child = Span::create([
+            'name' => 'Test Child',
             'type_id' => 'person',
-            'start_year' => 1990
+            'owner_id' => $this->user->id,
+            'updater_id' => $this->user->id,
+            'start_year' => 1990,
+            'access_level' => 'public'
         ]);
 
         // Create test spans
@@ -313,19 +321,18 @@ class ConnectionTemporalConstraintTest extends TestCase
     {
         $this->actingAs($this->user);
 
-        $span = Span::factory()->create([
-            'type_id' => 'connection',
-            'start_year' => 2005,
-            'end_year' => 2000
-        ]);
-
+        // Test that creating a span with invalid dates is prevented by our temporal constraint
         $this->expectException(\Illuminate\Database\QueryException::class);
-        $this->expectExceptionMessage('End date cannot be before start date');
-        Connection::create([
-            'parent_id' => $this->parent->id,
-            'child_id' => $this->child->id,
-            'type_id' => 'residence',
-            'connection_span_id' => $span->id
+        $this->expectExceptionMessage('check constraint "check_span_temporal_constraint"');
+        
+        Span::create([
+            'name' => 'Invalid Connection Span',
+            'type_id' => 'connection',
+            'owner_id' => $this->user->id,
+            'updater_id' => $this->user->id,
+            'start_year' => 2005,
+            'end_year' => 2000, // Invalid: end before start
+            'access_level' => 'public'
         ]);
     }
 }
