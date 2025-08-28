@@ -24,6 +24,12 @@
     @endif
 
     <li class="nav-item">
+        <a class="nav-link {{ request()->routeIs('viewer.*') ? 'active' : '' }}" href="{{ route('viewer.index') }}">
+            <i class="bi bi-body-text me-1"></i> <span>Timeline</span>
+        </a>
+    </li>
+
+    <li class="nav-item">
         <a class="nav-link {{ request()->routeIs('spans.shared-with-me') ? 'active' : '' }}" href="{{ route('spans.shared-with-me') }}">
             <i class="bi bi-share me-1"></i> <span>Shared</span>
         </a>
