@@ -10,10 +10,12 @@ use Carbon\Carbon;
 class ConfigurableStoryGeneratorService
 {
     protected $templates;
+    protected $currentUser;
 
     public function __construct()
     {
         $this->templates = config('story_templates');
+        $this->currentUser = auth()->user();
     }
 
     /**
@@ -165,8 +167,6 @@ class ConfigurableStoryGeneratorService
             $sentences = [$fallbackSentence];
             $debug['used_fallback'] = true;
         }
-
-
 
         return [
             'title' => "The Story of {$span->name}",
@@ -608,7 +608,7 @@ class ConfigurableStoryGeneratorService
             return null;
         }
 
-        $residenceConnections = $person->connectionsAsSubject()
+        $residenceConnections = $person->connectionsAsSubjectWithAccess($this->currentUser)
             ->where('type_id', 'residence')
             ->whereHas('child', function ($query) {
                 $query->where('type_id', 'place');
@@ -659,7 +659,7 @@ class ConfigurableStoryGeneratorService
             return ['error' => 'No birth year'];
         }
 
-        $residenceConnections = $person->connectionsAsSubject()
+        $residenceConnections = $person->connectionsAsSubjectWithAccess($this->currentUser)
             ->where('type_id', 'residence')
             ->whereHas('child', function ($query) {
                 $query->where('type_id', 'place');
@@ -779,7 +779,7 @@ class ConfigurableStoryGeneratorService
 
     protected function getResidences(Span $person): Collection
     {
-        return $person->connectionsAsSubject()
+        return $person->connectionsAsSubjectWithAccess($this->currentUser)
             ->where('type_id', 'residence')
             ->whereHas('child', function ($query) {
                 $query->where('type_id', 'place');
@@ -843,7 +843,7 @@ class ConfigurableStoryGeneratorService
 
     protected function getEducation(Span $person): Collection
     {
-        return $person->connectionsAsSubject()
+        return $person->connectionsAsSubjectWithAccess($this->currentUser)
             ->where('type_id', 'education')
             ->whereHas('child', function ($query) {
                 $query->where('type_id', 'organisation');
@@ -863,7 +863,7 @@ class ConfigurableStoryGeneratorService
     {
         $institutions = $this->getEducation($person);
         $links = $institutions->map(function ($edu) use ($person) {
-            $org = $person->connectionsAsSubject()
+            $org = $person->connectionsAsSubjectWithAccess($this->currentUser)
                 ->where('type_id', 'education')
                 ->whereHas('child', function ($query) {
                     $query->where('type_id', 'organisation');
@@ -882,7 +882,7 @@ class ConfigurableStoryGeneratorService
 
     protected function getWork(Span $person): Collection
     {
-        return $person->connectionsAsSubject()
+        return $person->connectionsAsSubjectWithAccess($this->currentUser)
             ->where('type_id', 'employment')
             ->whereHas('child', function ($query) {
                 $query->where('type_id', 'organisation');
@@ -902,7 +902,7 @@ class ConfigurableStoryGeneratorService
     {
         $organisations = $this->getWork($person);
         $links = $organisations->map(function ($work) use ($person) {
-            $org = $person->connectionsAsSubject()
+            $org = $person->connectionsAsSubjectWithAccess($this->currentUser)
                 ->where('type_id', 'employment')
                 ->whereHas('child', function ($query) {
                     $query->where('type_id', 'organisation');
@@ -959,7 +959,7 @@ class ConfigurableStoryGeneratorService
         }
         
         // Find the organisation span to create a link
-        $org = $person->connectionsAsSubject()
+        $org = $person->connectionsAsSubjectWithAccess($this->currentUser)
             ->where('type_id', 'employment')
             ->whereHas('child', function ($query) {
                 $query->where('type_id', 'organisation');
@@ -977,7 +977,7 @@ class ConfigurableStoryGeneratorService
 
     protected function getRelationships(Span $person): Collection
     {
-        return $person->connectionsAsSubject()
+        return $person->connectionsAsSubjectWithAccess($this->currentUser)
             ->where('type_id', 'relationship')
             ->whereHas('child', function ($query) {
                 $query->where('type_id', 'person');
@@ -1127,7 +1127,7 @@ class ConfigurableStoryGeneratorService
 
     protected function getBandMembers(Span $band): Collection
     {
-        return $band->connectionsAsObject()
+        return $band->connectionsAsObjectWithAccess($this->currentUser)
             ->where('type_id', 'membership')
             ->whereHas('parent', function ($query) {
                 $query->where('type_id', 'person');
@@ -1156,7 +1156,7 @@ class ConfigurableStoryGeneratorService
 
     protected function getBandMemberships(Span $person): Collection
     {
-        return $person->connectionsAsSubject()
+        return $person->connectionsAsSubjectWithAccess($this->currentUser)
             ->where('type_id', 'membership')
             ->whereHas('child', function ($query) {
                 $query->where('type_id', 'band');
@@ -1237,7 +1237,7 @@ class ConfigurableStoryGeneratorService
 
     protected function getDiscography(Span $band): Collection
     {
-        return $band->connectionsAsSubject()
+        return $band->connectionsAsSubjectWithAccess($this->currentUser)
             ->where('type_id', 'created')
             ->whereHas('child', function ($query) {
                 $query->where('type_id', 'thing');
@@ -1499,7 +1499,7 @@ class ConfigurableStoryGeneratorService
 
     protected function getRoles(Span $person): Collection
     {
-        return $person->connectionsAsSubject()
+        return $person->connectionsAsSubjectWithAccess($this->currentUser)
             ->where('type_id', 'has_role')
             ->whereHas('child', function ($query) {
                 $query->where('type_id', 'role');
@@ -1617,7 +1617,7 @@ class ConfigurableStoryGeneratorService
      */
     protected function getCreator(Span $span): ?string
     {
-        $creatorConnection = $span->connectionsAsObject()
+        $creatorConnection = $span->connectionsAsObjectWithAccess($this->currentUser)
             ->where('type_id', 'created')
             ->whereHas('parent', function ($query) {
                 $query->where('type_id', 'band');
@@ -1637,7 +1637,7 @@ class ConfigurableStoryGeneratorService
      */
     protected function getTracks(Span $span): Collection
     {
-        return $span->connectionsAsSubject()
+        return $span->connectionsAsSubjectWithAccess($this->currentUser)
             ->where('type_id', 'contains')
             ->whereHas('child', function ($query) {
                 $query->where('type_id', 'thing');
@@ -1657,7 +1657,7 @@ class ConfigurableStoryGeneratorService
      */
     protected function getAlbum(Span $span): ?string
     {
-        $albumConnection = $span->connectionsAsObject()
+        $albumConnection = $span->connectionsAsObjectWithAccess($this->currentUser)
             ->where('type_id', 'contains')
             ->whereHas('parent', function ($query) {
                 $query->where('type_id', 'thing');
@@ -1680,7 +1680,7 @@ class ConfigurableStoryGeneratorService
         $artists = collect();
         
         // First, try to get artists directly from the track
-        $directArtists = $span->connectionsAsObject()
+        $directArtists = $span->connectionsAsObjectWithAccess($this->currentUser)
             ->where('type_id', 'created')
             ->whereHas('parent', function ($query) {
                 $query->whereIn('type_id', ['person', 'band']);
@@ -1698,7 +1698,7 @@ class ConfigurableStoryGeneratorService
         
         // If no direct artists found, try to get artists from the album
         if ($artists->isEmpty()) {
-            $albumConnection = $span->connectionsAsObject()
+            $albumConnection = $span->connectionsAsObjectWithAccess($this->currentUser)
                 ->where('type_id', 'contains')
                 ->whereHas('parent', function ($query) {
                     $query->where('type_id', 'thing');
@@ -1707,7 +1707,7 @@ class ConfigurableStoryGeneratorService
                 ->first();
             
             if ($albumConnection && $albumConnection->parent) {
-                $albumArtists = $albumConnection->parent->connectionsAsObject()
+                $albumArtists = $albumConnection->parent->connectionsAsObjectWithAccess($this->currentUser)
                     ->where('type_id', 'created')
                     ->whereHas('parent', function ($query) {
                         $query->whereIn('type_id', ['person', 'band']);
@@ -1787,7 +1787,7 @@ class ConfigurableStoryGeneratorService
     protected function getTrackArtist(Span $span): ?string
     {
         // Try direct artist (person or band via 'created')
-        $directArtist = $span->connectionsAsObject()
+        $directArtist = $span->connectionsAsObjectWithAccess($this->currentUser)
             ->where('type_id', 'created')
             ->whereHas('parent', function ($query) {
                 $query->whereIn('type_id', ['person', 'band']);
@@ -1798,7 +1798,7 @@ class ConfigurableStoryGeneratorService
             return $this->makeSpanLink($directArtist->parent->name, $directArtist->parent);
         }
         // Fallback: get album, then its artist
-        $albumConnection = $span->connectionsAsObject()
+        $albumConnection = $span->connectionsAsObjectWithAccess($this->currentUser)
             ->where('type_id', 'contains')
             ->whereHas('parent', function ($query) {
                 $query->where('type_id', 'thing');
@@ -1807,7 +1807,7 @@ class ConfigurableStoryGeneratorService
             ->first();
         if ($albumConnection && $albumConnection->parent) {
             $album = $albumConnection->parent;
-            $albumArtist = $album->connectionsAsObject()
+            $albumArtist = $album->connectionsAsObjectWithAccess($this->currentUser)
                 ->where('type_id', 'created')
                 ->whereHas('parent', function ($query) {
                     $query->whereIn('type_id', ['person', 'band']);
@@ -1832,7 +1832,7 @@ class ConfigurableStoryGeneratorService
             return $date;
         }
         // Fallback: get album, then its date
-        $albumConnection = $span->connectionsAsObject()
+        $albumConnection = $span->connectionsAsObjectWithAccess($this->currentUser)
             ->where('type_id', 'contains')
             ->whereHas('parent', function ($query) {
                 $query->where('type_id', 'thing');
@@ -1850,7 +1850,7 @@ class ConfigurableStoryGeneratorService
      */
     protected function getTrackAlbum(Span $span): ?string
     {
-        $albumConnection = $span->connectionsAsObject()
+        $albumConnection = $span->connectionsAsObjectWithAccess($this->currentUser)
             ->where('type_id', 'contains')
             ->whereHas('parent', function ($query) {
                 $query->where('type_id', 'thing');
