@@ -52,7 +52,7 @@
                    data-bs-placement="top" 
                    data-bs-custom-class="tooltip-mini"
                    data-bs-title="State: {{ $stateLabel }}">
-                    <x-icon type="{{ $connection->type_id }}" category="connection" />
+                    <x-icon :connection="$connection" />
                 </a>
             @else
                 <button type="button" 
@@ -62,7 +62,7 @@
                         data-bs-placement="top" 
                         data-bs-custom-class="tooltip-mini"
                         data-bs-title="State: {{ $stateLabel }}">
-                    <x-icon type="{{ $connection->type_id }}" category="connection" />
+                    <x-icon :connection="$connection" />
                 </button>
             @endif
             

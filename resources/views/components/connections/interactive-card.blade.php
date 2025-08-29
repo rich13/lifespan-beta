@@ -36,7 +36,7 @@
     <x-slot name="iconButton">
         <!-- Connection type icon button -->
         @if($connection->connectionSpan)
-            <a href="{{ route('spans.connection', ['subject' => $connection->parent, 'predicate' => str_replace(' ', '-', $connection->type->forward_predicate), 'object' => $connection->child]) }}" 
+            <a href="{{ route('spans.show', $connection->connectionSpan) }}" 
                class="btn btn-outline-{{ $connection->type_id }}" 
                style="min-width: 40px;"
                title="View connection details"
@@ -44,7 +44,7 @@
                data-bs-placement="top" 
                data-bs-custom-class="tooltip-mini"
                data-bs-title="State: {{ $stateLabel }}">
-                <x-icon type="{{ $connection->type_id }}" category="connection" />
+                <x-icon :connection="$connection" />
             </a>
         @else
             <button type="button" 
@@ -54,7 +54,7 @@
                     data-bs-placement="top" 
                     data-bs-custom-class="tooltip-mini"
                     data-bs-title="State: {{ $stateLabel }}">
-                <x-icon type="{{ $connection->type_id }}" category="connection" />
+                <x-icon :connection="$connection" />
             </button>
         @endif
     </x-slot>

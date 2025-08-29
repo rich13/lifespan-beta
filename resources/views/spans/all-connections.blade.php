@@ -2,12 +2,12 @@
 
 @section('page_title')
     <x-breadcrumb :items="[
-        [
-            'text' => 'Spans',
-            'url' => route('spans.index'),
-            'icon' => 'view',
-            'icon_category' => 'action'
-        ],
+        //[
+        //    'text' => 'Spans',
+        //    'url' => route('spans.index'),
+        //    'icon' => 'view',
+        //    'icon_category' => 'action'
+        //],
         [
             'text' => $subject->getDisplayTitle(),
             'url' => route('spans.show', $subject),

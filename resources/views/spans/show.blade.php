@@ -8,15 +8,16 @@
 
 @section('page_title')
     @php
-        $breadcrumbItems = [
-            [
-                'text' => 'Spans',
-                'url' => route('spans.index'),
-                'icon' => 'view',
-                'icon_category' => 'action'
-            ]
-        ];
-
+        $breadcrumbItems = [];
+        // breadcrumb item for spans index
+        //[
+        //        'text' => 'Spans',
+        //        'url' => route('spans.index'),
+        //        'icon' => 'view',
+        //        'icon_category' => 'action'
+        //]
+        
+        
         // If we have connection context from the controller, use it
         if (isset($connectionType) && isset($subject) && isset($object)) {
             // Add subject to breadcrumb
@@ -42,6 +43,43 @@
                 'icon' => $object->type_id,
                 'icon_category' => 'span'
             ];
+        } elseif ($span->type_id === 'connection') {
+            // This is a connection span - derive context from the connection
+            $connection = \App\Models\Connection::where('connection_span_id', $span->id)->first();
+            
+            if ($connection) {
+                // Add subject to breadcrumb
+                $breadcrumbItems[] = [
+                    'text' => $connection->subject->getDisplayTitle(),
+                    'url' => route('spans.show', $connection->subject),
+                    'icon' => $connection->subject->type_id,
+                    'icon_category' => 'span'
+                ];
+                
+                // Add predicate to breadcrumb
+                $breadcrumbItems[] = [
+                    'text' => $connection->type->forward_predicate,
+                    'url' => route('spans.connections', ['subject' => $connection->subject, 'predicate' => str_replace(' ', '-', $connection->type->forward_predicate)]),
+                    'icon' => $connection->type->type_id,
+                    'icon_category' => 'connection'
+                ];
+                
+                // Add object to breadcrumb
+                $breadcrumbItems[] = [
+                    'text' => $connection->object->getDisplayTitle(),
+                    'url' => route('spans.show', $connection->object),
+                    'icon' => $connection->object->type_id,
+                    'icon_category' => 'span'
+                ];
+            } else {
+                // Fallback for connection spans without a connection record
+                $breadcrumbItems[] = [
+                    'text' => $span->getDisplayTitle(),
+                    'url' => route('spans.show', $span),
+                    'icon' => $span->type_id,
+                    'icon_category' => 'span'
+                ];
+            }
         } else {
             // Regular span - just add the span itself
             $breadcrumbItems[] = [

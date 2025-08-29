@@ -55,7 +55,7 @@
         <x-slot name="iconButton">
             <!-- Span type icon button -->
             <button type="button" class="btn btn-outline-{{ $span->type_id }} disabled" style="min-width: 40px;">
-                <x-icon type="{{ $span->type_id }}" category="span" />
+                <x-icon :span="$span" />
             </button>
         </x-slot>
 
@@ -71,7 +71,7 @@
                 <button type="button" class="btn btn-outline-light text-dark inactive" disabled>by</button>
                 <a href="{{ route('spans.show', $creator) }}"
                    class="btn btn-{{ $creator->type_id }}">
-                    <x-icon type="{{ $creator->type_id }}" category="span" class="me-1" />
+                    <x-icon :span="$creator" class="me-1" />
                     {{ $creator->name }}
                 </a>
             @endif
@@ -167,7 +167,7 @@
         <x-slot name="iconButton">
             <!-- Connection type icon button -->
             <button type="button" class="btn btn-outline-{{ $connection->type_id }} disabled" style="min-width: 40px;">
-                <x-icon type="{{ $connection->type_id }}" category="connection" />
+                <x-icon :connection="$connection" />
             </button>
         </x-slot>
 

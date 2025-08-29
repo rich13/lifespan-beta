@@ -1,6 +1,10 @@
 @props(['variant' => 'default', 'height' => '56px'])
 
 @php
+// Check if we're in time travel mode
+$timeTravelDate = request()->cookie('time_travel_date');
+$isTimeTravel = !empty($timeTravelDate);
+
 // Define variants for different contexts
 $variants = [
     'default' => 'bg-light border-bottom shadow-sm',
@@ -9,6 +13,12 @@ $variants = [
 ];
 
 $containerClass = $variants[$variant] ?? $variants['default'];
+
+// Add time travel styling if in time travel mode
+if ($isTimeTravel) {
+    $containerClass = str_replace('bg-light', 'bg-warning', $containerClass);
+    $containerClass = str_replace('bg-secondary', 'bg-warning', $containerClass);
+}
 @endphp
 
 <!-- Top Navigation Container -->

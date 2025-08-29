@@ -178,7 +178,7 @@
                                     @if($event['age'] === 0)
                                         <!-- Born today -->
                                         <button type="button" class="btn btn-outline-{{ $event['span']->type_id }} disabled" style="min-width: 40px;">
-                                            <x-icon type="{{ $event['span']->type_id }}" category="span" />
+                                            <x-icon :span="$event['span']" />
                                         </button>
                                         <a href="{{ route('spans.show', $event['span']) }}" 
                                            class="btn {{ $event['span']->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $event['span']->type_id }}">
@@ -189,7 +189,7 @@
                                     @else
                                         <!-- Birthday today -->
                                         <button type="button" class="btn btn-outline-{{ $event['span']->type_id }} disabled" style="min-width: 40px;">
-                                            <x-icon type="{{ $event['span']->type_id }}" category="span" />
+                                            <x-icon :span="$event['span']" />
                                         </button>
                                         <a href="{{ route('spans.show', $event['span']) }}" 
                                            class="btn {{ $event['span']->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $event['span']->type_id }}">
@@ -203,7 +203,7 @@
                                     @if($event['age'] === 0)
                                         <!-- Will be born -->
                                         <button type="button" class="btn btn-outline-{{ $event['span']->type_id }} disabled" style="min-width: 40px;">
-                                            <x-icon type="{{ $event['span']->type_id }}" category="span" />
+                                            <x-icon :span="$event['span']" />
                                         </button>
                                         <a href="{{ route('spans.show', $event['span']) }}" 
                                            class="btn {{ $event['span']->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $event['span']->type_id }}">
@@ -213,7 +213,7 @@
                                     @else
                                         <!-- Birthday in future -->
                                         <button type="button" class="btn btn-outline-{{ $event['span']->type_id }} disabled" style="min-width: 40px;">
-                                            <x-icon type="{{ $event['span']->type_id }}" category="span" />
+                                            <x-icon :span="$event['span']" />
                                         </button>
                                         <a href="{{ route('spans.show', $event['span']) }}" 
                                            class="btn {{ $event['span']->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $event['span']->type_id }}">
@@ -227,7 +227,7 @@
                                     <!-- Death anniversary today -->
                                     <button type="button" class="btn btn-outline-light text-dark inactive" disabled>{{ $event['years'] }} years since</button>
                                     <button type="button" class="btn btn-outline-{{ $event['span']->type_id }} disabled" style="min-width: 40px;">
-                                        <x-icon type="{{ $event['span']->type_id }}" category="span" />
+                                        <x-icon :span="$event['span']" />
                                     </button>
                                     <a href="{{ route('spans.show', $event['span']) }}" 
                                        class="btn {{ $event['span']->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $event['span']->type_id }}">
@@ -238,7 +238,7 @@
                                     <!-- Death anniversary in future -->
                                     <button type="button" class="btn btn-outline-light text-dark inactive" disabled>{{ $event['years'] }} years since</button>
                                     <button type="button" class="btn btn-outline-{{ $event['span']->type_id }} disabled" style="min-width: 40px;">
-                                        <x-icon type="{{ $event['span']->type_id }}" category="span" />
+                                        <x-icon :span="$event['span']" />
                                     </button>
                                     <a href="{{ route('spans.show', $event['span']) }}" 
                                        class="btn {{ $event['span']->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $event['span']->type_id }}">
@@ -257,7 +257,7 @@
                                     <!-- Album anniversary today -->
                                     <button type="button" class="btn btn-outline-light text-dark inactive" disabled>{{ $event['years'] }} years since</button>
                                     <button type="button" class="btn btn-outline-{{ $event['span']->type_id }} disabled" style="min-width: 40px;">
-                                        <x-icon type="{{ $event['span']->type_id }}" category="span" />
+                                        <x-icon :span="$event['span']" />
                                     </button>
                                     <a href="{{ route('spans.show', $event['span']) }}" 
                                        class="btn {{ $event['span']->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $event['span']->type_id }}">
@@ -275,7 +275,7 @@
                                     <!-- Album anniversary in future -->
                                     <button type="button" class="btn btn-outline-light text-dark inactive" disabled>{{ $event['years'] }} years since</button>
                                     <button type="button" class="btn btn-outline-{{ $event['span']->type_id }} disabled" style="min-width: 40px;">
-                                        <x-icon type="{{ $event['span']->type_id }}" category="span" />
+                                        <x-icon :span="$event['span']" />
                                     </button>
                                     <a href="{{ route('spans.show', $event['span']) }}" 
                                        class="btn {{ $event['span']->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $event['span']->type_id }}">

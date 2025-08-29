@@ -22,6 +22,7 @@ if ($user) {
 <div class="d-flex align-items-center {{ $class }}">
     @php
         $timeTravelDate = request()->cookie('time_travel_date');
+        $isTimeTravel = !empty($timeTravelDate);
     @endphp
     
     <!-- Time Travel Button/Indicator -->
@@ -29,7 +30,7 @@ if ($user) {
         @if($timeTravelDate)
             <!-- Time Travel Active -->
             <div class="btn-group" role="group">
-                <button class="btn btn-sm btn-warning d-flex align-items-center" 
+                <button class="btn btn-sm {{ $isTimeTravel ? 'btn-dark' : 'btn-warning' }} d-flex align-items-center" 
                         type="button" 
                         data-bs-toggle="modal" 
                         data-bs-target="#timeTravelModal"
@@ -39,7 +40,7 @@ if ($user) {
                     <span class="d-none d-sm-inline">{{ date('M j Y', strtotime($timeTravelDate)) }}</span>
                 </button>
                 <a href="{{ route('time-travel.toggle') }}" 
-                   class="btn btn-sm btn-outline-warning"
+                   class="btn btn-sm {{ $isTimeTravel ? 'btn-outline-dark' : 'btn-outline-warning' }}"
                    data-bs-toggle="tooltip" data-bs-placement="bottom" 
                    title="Exit Time Travel">
                     <i class="bi bi-x"></i>

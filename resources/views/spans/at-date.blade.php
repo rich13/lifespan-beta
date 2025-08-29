@@ -3,12 +3,12 @@
 @section('page_title')
     @php
         $breadcrumbItems = [
-            [
-                'text' => 'Spans',
-                'url' => route('spans.index'),
-                'icon' => 'view',
-                'icon_category' => 'action'
-            ],
+            //[
+            //    'text' => 'Spans',
+            //    'url' => route('spans.index'),
+            //    'icon' => 'view',
+            //    'icon_category' => 'action'
+            //],
             [
                 'text' => $span->getDisplayTitle(),
                 'url' => route('spans.show', $span),
@@ -50,7 +50,7 @@
                     <div class="card-header">
                         <h5 class="card-title mb-0">
                             <i class="bi bi-link-45deg me-2"></i>
-                            On {{ $displayDate }}...
+                            On {{ $displayDate }}{{ $span->type_id === 'person' ? ', ' . $span->name . ' ' . $ageInfo['message'] : '' }}...
                         </h5>
                     </div>
                     <div class="card-body">

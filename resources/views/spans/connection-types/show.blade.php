@@ -95,7 +95,7 @@
                                                class="btn btn-sm btn-outline-primary">
                                                 <i class="bi bi-eye"></i> View
                                             </a>
-                                            <a href="{{ route('spans.connection', [$span, $connectionType, $connection->other_span]) }}" 
+                                            <a href="{{ route('spans.show', $connection->connectionSpan) }}" 
                                                class="btn btn-sm btn-outline-info">
                                                 <i class="bi bi-link-45deg"></i> Connection
                                             </a>

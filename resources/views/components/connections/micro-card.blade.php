@@ -1,7 +1,7 @@
 @props(['connection'])
 
 <span class="d-inline-flex align-items-center gap-1">
-    <x-icon type="{{ $connection->type_id }}" category="connection" class="text-{{ $connection->type_id }}" />
+    <x-icon :connection="$connection" class="text-{{ $connection->type_id }}" />
     <span>
         <x-spans.display.micro-card :span="$connection->parent" />
         @if($connection->type_id === 'family')

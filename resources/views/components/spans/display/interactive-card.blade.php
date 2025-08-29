@@ -34,7 +34,7 @@
                data-bs-placement="top" 
                data-bs-custom-class="tooltip-mini"
                data-bs-title="State: {{ $stateLabel }}">
-                <x-icon type="{{ $span->type_id }}" category="span" />
+                <x-icon :span="$span" />
             </a>
             
             <!-- Span name button (main link) -->
@@ -48,7 +48,7 @@
                 <button type="button" class="btn btn-outline-light text-dark inactive" disabled>by</button>
                 <a href="{{ route('spans.show', $creator) }}"
                    class="btn btn-{{ $creator->type_id }}">
-                    <x-icon type="{{ $creator->type_id }}" category="span" class="me-1" />
+                    <x-icon :span="$creator" class="me-1" />
                     {{ $creator->name }}
                 </a>
             @endif

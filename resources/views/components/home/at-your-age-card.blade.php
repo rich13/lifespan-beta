@@ -169,7 +169,7 @@
     <div class="card-header">
         <h3 class="h6 mb-0">
             <i class="bi bi-arrow-left-right text-primary me-2"></i>
-            You are {{ $age->y }} years, {{ $age->m }} months, and {{ $age->d }} days old.
+            You are {{ $age->y }} years, {{ $age->m }} months, and {{ $age->d }} days old
         </h3>
     </div>
     <div class="card-body">
@@ -203,9 +203,9 @@
             @endforeach
             
             <div class="mt-3">
-                <a href="{{ route('explore.at-your-age') }}" class="btn btn-primary btn-sm">
+                <a href="{{ route('explore.at-your-age') }}" class="btn btn-outline-secondary btn-sm">
                     <i class="bi bi-arrow-right me-2"></i>
-                    Explore more at your age...
+                    More...
                 </a>
             </div>
         @else
@@ -214,7 +214,7 @@
             </p>
             <a href="{{ route('explore.at-your-age') }}" class="btn btn-primary btn-sm">
                 <i class="bi bi-arrow-right me-2"></i>
-                Explore At Your Age
+                More...
             </a>
         @endif
     </div>

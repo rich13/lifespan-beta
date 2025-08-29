@@ -14,11 +14,9 @@
         ->where('child_id', '!=', $span->id) // Exclude self-referential connections
         ->where('type_id', '!=', 'contains') // Exclude contains connections
         ->with(['connectionSpan', 'child', 'type'])
-        ->get()
-        ->sortBy(function($connection) {
-            return $connection->connectionSpan->start_year;
-        })
-        ->take(3); // Limit to 3 connections
+        ->inRandomOrder() // Choose connections at random
+        ->limit(3) // Limit to 3 random connections
+        ->get();
 @endphp
 
 @if($connections->isNotEmpty())

@@ -11,28 +11,7 @@
     <x-slot name="iconButton">
         <!-- Span type icon button -->
         <button type="button" class="btn btn-outline-secondary disabled" style="min-width: 40px;">
-            @switch($span->type_id)
-                @case('person')
-                    <i class="bi bi-person-fill"></i>
-                    @break
-                @case('organisation')
-                    <i class="bi bi-building"></i>
-                    @break
-                @case('place')
-                    <i class="bi bi-geo-alt-fill"></i>
-                    @break
-                @case('event')
-                    <i class="bi bi-calendar-event-fill"></i>
-                    @break
-                @case('band')
-                    <i class="bi bi-cassette"></i>
-                    @break
-                @case('thing')
-                    <i class="bi bi-box"></i>
-                    @break
-                @default
-                    <i class="bi bi-question-circle"></i>
-            @endswitch
+                            <x-icon :span="$span" />
         </button>
     </x-slot>
 
@@ -40,7 +19,7 @@
         <!-- Span name -->
         <a href="{{ route('spans.show', $span) }}" 
            class="btn {{ $span->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $span->type_id }}">
-            <x-icon type="{{ $span->type_id }}" category="span" class="me-1" />
+                            <x-icon :span="$span" class="me-1" />
             {{ $span->name }}
         </a>
 
@@ -49,7 +28,7 @@
             <button type="button" class="btn btn-outline-light text-dark inactive" disabled>by</button>
             <a href="{{ route('spans.show', $creator) }}"
                class="btn btn-{{ $creator->type_id }}">
-                <x-icon type="{{ $creator->type_id }}" category="span" class="me-1" />
+                <x-icon :span="$creator" class="me-1" />
                 {{ $creator->name }}
             </a>
         @endif

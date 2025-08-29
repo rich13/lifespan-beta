@@ -89,54 +89,7 @@
     <div class="btn-group btn-group-sm" role="group">
         <!-- Connection type icon button -->
         <button type="button" class="btn btn-outline-{{ $connection->type_id }} disabled" style="min-width: 40px;">
-            @switch($connection->type_id)
-                @case('education')
-                    <i class="bi bi-mortarboard-fill"></i>
-                    @break
-                @case('employment')
-                @case('work')
-                    <i class="bi bi-briefcase-fill"></i>
-                    @break
-                @case('member_of')
-                @case('membership')
-                    <i class="bi bi-people-fill"></i>
-                    @break
-                @case('residence')
-                    <i class="bi bi-house-fill"></i>
-                    @break
-                @case('family')
-                    <i class="bi bi-heart-fill"></i>
-                    @break
-                @case('friend')
-                    <i class="bi bi-person-heart"></i>
-                    @break
-                @case('relationship')
-                    <i class="bi bi-people"></i>
-                    @break
-                @case('created')
-                    <i class="bi bi-palette-fill"></i>
-                    @break
-                @case('contains')
-                    <i class="bi bi-box-seam"></i>
-                    @break
-                @case('travel')
-                    <i class="bi bi-airplane"></i>
-                    @break
-                @case('participation')
-                    <i class="bi bi-calendar-event"></i>
-                    @break
-                @case('ownership')
-                    <i class="bi bi-key-fill"></i>
-                    @break
-                @case('has_role')
-                    <i class="bi bi-person-badge"></i>
-                    @break
-                @case('at_organisation')
-                    <i class="bi bi-building"></i>
-                    @break
-                @default
-                    <i class="bi bi-link-45deg"></i>
-            @endswitch
+            <x-icon type="{{ $connection->type_id }}" category="connection" />
         </button>
 
         <!-- Subject span name -->

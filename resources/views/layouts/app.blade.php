@@ -175,7 +175,7 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
             /* Subtle border toggle button */
             .sidebar-toggle-btn {
                 position: fixed;
-                top: 0;
+                bottom: 0;
                 left: var(--sidebar-width-md);
                 width: 20px;
                 height: 56px;

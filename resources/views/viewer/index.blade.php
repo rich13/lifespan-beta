@@ -3,7 +3,7 @@
 @section('title', 'Timeline Viewer - Lifespan')
 
 @section('page_title')
-    Timeline Viewer (experimental...)
+    Timeline Viewer (<i>very</i> experimental...)
 @endsection
 
 @section('page_filters')
