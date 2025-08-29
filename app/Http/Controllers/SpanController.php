@@ -659,10 +659,13 @@ class SpanController extends Controller
             // Format the date for display
             $displayDate = $this->formatDateForDisplay($year, $month, $day);
 
+            // Calculate the span's age at this date
+            $ageInfo = $this->calculateSpanAgeAtDate($span, $year, $month, $day);
+
             // Set global time travel cookie
             $cookie = cookie('time_travel_date', $date, 60 * 24 * 30); // 30 days
 
-            return response()->view('spans.at-date', compact('span', 'date', 'displayDate', 'ongoingConnections'))
+            return response()->view('spans.at-date', compact('span', 'date', 'displayDate', 'ongoingConnections', 'ageInfo'))
                 ->withCookie($cookie);
         } catch (AuthorizationException $e) {
             return view('errors.403');
@@ -768,6 +771,92 @@ class SpanController extends Controller
     private function formatDateForDisplay(int $year, int $month, int $day): string
     {
         return date('j F Y', mktime(0, 0, 0, $month, $day, $year));
+    }
+
+    /**
+     * Calculate the span's age at a specific date
+     */
+    private function calculateSpanAgeAtDate(Span $span, int $year, int $month, int $day): array
+    {
+        $targetDate = (object)[
+            'year' => $year,
+            'month' => $month,
+            'day' => $day,
+        ];
+
+        // Check if span has a start date
+        if (!$span->start_year) {
+            return [
+                'status' => 'no_start_date',
+                'message' => "wasn't alive (no birth date recorded)"
+            ];
+        }
+
+        $startDate = (object)[
+            'year' => $span->start_year,
+            'month' => $span->start_month ?? 1,
+            'day' => $span->start_day ?? 1,
+        ];
+
+        // Check if target date is before span's start
+        if ($year < $startDate->year || 
+            ($year == $startDate->year && $month < $startDate->month) ||
+            ($year == $startDate->year && $month == $startDate->month && $day < $startDate->day)) {
+            return [
+                'status' => 'before_birth',
+                'message' => "wasn't alive yet"
+            ];
+        }
+
+        // Check if span has an end date and if target date is after it
+        if ($span->end_year) {
+            $endDate = (object)[
+                'year' => $span->end_year,
+                'month' => $span->end_month ?? 1,
+                'day' => $span->end_day ?? 1,
+            ];
+
+            if ($year > $endDate->year || 
+                ($year == $endDate->year && $month > $endDate->month) ||
+                ($year == $endDate->year && $month == $endDate->month && $day > $endDate->day)) {
+                return [
+                    'status' => 'after_death',
+                    'message' => "wasn't alive anymore"
+                ];
+            }
+        }
+
+        // Calculate age at target date
+        $age = \App\Helpers\DateDurationCalculator::calculateDuration($startDate, $targetDate);
+        
+        if (!$age) {
+            return [
+                'status' => 'error',
+                'message' => "age calculation error"
+            ];
+        }
+
+        // Format age message
+        $ageParts = [];
+        if ($age['years'] > 0) {
+            $ageParts[] = $age['years'] . ' year' . ($age['years'] != 1 ? 's' : '');
+        }
+        if ($age['months'] > 0) {
+            $ageParts[] = $age['months'] . ' month' . ($age['months'] != 1 ? 's' : '');
+        }
+        if ($age['days'] > 0) {
+            $ageParts[] = $age['days'] . ' day' . ($age['days'] != 1 ? 's' : '');
+        }
+
+        if (empty($ageParts)) {
+            $ageParts[] = '0 days';
+        }
+
+        return [
+            'status' => 'alive',
+            'message' => 'was ' . implode(', ', $ageParts) . ' old',
+            'age' => $age
+        ];
     }
 
     /**
@@ -2852,10 +2941,10 @@ class SpanController extends Controller
 
         // Get all connections of this type involving the subject with access control
         $user = auth()->user();
-        $connections = Connection::where('type_id', $connectionType->type)
+        $connections = Connection::where('connections.type_id', $connectionType->type)
             ->where(function($query) use ($subject) {
-                $query->where('parent_id', $subject->id)
-                      ->orWhere('child_id', $subject->id);
+                $query->where('connections.parent_id', $subject->id)
+                      ->orWhere('connections.child_id', $subject->id);
             })
             ->where(function($query) use ($user) {
                 if (!$user) {
@@ -2909,10 +2998,23 @@ class SpanController extends Controller
                 }
             })
             ->with(['subject', 'object', 'connectionSpan'])
-            ->paginate(20);
-
-        // Sort the collection by connection span start date
-        $connections->getCollection()->sortBy(function($connection) {
+            ->get();
+        
+        // Transform connections to show the other span and relationship direction
+        $connections->transform(function($connection) use ($subject, $connectionType) {
+            $isParent = $connection->parent_id === $subject->id;
+            $otherSpan = $isParent ? $connection->object : $connection->subject;
+            $predicate = $isParent ? $connectionType->forward_predicate : $connectionType->inverse_predicate;
+            
+            $connection->other_span = $otherSpan;
+            $connection->is_parent = $isParent;
+            $connection->predicate = $predicate;
+            
+            return $connection;
+        });
+        
+        // Sort the collection by connection span start date (earliest first)
+        $connections = $connections->sortBy(function($connection) {
             $connectionSpan = $connection->connectionSpan;
             if (!$connectionSpan || !$connectionSpan->start_year) {
                 return PHP_INT_MAX; // Put connections without dates at the end
@@ -2924,20 +3026,21 @@ class SpanController extends Controller
             $day = $connectionSpan->start_day ?? 1;
             
             return sprintf('%04d%02d%02d', $year, $month, $day);
-        });
-
-        // Transform connections to show the other span and relationship direction
-        $connections->getCollection()->transform(function($connection) use ($subject, $connectionType) {
-            $isParent = $connection->parent_id === $subject->id;
-            $otherSpan = $isParent ? $connection->object : $connection->subject;
-            $predicate = $isParent ? $connectionType->forward_predicate : $connectionType->inverse_predicate;
-            
-            $connection->other_span = $otherSpan;
-            $connection->is_parent = $isParent;
-            $connection->predicate = $predicate;
-            
-            return $connection;
-        });
+        })->values();
+        
+        // Create a custom paginator
+        $perPage = 20;
+        $currentPage = request()->get('page', 1);
+        $offset = ($currentPage - 1) * $perPage;
+        $paginatedConnections = $connections->slice($offset, $perPage);
+        
+        $connections = new \Illuminate\Pagination\LengthAwarePaginator(
+            $paginatedConnections,
+            $connections->count(),
+            $perPage,
+            $currentPage,
+            ['path' => request()->url(), 'pageName' => 'page']
+        );
 
         // Get all relevant connection types for this span with connection counts
         $relevantConnectionTypes = ConnectionType::where(function($query) use ($subject) {
@@ -2947,10 +3050,10 @@ class SpanController extends Controller
 
         // Add connection counts for each type
         $relevantConnectionTypes->each(function($type) use ($subject) {
-            $count = Connection::where('type_id', $type->type)
+            $count = Connection::where('connections.type_id', $type->type)
                 ->where(function($query) use ($subject) {
-                    $query->where('parent_id', $subject->id)
-                          ->orWhere('child_id', $subject->id);
+                    $query->where('connections.parent_id', $subject->id)
+                          ->orWhere('connections.child_id', $subject->id);
                 })->count();
             
             $type->connection_count = $count;
