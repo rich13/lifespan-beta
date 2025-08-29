@@ -43,4 +43,9 @@ SESSION_DRIVER = "file"
 SESSION_LIFETIME = "525600"
 
 # Railway configuration will automatically inject additional variables
-# for any linked PostgreSQL service, including the database password 
+# for any linked PostgreSQL service, including the database password
+
+# Railway-specific upload configuration
+# These variables help Railway understand our upload requirements
+RAILWAY_UPLOAD_SIZE_LIMIT = "100M"
+RAILWAY_REQUEST_TIMEOUT = "300" 
