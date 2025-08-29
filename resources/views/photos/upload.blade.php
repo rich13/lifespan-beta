@@ -326,13 +326,25 @@ $(document).ready(function() {
                 uploadProgress.hide();
                 let errorMessage = 'Upload failed. Please try again.';
                 
-                if (xhr.responseJSON && xhr.responseJSON.message) {
+                // Handle specific error cases
+                if (xhr.status === 413) {
+                    errorMessage = 'File too large (413 Payload Too Large). The server rejected the upload due to size limits. Please try uploading smaller files or contact support if you need to upload larger files.';
+                } else if (xhr.responseJSON && xhr.responseJSON.message) {
                     errorMessage = xhr.responseJSON.message;
                 }
+                
+                // Log error details for debugging
+                console.error('Upload error:', {
+                    status: xhr.status,
+                    statusText: xhr.statusText,
+                    responseText: xhr.responseText,
+                    files: selectedFiles.map(f => ({ name: f.name, size: f.size }))
+                });
                 
                 uploadResults.html(`
                     <div class="alert alert-danger">
                         <i class="bi bi-exclamation-triangle me-2"></i>${errorMessage}
+                        ${xhr.status === 413 ? '<br><small class="text-muted">This is likely due to Railway\'s upload size limits. Please try uploading smaller files.</small>' : ''}
                     </div>
                 `);
                 
