@@ -3,6 +3,11 @@
     'category' => 'span',     // The category: 'span', 'connection', 'status', 'action', 'subtype'
     'size' => null,           // Optional size class (e.g., 'fs-4', 'fs-5')
     'class' => '',            // Additional CSS classes
+    'span' => null,           // Span object - if provided, automatically determines type/subtype
+    'connection' => null,     // Connection object - if provided, automatically determines type
+    'parent' => null,         // Parent span from connection - if provided, shows parent span icon
+    'child' => null,          // Child span from connection - if provided, shows child span icon
+    'preferSubtype' => true,  // For thing spans, prefer subtype icon over type icon
 ])
 
 @php
@@ -16,6 +21,41 @@
     // Add additional classes
     if ($class) {
         $iconClass .= ' ' . $class;
+    }
+    
+    // Auto-determine type and category if span or connection is provided
+    if ($span) {
+        $type = $span->type_id;
+        $category = 'span';
+        
+        // For thing spans, check if we should use subtype
+        if ($type === 'thing' && $preferSubtype && isset($span->metadata['subtype'])) {
+            $type = $span->metadata['subtype'];
+            $category = 'subtype';
+        }
+    } elseif ($parent) {
+        // Show parent span icon from connection
+        $type = $parent->type_id;
+        $category = 'span';
+        
+        // For thing spans, check if we should use subtype
+        if ($type === 'thing' && $preferSubtype && isset($parent->metadata['subtype'])) {
+            $type = $parent->metadata['subtype'];
+            $category = 'subtype';
+        }
+    } elseif ($child) {
+        // Show child span icon from connection
+        $type = $child->type_id;
+        $category = 'span';
+        
+        // For thing spans, check if we should use subtype
+        if ($type === 'thing' && $preferSubtype && isset($child->metadata['subtype'])) {
+            $type = $child->metadata['subtype'];
+            $category = 'subtype';
+        }
+    } elseif ($connection) {
+        $type = $connection->type_id;
+        $category = 'connection';
     }
     
     // Determine the icon based on category and type
@@ -44,22 +84,54 @@
             'ownership' => 'key-fill',
             'has_role' => 'person-badge',
             'at_organisation' => 'building',
-            'features' => 'camera',
+            'features' => 'box-arrow-in-down-right',
             'located' => 'geo-alt',
             default => 'link-45deg'
         },
         'subtype' => match($type) {
             // Thing subtypes
-            'book' => 'book',
-            'album' => 'disc',
             'track' => 'music-note-beamed',
+            'album' => 'disc',
+            'film' => 'camera-video',
+            'programme' => 'tv',
+            'play' => 'theater',
+            'book' => 'book',
+            'poem' => 'file-text',
             'photo' => 'image',
+            'sculpture' => 'gem',
+            'painting' => 'palette',
+            'performance' => 'mic',
+            'video' => 'camera-video',
+            'article' => 'file-text',
+            'paper' => 'file-earmark-text',
+            'product' => 'box',
+            'vehicle' => 'car-front',
+            'tool' => 'wrench',
+            'device' => 'cpu',
+            'artifact' => 'archive',
+            'plaque' => 'award',
+            'other' => 'box',
+            
             // Organisation subtypes
             'broadcaster' => 'broadcast',
             'educational' => 'mortarboard',
+            'government' => 'building',
+            'military' => 'shield',
+            'museum' => 'building',
+            'gallery' => 'image',
+            'theatre' => 'theater',
+            'hospital' => 'heart-pulse',
+            'tech company' => 'cpu',
+            'law firm' => 'scale',
+            'union' => 'people',
+            'newspaper' => 'newspaper',
+            'web platform' => 'globe',
+            'transport' => 'truck',
+            
             // Role subtypes
             'professional' => 'briefcase',
             'creative' => 'palette',
+            
             // Person categories
             'musicians' => 'music-note',
             'public_figure' => 'person-badge',
