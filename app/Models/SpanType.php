@@ -282,8 +282,17 @@ class SpanType extends Model
                     break;
                 case 'select':
                     if (isset($config['options'])) {
-                        $values = array_column($config['options'], 'value');
-                        $fieldRules[] = 'in:' . implode(',', $values);
+                        // Handle both simple string arrays and object arrays with 'value' property
+                        if (is_array($config['options']) && !empty($config['options'])) {
+                            if (is_string($config['options'][0])) {
+                                // Simple string array
+                                $values = $config['options'];
+                            } else {
+                                // Object array with 'value' property
+                                $values = array_column($config['options'], 'value');
+                            }
+                            $fieldRules[] = 'in:' . implode(',', $values);
+                        }
                     }
                     break;
                 case 'markdown':

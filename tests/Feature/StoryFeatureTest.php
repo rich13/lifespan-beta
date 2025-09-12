@@ -39,6 +39,9 @@ class StoryFeatureTest extends TestCase
             'type_id' => 'person',
             'name' => 'John Doe',
             'start_year' => 1990,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
             'owner_id' => $user->id,
             'access_level' => 'public'
         ]);

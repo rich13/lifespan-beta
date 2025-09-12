@@ -78,4 +78,46 @@ class DateHelper
         }
         return implode(', ', $parts);
     }
+
+    /**
+     * Get the current date, respecting time travel mode if active
+     * 
+     * @return Carbon
+     */
+    public static function getCurrentDate()
+    {
+        // First, check if we're on a date exploration route - if so, use that date
+        $route = request()->route();
+        if ($route && $route->hasParameter('date')) {
+            $routeName = $route->getName();
+            if (in_array($routeName, ['date.explore', 'spans.at-date'])) {
+                try {
+                    $dateParam = $route->parameter('date');
+                    // Parse the date parameter (could be YYYY, YYYY-MM, or YYYY-MM-DD)
+                    $dateParts = explode('-', $dateParam);
+                    $year = (int) $dateParts[0];
+                    $month = isset($dateParts[1]) ? (int) $dateParts[1] : 1;
+                    $day = isset($dateParts[2]) ? (int) $dateParts[2] : 1;
+                    
+                    return Carbon::createFromDate($year, $month, $day);
+                } catch (\Exception $e) {
+                    // If parsing fails, fall back to time travel or current date
+                }
+            }
+        }
+        
+        // Check for time travel cookie
+        $timeTravelDate = request()->cookie('time_travel_date');
+        
+        if ($timeTravelDate) {
+            try {
+                return Carbon::parse($timeTravelDate);
+            } catch (\Exception $e) {
+                // If parsing fails, fall back to current date
+                return Carbon::now();
+            }
+        }
+        
+        return Carbon::now();
+    }
 }

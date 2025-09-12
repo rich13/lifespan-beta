@@ -19,6 +19,9 @@ use App\Models\ConnectionType;
 use App\Services\YamlSpanService;
 use App\Services\ConfigurableStoryGeneratorService;
 use App\Services\RouteReservationService;
+use App\Services\YamlValidationService;
+use App\Services\SpreadsheetValidationService;
+
 use InvalidArgumentException;
 use App\Models\Connection;
 use App\Models\ConnectionType as ConnectionTypeModel;
@@ -1584,6 +1587,99 @@ class SpanController extends Controller
         $spanTypes = SpanType::orderBy('type_id')->get();
         
         return view('spans.yaml-editor', compact('span', 'yamlContent', 'connectionTypes', 'spanTypes'));
+    }
+
+    /**
+     * Show the spreadsheet editor for a span
+     */
+    public function spreadsheetEditor(Span $span)
+    {
+        $this->authorize('update', $span);
+        
+        // Eager load both outgoing and incoming connections
+        $span->load([
+            'owner', 'updater', 'connectionsAsSubject.type', 'connectionsAsSubject.object', 'connectionsAsSubject.connectionSpan',
+            'connectionsAsObject.type', 'connectionsAsObject.subject', 'connectionsAsObject.connectionSpan'
+        ]);
+        
+        // Prepare span data for the spreadsheet editor
+        $spanData = [
+            'id' => $span->id,
+            'slug' => $span->slug,
+            'name' => $span->name,
+            'type' => $span->type->type_id ?? '',
+            'state' => $span->state,
+            'start_year' => $span->start_year,
+            'start_month' => $span->start_month,
+            'start_day' => $span->start_day,
+            'end_year' => $span->end_year,
+            'end_month' => $span->end_month,
+            'end_day' => $span->end_day,
+            'description' => $span->description,
+            'notes' => $span->notes,
+            'access_level' => $span->access_level,
+            'metadata' => $span->metadata ?? (object)[],
+            // Extract common metadata fields for core fields table
+            'subtype' => $span->metadata['subtype'] ?? null,
+            // System fields
+            'created_at' => $span->created_at?->toISOString(),
+            'updated_at' => $span->updated_at?->toISOString(),
+            'updated_by' => $span->updater?->name ?? '',
+            'owner' => $span->owner?->name ?? '',
+            'connections' => collect()
+                // Outgoing connections (span is subject)
+                ->concat($span->connectionsAsSubject->map(function($conn) use ($span) {
+                    return [
+                        'subject' => $span->name,
+                        'subject_id' => $span->id,
+                        'predicate' => $conn->type->type,
+                        'object' => $conn->object->name ?? '',
+                        'object_id' => $conn->object_id,
+                        'direction' => 'outgoing',
+                        'start_year' => $conn->connectionSpan?->start_year,
+                        'start_month' => $conn->connectionSpan?->start_month,
+                        'start_day' => $conn->connectionSpan?->start_day,
+                        'end_year' => $conn->connectionSpan?->end_year,
+                        'end_month' => $conn->connectionSpan?->end_month,
+                        'end_day' => $conn->connectionSpan?->end_day,
+                        'metadata' => $conn->connectionSpan?->metadata ?? (object)[]
+                    ];
+                }))
+                // Incoming connections (span is object)
+                ->concat($span->connectionsAsObject->map(function($conn) use ($span) {
+                    return [
+                        'subject' => $conn->subject->name ?? '',
+                        'subject_id' => $conn->subject_id,
+                        'predicate' => $conn->type->type,
+                        'object' => $span->name,
+                        'object_id' => $span->id,
+                        'direction' => 'incoming',
+                        'start_year' => $conn->connectionSpan?->start_year,
+                        'start_month' => $conn->connectionSpan?->start_month,
+                        'start_day' => $conn->connectionSpan?->start_day,
+                        'end_year' => $conn->connectionSpan?->end_year,
+                        'end_month' => $conn->connectionSpan?->end_month,
+                        'end_day' => $conn->connectionSpan?->end_day,
+                        'metadata' => $conn->connectionSpan?->metadata ?? (object)[]
+                    ];
+                }))
+                ->toArray()
+        ];
+        
+        // Get all connection types and span types for help text
+        $connectionTypes = ConnectionTypeModel::orderBy('type')->get();
+        $spanTypes = SpanType::orderBy('type_id')->get();
+        
+        // Get complete span type metadata for dynamic field handling
+        $spanTypeMetadata = [];
+        foreach ($spanTypes as $type) {
+            $spanTypeMetadata[$type->type_id] = [
+                'metadata' => $type->metadata ?? [],
+                'schema' => $type->metadata['schema'] ?? []
+            ];
+        }
+        
+        return view('spans.spreadsheet-editor', compact('span', 'spanData', 'connectionTypes', 'spanTypes', 'spanTypeMetadata'));
     }
 
     /**
@@ -3358,9 +3454,281 @@ class SpanController extends Controller
     }
 
     /**
-     * Create a structured diff between current and merged data
+     * Normalize metadata values for comparison (handle type differences)
+     */
+    private function normalizeMetadataForComparison($value)
+    {
+        if (is_array($value)) {
+            $normalized = [];
+            foreach ($value as $key => $val) {
+                $normalized[$key] = $this->normalizeMetadataForComparison($val);
+            }
+            return $normalized;
+        }
+        
+        if (is_object($value)) {
+            // Convert objects to arrays for comparison
+            return $this->normalizeMetadataForComparison((array)$value);
+        }
+        
+        if (is_string($value)) {
+            // Try to convert string numbers to integers
+            if (is_numeric($value) && ctype_digit($value)) {
+                return (int)$value;
+            }
+            // Try to convert string booleans
+            if ($value === 'true') {
+                return true;
+            }
+            if ($value === 'false') {
+                return false;
+            }
+        }
+        
+        // Handle other data types (null, boolean, integer, float, resource, etc.)
+        if (is_resource($value)) {
+            return '[resource]'; // Convert resources to string representation
+        }
+        
+        if (is_callable($value)) {
+            return '[callable]'; // Convert callables to string representation
+        }
+        
+        return $value;
+    }
+
+    /**
+     * Create a structured diff between current and merged data (database format)
      */
     private function createStructuredDiff(array $currentData, array $mergedData): array
+    {
+        $diff = [
+            'basic_fields' => [],
+            'metadata' => [],
+            'connections' => []
+        ];
+
+        // Compare basic fields (all editable core fields from spreadsheet)
+        $basicFields = ['name', 'slug', 'state', 'access_level', 'description', 'notes'];
+        foreach ($basicFields as $field) {
+            $current = $currentData[$field] ?? null;
+            $merged = $mergedData[$field] ?? null;
+            
+            if ($current !== $merged) {
+                $diff['basic_fields'][] = [
+                    'field' => $field,
+                    'current' => $current,
+                    'new' => $merged,
+                    'action' => $current === null ? 'add' : ($merged === null ? 'remove' : 'update')
+                ];
+            }
+        }
+
+        // Compare type field (handle type vs type_id mapping)
+        $currentType = $currentData['type'] ?? null;
+        $mergedType = $mergedData['type_id'] ?? null;
+        
+        if ($currentType !== $mergedType) {
+            $diff['basic_fields'][] = [
+                'field' => 'type',
+                'current' => $currentType,
+                'new' => $mergedType,
+                'action' => $currentType === null ? 'add' : ($mergedType === null ? 'remove' : 'update')
+            ];
+        }
+
+        // Compare date fields
+        $dateFields = ['start_year', 'start_month', 'start_day', 'end_year', 'end_month', 'end_day'];
+        foreach ($dateFields as $field) {
+            $current = $currentData[$field] ?? null;
+            $merged = $mergedData[$field] ?? null;
+            
+            if ($current !== $merged) {
+                $diff['basic_fields'][] = [
+                    'field' => $field,
+                    'current' => $current,
+                    'new' => $merged,
+                    'action' => $current === null ? 'add' : ($merged === null ? 'remove' : 'update')
+                ];
+            }
+        }
+
+        // Compare metadata
+        $currentMetadata = $currentData['metadata'] ?? [];
+        $mergedMetadata = $mergedData['metadata'] ?? [];
+        
+        $allMetadataKeys = array_unique(array_merge(array_keys($currentMetadata), array_keys($mergedMetadata)));
+        foreach ($allMetadataKeys as $key) {
+            $current = $currentMetadata[$key] ?? null;
+            $merged = $mergedMetadata[$key] ?? null;
+            
+            // Normalize both values for comparison
+            $normalizedCurrent = $this->normalizeMetadataForComparison($current);
+            $normalizedMerged = $this->normalizeMetadataForComparison($merged);
+            
+
+            
+            if ($normalizedCurrent !== $normalizedMerged) {
+                $diff['metadata'][] = [
+                    'key' => $key,
+                    'current' => $normalizedCurrent,
+                    'new' => $normalizedMerged,
+                    'action' => $current === null ? 'add' : ($merged === null ? 'remove' : 'update')
+                ];
+            }
+        }
+
+        // Compare connections (database format - array of connection objects)
+        $currentConnections = $currentData['connections'] ?? [];
+        $mergedConnections = $mergedData['connections'] ?? [];
+        
+        // Only compare if there are connections to compare
+        if (!empty($mergedConnections) || !empty($currentConnections)) {
+            // Group connections by predicate for easier comparison
+            $currentByPredicate = [];
+            $mergedByPredicate = [];
+            
+            foreach ($currentConnections as $conn) {
+                $predicate = $conn['predicate'] ?? 'unknown';
+                if (!isset($currentByPredicate[$predicate])) {
+                    $currentByPredicate[$predicate] = [];
+                }
+                $currentByPredicate[$predicate][] = $conn;
+            }
+            
+            foreach ($mergedConnections as $conn) {
+                $predicate = $conn['predicate'] ?? 'unknown';
+                if (!isset($mergedByPredicate[$predicate])) {
+                    $mergedByPredicate[$predicate] = [];
+                }
+                $mergedByPredicate[$predicate][] = $conn;
+            }
+            
+            $allPredicates = array_unique(array_merge(array_keys($currentByPredicate), array_keys($mergedByPredicate)));
+            
+            foreach ($allPredicates as $predicate) {
+                $current = $currentByPredicate[$predicate] ?? [];
+                $merged = $mergedByPredicate[$predicate] ?? [];
+                
+                // Compare connections by object name and key attributes
+                $currentObjects = array_map(function($conn) {
+                    return $conn['object'] ?? '';
+                }, $current);
+                $mergedObjects = array_map(function($conn) {
+                    return $conn['object'] ?? '';
+                }, $merged);
+                
+                $added = array_diff($mergedObjects, $currentObjects);
+                $removed = array_diff($currentObjects, $mergedObjects);
+                
+                // Also check for modifications to existing connections
+                $modified = [];
+                $commonObjects = array_intersect($currentObjects, $mergedObjects);
+                
+                foreach ($commonObjects as $objectName) {
+                    $currentConn = collect($current)->firstWhere('object', $objectName);
+                    $mergedConn = collect($merged)->firstWhere('object', $objectName);
+                    
+                    if ($currentConn && $mergedConn) {
+                        // Compare key connection attributes
+                        $dateFields = ['start_year', 'start_month', 'start_day', 'end_year', 'end_month', 'end_day'];
+                        $otherFields = ['subject', 'predicate', 'metadata'];
+                        
+                        $hasChanges = false;
+                        $changes = [];
+                        
+                        foreach ($dateFields as $field) {
+                            $currentVal = $currentConn[$field] ?? null;
+                            $mergedVal = $mergedConn[$field] ?? null;
+                            
+                            // Normalize values for comparison (handle int vs string differences)
+                            $currentVal = $currentVal !== null ? (int)$currentVal : null;
+                            $mergedVal = $mergedVal !== null ? (int)$mergedVal : null;
+                            
+                            if ($currentVal !== $mergedVal) {
+                                $hasChanges = true;
+                                $changes[$field] = [
+                                    'current' => $currentVal,
+                                    'new' => $mergedVal
+                                ];
+                            }
+                        }
+                        
+                        foreach ($otherFields as $field) {
+                            $currentVal = $currentConn[$field] ?? null;
+                            $mergedVal = $mergedConn[$field] ?? null;
+                            
+                            // Special handling for metadata field
+                            if ($field === 'metadata') {
+                                // Convert both to arrays and compare
+                                $currentVal = is_array($currentVal) ? $currentVal : [];
+                                $mergedVal = is_array($mergedVal) ? $mergedVal : [];
+                                
+                                // Normalize both values for comparison
+                                $normalizedCurrent = $this->normalizeMetadataForComparison($currentVal);
+                                $normalizedMerged = $this->normalizeMetadataForComparison($mergedVal);
+                                
+                                // Only mark as changed if the arrays are actually different
+                                try {
+                                    $currentJson = json_encode($normalizedCurrent, JSON_THROW_ON_ERROR);
+                                    $mergedJson = json_encode($normalizedMerged, JSON_THROW_ON_ERROR);
+                                    
+                                    if ($currentJson !== $mergedJson) {
+                                        $hasChanges = true;
+                                        $changes[$field] = [
+                                            'current' => $currentVal,
+                                            'new' => $mergedVal
+                                        ];
+                                    }
+                                } catch (\JsonException $e) {
+                                    // If JSON encoding fails, do a simple comparison
+                                    if ($normalizedCurrent !== $normalizedMerged) {
+                                        $hasChanges = true;
+                                        $changes[$field] = [
+                                            'current' => $currentVal,
+                                            'new' => $mergedVal
+                                        ];
+                                    }
+                                }
+                            } else {
+                                // For other fields, do simple comparison
+                                if ($currentVal !== $mergedVal) {
+                                    $hasChanges = true;
+                                    $changes[$field] = [
+                                        'current' => $currentVal,
+                                        'new' => $mergedVal
+                                    ];
+                                }
+                            }
+                        }
+                        
+                        if ($hasChanges) {
+                            $modified[] = [
+                                'object' => $objectName,
+                                'changes' => $changes
+                            ];
+                        }
+                    }
+                }
+                
+                if (!empty($added) || !empty($removed) || !empty($modified)) {
+                    $diff['connections'][] = [
+                        'type' => $predicate,
+                        'added' => array_values($added),
+                        'removed' => array_values($removed),
+                        'modified' => $modified
+                    ];
+                }
+            }
+        }
+
+        return $diff;
+    }
+
+    /**
+     * Create a structured diff between current and merged data (YAML format)
+     */
+    private function createStructuredDiffYaml(array $currentData, array $mergedData): array
     {
         $diff = [
             'basic_fields' => [],
@@ -3369,8 +3737,8 @@ class SpanController extends Controller
             'connections' => []
         ];
 
-        // Compare basic fields
-        $basicFields = ['description', 'notes', 'start', 'end'];
+        // Compare basic fields (all editable core fields from spreadsheet)
+        $basicFields = ['name', 'slug', 'type', 'state', 'access_level', 'description', 'notes', 'start', 'end'];
         foreach ($basicFields as $field) {
             $current = $currentData[$field] ?? null;
             $merged = $mergedData[$field] ?? null;
@@ -3429,27 +3797,930 @@ class SpanController extends Controller
         $currentConnections = $currentData['connections'] ?? [];
         $mergedConnections = $mergedData['connections'] ?? [];
         
-        $allConnectionTypes = array_unique(array_merge(array_keys($currentConnections), array_keys($mergedConnections)));
-        
-        foreach ($allConnectionTypes as $type) {
-            $current = $currentConnections[$type] ?? [];
-            $merged = $mergedConnections[$type] ?? [];
+        // Only compare if there are connections to compare
+        if (!empty($mergedConnections) || !empty($currentConnections)) {
+            $allConnectionTypes = array_unique(array_merge(array_keys($currentConnections), array_keys($mergedConnections)));
             
-            $currentNames = array_column($current, 'name');
-            $mergedNames = array_column($merged, 'name');
-            
-            $added = array_diff($mergedNames, $currentNames);
-            $removed = array_diff($currentNames, $mergedNames);
-            
-            if (!empty($added) || !empty($removed)) {
-                $diff['connections'][] = [
-                    'type' => $type,
-                    'added' => array_values($added),
-                    'removed' => array_values($removed)
-                ];
+            foreach ($allConnectionTypes as $type) {
+                $current = $currentConnections[$type] ?? [];
+                $merged = $mergedConnections[$type] ?? [];
+                
+                // Normalize the data for comparison
+                $currentNormalized = $this->normalizeConnectionsForComparison($current);
+                $mergedNormalized = $this->normalizeConnectionsForComparison($merged);
+                
+                $currentNames = array_column($currentNormalized, 'name');
+                $mergedNames = array_column($mergedNormalized, 'name');
+                
+                $added = array_diff($mergedNames, $currentNames);
+                $removed = array_diff($currentNames, $mergedNames);
+                
+                if (!empty($added) || !empty($removed)) {
+                    $diff['connections'][] = [
+                        'type' => $type,
+                        'added' => array_values($added),
+                        'removed' => array_values($removed)
+                    ];
+                }
             }
         }
 
         return $diff;
+    }
+
+    /**
+     * Normalize connection data for comparison
+     */
+    private function normalizeConnectionsForComparison(array $connections): array
+    {
+        $normalized = [];
+        
+        foreach ($connections as $connection) {
+            // Handle different data structures:
+            // 1. From spanToArray (current data): connections are objects with 'name', 'start', 'end', etc.
+            // 2. From spreadsheet editor (merged data): connections are objects with 'object', 'start_year', etc.
+            
+            $name = $connection['name'] ?? $connection['object'] ?? '';
+            
+            // Handle dates - current data has 'start'/'end' strings, merged data has year/month/day components
+            $startYear = null;
+            $startMonth = null;
+            $startDay = null;
+            $endYear = null;
+            $endMonth = null;
+            $endDay = null;
+            
+            if (isset($connection['start_year'])) {
+                // From spreadsheet editor format
+                $startYear = $connection['start_year'];
+                $startMonth = $connection['start_month'] ?? null;
+                $startDay = $connection['start_day'] ?? null;
+            } elseif (isset($connection['start'])) {
+                // From spanToArray format - parse the date string
+                $startParts = explode('-', $connection['start']);
+                if (count($startParts) >= 1) $startYear = (int)$startParts[0];
+                if (count($startParts) >= 2) $startMonth = (int)$startParts[1];
+                if (count($startParts) >= 3) $startDay = (int)$startParts[2];
+            }
+            
+            if (isset($connection['end_year'])) {
+                // From spreadsheet editor format
+                $endYear = $connection['end_year'];
+                $endMonth = $connection['end_month'] ?? null;
+                $endDay = $connection['end_day'] ?? null;
+            } elseif (isset($connection['end'])) {
+                // From spanToArray format - parse the date string
+                $endParts = explode('-', $connection['end']);
+                if (count($endParts) >= 1) $endYear = (int)$endParts[0];
+                if (count($endParts) >= 2) $endMonth = (int)$endParts[1];
+                if (count($endParts) >= 3) $endDay = (int)$endParts[2];
+            }
+            
+            $normalized[] = [
+                'name' => $name,
+                'start_year' => $startYear,
+                'start_month' => $startMonth,
+                'start_day' => $startDay,
+                'end_year' => $endYear,
+                'end_month' => $endMonth,
+                'end_day' => $endDay,
+                'metadata' => $connection['metadata'] ?? []
+            ];
+        }
+        
+        return $normalized;
+    }
+
+
+
+    /**
+     * Validate spreadsheet data without saving
+     */
+    public function validateSpreadsheetData(Request $request, Span $span)
+    {
+        $this->authorize('update', $span);
+        
+        try {
+            Log::channel('spans')->info('Validating spreadsheet data', [
+                'span_id' => $span->id,
+                'input_keys' => array_keys($request->all())
+            ]);
+            
+
+            
+            // Use the new SpreadsheetValidationService for validation
+            $validationService = app(SpreadsheetValidationService::class);
+            $validationErrors = $validationService->validateSpanData($request->all(), $span);
+            
+
+            
+            return response()->json([
+                'success' => empty($validationErrors),
+                'errors' => $validationErrors,
+                'valid' => empty($validationErrors)
+            ]);
+
+        } catch (\Exception $e) {
+            Log::channel('spans')->error('Error validating spreadsheet data', [
+                'span_id' => $span->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'An error occurred while validating the data. Please try again.'
+            ], 500);
+        }
+    }
+
+    /**
+     * Update span from spreadsheet editor data
+     */
+    public function updateFromSpreadsheet(Request $request, Span $span)
+    {
+        $this->authorize('update', $span);
+        
+        try {
+            Log::channel('spans')->info('=== SPREADSHEET UPDATE START ===', [
+                'span_id' => $span->id,
+                'span_name' => $span->name,
+                'request_method' => $request->method(),
+                'request_url' => $request->url(),
+                'input_data' => $request->all(),
+                'input_keys' => array_keys($request->all())
+            ]);
+
+            // Use the new SpreadsheetValidationService for validation
+            Log::channel('spans')->info('Starting validation...');
+            $validationService = app(SpreadsheetValidationService::class);
+            $validationErrors = $validationService->validateSpanData($request->all(), $span);
+            
+            Log::channel('spans')->info('Validation completed', [
+                'validation_errors_count' => count($validationErrors),
+                'validation_errors' => $validationErrors
+            ]);
+            
+            if (!empty($validationErrors)) {
+                Log::channel('spans')->error('Spreadsheet validation failed', [
+                    'errors' => $validationErrors
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'errors' => $validationErrors
+                ], 422);
+            }
+
+            // Convert spreadsheet data directly to database format
+            Log::channel('spans')->info('Converting spreadsheet data to database format...');
+            $validated = $this->convertSpreadsheetDataToDatabase($request->all());
+            
+            Log::channel('spans')->info('Data conversion completed', [
+                'converted_data_keys' => array_keys($validated),
+                'converted_data' => $validated
+            ]);
+
+            // Handle type transition if type is changing
+            if ($validated['type_id'] !== $span->type_id) {
+                Log::channel('spans')->info('Type changing from spreadsheet', [
+                    'span_id' => $span->id,
+                    'old_type' => $span->type_id,
+                    'new_type' => $validated['type_id']
+                ]);
+            }
+
+            // Update basic span fields
+            Log::channel('spans')->info('Updating span fields...', [
+                'fields_to_update' => array_keys(array_filter([
+                    'name' => $validated['name'],
+                    'slug' => $validated['slug'],
+                    'type_id' => $validated['type_id'],
+                    'state' => $validated['state'],
+                    'access_level' => $validated['access_level'],
+                    'start_year' => $validated['start_year'],
+                    'start_month' => $validated['start_month'],
+                    'start_day' => $validated['start_day'],
+                    'end_year' => $validated['end_year'],
+                    'end_month' => $validated['end_month'],
+                    'end_day' => $validated['end_day'],
+                    'description' => $validated['description'],
+                    'notes' => $validated['notes'],
+                    'metadata' => $validated['metadata'] ?? []
+                ]))
+            ]);
+            
+            $span->update([
+                'name' => $validated['name'],
+                'slug' => $validated['slug'],
+                'type_id' => $validated['type_id'],
+                'state' => $validated['state'],
+                'access_level' => $validated['access_level'],
+                'start_year' => $validated['start_year'],
+                'start_month' => $validated['start_month'],
+                'start_day' => $validated['start_day'],
+                'end_year' => $validated['end_year'],
+                'end_month' => $validated['end_month'],
+                'end_day' => $validated['end_day'],
+                'description' => $validated['description'],
+                'notes' => $validated['notes'],
+                'metadata' => $validated['metadata'] ?? []
+            ]);
+
+            // Handle connections
+            if (isset($validated['connections'])) {
+                Log::channel('spans')->info('Updating connections...', [
+                    'connections_count' => count($validated['connections'])
+                ]);
+                $this->updateConnectionsFromSpreadsheet($span, $validated['connections']);
+            } else {
+                Log::channel('spans')->info('No connections to update');
+            }
+
+            Log::channel('spans')->info('=== SPREADSHEET UPDATE SUCCESS ===', [
+                'span_id' => $span->id,
+                'span_name' => $span->name,
+                'changes' => $span->getChanges(),
+                'changes_count' => count($span->getChanges())
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Span updated successfully',
+                'span' => $span->fresh()
+            ]);
+
+        } catch (\Exception $e) {
+            Log::channel('spans')->error('=== SPREADSHEET UPDATE ERROR ===', [
+                'span_id' => $span->id,
+                'span_name' => $span->name,
+                'error_message' => $e->getMessage(),
+                'error_code' => $e->getCode(),
+                'error_file' => $e->getFile(),
+                'error_line' => $e->getLine(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'An error occurred while saving the span. Please try again.',
+                'debug_message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Update connections from spreadsheet data
+     */
+    private function updateConnectionsFromSpreadsheet(Span $span, array $connections)
+    {
+        // Get existing connections for this span
+        $existingConnections = $span->connectionsAsSubject->merge($span->connectionsAsObject);
+        
+        // Create a map of existing connections by their key identifiers
+        $existingMap = [];
+        foreach ($existingConnections as $conn) {
+            $key = $conn->subject_id . '-' . $conn->type_id . '-' . $conn->object_id;
+            $existingMap[$key] = $conn;
+        }
+
+        // Process each connection from the spreadsheet
+        foreach ($connections as $connData) {
+            Log::channel('spans')->info('Processing connection from spreadsheet', [
+                'connection_data' => $connData
+            ]);
+            
+            $connectionType = ConnectionType::where('type', $connData['predicate'])->first();
+            Log::channel('spans')->info('Connection type lookup', [
+                'predicate' => $connData['predicate'],
+                'found' => $connectionType ? true : false,
+                'connection_type_id' => $connectionType ? $connectionType->id : null
+            ]);
+            if (!$connectionType) {
+                Log::channel('spans')->warning('Connection type not found', [
+                    'predicate' => $connData['predicate']
+                ]);
+                continue;
+            }
+            
+            Log::channel('spans')->info('Found connection type', [
+                'predicate' => $connData['predicate'],
+                'connection_type' => $connectionType->toArray()
+            ]);
+
+            // Use the IDs directly from the spreadsheet data
+            $subject = null;
+            $object = null;
+            
+            if (isset($connData['subject_id']) && $connData['subject_id']) {
+                $subject = Span::find($connData['subject_id']);
+            }
+            if (isset($connData['object_id']) && $connData['object_id']) {
+                $object = Span::find($connData['object_id']);
+            }
+            
+            // Fallback to name lookup if IDs are not available (for backward compatibility)
+            if (!$subject && isset($connData['subject'])) {
+                $subject = Span::where('name', $connData['subject'])->first();
+            }
+            if (!$object && isset($connData['object'])) {
+                $object = Span::where('name', $connData['object'])->first();
+            }
+
+            if (!$subject || !$object) {
+                Log::channel('spans')->warning('Subject or object not found', [
+                    'subject_name' => $connData['subject'] ?? 'N/A',
+                    'object_name' => $connData['object'] ?? 'N/A',
+                    'subject_found' => $subject ? true : false,
+                    'object_found' => $object ? true : false
+                ]);
+                continue;
+            }
+            
+            Log::channel('spans')->info('Found subject and object', [
+                'subject_name' => $subject->name,
+                'subject_id' => $subject->id,
+                'object_name' => $object->name,
+                'object_id' => $object->id
+            ]);
+
+            $key = $subject->id . '-' . $connectionType->type . '-' . $object->id;
+            
+            // Check if connection already exists
+            if (isset($existingMap[$key])) {
+                // Update existing connection
+                $connection = $existingMap[$key];
+                $connection->connectionSpan->update([
+                    'start_year' => $connData['start_year'] ?? null,
+                    'start_month' => $connData['start_month'] ?? null,
+                    'start_day' => $connData['start_day'] ?? null,
+                    'end_year' => $connData['end_year'] ?? null,
+                    'end_month' => $connData['end_month'] ?? null,
+                    'end_day' => $connData['end_day'] ?? null,
+                    'metadata' => $connData['metadata'] ?? []
+                ]);
+                unset($existingMap[$key]);
+            } else {
+                // Create new connection
+                $connectionSpan = Span::create([
+                    'name' => "{$subject->name} {$connectionType->forward_predicate} {$object->name}",
+                    'type_id' => 'connection',
+                    'state' => 'placeholder', // Use placeholder to avoid date requirements
+                    'access_level' => 'private',
+                    'owner_id' => $span->owner_id, // Add required owner
+                    'updater_id' => $span->updater_id, // Add required updater
+                    'start_year' => $connData['start_year'] ?? null,
+                    'start_month' => $connData['start_month'] ?? null,
+                    'start_day' => $connData['start_day'] ?? null,
+                    'end_year' => $connData['end_year'] ?? null,
+                    'end_month' => $connData['end_month'] ?? null,
+                    'end_day' => $connData['end_day'] ?? null,
+                    'metadata' => $connData['metadata'] ?? []
+                ]);
+
+                Connection::create([
+                    'parent_id' => $subject->id,
+                    'child_id' => $object->id,
+                    'type_id' => $connectionType->type,
+                    'connection_span_id' => $connectionSpan->id
+                ]);
+            }
+        }
+
+        // Remove connections that are no longer in the spreadsheet
+        foreach ($existingMap as $connection) {
+            if ($connection->connectionSpan) {
+                $connection->connectionSpan->delete();
+            }
+            $connection->delete();
+        }
+    }
+
+    /**
+     * Convert spreadsheet data to YAML format for validation
+     */
+    private function convertSpreadsheetDataToYaml(array $spreadsheetData): array
+    {
+        $yamlData = [
+            'name' => $spreadsheetData['name'],
+            'slug' => $spreadsheetData['slug'] ?? null,
+            'type' => $spreadsheetData['type'], // Keep as string for validation
+            'state' => $spreadsheetData['state'],
+            'access_level' => $spreadsheetData['access_level'],
+            'description' => $spreadsheetData['description'] ?? null,
+            'notes' => $spreadsheetData['notes'] ?? null,
+            'metadata' => $spreadsheetData['metadata'] ?? []
+        ];
+
+        // Handle subtype field from core fields table
+        if (isset($spreadsheetData['subtype'])) {
+            $yamlData['metadata']['subtype'] = $spreadsheetData['subtype'];
+        }
+
+        // Convert date components to YAML format and validate
+        if (!empty($spreadsheetData['start_year'])) {
+            $yamlData['start'] = $this->formatDateForYaml(
+                $spreadsheetData['start_year'],
+                $spreadsheetData['start_month'] ?? null,
+                $spreadsheetData['start_day'] ?? null
+            );
+        }
+
+        if (!empty($spreadsheetData['end_year'])) {
+            $yamlData['end'] = $this->formatDateForYaml(
+                $spreadsheetData['end_year'],
+                $spreadsheetData['end_month'] ?? null,
+                $spreadsheetData['end_day'] ?? null
+            );
+        }
+        
+        // Add custom date validation
+        $dateErrors = $this->validateDateRanges($spreadsheetData);
+        if (!empty($dateErrors)) {
+            return ['__validation_errors' => $dateErrors];
+        }
+
+        // Convert connections to YAML format
+        if (!empty($spreadsheetData['connections'])) {
+            $yamlData['connections'] = [];
+            foreach ($spreadsheetData['connections'] as $connection) {
+                $predicate = $connection['predicate'];
+                if (!isset($yamlData['connections'][$predicate])) {
+                    $yamlData['connections'][$predicate] = [];
+                }
+
+                $connectionData = [
+                    'name' => $connection['object'],
+                    'type' => 'connection'
+                ];
+
+                // Add connection dates if present
+                if (!empty($connection['start_year'])) {
+                    $connectionData['start'] = $this->formatDateForYaml(
+                        $connection['start_year'],
+                        $connection['start_month'] ?? null,
+                        $connection['start_day'] ?? null
+                    );
+                }
+
+                if (!empty($connection['end_year'])) {
+                    $connectionData['end'] = $this->formatDateForYaml(
+                        $connection['end_year'],
+                        $connection['end_month'] ?? null,
+                        $connection['end_day'] ?? null
+                    );
+                }
+
+                if (!empty($connection['metadata'])) {
+                    $connectionData['metadata'] = $connection['metadata'];
+                }
+
+                $yamlData['connections'][$predicate][] = $connectionData;
+            }
+            
+
+        }
+
+        return $yamlData;
+    }
+
+    /**
+     * Convert YAML data back to database format
+     */
+    private function convertYamlDataToDatabase(array $yamlData): array
+    {
+        $dbData = [
+            'name' => $yamlData['name'],
+            'slug' => $yamlData['slug'],
+            'type_id' => $yamlData['type'], // Keep as string - database expects character varying
+            'state' => $yamlData['state'],
+            'access_level' => $yamlData['access_level'],
+            'description' => $yamlData['description'],
+            'notes' => $yamlData['notes'],
+            'metadata' => $yamlData['metadata'] ?? [],
+            // Always include date fields, even if null
+            'start_year' => null,
+            'start_month' => null,
+            'start_day' => null,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null
+        ];
+
+        // Convert YAML dates to database format
+        if (isset($yamlData['start']) && !empty($yamlData['start'])) {
+            $startDate = $this->parseDateFromYaml($yamlData['start']);
+            $dbData['start_year'] = $startDate['year'];
+            $dbData['start_month'] = $startDate['month'];
+            $dbData['start_day'] = $startDate['day'];
+        }
+
+        if (isset($yamlData['end']) && !empty($yamlData['end'])) {
+            $endDate = $this->parseDateFromYaml($yamlData['end']);
+            $dbData['end_year'] = $endDate['year'];
+            $dbData['end_month'] = $endDate['month'];
+            $dbData['end_day'] = $endDate['day'];
+        }
+
+        // Convert connections back to spreadsheet format
+        if (isset($yamlData['connections'])) {
+            $dbData['connections'] = [];
+            foreach ($yamlData['connections'] as $predicate => $connections) {
+                foreach ($connections as $connection) {
+                    $connectionData = [
+                        'subject' => $yamlData['name'], // The current span is always the subject
+                        'predicate' => $predicate,
+                        'object' => $connection['name'],
+                        'metadata' => $connection['metadata'] ?? []
+                    ];
+
+                    // Convert connection dates back to components
+                    if (isset($connection['start'])) {
+                        $startDate = $this->parseDateFromYaml($connection['start']);
+                        $connectionData['start_year'] = $startDate['year'];
+                        $connectionData['start_month'] = $startDate['month'];
+                        $connectionData['start_day'] = $startDate['day'];
+                    }
+
+                    if (isset($connection['end'])) {
+                        $endDate = $this->parseDateFromYaml($connection['end']);
+                        $connectionData['end_year'] = $endDate['year'];
+                        $connectionData['end_month'] = $endDate['month'];
+                        $connectionData['end_day'] = $endDate['day'];
+                    }
+
+                    $dbData['connections'][] = $connectionData;
+                }
+            }
+        }
+
+        return $dbData;
+    }
+
+    /**
+     * Convert spreadsheet data directly to database format
+     */
+    private function convertSpreadsheetDataToDatabase(array $spreadsheetData): array
+    {
+        $dbData = [
+            'name' => $spreadsheetData['name'],
+            'slug' => $spreadsheetData['slug'],
+            'type_id' => $spreadsheetData['type'],
+            'state' => $spreadsheetData['state'],
+            'access_level' => $spreadsheetData['access_level'],
+            'description' => $spreadsheetData['description'] ?? null,
+            'notes' => $spreadsheetData['notes'] ?? null,
+            'metadata' => $this->normalizeMetadataForComparison($spreadsheetData['metadata'] ?? [])
+        ];
+
+        // Handle subtype field from core fields table
+        if (isset($spreadsheetData['subtype'])) {
+            $dbData['metadata']['subtype'] = $spreadsheetData['subtype'];
+        }
+
+        // Add date fields
+        if (!empty($spreadsheetData['start_year'])) {
+            $dbData['start_year'] = (int)$spreadsheetData['start_year'];
+            $dbData['start_month'] = !empty($spreadsheetData['start_month']) ? (int)$spreadsheetData['start_month'] : null;
+            $dbData['start_day'] = !empty($spreadsheetData['start_day']) ? (int)$spreadsheetData['start_day'] : null;
+        } else {
+            $dbData['start_year'] = null;
+            $dbData['start_month'] = null;
+            $dbData['start_day'] = null;
+        }
+
+        if (!empty($spreadsheetData['end_year'])) {
+            $dbData['end_year'] = (int)$spreadsheetData['end_year'];
+            $dbData['end_month'] = !empty($spreadsheetData['end_month']) ? (int)$spreadsheetData['end_month'] : null;
+            $dbData['end_day'] = !empty($spreadsheetData['end_day']) ? (int)$spreadsheetData['end_day'] : null;
+        } else {
+            $dbData['end_year'] = null;
+            $dbData['end_month'] = null;
+            $dbData['end_day'] = null;
+        }
+
+        // Add connections if present
+        if (!empty($spreadsheetData['connections'])) {
+            $dbData['connections'] = $spreadsheetData['connections'];
+        }
+
+        return $dbData;
+    }
+
+    /**
+     * Format date components to YAML format
+     */
+    private function formatDateForYaml($year, $month = null, $day = null): string
+    {
+        // Convert to integers and validate
+        $year = is_numeric($year) ? (int)$year : null;
+        $month = is_numeric($month) ? (int)$month : null;
+        $day = is_numeric($day) ? (int)$day : null;
+        
+        if (!$year) return '';
+        
+        $date = $year;
+        if ($month && $month > 0 && $month <= 12) {
+            $date .= '-' . str_pad($month, 2, '0', STR_PAD_LEFT);
+            if ($day && $day > 0 && $day <= 31) {
+                $date .= '-' . str_pad($day, 2, '0', STR_PAD_LEFT);
+            }
+        }
+        
+        return $date;
+    }
+
+    /**
+     * Parse date from YAML format to components
+     */
+    private function parseDateFromYaml($date): array
+    {
+        if (!$date || is_array($date)) {
+            return ['year' => null, 'month' => null, 'day' => null];
+        }
+
+        $parts = explode('-', (string)$date);
+        
+        return [
+            'year' => isset($parts[0]) ? (int)$parts[0] : null,
+            'month' => isset($parts[1]) ? (int)$parts[1] : null,
+            'day' => isset($parts[2]) ? (int)$parts[2] : null
+        ];
+    }
+    
+    /**
+     * Validate date ranges for reasonable values
+     */
+    private function validateDateRanges(array $spreadsheetData): array
+    {
+        $errors = [];
+        
+        // Validate core span dates
+        $errors = array_merge($errors, $this->validateSingleDateRange(
+            $spreadsheetData['start_year'] ?? null,
+            $spreadsheetData['start_month'] ?? null,
+            $spreadsheetData['start_day'] ?? null,
+            $spreadsheetData['end_year'] ?? null,
+            $spreadsheetData['end_month'] ?? null,
+            $spreadsheetData['end_day'] ?? null,
+            'span'
+        ));
+        
+        // Validate connection dates
+        if (!empty($spreadsheetData['connections'])) {
+            foreach ($spreadsheetData['connections'] as $index => $connection) {
+                $connectionErrors = $this->validateSingleDateRange(
+                    $connection['start_year'] ?? null,
+                    $connection['start_month'] ?? null,
+                    $connection['start_day'] ?? null,
+                    $connection['end_year'] ?? null,
+                    $connection['end_month'] ?? null,
+                    $connection['end_day'] ?? null,
+                    "connection " . ($index + 1) . " ({$connection['object']})"
+                );
+                
+                foreach ($connectionErrors as $error) {
+                    $errors[] = $error;
+                }
+            }
+        }
+        
+        return $errors;
+    }
+    
+    /**
+     * Validate a single date range (for spans or connections)
+     */
+    private function validateSingleDateRange($startYear, $startMonth, $startDay, $endYear, $endMonth, $endDay, string $context): array
+    {
+        $errors = [];
+        
+        // Validate start year
+        if (!empty($startYear)) {
+            $startYear = (int)$startYear;
+            if ($startYear < 1000 || $startYear > 9999) {
+                $errors[] = "{$context}: Start year must be between 1000 and 9999, got {$startYear}";
+            }
+        }
+        
+        // Validate end year
+        if (!empty($endYear)) {
+            $endYear = (int)$endYear;
+            if ($endYear < 1000 || $endYear > 9999) {
+                $errors[] = "{$context}: End year must be between 1000 and 9999, got {$endYear}";
+            }
+        }
+        
+        // Validate start month
+        if (!empty($startMonth)) {
+            $startMonth = (int)$startMonth;
+            if ($startMonth < 1 || $startMonth > 12) {
+                $errors[] = "{$context}: Start month must be between 1 and 12, got {$startMonth}";
+            }
+        }
+        
+        // Validate end month
+        if (!empty($endMonth)) {
+            $endMonth = (int)$endMonth;
+            if ($endMonth < 1 || $endMonth > 12) {
+                $errors[] = "{$context}: End month must be between 1 and 12, got {$endMonth}";
+            }
+        }
+        
+        // Validate start day
+        if (!empty($startDay)) {
+            $startDay = (int)$startDay;
+            if ($startDay < 1 || $startDay > 31) {
+                $errors[] = "{$context}: Start day must be between 1 and 31, got {$startDay}";
+            }
+        }
+        
+        // Validate end day
+        if (!empty($endDay)) {
+            $endDay = (int)$endDay;
+            if ($endDay < 1 || $endDay > 31) {
+                $errors[] = "{$context}: End day must be between 1 and 31, got {$endDay}";
+            }
+        }
+        
+        // Validate that end date is after start date
+        if (!empty($startYear) && !empty($endYear)) {
+            $startYear = (int)$startYear;
+            $endYear = (int)$endYear;
+            
+            if ($endYear < $startYear) {
+                $errors[] = "{$context}: End year ({$endYear}) cannot be before start year ({$startYear})";
+            } elseif ($endYear === $startYear) {
+                // Check months if years are the same
+                if (!empty($startMonth) && !empty($endMonth)) {
+                    $startMonth = (int)$startMonth;
+                    $endMonth = (int)$endMonth;
+                    
+                    if ($endMonth < $startMonth) {
+                        $errors[] = "{$context}: End month ({$endMonth}) cannot be before start month ({$startMonth}) in the same year";
+                    } elseif ($endMonth === $startMonth) {
+                        // Check days if months are the same
+                        if (!empty($startDay) && !empty($endDay)) {
+                            $startDay = (int)$startDay;
+                            $endDay = (int)$endDay;
+                            
+                            if ($endDay < $startDay) {
+                                $errors[] = "{$context}: End day ({$endDay}) cannot be before start day ({$startDay}) in the same month";
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        return $errors;
+    }
+    
+    /**
+     * Validate a single connection row from the spreadsheet
+     */
+    public function validateConnectionRow(Request $request, Span $span)
+    {
+        $this->authorize('update', $span);
+        
+        $connectionData = $request->input('connection');
+        
+        // Convert the connection data to YAML format for validation
+        $yamlData = [
+            'name' => $span->name,
+            'type' => $span->type->type_id ?? 'unknown',
+            'connections' => [
+                $connectionData['predicate'] => [
+                    [
+                        'name' => $connectionData['object'],
+                        'type' => 'connection',
+                        'start' => $this->formatDateForYaml(
+                            $connectionData['start_year'] ?? null,
+                            $connectionData['start_month'] ?? null,
+                            $connectionData['start_day'] ?? null
+                        ),
+                        'end' => $this->formatDateForYaml(
+                            $connectionData['end_year'] ?? null,
+                            $connectionData['end_month'] ?? null,
+                            $connectionData['end_day'] ?? null
+                        ),
+                        'metadata' => $connectionData['metadata'] ?? []
+                    ]
+                ]
+            ]
+        ];
+        
+        // Use YamlValidationService to validate the connection
+        $yamlValidationService = app(YamlValidationService::class);
+        $validationErrors = $yamlValidationService->validateSchema($yamlData, $span->slug, $span);
+        
+        // Filter errors to only include connection-related errors
+        $connectionErrors = array_filter($validationErrors, function($error) {
+            return strpos($error, 'connection') !== false;
+        });
+        
+        return response()->json([
+            'success' => empty($connectionErrors),
+            'errors' => array_values($connectionErrors)
+        ]);
+    }
+    
+    /**
+     * Preview changes that would be made from spreadsheet data
+     */
+    public function previewSpreadsheetChanges(Request $request, Span $span)
+    {
+        $this->authorize('update', $span);
+        
+        try {
+            Log::channel('spans')->info('Preview spreadsheet data', [
+                'span_id' => $span->id,
+                'input_keys' => array_keys($request->all())
+            ]);
+            
+            // Convert spreadsheet data directly to database format (same as save process)
+            $validated = $this->convertSpreadsheetDataToDatabase($request->all());
+            
+            // Get current span data for comparison (same format as validated data)
+            $currentData = [
+                'name' => $span->name,
+                'slug' => $span->slug,
+                'type' => $span->type->type_id ?? '',
+                'state' => $span->state,
+                'access_level' => $span->access_level,
+                'description' => $span->description,
+                'notes' => $span->notes,
+                'start_year' => $span->start_year,
+                'start_month' => $span->start_month,
+                'start_day' => $span->start_day,
+                'end_year' => $span->end_year,
+                'end_month' => $span->end_month,
+                'end_day' => $span->end_day,
+                'metadata' => $span->metadata ?? [],
+                'connections' => collect()
+                    ->concat($span->connectionsAsSubject->map(function($conn) use ($span) {
+                        return [
+                            'subject' => $span->name,
+                            'predicate' => $conn->type->type,
+                            'object' => $conn->object->name ?? '',
+                            'start_year' => $conn->connectionSpan?->start_year,
+                            'start_month' => $conn->connectionSpan?->start_month,
+                            'start_day' => $conn->connectionSpan?->start_day,
+                            'end_year' => $conn->connectionSpan?->end_year,
+                            'end_month' => $conn->connectionSpan?->end_month,
+                            'end_day' => $conn->connectionSpan?->end_day,
+                            'metadata' => $conn->connectionSpan?->metadata ?? []
+                        ];
+                    }))
+                    ->concat($span->connectionsAsObject->map(function($conn) use ($span) {
+                        return [
+                            'subject' => $conn->subject->name ?? '',
+                            'predicate' => $conn->type->type,
+                            'object' => $span->name,
+                            'start_year' => $conn->connectionSpan?->start_year,
+                            'start_month' => $conn->connectionSpan?->start_month,
+                            'start_day' => $conn->connectionSpan?->start_day,
+                            'end_year' => $conn->connectionSpan?->end_year,
+                            'end_month' => $conn->connectionSpan?->end_month,
+                            'end_day' => $conn->connectionSpan?->end_day,
+                            'metadata' => $conn->connectionSpan?->metadata ?? []
+                        ];
+                    }))
+                    ->toArray()
+            ];
+            
+            // Create a structured diff showing what will change
+            $diff = $this->createStructuredDiff($currentData, $validated);
+            
+            // Debug: Log what changes were detected
+            Log::channel('spans')->info('Diff results', [
+                'has_basic_field_changes' => !empty($diff['basic_fields']),
+                'has_metadata_changes' => !empty($diff['metadata']),
+                'has_connection_changes' => !empty($diff['connections']),
+                'basic_fields_count' => count($diff['basic_fields']),
+                'metadata_count' => count($diff['metadata']),
+                'connections_count' => count($diff['connections']),
+                'diff_summary' => $diff
+            ]);
+            
+            return response()->json([
+                'success' => true,
+                'diff' => $diff,
+                'current_data' => $currentData,
+                'merged_data' => $validated,
+                'message' => 'Preview generated successfully'
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Spreadsheet preview error', [
+                'error' => $e->getMessage(),
+                'span_id' => $span->id,
+                'span_name' => $span->name
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to generate preview: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }

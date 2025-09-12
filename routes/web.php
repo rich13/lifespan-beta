@@ -185,6 +185,11 @@ Route::middleware('web')->group(function () {
             Route::get('/{span}/edit', [SpanController::class, 'edit'])->name('spans.edit');
             Route::get('/{span}/yaml', [SpanController::class, 'getYaml'])->name('spans.yaml')->middleware('timeout.prevention');
             Route::get('/{span}/editor', [SpanController::class, 'yamlEditor'])->name('spans.yaml-editor')->middleware('timeout.prevention');
+            Route::get('/{span}/spanner', [SpanController::class, 'spreadsheetEditor'])->name('spans.spanner')->middleware('timeout.prevention');
+Route::put('/{span}/spanner', [SpanController::class, 'updateFromSpreadsheet'])->name('spans.spanner-update')->middleware('timeout.prevention');
+Route::post('/{span}/spanner/validate', [SpanController::class, 'validateSpreadsheetData'])->name('spans.spanner-validate')->middleware('timeout.prevention');
+Route::post('/{span}/spanner/validate-connection', [SpanController::class, 'validateConnectionRow'])->name('spans.spanner-validate-connection')->middleware('timeout.prevention');
+Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadsheetChanges'])->name('spans.spanner-preview')->middleware('timeout.prevention');
             Route::post('/{span}/editor/validate', [SpanController::class, 'validateYaml'])->name('spans.yaml-validate')->middleware('timeout.prevention');
             Route::post('/{span}/editor/apply', [SpanController::class, 'applyYaml'])->name('spans.yaml-apply')->middleware('timeout.prevention');
             Route::post('/{span}/improve/preview', [SpanController::class, 'previewImprovement'])->name('spans.improve.preview')->middleware('timeout.prevention');
@@ -617,6 +622,14 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
                 Route::get('/', [\App\Http\Controllers\LinkedInImportController::class, 'index'])->name('index');
                 Route::post('/preview', [\App\Http\Controllers\LinkedInImportController::class, 'preview'])->name('preview');
                 Route::post('/import', [\App\Http\Controllers\LinkedInImportController::class, 'import'])->name('import');
+            });
+            
+            // Photo Timeline Import routes
+            Route::prefix('import/photo-timeline')->name('import.photo-timeline.')->group(function () {
+                Route::get('/', [\App\Http\Controllers\PhotoTimelineImportController::class, 'index'])->name('index');
+                Route::post('/preview', [\App\Http\Controllers\PhotoTimelineImportController::class, 'preview'])->name('preview');
+                Route::post('/import', [\App\Http\Controllers\PhotoTimelineImportController::class, 'import'])->name('import');
+                Route::post('/osm-lookup', [\App\Http\Controllers\PhotoTimelineImportController::class, 'osmLookup'])->name('osm-lookup');
             });
         });
 
@@ -1073,6 +1086,8 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
                     ->name('search-matches');
                 Route::get('/stats', [\App\Http\Controllers\Admin\PlaceController::class, 'stats'])
                     ->name('stats');
+                Route::post('/clear-import-log', [\App\Http\Controllers\Admin\PlaceController::class, 'clearImportLog'])
+                    ->name('clear-import-log');
             });
             Route::post('/tools/manage-person-subtypes', [App\Http\Controllers\Admin\ToolsController::class, 'updatePersonSubtypes'])
                 ->name('tools.update-person-subtypes');

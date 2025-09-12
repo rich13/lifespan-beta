@@ -208,4 +208,6 @@ class ConfigurableStoryGeneratorTest extends TestCase
         $this->assertStringContainsString('The Beatles', $storyText);
         $this->assertStringContainsString('1960', $storyText);
     }
+
+
 } 
