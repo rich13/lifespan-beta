@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Photo Travel Timeline Generator</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .step {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #007bff;
+        }
+        .step h3 {
+            margin-top: 0;
+            color: #007bff;
+        }
+        .btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        .btn:hover {
+            background: #0056b3;
+        }
+        .btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        .btn-secondary {
+            background: #6c757d;
+        }
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+        .progress {
+            background: #e9ecef;
+            border-radius: 10px;
+            height: 20px;
+            margin: 20px 0;
+            overflow: hidden;
+        }
+        .progress-bar {
+            background: #007bff;
+            height: 100%;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        .status {
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+            display: none;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .results {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+            display: none;
+        }
+        .download-section {
+            text-align: center;
+            margin-top: 20px;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+            border: 1px solid #dee2e6;
+        }
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+        }
+        .stat-label {
+            color: #6c757d;
+            font-size: 14px;
+        }
+        .file-input {
+            display: none;
+        }
+        .file-label {
+            display: inline-block;
+            padding: 12px 24px;
+            background: #28a745;
+            color: white;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+        .file-label:hover {
+            background: #218838;
+        }
+        .instructions {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .instructions h4 {
+            margin-top: 0;
+            color: #856404;
+        }
+        .instructions ol {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        .instructions li {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📸 Photo Travel Timeline Generator</h1>
+        <p class="text-center">Generate a travel timeline from your Photos.app library</p>
+
+        <div class="instructions">
+            <h4>📋 How to use this tool:</h4>
+            <ol>
+                <li><strong>Export your Photos.app data</strong> (see instructions below)</li>
+                <li><strong>Upload the exported data</strong> using the button below</li>
+                <li><strong>Process and download</strong> your travel timeline</li>
+                <li><strong>Import the timeline</strong> into your Lifespan account</li>
+            </ol>
+        </div>
+
+        <div class="step">
+            <h3>Step 1: Export Photos.app Data</h3>
+            <p>You'll need to export your photo location data from Photos.app. Here are the options:</p>
+            
+            <h4>Option A: Use Terminal (Recommended)</h4>
+            <p>Open Terminal and run this command to export your photo data:</p>
+            <code style="background: #f8f9fa; padding: 10px; border-radius: 4px; display: block; margin: 10px 0;">
+                sqlite3 ~/Pictures/Photos\ Library.photoslibrary/database/Photos.sqlite "SELECT ZDATECREATED, ZLATITUDE, ZLONGITUDE, ZDIRECTORY, ZFILENAME FROM ZASSET WHERE ZLATITUDE IS NOT NULL AND ZLONGITUDE IS NOT NULL AND ZLATITUDE != 0 AND ZLONGITUDE != 0 ORDER BY ZDATECREATED;" > ~/Desktop/photos_export.csv
+            </code>
+            <p><strong>Note:</strong> This creates a pipe-delimited file (|) which our processor handles automatically.</p>
+            
+            <h4>Option B: Use Photos.app Export</h4>
+            <p>In Photos.app, select all photos, File → Export → Export Unmodified Originals, then use a tool like ExifTool to extract location data.</p>
+        </div>
+
+        <div class="step">
+            <h3>Step 2: Upload and Process</h3>
+            <p>Upload your exported photo data file:</p>
+            
+            <input type="file" id="photoFile" class="file-input" accept=".csv,.txt">
+            <label for="photoFile" class="file-label">📁 Choose Photo Data File</label>
+            
+            <div id="fileInfo" style="margin: 10px 0; display: none;">
+                <strong>Selected file:</strong> <span id="fileName"></span> (<span id="fileSize"></span>)
+            </div>
+            
+            <button id="processBtn" class="btn" disabled>🔄 Process Photos</button>
+        </div>
+
+        <div id="progressSection" style="display: none;">
+            <div class="progress">
+                <div class="progress-bar" id="progressBar"></div>
+            </div>
+            <div id="progressText">Processing photos...</div>
+        </div>
+
+        <div id="status" class="status"></div>
+
+        <div id="results" class="results">
+            <h3>📊 Processing Results</h3>
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-number" id="totalPhotos">0</div>
+                    <div class="stat-label">Total Photos</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="totalLocations">0</div>
+                    <div class="stat-label">Unique Locations</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="totalDays">0</div>
+                    <div class="stat-label">Travel Days</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="dateRange">-</div>
+                    <div class="stat-label">Date Range</div>
+                </div>
+            </div>
+            
+            <div class="download-section">
+                <button id="downloadBtn" class="btn">📥 Download Timeline</button>
+                <button id="previewBtn" class="btn btn-secondary">👁️ Preview Timeline</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let photoData = [];
+        let processedData = [];
+        
+        // File handling
+        document.getElementById('photoFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                document.getElementById('fileName').textContent = file.name;
+                document.getElementById('fileSize').textContent = formatFileSize(file.size);
+                document.getElementById('fileInfo').style.display = 'block';
+                document.getElementById('processBtn').disabled = false;
+            }
+        });
+
+        // Process button
+        document.getElementById('processBtn').addEventListener('click', processPhotos);
+        
+        // Download button
+        document.getElementById('downloadBtn').addEventListener('click', downloadTimeline);
+        
+        // Preview button
+        document.getElementById('previewBtn').addEventListener('click', previewTimeline);
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function showStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+            status.style.display = 'block';
+        }
+
+        function updateProgress(percent, text) {
+            document.getElementById('progressBar').style.width = percent + '%';
+            document.getElementById('progressText').textContent = text;
+        }
+
+        async function processPhotos() {
+            const file = document.getElementById('photoFile').files[0];
+            if (!file) {
+                showStatus('Please select a file first.', 'error');
+                return;
+            }
+
+            // Show progress
+            document.getElementById('progressSection').style.display = 'block';
+            document.getElementById('processBtn').disabled = true;
+            showStatus('Reading file...', 'info');
+
+            try {
+                // Read file
+                const text = await file.text();
+                updateProgress(20, 'Parsing data...');
+                
+                // Parse CSV data
+                photoData = parseCSV(text);
+                updateProgress(40, 'Processing locations...');
+                
+                // Process photos into timeline
+                processedData = processPhotoTimeline(photoData);
+                updateProgress(80, 'Generating statistics...');
+                
+                // Calculate stats
+                const stats = calculateStats(processedData);
+                updateProgress(100, 'Complete!');
+                
+                // Display results
+                displayResults(stats);
+                showStatus('Processing complete! Your travel timeline is ready.', 'success');
+                
+            } catch (error) {
+                showStatus('Error processing file: ' + error.message, 'error');
+                console.error(error);
+            } finally {
+                document.getElementById('processBtn').disabled = false;
+            }
+        }
+
+        function parseCSV(text) {
+            const lines = text.trim().split('\n');
+            const photos = [];
+            
+            for (let i = 0; i < lines.length; i++) {
+                // Try different delimiters: pipe (|), tab (\t), comma (,)
+                let values;
+                if (lines[i].includes('|')) {
+                    values = lines[i].split('|');
+                } else if (lines[i].includes('\t')) {
+                    values = lines[i].split('\t');
+                } else if (lines[i].includes(',')) {
+                    values = lines[i].split(',');
+                } else {
+                    continue; // Skip lines without recognizable delimiters
+                }
+                
+                if (values.length >= 5) {
+                    const photo = {
+                        ZDATECREATED: parseFloat(values[0]),
+                        ZLATITUDE: parseFloat(values[1]),
+                        ZLONGITUDE: parseFloat(values[2]),
+                        ZDIRECTORY: values[3],
+                        ZFILENAME: values[4]
+                    };
+                    
+                    // Skip photos with invalid coordinates (-180.0 indicates no GPS data)
+                    if (photo.ZLATITUDE === -180.0 || photo.ZLONGITUDE === -180.0) {
+                        continue;
+                    }
+                    
+                    // Skip photos with invalid timestamps
+                    if (photo.ZDATECREATED <= -978307200) {
+                        continue;
+                    }
+                    
+                    // Convert Apple timestamp to readable date
+                    if (photo.ZDATECREATED) {
+                        photo.timestamp = new Date((photo.ZDATECREATED + 978307200) * 1000);
+                    }
+                    
+                    photos.push(photo);
+                }
+            }
+            
+            return photos;
+        }
+
+        function processPhotoTimeline(photos) {
+            const timeline = [];
+            let currentLocation = null;
+            let currentStart = null;
+            let currentEnd = null;
+            let photoCount = 0;
+            
+            // Sort by timestamp
+            photos.sort((a, b) => a.timestamp - b.timestamp);
+            
+            for (const photo of photos) {
+                if (!photo.timestamp || !photo.ZLATITUDE || !photo.ZLONGITUDE) continue;
+                
+                const location = {
+                    lat: photo.ZLATITUDE,
+                    lon: photo.ZLONGITUDE,
+                    date: photo.timestamp
+                };
+                
+                if (!currentLocation) {
+                    // First location
+                    currentLocation = location;
+                    currentStart = photo.timestamp;
+                    currentEnd = photo.timestamp;
+                    photoCount = 1;
+                } else {
+                    // Check if this is a new location (more than 50km away or 7+ days gap)
+                    const distance = haversineDistance(
+                        currentLocation.lat, currentLocation.lon,
+                        location.lat, location.lon
+                    );
+                    const daysDiff = (photo.timestamp - currentEnd) / (1000 * 60 * 60 * 24);
+                    
+                    if (distance > 50 || daysDiff > 7) {
+                        // Save current location period
+                        timeline.push({
+                            start_date: currentStart.toISOString().split('T')[0],
+                            end_date: currentEnd.toISOString().split('T')[0],
+                            lat: currentLocation.lat,
+                            lon: currentLocation.lon,
+                            photo_count: photoCount,
+                            name: getLocationName(currentLocation.lat, currentLocation.lon)
+                        });
+                        
+                        // Start new location period
+                        currentLocation = location;
+                        currentStart = photo.timestamp;
+                        currentEnd = photo.timestamp;
+                        photoCount = 1;
+                    } else {
+                        // Extend current location period
+                        currentEnd = photo.timestamp;
+                        photoCount++;
+                    }
+                }
+            }
+            
+            // Add final location period
+            if (currentLocation) {
+                timeline.push({
+                    start_date: currentStart.toISOString().split('T')[0],
+                    end_date: currentEnd.toISOString().split('T')[0],
+                    lat: currentLocation.lat,
+                    lon: currentLocation.lon,
+                    photo_count: photoCount,
+                    name: getLocationName(currentLocation.lat, currentLocation.lon)
+                });
+            }
+            
+            return timeline;
+        }
+        
+        function getLocationName(lat, lon) {
+            // Simple coordinate-based naming for common areas
+            const locations = [
+                // UK Cities
+                {lat: 51.5074, lon: -0.1278, name: 'London'},
+                {lat: 55.9533, lon: -3.1883, name: 'Edinburgh'},
+                {lat: 53.4808, lon: -2.2426, name: 'Manchester'},
+                {lat: 52.4862, lon: -1.8904, name: 'Birmingham'},
+                {lat: 53.4084, lon: -2.9916, name: 'Birmingham'},
+                {lat: 50.3755, lon: -4.1427, name: 'Plymouth'},
+                {lat: 50.1040, lon: -5.4208, name: 'Penzance'},
+                {lat: 52.3180, lon: 1.4688, name: 'Lowestoft'},
+                
+                // European Cities
+                {lat: 48.8566, lon: 2.3522, name: 'Paris'},
+                {lat: 40.4168, lon: -3.7038, name: 'Madrid'},
+                {lat: 41.9028, lon: 12.4964, name: 'Rome'},
+                {lat: 52.5200, lon: 13.4050, name: 'Berlin'},
+                {lat: 52.3676, lon: 4.9041, name: 'Amsterdam'},
+                {lat: 43.7696, lon: 11.2558, name: 'Florence'},
+                {lat: 43.7228, lon: 11.2486, name: 'Siena'},
+            ];
+            
+            for (const location of locations) {
+                const distance = haversineDistance(lat, lon, location.lat, location.lon);
+                if (distance <= 25) { // Within 25km
+                    return location.name;
+                }
+            }
+            
+            return null;
+        }
+
+        function haversineDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371; // Earth's radius in km
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                     Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                     Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+
+        function calculateStats(timeline) {
+            const totalPhotos = photoData.length;
+            const totalLocations = timeline.length;
+            const totalDays = timeline.reduce((sum, period) => {
+                const start = new Date(period.start_date);
+                const end = new Date(period.end_date);
+                return sum + Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
+            }, 0);
+            
+            let dateRange = '-';
+            if (timeline.length > 0) {
+                const firstDate = timeline[0].start_date;
+                const lastDate = timeline[timeline.length - 1].end_date;
+                dateRange = `${firstDate} to ${lastDate}`;
+            }
+            
+            return {
+                totalPhotos,
+                totalLocations,
+                totalDays,
+                dateRange
+            };
+        }
+
+        function displayResults(stats) {
+            document.getElementById('totalPhotos').textContent = stats.totalPhotos.toLocaleString();
+            document.getElementById('totalLocations').textContent = stats.totalLocations.toLocaleString();
+            document.getElementById('totalDays').textContent = stats.totalDays.toLocaleString();
+            document.getElementById('dateRange').textContent = stats.dateRange;
+            
+            document.getElementById('results').style.display = 'block';
+        }
+
+        function downloadTimeline() {
+            const dataStr = JSON.stringify(processedData, null, 2);
+            const dataBlob = new Blob([dataStr], {type: 'application/json'});
+            
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(dataBlob);
+            link.download = 'travel_timeline.json';
+            link.click();
+        }
+
+        function previewTimeline() {
+            const preview = processedData.map(period => 
+                `${period.start_date} to ${period.end_date}: Location (${period.lat.toFixed(4)}, ${period.lon.toFixed(4)})`
+            ).join('\n');
+            
+            alert('Travel Timeline Preview:\n\n' + preview);
+        }
+    </script>
+</body>
+</html>
