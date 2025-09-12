@@ -73,12 +73,12 @@
                                 <div class="card h-100">
                                     <div class="card-body">
                                         <h6 class="card-title">
-                                            <i class="bi bi-info-circle me-2"></i>More Importers
+                                            <i class="bi bi-camera me-2"></i>Photo Timeline Import
                                         </h6>
-                                        <p class="card-text text-muted">Additional import options will be available here soon.</p>
-                                        <button class="btn btn-outline-secondary btn-sm" disabled>
-                                            <i class="bi bi-clock me-1"></i>Coming Soon
-                                        </button>
+                                        <p class="card-text text-muted">Import travel events from your photo timeline data.</p>
+                                        <a href="{{ route('settings.import.photo-timeline.index') }}" class="btn btn-outline-primary btn-sm">
+                                            <i class="bi bi-arrow-right me-1"></i>Import Photo Timeline
+                                        </a>
                                     </div>
                                 </div>
                             </div>

@@ -311,13 +311,13 @@
     <div class="main-carousel-container">
         <div class="card-carousel-container">
             <div class="card-carousel">
-                <!-- Card 1 -->
-                <div class="carousel-card">
+
+            <div class="carousel-card">
                     <div class="card h-100 shadow-sm">
                         <div class="card-body">
                             <div class="card-content-top">
                                 <div class="mb-3">
-                                    <i class="bi bi-archive" style="font-size: 2.5rem;"></i>
+                                    <i class="bi bi-cloud-rain" style="font-size: 2.5rem;"></i>
                                 </div>
                                 <h3 class="card-title">All these moments</h3>
                                 <p class="card-text">
@@ -334,13 +334,34 @@
                     </div>
                 </div>
 
-                <!-- Card 2 -->
                 <div class="carousel-card">
                     <div class="card h-100 shadow-sm">
                         <div class="card-body">
                             <div class="card-content-top">
                                 <div class="mb-3">
-                                    <i class="bi bi-globe2" style="font-size: 2.5rem;"></i>
+                                    <i class="bi bi-leaf" style="font-size: 2.5rem;"></i>
+                                </div>
+                                <h3 class="card-title">Look through time</h3>
+                                <p class="card-text">
+                                and find your life,<br>
+                                tell us what you find
+                                </p>
+                            </div>
+                            <div class="card-content-bottom">
+                                <p class="card-text"><a href="/spans/nick-drake">Nick Drake</a></p>
+                                <!--<p class="card-text">Nick Drake</p> -->
+                                <p class="card-text mb-0">1948 - 1974</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="carousel-card">
+                    <div class="card h-100 shadow-sm">
+                        <div class="card-body">
+                            <div class="card-content-top">
+                                <div class="mb-3">
+                                    <i class="bi bi-car-front" style="font-size: 2.5rem;"></i>
                                 </div>
                                 <h3 class="card-title">Roads?</h3>
                                 <p class="card-text">
@@ -357,13 +378,12 @@
                     </div>
                 </div>
 
-                <!-- Card 3 -->
                 <div class="carousel-card">
                     <div class="card h-100 shadow-sm">
                         <div class="card-body">
                             <div class="card-content-top">
                                 <div class="mb-3">
-                                    <i class="bi bi-search" style="font-size: 2.5rem;"></i>
+                                    <i class="bi bi-8-circle-fill" style="font-size: 2.5rem;"></i>
                                 </div>
                                 <h3 class="card-title">All persons</h3>
                                 <p class="card-text">
@@ -372,15 +392,14 @@
                                 </p>
                             </div>
                             <div class="card-content-bottom">
-                                <!-- <p class="card-text"><a href="/spans/kurt-vonnegut">Kurt Vonnegut</a></p> -->
-                                <p class="card-text">Kurt Vonnegut</p>
+                                <p class="card-text"><a href="/spans/kurt-vonnegut">Kurt Vonnegut</a></p>
+                                <!-- <p class="card-text">Kurt Vonnegut</p> -->
                                 <p class="card-text mb-0">1922 - 2007</p>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Card 4 -->
                 <div class="carousel-card">
                     <div class="card h-100 shadow-sm">
                         <div class="card-body">
@@ -395,13 +414,14 @@
                                 </p>
                             </div>
                             <div class="card-content-bottom">
-                                <!-- <p class="card-text"><a href="/spans/laurie-anderson">Laurie Anderson</a></p> -->
-                                <p class="card-text">Laurie Anderson</p>
+                                <p class="card-text"><a href="/spans/laurie-anderson">Laurie Anderson</a></p>
+                                <!-- <p class="card-text">Laurie Anderson</p> -->
                                 <p class="card-text mb-0">1947 - present</p>
                             </div>
                         </div>
                     </div>
                 </div>
+
             </div>
         </div>
     </div>
@@ -430,11 +450,11 @@
                     <div class="card h-100 shadow-sm">
                         <div class="card-body">
                             <div class="card-content-top">
-                                <h3 class="card-title">Card A</h3>
+                                <h3 class="card-title">Something</h3>
                                 <p class="card-text">Something</p>
                             </div>
                             <div class="card-content-bottom">
-                                <p class="card-text mb-0">1920 - 2007</p>
+                                <p class="card-text mb-0">Something</p>
                             </div>
                         </div>
                     </div>
@@ -445,11 +465,11 @@
                     <div class="card h-100 shadow-sm">
                         <div class="card-body">
                             <div class="card-content-top">
-                                <h3 class="card-title">Card B</h3>
+                                <h3 class="card-title">Something</h3>
                                 <p class="card-text">Something</p>
                             </div>
                             <div class="card-content-bottom">
-                                <p class="card-text mb-0">1920 - 2007</p>
+                                <p class="card-text mb-0">Something</p>
                             </div>
                         </div>
                     </div>
@@ -460,11 +480,11 @@
                     <div class="card h-100 shadow-sm">
                         <div class="card-body">
                             <div class="card-content-top">
-                                <h3 class="card-title">Card C</h3>
+                                <h3 class="card-title">Something</h3>
                                 <p class="card-text">Something</p>
                             </div>
                             <div class="card-content-bottom">
-                                <p class="card-text mb-0">1920 - 2007</p>
+                                <p class="card-text mb-0">Something</p>
                             </div>
                         </div>
                     </div>
@@ -475,11 +495,11 @@
                     <div class="card h-100 shadow-sm">
                         <div class="card-body">
                             <div class="card-content-top">
-                                <h3 class="card-title">Card D</h3>
+                                <h3 class="card-title">Something</h3>
                                 <p class="card-text">Something</p>
                             </div>
                             <div class="card-content-bottom">
-                                <p class="card-text mb-0">1920 - 2007</p>
+                                <p class="card-text mb-0">Something</p>
                             </div>
                         </div>
                     </div>
@@ -490,11 +510,11 @@
                     <div class="card h-100 shadow-sm">
                         <div class="card-body">
                             <div class="card-content-top">
-                                <h3 class="card-title">Card E</h3>
+                                <h3 class="card-title">Something</h3>
                                 <p class="card-text">Something</p>
                             </div>
                             <div class="card-content-bottom">
-                                <p class="card-text mb-0">1920 - 2007</p>
+                                <p class="card-text mb-0">Something</p>
                             </div>
                         </div>
                     </div>
@@ -505,11 +525,11 @@
                     <div class="card h-100 shadow-sm">
                         <div class="card-body">
                             <div class="card-content-top">
-                                <h3 class="card-title">Card F</h3>
+                                <h3 class="card-title">Something</h3>
                                 <p class="card-text">Something</p>
                             </div>
                             <div class="card-content-bottom">
-                                <p class="card-text mb-0">1920 - 2007</p>
+                                <p class="card-text mb-0">Something</p>
                             </div>
                         </div>
                     </div>

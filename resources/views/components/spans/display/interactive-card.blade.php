@@ -58,19 +58,19 @@
                     @if($span->end_year)
                         <!-- Person with death date: [person] [name] lived from [start] to [end] -->
                         <button type="button" class="btn btn-outline-light text-dark inactive" disabled>lived from</button>
-                        <a href="{{ route('date.explore', ['date' => $span->start_date_link]) }}" 
+                        <a href="{{ $span->start_date_link ? route('date.explore', ['date' => $span->start_date_link]) : '#' }}" 
                            class="btn btn-outline-date">
                             {{ $span->human_readable_start_date }}
                         </a>
                         <button type="button" class="btn btn-outline-light text-dark inactive" disabled>to</button>
-                        <a href="{{ route('date.explore', ['date' => $span->end_date_link]) }}" 
+                        <a href="{{ $span->end_date_link ? route('date.explore', ['date' => $span->end_date_link]) : '#' }}" 
                            class="btn btn-outline-date">
                             {{ $span->human_readable_end_date }}
                         </a>
                     @else
                         <!-- Person alive: [person] [name] was born [start] -->
                         <button type="button" class="btn btn-outline-light text-dark inactive" disabled>was born</button>
-                        <a href="{{ route('date.explore', ['date' => $span->start_date_link]) }}" 
+                        <a href="{{ $span->start_date_link ? route('date.explore', ['date' => $span->start_date_link]) : '#' }}" 
                            class="btn btn-outline-date">
                             {{ $span->human_readable_start_date }}
                         </a>
@@ -79,12 +79,12 @@
                     @if($span->end_year)
                         <!-- Other span with end date: [span] [name] from [start] to [end] -->
                         <button type="button" class="btn btn-outline-light text-dark inactive" disabled>from</button>
-                        <a href="{{ route('date.explore', ['date' => $span->start_date_link]) }}" 
+                        <a href="{{ $span->start_date_link ? route('date.explore', ['date' => $span->start_date_link]) : '#' }}" 
                            class="btn btn-outline-date">
                             {{ $span->human_readable_start_date }}
                         </a>
                         <button type="button" class="btn btn-outline-light text-dark inactive" disabled>to</button>
-                        <a href="{{ route('date.explore', ['date' => $span->end_date_link]) }}" 
+                        <a href="{{ $span->end_date_link ? route('date.explore', ['date' => $span->end_date_link]) : '#' }}" 
                            class="btn btn-outline-date">
                             {{ $span->human_readable_end_date }}
                         </a>
@@ -117,7 +117,7 @@
                                 started
                             @endif
                         </button>
-                        <a href="{{ route('date.explore', ['date' => $span->start_date_link]) }}" 
+                        <a href="{{ $span->start_date_link ? route('date.explore', ['date' => $span->start_date_link]) : '#' }}" 
                            class="btn btn-outline-date">
                             {{ $span->human_readable_start_date }}
                         </a>

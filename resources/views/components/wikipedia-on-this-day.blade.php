@@ -1,8 +1,12 @@
 @props(['month' => null, 'day' => null, 'year' => null])
 
 @php
-    // Use provided date or default to today
-    $targetDate = $month && $day ? \Carbon\Carbon::createFromDate($year ?? date('Y'), $month, $day) : \Carbon\Carbon::now();
+    // Use provided date or default to current date (respecting time travel mode)
+    if ($month && $day) {
+        $targetDate = \Carbon\Carbon::createFromDate($year ?? date('Y'), $month, $day);
+    } else {
+        $targetDate = \App\Helpers\DateHelper::getCurrentDate();
+    }
     $month = $targetDate->month;
     $day = $targetDate->day;
     $year = $targetDate->year;

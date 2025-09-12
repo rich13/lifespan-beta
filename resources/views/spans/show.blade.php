@@ -99,12 +99,26 @@
     @auth
         @if(auth()->user()->can('update', $span) || auth()->user()->can('delete', $span))
             @can('update', $span)
-                <a href="{{ route('spans.yaml-editor', $span) }}" class="btn btn-sm btn-outline-primary" 
-                   id="edit-span-btn" 
+                @if($span->type && $span->type->type_id === 'place')
+                    <a href="{{ route('spans.yaml-editor', $span) }}" class="btn btn-sm btn-outline-primary" 
+                       id="edit-span-btn" 
+                       data-bs-toggle="tooltip" data-bs-placement="bottom" 
+                       title="Edit span (⌘E)">
+                        <i class="bi bi-code-square me-1"></i> Edit
+                    </a>
+                @else
+                    <a href="{{ route('spans.spanner', $span) }}" class="btn btn-sm btn-outline-primary" 
+                       id="edit-span-btn" 
+                       data-bs-toggle="tooltip" data-bs-placement="bottom" 
+                       title="Edit span (⌘E)">
+                        <i class="bi bi-wrench me-1"></i> Edit
+                    </a>
+                @endif
+                <!-- <a href="{{ route('spans.yaml-editor', $span) }}" class="btn btn-sm btn-outline-secondary" 
                    data-bs-toggle="tooltip" data-bs-placement="bottom" 
-                   title="Edit span (⌘E)">
-                    <i class="bi bi-code-square me-1"></i> Edit
-                </a>
+                   title="YAML Editor">
+                    <i class="bi bi-code-square me-1"></i> YAML
+                </a> -->
             @endcan
             @can('delete', $span)
             
@@ -119,7 +133,7 @@
             @endcan
         @endif
 
-        <a href="{{ route('spans.history', $span) }}" class="btn btn-sm btn-outline-info">
+        <a href="{{ route('spans.history', $span) }}" class="btn btn-sm btn-outline-dark">
             <i class="bi bi-clock-history me-1"></i> History
         </a>
 
@@ -169,8 +183,10 @@
                     </div>
                 </div>
                 
-                <!-- Description Card -->
-                <x-spans.cards.description-card :span="$span" />
+                <!-- Description Card - Only show for public figures, not private individuals -->
+                @if(!($span->type_id === 'person' && $span->getMeta('subtype') === 'private_individual'))
+                    <x-spans.cards.description-card :span="$span" />
+                @endif
                 
                 <x-spans.partials.connections :span="$span" />
             </div>

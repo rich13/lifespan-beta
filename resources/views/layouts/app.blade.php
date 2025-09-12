@@ -292,6 +292,18 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
                 padding-left: 0.75rem;
                 padding-right: 0.75rem;
             }
+            
+            /* Guest content wrapper - add margins to cards */
+            .guest-content-wrapper .card {
+                margin-left: 0.5rem;
+                margin-right: 0.5rem;
+            }
+            
+            /* Ensure proper spacing for guest layout */
+            .guest-content-wrapper .container-fluid {
+                padding-left: 0;
+                padding-right: 0;
+            }
         </style>
         
         <!-- Page-specific scripts -->
@@ -359,12 +371,14 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
                 
                 <!-- Guest Content Area -->
                 <div class="row">
-                    <div class="col-12 bg-light py-3">
+                    <div class="col-12 bg-light py-3 px-3">
                         <div class="header-section mb-4">
                             @yield('header')
                             <x-flash-messages />
                         </div>
-                        @yield('content')
+                        <div class="guest-content-wrapper">
+                            @yield('content')
+                        </div>
                     </div>
                 </div>
             @endauth

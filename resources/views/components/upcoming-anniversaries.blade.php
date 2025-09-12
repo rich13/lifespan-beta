@@ -1,8 +1,8 @@
 @props(['date' => null])
 
 @php
-    // Use provided date or default to today
-    $targetDate = $date ? \Carbon\Carbon::parse($date) : \Carbon\Carbon::now();
+    // Use provided date or default to current date (respecting time travel mode)
+    $targetDate = $date ? \Carbon\Carbon::parse($date) : \App\Helpers\DateHelper::getCurrentDate();
     
     // Calculate the date range for the next 30 days
     $startDate = $targetDate->copy();

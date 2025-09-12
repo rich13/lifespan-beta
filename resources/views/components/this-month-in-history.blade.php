@@ -1,9 +1,10 @@
 @props(['month' => null, 'year' => null])
 
 @php
-    // Use provided month/year or default to current month
-    $currentMonth = $month ?? \Carbon\Carbon::now()->month;
-    $currentYear = $year ?? \Carbon\Carbon::now()->year;
+    // Use provided month/year or default to current month (respecting time travel mode)
+    $currentDate = \App\Helpers\DateHelper::getCurrentDate();
+    $currentMonth = $month ?? $currentDate->month;
+    $currentYear = $year ?? $currentDate->year;
     
     // Get historical events from this month in any year
     $historicalEvents = \App\Models\Span::where(function($query) use ($currentMonth) {

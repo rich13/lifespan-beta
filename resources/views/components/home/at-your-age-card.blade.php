@@ -5,7 +5,7 @@
     }
 
     $personalSpan = $user->personalSpan;
-    $today = \Carbon\Carbon::now();
+    $today = \App\Helpers\DateHelper::getCurrentDate();
     
     // Calculate age
     $birthDate = \Carbon\Carbon::createFromDate(

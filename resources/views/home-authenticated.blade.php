@@ -6,7 +6,14 @@
 @endphp
 
 @section('page_title')
-    Today is {{ \Carbon\Carbon::now()->format('F j, Y') }}
+    @php
+        $currentDate = \App\Helpers\DateHelper::getCurrentDate();
+    @endphp
+    @if(request()->cookie('time_travel_date'))
+        Time Travel: {{ $currentDate->format('F j, Y') }}
+    @else
+        Today is {{ $currentDate->format('F j, Y') }}
+    @endif
 @endsection
 
 <x-shared.interactive-card-styles />
@@ -449,7 +456,7 @@
         <div class="col-md-4">
             <div class="mb-4">
                 @php
-                    $today = \Carbon\Carbon::now();
+                    $today = \App\Helpers\DateHelper::getCurrentDate();
                     $spansStartingOnDate = \App\Models\Span::where('start_year', $today->year)
                         ->where('start_month', $today->month)
                         ->where('start_day', $today->day)
@@ -476,7 +483,11 @@
                         <div class="card-header">
                             <h3 class="h6 mb-0">
                                 <i class="bi bi-calendar-plus text-success me-2"></i>
-                                Started Today
+                                @if(request()->cookie('time_travel_date'))
+                                    Started on {{ $today->format('F j') }}
+                                @else
+                                    Started Today
+                                @endif
                             </h3>
                         </div>
                         <div class="card-body">
@@ -494,7 +505,11 @@
                         <div class="card-header">
                             <h3 class="h6 mb-0">
                                 <i class="bi bi-calendar-x text-danger me-2"></i>
-                                Ended Today
+                                @if(request()->cookie('time_travel_date'))
+                                    Ended on {{ $today->format('F j') }}
+                                @else
+                                    Ended Today
+                                @endif
                             </h3>
                         </div>
                         <div class="card-body">

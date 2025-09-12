@@ -39,7 +39,12 @@
     if ($model) {
         $modelClass = get_class($model);
         if ($modelClass === \App\Models\Span::class) {
-            $editRoute = 'spans.yaml-editor';
+            // Use spreadsheet editor for all span types except 'place'
+            if ($model->type && $model->type->type_id === 'place') {
+                $editRoute = 'spans.yaml-editor';
+            } else {
+                $editRoute = 'spans.spanner';
+            }
             $editRouteParams = ['span' => $model];
             $viewRoute = 'spans.show';
             $viewRouteParams = ['span' => $model];
