@@ -135,6 +135,66 @@
                     @endif
                 </div>
             </div>
+            
+            <!-- Import Log -->
+            @if(session('import_log') && count(session('import_log')) > 0)
+                <div class="card mt-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5>Recent Import History ({{ count(session('import_log')) }} imports)</h5>
+                        <form action="{{ route('admin.places.clear-import-log') }}" method="POST" class="d-inline">
+                            @csrf
+                            <button type="submit" class="btn btn-sm btn-outline-secondary" onclick="return confirm('Clear import log?')">
+                                <i class="bi bi-trash"></i> Clear Log
+                            </button>
+                        </form>
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-info alert-sm mb-3">
+                            <i class="bi bi-info-circle me-2"></i>
+                            <strong>Clickable places:</strong> Places with links can be clicked to view their details. Batch imports show the total count of places processed.
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Place Name</th>
+                                        <th>Method</th>
+                                        <th>Date/Time</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach(array_reverse(session('import_log')) as $import)
+                                        <tr>
+                                            <td>
+                                                @if(isset($import['span_id']) && $import['span_id'])
+                                                    <a href="{{ route('spans.show', $import['span_id']) }}" class="text-decoration-none">
+                                                        <i class="bi bi-link-45deg text-primary me-1"></i>
+                                                        {{ $import['place_name'] }}
+                                                    </a>
+                                                @else
+                                                    <span class="text-muted">{{ $import['place_name'] }}</span>
+                                                @endif
+                                            </td>
+                                            <td>
+                                                @if($import['method'] === 'auto')
+                                                    <span class="badge bg-success">Auto</span>
+                                                @elseif($import['method'] === 'manual')
+                                                    <span class="badge bg-primary">Manual</span>
+                                                @elseif($import['method'] === 'batch')
+                                                    <span class="badge bg-info">Batch</span>
+                                                @else
+                                                    <span class="badge bg-secondary">{{ ucfirst($import['method']) }}</span>
+                                                @endif
+                                            </td>
+                                            <td>{{ $import['date'] }}</td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            @endif
         </div>
     </div>
 </div>

@@ -43,8 +43,13 @@ class PlaceGeocodingWorkflowService
         }
 
         try {
-            // Try to geocode the place
-            $osmData = $this->osmService->geocode($span->name);
+            // Extract coordinates from span metadata if available
+            $coordinates = $span->getCoordinates();
+            $latitude = $coordinates['latitude'] ?? null;
+            $longitude = $coordinates['longitude'] ?? null;
+            
+            // Try to geocode the place with coordinate context if available
+            $osmData = $this->osmService->geocode($span->name, $latitude, $longitude);
             
             if ($osmData) {
                 // Set the OSM data and coordinates
@@ -100,7 +105,12 @@ class PlaceGeocodingWorkflowService
             return [];
         }
 
-        return $this->osmService->search($span->name, $limit);
+        // Extract coordinates from span metadata if available
+        $coordinates = $span->getCoordinates();
+        $latitude = $coordinates['latitude'] ?? null;
+        $longitude = $coordinates['longitude'] ?? null;
+
+        return $this->osmService->search($span->name, $limit, $latitude, $longitude);
     }
 
     /**
@@ -464,7 +474,8 @@ class PlaceGeocodingWorkflowService
             'success' => 0,
             'failed' => 0,
             'skipped' => 0,
-            'errors' => []
+            'errors' => [],
+            'successful_spans' => [] // Track successful spans for logging
         ];
 
         foreach ($spanIds as $spanId) {
@@ -483,6 +494,7 @@ class PlaceGeocodingWorkflowService
 
                 if ($this->resolvePlace($span)) {
                     $results['success']++;
+                    $results['successful_spans'][] = $span; // Track successful spans
                 } else {
                     $results['failed']++;
                 }

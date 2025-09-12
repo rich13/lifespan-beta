@@ -128,6 +128,9 @@ class PlaceController extends Controller
         $success = $this->geocodingWorkflow->resolveWithMatch($span, $osmData);
         
         if ($success) {
+            // Add to import log
+            $this->addToImportLog($span->name, 'manual', $span->id);
+            
             return redirect()->route('admin.places.index')
                 ->with('success', "Successfully imported '{$span->name}' with complete hierarchy.");
         } else {
@@ -147,6 +150,13 @@ class PlaceController extends Controller
 
         $spanIds = $request->input('span_ids');
         $results = $this->geocodingWorkflow->batchProcess($spanIds);
+
+        // Log each successful place individually with batch method indicator
+        if (!empty($results['successful_spans'])) {
+            foreach ($results['successful_spans'] as $span) {
+                $this->addToImportLog($span->name, 'batch', $span->id);
+            }
+        }
 
         $message = "Batch processing complete: {$results['success']} successful, {$results['failed']} failed, {$results['skipped']} skipped.";
         
@@ -175,6 +185,9 @@ class PlaceController extends Controller
         $redirectTo = $request->input('redirect', 'admin.places.index');
         
         if ($success) {
+            // Add to import log
+            $this->addToImportLog($span->name, 'auto', $span->id);
+            
             return redirect()->route($redirectTo)
                 ->with('success', "Successfully imported '{$span->name}' with complete hierarchy.");
         } else {
@@ -722,5 +735,47 @@ class PlaceController extends Controller
         }
         
         return $placeHierarchies;
+    }
+
+    /**
+     * Add a successful import to the import log
+     */
+    private function addToImportLog(string $placeName, string $method, string $spanId = null): void
+    {
+        $importLog = session('import_log', []);
+        
+        // Ensure all existing entries have the span_id key for backward compatibility
+        foreach ($importLog as &$entry) {
+            if (!isset($entry['span_id'])) {
+                $entry['span_id'] = null;
+            }
+        }
+        
+        $importLog[] = [
+            'place_name' => $placeName,
+            'method' => $method,
+            'span_id' => $spanId,
+            'timestamp' => now()->toISOString(),
+            'date' => now()->format('Y-m-d H:i:s')
+        ];
+        
+        // Keep only the last 50 imports to prevent the log from getting too large
+        if (count($importLog) > 50) {
+            $importLog = array_slice($importLog, -50);
+        }
+        
+        session(['import_log' => $importLog]);
+    }
+
+
+
+    /**
+     * Clear the import log
+     */
+    public function clearImportLog()
+    {
+        session()->forget('import_log');
+        return redirect()->route('admin.places.index')
+            ->with('success', 'Import log cleared successfully.');
     }
 }

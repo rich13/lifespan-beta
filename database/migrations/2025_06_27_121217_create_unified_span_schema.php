@@ -51,6 +51,18 @@ return new class extends Migration
                             'label' => 'Nationality',
                             'required' => false,
                             'component' => 'text-input'
+                        ],
+                        'subtype' => [
+                            'help' => 'Whether this person is a public figure (found on Wikipedia) or a private individual',
+                            'type' => 'select',
+                            'label' => 'Person Type',
+                            'options' => [
+                                'public_figure',
+                                'private_individual'
+                            ],
+                            'required' => true,
+                            'component' => 'select',
+                            'default' => 'private_individual'
                         ]
                     ]
                 ]
