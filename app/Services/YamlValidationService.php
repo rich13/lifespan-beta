@@ -50,6 +50,14 @@ class YamlValidationService
             $errors = array_merge($errors, $metadataErrors);
         }
         
+        // Debug: Log what we're validating
+        Log::info('YAML validation debug', [
+            'data_type' => $data['type'] ?? 'unknown',
+            'metadata' => $data['metadata'] ?? [],
+            'metadata_errors' => $metadataErrors ?? [],
+            'all_errors' => $errors
+        ]);
+        
         // Validate connections structure if present
         if (isset($data['connections']) && is_array($data['connections'])) {
             $connectionErrors = $this->validateConnectionSchema($data['connections']);

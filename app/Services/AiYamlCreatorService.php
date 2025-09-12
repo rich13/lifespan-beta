@@ -435,11 +435,10 @@ You may include the following groups:
   - end: <YYYY, YYYY-MM, or null>
   - metadata: {}  # leave empty
   - nested_connections:
-    - 
-      type: at_organisation
-      direction: outgoing
-      target_name: <Organisation Name>
-      target_type: organisation
+    - type: "at_organisation"  # String value, not array
+      direction: "outgoing"    # String value, not array
+      target_name: "<Organisation Name>"  # String value, not array
+      target_type: "organisation"  # String value, not array
 
 ---
 
@@ -458,11 +457,12 @@ You may include the following groups:
 11. **CRITICAL**: Quote location names with commas (e.g., "Chicago, Illinois, United States", "Malibu, California")
 12. **CRITICAL**: Quote names containing punctuation (e.g., "D'arcy Wretzky", "Mary-Ann Phelan")
 13. **CRITICAL**: Quote birth names with special characters (e.g., "Ramón Gerard Antonio Estévez")
-14. Include sources as a top-level field, not in metadata
-15. Put has_role inside the connections block, not as a separate top-level field
-16. Do not include any explanatory text or sources outside the YAML structure - only return the YAML
-17. If a value (such as a name, date, or organisation) is not publicly known, do not include that field or connection at all. Do not use placeholders like "unnamed person", "unknown", or similar.
-18. Research thoroughly - read full source material, not just summaries or introductions
+14. **CRITICAL**: In nested_connections, all field values must be strings, not arrays (e.g., type: "at_organisation", not type: ["at_organisation"])
+15. Include sources as a top-level field, not in metadata
+16. Put has_role inside the connections block, not as a separate top-level field
+17. Do not include any explanatory text or sources outside the YAML structure - only return the YAML
+18. If a value (such as a name, date, or organisation) is not publicly known, do not include that field or connection at all. Do not use placeholders like "unnamed person", "unknown", or similar.
+19. Research thoroughly - read full source material, not just summaries or introductions
 
 **YAML FORMATTING EXAMPLES FOR PEOPLE**:
 ```yaml
@@ -592,11 +592,10 @@ You may include the following groups:
   - end: <YYYY, YYYY-MM, or null>
   - metadata: {}  # leave empty
   - nested_connections:
-    - 
-      type: at_organisation
-      direction: outgoing
-      target_name: <Organisation Name>
-      target_type: organisation
+    - type: "at_organisation"  # String value, not array
+      direction: "outgoing"    # String value, not array
+      target_name: "<Organisation Name>"  # String value, not array
+      target_type: "organisation"  # String value, not array
 
 ---
 
@@ -607,8 +606,9 @@ You may include the following groups:
 3. **ADD MISSING INFORMATION**: Add new connections, metadata, or details that are missing
 4. **CORRECT ERRORS**: Fix any factual errors you find in the existing data, but only if you have a more authoritative source
 5. **EXPAND COMPREHENSIVELY**: Add all significant biographical details that are publicly documented
-6. Only include information that is publicly verifiable from authoritative sources
-7. Use exact dates when available, approximate dates (YYYY-MM or YYYY) when necessary
+6. **CRITICAL**: In nested_connections, all field values must be strings, not arrays (e.g., type: "at_organisation", not type: ["at_organisation"])
+7. Only include information that is publicly verifiable from authoritative sources
+8. Use exact dates when available, approximate dates (YYYY-MM or YYYY) when necessary
 
 ### CRITICAL: BIRTH DATES AND PERSONAL INFORMATION
 

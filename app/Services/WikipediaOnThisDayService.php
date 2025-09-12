@@ -23,8 +23,16 @@ class WikipediaOnThisDayService
                 $monthPadded = str_pad($month, 2, '0', STR_PAD_LEFT);
                 $dayPadded = str_pad($day, 2, '0', STR_PAD_LEFT);
                 
-                // Use a shorter timeout for external API calls
-                $response = Http::timeout(5)->retry(2, 1000)->get($this->baseUrl . "/all/{$monthPadded}/{$dayPadded}");
+                // Use a shorter timeout for external API calls with proper user-agent
+                // Add a small delay to be respectful to Wikipedia's API
+                usleep(500000); // 0.5 second delay
+                
+                $response = Http::timeout(10)
+                    ->retry(2, 2000)
+                    ->withHeaders([
+                        'User-Agent' => 'LifespanBeta/1.0 (https://lifespan-beta.railway.app; contact@lifespan-beta.railway.app)'
+                    ])
+                    ->get($this->baseUrl . "/all/{$monthPadded}/{$dayPadded}");
                 
                 if ($response->successful()) {
                     return $response->json();

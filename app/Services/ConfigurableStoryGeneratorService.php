@@ -1620,7 +1620,7 @@ class ConfigurableStoryGeneratorService
         $creatorConnection = $span->connectionsAsObjectWithAccess($this->currentUser)
             ->where('type_id', 'created')
             ->whereHas('parent', function ($query) {
-                $query->where('type_id', 'band');
+                $query->whereIn('type_id', ['person', 'band']);
             })
             ->with(['parent'])
             ->first();
