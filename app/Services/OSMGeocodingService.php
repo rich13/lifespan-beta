@@ -19,7 +19,7 @@ class OSMGeocodingService
     /**
      * Geocode a place name and return OSM data
      */
-    public function geocode(string $placeName): ?array
+    public function geocode(string $placeName, ?float $latitude = null, ?float $longitude = null): ?array
     {
         // Skip continents as they're too broad for meaningful geocoding
         $continents = [
@@ -36,6 +36,9 @@ class OSMGeocodingService
         }
         
         $cacheKey = 'osm_geocode_' . md5(strtolower(trim($placeName)));
+        if ($latitude !== null && $longitude !== null) {
+            $cacheKey .= '_' . round($latitude, 4) . '_' . round($longitude, 4);
+        }
         
         // Check cache first
         if (Cache::has($cacheKey)) {
@@ -43,9 +46,16 @@ class OSMGeocodingService
         }
 
         try {
-            $response = $this->makeNominatimRequest($placeName);
+            $response = $this->makeNominatimRequest($placeName, 1, $latitude, $longitude);
             
             if (empty($response)) {
+                // If no results, try progressive fallback searches
+                $fallbackResult = $this->tryFallbackSearches($placeName, $latitude, $longitude);
+                if ($fallbackResult) {
+                    // Cache the fallback result
+                    Cache::put($cacheKey, $fallbackResult, self::CACHE_TTL);
+                    return $fallbackResult;
+                }
                 return null;
             }
 
@@ -82,9 +92,12 @@ class OSMGeocodingService
     /**
      * Search for multiple matches (for disambiguation)
      */
-    public function search(string $placeName, int $limit = 5): array
+    public function search(string $placeName, int $limit = 5, ?float $latitude = null, ?float $longitude = null): array
     {
         $cacheKey = 'osm_search_' . md5(strtolower(trim($placeName)) . '_' . $limit);
+        if ($latitude !== null && $longitude !== null) {
+            $cacheKey .= '_' . round($latitude, 4) . '_' . round($longitude, 4);
+        }
         
         // Check cache first
         if (Cache::has($cacheKey)) {
@@ -92,7 +105,7 @@ class OSMGeocodingService
         }
 
         try {
-            $response = $this->makeNominatimRequest($placeName, $limit);
+            $response = $this->makeNominatimRequest($placeName, $limit, $latitude, $longitude);
             
             $results = array_map([$this, 'formatOsmData'], $response);
             
@@ -119,25 +132,34 @@ class OSMGeocodingService
     /**
      * Make a request to Nominatim API with retry logic
      */
-    private function makeNominatimRequest(string $placeName, int $limit = 1): array
+    private function makeNominatimRequest(string $placeName, int $limit = 1, ?float $latitude = null, ?float $longitude = null): array
     {
         $attempts = 0;
         
         while ($attempts < self::MAX_RETRIES) {
             try {
+                $params = [
+                    'q' => $placeName,
+                    'format' => 'json',
+                    'limit' => $limit,
+                    'addressdetails' => 1,
+                    'extratags' => 1,
+                    'namedetails' => 1
+                ];
+                
+                // Add coordinate context if available
+                if ($latitude !== null && $longitude !== null) {
+                    $params['lat'] = $latitude;
+                    $params['lon'] = $longitude;
+                    $params['bounded'] = 1; // Restrict results to within a reasonable area
+                }
+                
                 $response = Http::timeout(10)
                     ->withHeaders([
                         'User-Agent' => 'Lifespan-Beta/1.0 (https://lifespan-beta.com)',
                         'Accept-Language' => 'en'
                     ])
-                    ->get(self::NOMINATIM_BASE_URL . '/search', [
-                        'q' => $placeName,
-                        'format' => 'json',
-                        'limit' => $limit,
-                        'addressdetails' => 1,
-                        'extratags' => 1,
-                        'namedetails' => 1
-                    ]);
+                    ->get(self::NOMINATIM_BASE_URL . '/search', $params);
 
                 if ($response->successful()) {
                     return $response->json();
@@ -459,14 +481,26 @@ class OSMGeocodingService
         // Build admin hierarchy directly from the search result's address components
         $hierarchy = $this->buildAdminHierarchyFromNominatim($nominatimResult);
         
-        // Try to get English name from namedetails first
-        $placeName = null;
-        if (isset($nominatimResult['namedetails']['name:en'])) {
-            $placeName = $nominatimResult['namedetails']['name:en'];
-        } else {
-            // Fall back to display_name or name
+        // Determine if this is a building address that needs special handling
+        $placeType = $nominatimResult['type'] ?? '';
+        $isBuildingAddress = in_array($placeType, ['house', 'building', 'address', 'office']) || 
+                            isset($address['house_number']) || 
+                            isset($address['road']);
+        
+        // For building addresses, always use our custom extraction method
+        if ($isBuildingAddress) {
             $canonicalName = $nominatimResult['display_name'] ?? $nominatimResult['name'] ?? '';
-            $placeName = explode(',', $canonicalName)[0];
+            $placeName = $this->extractMeaningfulPlaceName($canonicalName, $nominatimResult);
+
+        } else {
+            // For non-building places, try to get English name from namedetails first
+            if (isset($nominatimResult['namedetails']['name:en'])) {
+                $placeName = $nominatimResult['namedetails']['name:en'];
+            } else {
+                // Fall back to display_name or name
+                $canonicalName = $nominatimResult['display_name'] ?? $nominatimResult['name'] ?? '';
+                $placeName = $this->extractMeaningfulPlaceName($canonicalName, $nominatimResult);
+            }
             
             // Convert Italian city names to English (fallback for cases without namedetails)
             $italianToEnglish = [
@@ -526,6 +560,126 @@ class OSMGeocodingService
     }
 
     /**
+     * Extract a meaningful place name from the canonical name, handling building addresses properly
+     */
+    private function extractMeaningfulPlaceName(string $canonicalName, array $nominatimResult): string
+    {
+        $address = $nominatimResult['address'] ?? [];
+        $placeType = $nominatimResult['type'] ?? '';
+        
+        // Split the canonical name by commas
+        $parts = array_map('trim', explode(',', $canonicalName));
+        
+        // For buildings, houses, and addresses, we need to preserve more context
+        if (in_array($placeType, ['house', 'building', 'address']) || 
+            isset($address['house_number']) || 
+            isset($address['road'])) {
+            
+            // Check if the first part starts with a number (house number + road)
+            $firstPart = $parts[0];
+            if (preg_match('/^\d+[A-Za-z]?(\s|,)/', $firstPart)) {
+                // This is a house number with road name
+                $placeName = $firstPart;
+                
+                // If the first part ends with a comma, we need to get the road name from the second part
+                if (substr($firstPart, -1) === ',') {
+                    $placeName = rtrim($firstPart, ',');
+                    if (count($parts) >= 2) {
+                        $placeName .= ' ' . $parts[1];
+                    }
+                }
+                
+                // If the first part is just a number (like "103,"), we need to get the road from the second part
+                if (preg_match('/^\d+[A-Za-z]?$/', rtrim($firstPart, ','))) {
+                    if (count($parts) >= 2) {
+                        $placeName = rtrim($firstPart, ',') . ' ' . $parts[1];
+                    }
+                }
+                
+                // If the first part is just a number followed by a comma, get the road from the second part
+                if (preg_match('/^\d+[A-Za-z]?,$/', $firstPart)) {
+                    $houseNumber = rtrim($firstPart, ',');
+                    if (count($parts) >= 2) {
+                        $placeName = $houseNumber . ' ' . $parts[1];
+                    }
+                }
+            } else if (preg_match('/^\d+[A-Za-z]?$/', $firstPart)) {
+                // The first part is just a number (was originally "103,")
+                // This means we need to get the road from the second part
+                if (count($parts) >= 2) {
+                    $placeName = $firstPart . ' ' . $parts[1];
+                } else {
+                    $placeName = $firstPart;
+                }
+            } else {
+                // First part doesn't start with a number, use it as is
+                $placeName = $firstPart;
+            }
+            
+            // For buildings, also include the city/area for context
+            if (count($parts) >= 2) {
+                // Find the city or area name
+                $cityPart = null;
+                
+                // Start looking for city from index 2 (after house number + road)
+                // This ensures we skip postal codes and find the actual neighborhood
+                $startIndex = 2;
+                
+                for ($i = $startIndex; $i < min(6, count($parts)); $i++) {
+                    $part = $parts[$i];
+                    
+                    // Skip postal codes (like W8, SW1A 1AA), very short parts, and borough names
+                    if (strlen($part) > 3 && 
+                        !preg_match('/^[A-Z0-9\s]+$/', $part) && 
+                        !preg_match('/^[A-Z]\d+$/', $part) &&
+                        !preg_match('/^[A-Z]\d+[A-Z]\s?\d+[A-Z]\d+$/', $part)) {
+                        
+                        // Prefer neighborhood names over borough names
+                        // Common London borough patterns to avoid
+                        $boroughPatterns = [
+                            '/^Kensington and Chelsea$/i',
+                            '/^Wandsworth$/i',
+                            '/^Westminster$/i',
+                            '/^Camden$/i',
+                            '/^Islington$/i',
+                            '/^Hackney$/i',
+                            '/^Tower Hamlets$/i',
+                            '/^Southwark$/i',
+                            '/^Lambeth$/i',
+                            '/^Hammersmith and Fulham$/i',
+                            '/^Fulham$/i',
+                            '/^Chelsea$/i',
+                            '/^Kensington$/i'
+                        ];
+                        
+                        $isBorough = false;
+                        foreach ($boroughPatterns as $pattern) {
+                            if (preg_match($pattern, $part)) {
+                                $isBorough = true;
+                                break;
+                            }
+                        }
+                        
+                        if (!$isBorough) {
+                            $cityPart = $part;
+                            break;
+                        }
+                    }
+                }
+                
+                if ($cityPart) {
+                    $placeName .= ', ' . $cityPart;
+                }
+            }
+            
+            return $placeName;
+        }
+        
+        // For non-building places, use the first part (original behavior)
+        return $parts[0];
+    }
+
+    /**
      * Convert string to URL-friendly slug
      */
     private function slugify(string $text): string
@@ -542,14 +696,117 @@ class OSMGeocodingService
     }
 
     /**
+     * Try progressive fallback searches when the full address fails
+     */
+    private function tryFallbackSearches(string $placeName, ?float $latitude = null, ?float $longitude = null): ?array
+    {
+        // Parse the address into components
+        $parts = array_map('trim', explode(',', $placeName));
+        
+        // Strategy 1: Try without postal code (last part if it looks like a postal code)
+        $lastPart = end($parts);
+        if (preg_match('/^[A-Z]\d+$/', $lastPart) || preg_match('/^[A-Z]\d+[A-Z]\s?\d+[A-Z]\d+$/', $lastPart)) {
+            $withoutPostalCode = implode(', ', array_slice($parts, 0, -1));
+            Log::info('Trying fallback search without postal code', [
+                'original' => $placeName,
+                'fallback' => $withoutPostalCode
+            ]);
+            
+            $response = $this->makeNominatimRequest($withoutPostalCode, 1, $latitude, $longitude);
+            if (!empty($response)) {
+                $result = $response[0];
+                $osmData = $this->formatOsmData($result);
+                
+                // Skip continents
+                if (isset($osmData['place_type']) && $osmData['place_type'] === 'continent') {
+                    return null;
+                }
+                
+                Log::info('Fallback search succeeded without postal code', [
+                    'original' => $placeName,
+                    'fallback' => $withoutPostalCode,
+                    'result' => $osmData['canonical_name'] ?? 'N/A'
+                ]);
+                
+                return $osmData;
+            }
+        }
+        
+        // Strategy 2: Try just the street address (first two parts)
+        if (count($parts) >= 2) {
+            $streetAddress = $parts[0] . ', ' . $parts[1];
+            Log::info('Trying fallback search with street address only', [
+                'original' => $placeName,
+                'fallback' => $streetAddress
+            ]);
+            
+            $response = $this->makeNominatimRequest($streetAddress, 1, $latitude, $longitude);
+            if (!empty($response)) {
+                $result = $response[0];
+                $osmData = $this->formatOsmData($result);
+                
+                // Skip continents
+                if (isset($osmData['place_type']) && $osmData['place_type'] === 'continent') {
+                    return null;
+                }
+                
+                Log::info('Fallback search succeeded with street address only', [
+                    'original' => $placeName,
+                    'fallback' => $streetAddress,
+                    'result' => $osmData['canonical_name'] ?? 'N/A'
+                ]);
+                
+                return $osmData;
+            }
+        }
+        
+        // Strategy 3: Try just the street name (second part if first is a house number)
+        if (count($parts) >= 2 && preg_match('/^\d+[A-Za-z]?/', $parts[0])) {
+            $streetName = $parts[1];
+            Log::info('Trying fallback search with street name only', [
+                'original' => $placeName,
+                'fallback' => $streetName
+            ]);
+            
+            $response = $this->makeNominatimRequest($streetName, 1, $latitude, $longitude);
+            if (!empty($response)) {
+                $result = $response[0];
+                $osmData = $this->formatOsmData($result);
+                
+                // Skip continents
+                if (isset($osmData['place_type']) && $osmData['place_type'] === 'continent') {
+                    return null;
+                }
+                
+                Log::info('Fallback search succeeded with street name only', [
+                    'original' => $placeName,
+                    'fallback' => $streetName,
+                    'result' => $osmData['canonical_name'] ?? 'N/A'
+                ]);
+                
+                return $osmData;
+            }
+        }
+        
+        Log::info('All fallback searches failed', ['place_name' => $placeName]);
+        return null;
+    }
+
+    /**
      * Clear cache for a specific place name
      */
-    public function clearCache(string $placeName): void
+    public function clearCache(string $placeName, ?float $latitude = null, ?float $longitude = null): void
     {
         $cacheKey = 'osm_geocode_' . md5(strtolower(trim($placeName)));
+        if ($latitude !== null && $longitude !== null) {
+            $cacheKey .= '_' . round($latitude, 4) . '_' . round($longitude, 4);
+        }
         Cache::forget($cacheKey);
         
         $searchCacheKey = 'osm_search_' . md5(strtolower(trim($placeName)) . '_5');
+        if ($latitude !== null && $longitude !== null) {
+            $searchCacheKey .= '_' . round($latitude, 4) . '_' . round($longitude, 4);
+        }
         Cache::forget($searchCacheKey);
     }
 }
