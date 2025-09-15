@@ -25,6 +25,45 @@ Route::middleware('auth:sanctum')->group(function () {
     // Other API endpoints that need Sanctum auth can go here
 });
 
+// Admin-only API endpoints
+Route::middleware(['auth:sanctum', 'admin'])->group(function () {
+    // Fetch OSM data for a place
+    Route::post('/places/{span}/fetch-osm-data', function (Request $request, \App\Models\Span $span) {
+        if ($span->type_id !== 'place') {
+            return response()->json(['success' => false, 'message' => 'Span is not a place'], 400);
+        }
+        
+        try {
+            $geocodingWorkflow = app(\App\Services\PlaceGeocodingWorkflowService::class);
+            $success = $geocodingWorkflow->resolvePlace($span);
+            
+            if ($success) {
+                return response()->json([
+                    'success' => true, 
+                    'message' => 'OSM data fetched successfully',
+                    'has_osm_data' => $span->fresh()->getOsmData() !== null,
+                    'has_coordinates' => $span->fresh()->getCoordinates() !== null
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false, 
+                    'message' => 'Could not fetch OSM data for this place'
+                ], 422);
+            }
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Error fetching OSM data', [
+                'span_id' => $span->id,
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'success' => false, 
+                'message' => 'An error occurred while fetching OSM data'
+            ], 500);
+        }
+    });
+});
+
 // Span search API
 Route::get('/spans/search', [SpanSearchController::class, 'search']);
 
@@ -67,10 +106,18 @@ Route::get('/wikipedia/on-this-day/{month}/{day}', function ($month, $day) {
 // Connection Types API
 Route::get('/connection-types', function (Request $request) {
     $spanType = $request->query('span_type');
+    $mode = $request->query('mode');
     
     if ($spanType) {
-        // Filter connection types based on the span type
-        $types = \App\Models\ConnectionType::whereJsonContains('allowed_span_types->parent', $spanType)->get();
+        if ($mode === 'reverse') {
+            // In reverse mode, filter connection types where the span type is in the 'child' array
+            // This means the current span will be the object, and we need connection types
+            // that allow the current span type as a child
+            $types = \App\Models\ConnectionType::whereJsonContains('allowed_span_types->child', $spanType)->get();
+        } else {
+            // In forward mode, filter connection types where the span type is in the 'parent' array
+            $types = \App\Models\ConnectionType::whereJsonContains('allowed_span_types->parent', $spanType)->get();
+        }
     } else {
         // Return all connection types if no span type specified
         $types = \App\Models\ConnectionType::all();
