@@ -103,3 +103,4 @@ Planned improvements:
 - Reverse geocoding for location names
 - Integration with existing place spans
 - Batch processing for large libraries
+
