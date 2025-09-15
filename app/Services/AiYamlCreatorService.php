@@ -434,7 +434,7 @@ You may include the following groups:
   - start: <YYYY or YYYY-MM>
   - end: <YYYY, YYYY-MM, or null>
   - metadata: {}  # leave empty
-  - nested_connections:
+  - nested_connections:  # MUST be an array of objects (note the dash)
     - type: "at_organisation"  # String value, not array
       direction: "outgoing"    # String value, not array
       target_name: "<Organisation Name>"  # String value, not array
@@ -458,11 +458,12 @@ You may include the following groups:
 12. **CRITICAL**: Quote names containing punctuation (e.g., "D'arcy Wretzky", "Mary-Ann Phelan")
 13. **CRITICAL**: Quote birth names with special characters (e.g., "Ramón Gerard Antonio Estévez")
 14. **CRITICAL**: In nested_connections, all field values must be strings, not arrays (e.g., type: "at_organisation", not type: ["at_organisation"])
-15. Include sources as a top-level field, not in metadata
-16. Put has_role inside the connections block, not as a separate top-level field
-17. Do not include any explanatory text or sources outside the YAML structure - only return the YAML
-18. If a value (such as a name, date, or organisation) is not publicly known, do not include that field or connection at all. Do not use placeholders like "unnamed person", "unknown", or similar.
-19. Research thoroughly - read full source material, not just summaries or introductions
+15. **CRITICAL**: nested_connections must be an array of objects, not a single object (use dashes to create array items)
+16. Include sources as a top-level field, not in metadata
+17. Put has_role inside the connections block, not as a separate top-level field
+18. Do not include any explanatory text or sources outside the YAML structure - only return the YAML
+19. If a value (such as a name, date, or organisation) is not publicly known, do not include that field or connection at all. Do not use placeholders like "unnamed person", "unknown", or similar.
+20. Research thoroughly - read full source material, not just summaries or introductions
 
 **YAML FORMATTING EXAMPLES FOR PEOPLE**:
 ```yaml
@@ -591,7 +592,7 @@ You may include the following groups:
   - start: <YYYY or YYYY-MM>
   - end: <YYYY, YYYY-MM, or null>
   - metadata: {}  # leave empty
-  - nested_connections:
+  - nested_connections:  # MUST be an array of objects (note the dash)
     - type: "at_organisation"  # String value, not array
       direction: "outgoing"    # String value, not array
       target_name: "<Organisation Name>"  # String value, not array

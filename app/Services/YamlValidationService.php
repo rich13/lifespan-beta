@@ -45,6 +45,7 @@ class YamlValidationService
         }
         
         // Validate metadata structure if present
+        $metadataErrors = [];
         if (isset($data['metadata']) && is_array($data['metadata'])) {
             $metadataErrors = $this->validateMetadataStructure($data['metadata'], $data['type'] ?? null);
             $errors = array_merge($errors, $metadataErrors);
@@ -54,7 +55,7 @@ class YamlValidationService
         Log::info('YAML validation debug', [
             'data_type' => $data['type'] ?? 'unknown',
             'metadata' => $data['metadata'] ?? [],
-            'metadata_errors' => $metadataErrors ?? [],
+            'metadata_errors' => $metadataErrors,
             'all_errors' => $errors
         ]);
         
@@ -312,9 +313,13 @@ class YamlValidationService
                 }
                 
                 // Validate nested connections if present
-                if (isset($connection['nested_connections']) && is_array($connection['nested_connections'])) {
-                    $nestedErrors = $this->validateNestedConnectionSchema($connection['nested_connections'], $connectionType, $index);
-                    $errors = array_merge($errors, $nestedErrors);
+                if (isset($connection['nested_connections'])) {
+                    if (!is_array($connection['nested_connections'])) {
+                        $errors[] = "Field 'nested_connections' in connection {$index} of type '{$connectionType}' must be an array";
+                    } else {
+                        $nestedErrors = $this->validateNestedConnectionSchema($connection['nested_connections'], $connectionType, $index);
+                        $errors = array_merge($errors, $nestedErrors);
+                    }
                 }
             }
         }
@@ -328,6 +333,14 @@ class YamlValidationService
     private function validateNestedConnectionSchema(array $nestedConnections, string $connectionType, int $connectionIndex): array
     {
         $errors = [];
+        
+        // Debug: Log what we're validating
+        \Log::debug('Validating nested connections', [
+            'connection_type' => $connectionType,
+            'connection_index' => $connectionIndex,
+            'nested_connections_structure' => $nestedConnections,
+            'nested_connections_count' => count($nestedConnections)
+        ]);
         
         $nestedSchema = [
             'type' => ['type' => 'string', 'required' => true],
@@ -366,7 +379,12 @@ class YamlValidationService
                     $actualType = $this->getValueType($value);
                     
                     if (!$this->isTypeCompatible($actualType, $expectedType)) {
-                        $errors[] = "Field '{$field}' in nested connection {$index} of connection {$connectionIndex} in type '{$connectionType}' should be of type '{$expectedType}', got '{$actualType}'";
+                        // Special handling for nested connection fields that should be strings but are arrays
+                        if ($actualType === 'array' && $expectedType === 'string') {
+                            $errors[] = "Nested connection {$field} in connection {$connectionIndex} of type '{$connectionType}' should be a string, not an array. Check YAML structure - field values should be quoted strings, not arrays.";
+                        } else {
+                            $errors[] = "Field '{$field}' in nested connection {$index} of connection {$connectionIndex} in type '{$connectionType}' should be of type '{$expectedType}', got '{$actualType}'";
+                        }
                     }
                 }
             }
