@@ -128,7 +128,7 @@ class ConnectionController extends Controller
                 'type_id' => 'connection',
                 'owner_id' => auth()->id(),
                 'updater_id' => auth()->id(),
-                'name' => "{$parent->name} {$connectionType->forward_predicate} {$child->name}",
+                'name' => "{$parent->name} {$connectionType->getPredicate($validated['direction'] === 'inverse')} {$child->name}",
                 'state' => $validated['state'] ?? 'placeholder'
             ];
 

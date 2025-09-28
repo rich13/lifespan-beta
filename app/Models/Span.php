@@ -2159,6 +2159,7 @@ class Span extends Model
                     $query->where('type', 'contains');
                 })
                 ->with([
+                    'connectionSpan:id,description',
                     'child:id,name,type_id,description,start_year,end_year,owner_id,access_level,metadata',
                     'child.connectionsAsObject' => function ($query) {
                         $query->whereHas('type', function ($q) {
@@ -2174,6 +2175,8 @@ class Span extends Model
                 ->get()
                 ->map(function ($connection) {
                     $child = $connection->child;
+                    // Expose the contains-connection description to the child for views
+                    $child->set_connection_description = $connection->connectionSpan?->description;
                     $child->pivot = (object) [
                         'created_at' => $connection->created_at,
                         'updated_at' => $connection->updated_at

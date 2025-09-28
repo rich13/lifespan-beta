@@ -67,16 +67,21 @@ class WikipediaSpanMatcherService
     {
         $entities = [];
         
-        // Look for multi-word capitalized phrases (e.g., "Donald Trump", "World Trade Center")
-        preg_match_all('/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b/', $text, $multiWordMatches);
+        // Look for multi-word Title Case phrases allowing lowercase connector words
+        // Example: "Monkey Gone to Heaven", "The Lord of the Rings"
+        $connectorWords = '(?:of|to|and|or|the|a|an|in|on|for|with|from|by|at|as|but|nor|so|yet)';
+        preg_match_all('/\b[A-Z][A-Za-z’\']+(?:\s+(?:[A-Z][A-Za-z’\']+|' . $connectorWords . '))+\b/u', $text, $multiWordMatches);
         
         // Look for single capitalized words that are at least 4 characters (e.g., "London", "Trump")
         preg_match_all('/\b[A-Z][a-z]{3,}\b/', $text, $singleWordMatches);
         
+        // Look for acronyms (e.g., "BBC", "NASA", "FBI")
+        preg_match_all('/\b[A-Z]{2,}\b/', $text, $acronymMatches);
+        
         // Look for quoted phrases (e.g., "Nevermind", "Foo Fighters")
         preg_match_all('/"([^"]+)"/', $text, $quotedMatches);
         
-        $allMatches = array_merge($multiWordMatches[0], $singleWordMatches[0], $quotedMatches[1] ?? []);
+        $allMatches = array_merge($multiWordMatches[0], $singleWordMatches[0], $acronymMatches[0], $quotedMatches[1] ?? []);
         
         foreach ($allMatches as $match) {
             // Filter out common words that aren't likely to be entities
@@ -91,7 +96,7 @@ class WikipediaSpanMatcherService
             return strlen($b) - strlen($a);
         });
         
-        return array_slice($entities, 0, 15); // Limit to top 15
+        return array_slice($entities, 0, 50); // Limit to top 50
     }
 
     /**
@@ -133,9 +138,13 @@ class WikipediaSpanMatcherService
             return false;
         }
         
-        // Skip if it contains common non-entity patterns
+        // Skip single-word leading articles, but allow multi-word phrases like "The Beatles"
         if (preg_match('/^(The|A|An)\s+/i', $text)) {
-            return false;
+            // If it's a single word (no additional words), skip
+            if (!str_contains($text, ' ')) {
+                return false;
+            }
+            // Otherwise allow multi-word entities starting with an article
         }
         
         return true;
@@ -146,17 +155,52 @@ class WikipediaSpanMatcherService
      */
     private function findSpansByName(string $name): array
     {
+        // Normalise entity: trim, collapse whitespace, normalise quotes
+        $normalise = function(string $s): string {
+            $s = trim($s);
+            // Replace fancy quotes/apostrophes with ASCII
+            $s = str_replace(["“","”","‘","’"], ['"','"','\'','\''], $s);
+            // Collapse multiple whitespace to single spaces
+            $s = preg_replace('/\s+/', ' ', $s);
+            return $s;
+        };
+
+        $name = $normalise($name);
+
         // Use exact matching to avoid finding partial matches
-        return Span::where(function($query) use ($name) {
-                // Exact match on name
-                $query->where('name', 'ILIKE', $name)
-                      // Or exact match on alternate names
-                      ->orWhere('metadata->alternate_names', 'ILIKE', $name);
-            })
-            ->where('access_level', 'public') // Only match public spans
-            ->limit(5)
-            ->get()
-            ->toArray();
+        $query = Span::where('name', 'ILIKE', $name)
+            ->where('access_level', 'public');
+
+        $results = $query->limit(5)->get();
+        if ($results->isNotEmpty()) {
+            return $results->toArray();
+        }
+
+        // If no results and the name starts with an article, also try without the leading article
+        if (preg_match('/^(The|A|An)\s+(.*)$/i', $name, $m)) {
+            $stripped = $m[2];
+            $altResults = Span::where('name', 'ILIKE', $stripped)
+                ->where('access_level', 'public')
+                ->limit(5)
+                ->get();
+            if ($altResults->isNotEmpty()) {
+                return $altResults->toArray();
+            }
+        }
+
+        // Try without surrounding quotes
+        if (preg_match('/^"(.+)"$/', $name, $m)) {
+            $unquoted = $m[1];
+            $altResults = Span::where('name', 'ILIKE', $unquoted)
+                ->where('access_level', 'public')
+                ->limit(5)
+                ->get();
+            if ($altResults->isNotEmpty()) {
+                return $altResults->toArray();
+            }
+        }
+
+        return [];
     }
 
     /**
@@ -201,16 +245,24 @@ class WikipediaSpanMatcherService
         
         $highlightedText = $text;
         $offset = 0;
-        $processedPositions = [];
+        // Track processed ranges to avoid overlapping replacements
+        $processedRanges = [];
         
         foreach ($allMatches as $match) {
             $entity = $match['entity'];
             $position = $match['text_position'];
             $type = $match['type'];
             
-            // Skip if this position has already been processed (to avoid overlapping matches)
-            $positionKey = $position['start'] . '-' . $position['end'];
-            if (in_array($positionKey, $processedPositions)) {
+            // Skip if this position overlaps any processed range (avoid overlapping matches)
+            $overlaps = false;
+            foreach ($processedRanges as $range) {
+                // Overlap if start < range_end and end > range_start
+                if ($position['start'] < $range['end'] && $position['end'] > $range['start']) {
+                    $overlaps = true;
+                    break;
+                }
+            }
+            if ($overlaps) {
                 continue;
             }
             
@@ -218,7 +270,13 @@ class WikipediaSpanMatcherService
                 $span = $match['spans'][0]; // Use the first matching span
                 $link = route('spans.show', $span['id']);
                 
-                $replacement = "<a href=\"{$link}\" class=\"text-decoration-none\" title=\"{$span['name']}\">{$entity}</a>";
+                $classes = 'text-decoration-none';
+                // Add placeholder class if the span is in placeholder state
+                if (isset($span['state']) && $span['state'] === 'placeholder') {
+                    $classes .= ' text-placeholder';
+                }
+                
+                $replacement = "<a href=\"{$link}\" class=\"{$classes}\" title=\"{$span['name']}\">{$entity}</a>";
             } elseif ($type === 'year') {
                 $year = $match['year'];
                 $link = route('date.explore', ['date' => $year]);
@@ -236,7 +294,11 @@ class WikipediaSpanMatcherService
             );
             
             $offset += strlen($replacement) - $position['length'];
-            $processedPositions[] = $positionKey;
+            // Record this processed range using original text coordinates
+            $processedRanges[] = [
+                'start' => $position['start'],
+                'end' => $position['end']
+            ];
         }
         
         return $highlightedText;

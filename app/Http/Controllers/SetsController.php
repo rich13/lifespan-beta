@@ -78,6 +78,12 @@ class SetsController extends Controller
         }
 
         $contents = $set->getSetContents();
+        
+        // Use special view for Desert Island Discs sets
+        if ($set->subtype === 'desertislanddiscs') {
+            return view('sets.desert-island-discs', compact('set', 'contents'));
+        }
+        
         return view('sets.show', compact('set', 'contents'));
     }
 
