@@ -83,7 +83,7 @@
 @elseif($parentConnections->isNotEmpty() || $childConnections->isNotEmpty())
     <div class="card mb-4">
         <div class="card-header d-flex justify-content-between align-items-center">
-            <h2 class="card-title h5 mb-0">Connections <small class="text-muted">(will become contextual)</small></h2>
+            <h2 class="card-title h5 mb-0">Connections</h2>
             <div class="d-flex gap-2">
                 <a href="{{ route('spans.all-connections', $span) }}" class="btn btn-sm btn-outline-secondary">
                     <i class="bi bi-clock-history me-1"></i>

@@ -25,10 +25,10 @@ $hasFamily = $ancestors->isNotEmpty() || $descendants->isNotEmpty() ||
     <div class="card mb-4">
         <div class="card-header">
             <div class="d-flex justify-content-between align-items-center">
-                <h3 class="h5 mb-0">
+                <h6 class="card-title mb-0">
                     <i class="bi bi-people-fill me-2"></i>
                     <a href="{{ route('family.show', $span) }}" class="text-decoration-none">Family</a>
-                </h3>
+                </h6>
             </div>
         </div>
         <div class="card-body">

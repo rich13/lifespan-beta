@@ -10,7 +10,7 @@
     <div class="card-header d-flex justify-content-between align-items-center">
         <h6 class="card-title mb-0">
             <i class="bi bi-file-text me-2"></i>
-            Wikipedia Description
+            Description
         </h6>
         @auth
             @if(auth()->user()->is_admin && !$span->description)

@@ -2,8 +2,13 @@
 
 @if(!empty($span->sources))
 <div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h6 class="card-title mb-0">
+            <i class="bi bi-link-45deg me-2"></i>
+            Sources
+        </h6>
+    </div>
     <div class="card-body">
-        <h2 class="card-title h5 mb-3">Sources</h2>
         <div class="d-flex flex-wrap gap-3">
             @foreach($span->sources as $source)
                 @if(is_array($source) && isset($source['url']))

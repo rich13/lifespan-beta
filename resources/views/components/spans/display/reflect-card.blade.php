@@ -184,11 +184,14 @@
 
 @if($personalSpan && $span->id !== $personalSpan->id && $canCalculateReflection)
     <div class="card mb-4">
-        <div class="card-body">
-            <h2 class="card-title h5 mb-3">
-                <i class="bi bi-symmetry-vertical text-primary me-2"></i>
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h6 class="card-title mb-0">
+                <i class="bi bi-symmetry-vertical me-2"></i>
                 Reflection
-            </h2>
+            </h6>
+        </div>
+
+        <div class="card-body">
             
             <p class="mb-3">
                 @if($reflectionType === 'person_older')

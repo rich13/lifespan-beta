@@ -1,12 +1,14 @@
 @if($desertIslandDiscsSet)
 <div class="card mb-4 desert-island-discs-tracks-card">
-    <div class="card-body">
-        <h2 class="card-title h5 mb-3">
+    <div class="card-header">
+        <h6 class="card-title mb-0">
             <a href="{{ route('spans.show', $desertIslandDiscsSet) }}" class="text-decoration-none">
                 <i class="bi bi-vinyl-fill text-primary me-2"></i>
                 Desert Island Discs
             </a>
-        </h2>
+        </h6>
+    </div>
+    <div class="card-body">
         
         @php
             $contents = $desertIslandDiscsSet->getSetContents();

@@ -224,8 +224,9 @@
                 <!-- User Connection Card -->
                 <x-spans.cards.user-connection-card :span="$span" />
                 
-                <!-- Unified Location Card -->
+                <!-- Place Map Card -->
                 <x-spans.cards.unified-location-card :span="$span" />
+                
                 
                 <!-- Band Discography Card -->
                 @if($span->type_id === 'band')

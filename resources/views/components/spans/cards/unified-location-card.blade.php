@@ -57,13 +57,102 @@
     <div class="card mb-4">
         <div class="card-header">
             <div class="d-flex justify-content-between align-items-center">
-                <h5 class="card-title mb-0">
+                <h6 class="card-title mb-0">
                     <i class="bi bi-geo-alt me-2"></i>
                     Location
-                </h5>
+                </h6>
                 @auth
                     @if(auth()->user()->is_admin && $needsOsmData)
-                        <button type="button" class="btn btn-sm btn-outline-primary" id="getMapDataBtn" title="Fetch OSM data for places without map data">
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="getMapDataBtn" title="Fetch OSM data for places without map data" onclick="
+                            console.log('Button clicked directly!');
+                            const button = this;
+                            const originalText = button.innerHTML;
+                            button.innerHTML = '<span class=&quot;spinner-border spinner-border-sm me-1&quot; role=&quot;status&quot; aria-hidden=&quot;true&quot;></span>Fetching...';
+                            button.disabled = true;
+                            
+                            // Get places needing data
+                            const placesNeedingData = [];
+                            @if($isPlaceSpan && !$hasOsmData)
+                                placesNeedingData.push('{{ $span->id }}');
+                            @endif
+                            @foreach($locatedConnections as $connection)
+                                @php $locationSpan = $connection->child; @endphp
+                                @if($locationSpan->type_id === 'place' && !$locationSpan->getOsmData())
+                                    placesNeedingData.push('{{ $locationSpan->id }}');
+                                @endif
+                            @endforeach
+                            
+                            console.log('Places needing data:', placesNeedingData);
+                            console.log('Current span ID:', '{{ $span->id }}');
+                            console.log('Current span slug:', '{{ $span->slug }}');
+                            
+                            if (placesNeedingData.length === 0) {
+                                button.innerHTML = '<i class=&quot;bi bi-info-circle me-1&quot;></i>No data needed';
+                                setTimeout(() => {
+                                    button.innerHTML = originalText;
+                                    button.disabled = false;
+                                }, 2000);
+                                return;
+                            }
+                            
+                            // Fetch OSM data for each place
+                            let successCount = 0;
+                            let errorCount = 0;
+                            
+                            placesNeedingData.forEach(async (placeId) => {
+                                try {
+                                    const csrfToken = document.querySelector('meta[name=&quot;csrf-token&quot;]');
+                                    const headers = {
+                                        'Content-Type': 'application/json',
+                                        'Accept': 'application/json'
+                                    };
+                                    
+                                    if (csrfToken) {
+                                        headers['X-CSRF-TOKEN'] = csrfToken.getAttribute('content');
+                                    }
+                                    
+                                    console.log('Making API call to:', '/api/places/' + placeId + '/fetch-osm-data');
+                                    const response = await fetch('/api/places/' + placeId + '/fetch-osm-data', {
+                                        method: 'POST',
+                                        headers: headers,
+                                        credentials: 'same-origin'
+                                    });
+                                    console.log('API response status:', response.status);
+                                    
+                                    if (response.ok) {
+                                        const result = await response.json();
+                                        if (result.success) {
+                                            successCount++;
+                                        } else {
+                                            errorCount++;
+                                        }
+                                    } else {
+                                        errorCount++;
+                                    }
+                                } catch (error) {
+                                    errorCount++;
+                                    console.error('Error:', error);
+                                }
+                                
+                                // Check if all requests are done
+                                if (successCount + errorCount === placesNeedingData.length) {
+                                    if (successCount > 0) {
+                                        button.innerHTML = '<i class=&quot;bi bi-check-circle me-1&quot;></i>Success!';
+                                        setTimeout(() => {
+                                            const redirectUrl = '/spans/{{ $span->id }}?t=' + Date.now();
+                                            console.log('Redirecting to:', redirectUrl);
+                                            window.location.href = redirectUrl;
+                                        }, 1000);
+                                    } else {
+                                        button.innerHTML = '<i class=&quot;bi bi-exclamation-triangle me-1&quot;></i>Failed';
+                                        setTimeout(() => {
+                                            button.innerHTML = originalText;
+                                            button.disabled = false;
+                                        }, 2000);
+                                    }
+                                }
+                            });
+                        ">
                             <i class="bi bi-download me-1"></i>Get Map Data
                         </button>
                     @endif
@@ -163,118 +252,10 @@
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
         @endpush
 
-        @push('scripts')
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
         <script>
+            
             document.addEventListener('DOMContentLoaded', function() {
-                // Handle Get Map Data button click
-                const getMapDataBtn = document.getElementById('getMapDataBtn');
-                console.log('Get Map Data button found:', getMapDataBtn);
-                if (getMapDataBtn) {
-                    console.log('Adding click event listener to Get Map Data button');
-                    getMapDataBtn.addEventListener('click', async function() {
-                        console.log('Get Map Data button clicked!');
-                        const originalText = this.innerHTML;
-                        this.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Fetching...';
-                        this.disabled = true;
-                        
-                        try {
-                            // Get all places that need OSM data
-                            const placesNeedingData = [];
-                            
-                            @if($isPlaceSpan && !$hasOsmData)
-                                placesNeedingData.push('{{ $span->id }}');
-                            @endif
-                            
-                            @foreach($locatedConnections as $connection)
-                                @php $locationSpan = $connection->child; @endphp
-                                @if($locationSpan->type_id === 'place' && !$locationSpan->getOsmData())
-                                    placesNeedingData.push('{{ $locationSpan->id }}');
-                                @endif
-                            @endforeach
-                            
-                            console.log('Places needing OSM data:', placesNeedingData);
-                            
-                            if (placesNeedingData.length === 0) {
-                                console.log('No places need OSM data');
-                                this.innerHTML = '<i class="bi bi-info-circle me-1"></i>No data needed';
-                                setTimeout(() => {
-                                    this.innerHTML = originalText;
-                                    this.disabled = false;
-                                }, 2000);
-                                return;
-                            }
-                            
-                            let successCount = 0;
-                            let errorCount = 0;
-                            
-                            // Fetch OSM data for each place
-                            for (const placeId of placesNeedingData) {
-                                try {
-                                    console.log('Fetching OSM data for place:', placeId);
-                                    
-                                    const csrfToken = document.querySelector('meta[name="csrf-token"]');
-                                    const headers = {
-                                        'Content-Type': 'application/json',
-                                        'Accept': 'application/json'
-                                    };
-                                    
-                                    if (csrfToken) {
-                                        headers['X-CSRF-TOKEN'] = csrfToken.getAttribute('content');
-                                    }
-                                    
-                                    const response = await fetch(`/api/places/${placeId}/fetch-osm-data`, {
-                                        method: 'POST',
-                                        headers: headers
-                                    });
-                                    
-                                    console.log('Response status:', response.status);
-                                    
-                                    if (!response.ok) {
-                                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                                    }
-                                    
-                                    const result = await response.json();
-                                    console.log('API result:', result);
-                                    
-                                    if (result.success) {
-                                        successCount++;
-                                        console.log('Successfully fetched OSM data for place:', placeId);
-                                    } else {
-                                        errorCount++;
-                                        console.error('Failed to fetch OSM data for place', placeId, result.message);
-                                    }
-                                } catch (error) {
-                                    errorCount++;
-                                    console.error('Error fetching OSM data for place', placeId, error);
-                                }
-                            }
-                            
-                            if (successCount > 0) {
-                                // Show success message and redirect to UUID (which will redirect to new slug)
-                                this.innerHTML = '<i class="bi bi-check-circle me-1"></i>Success!';
-                                setTimeout(() => {
-                                    window.location.href = '{{ route("spans.show", $span->id) }}';
-                                }, 1000);
-                            } else {
-                                // Show error message
-                                this.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i>Failed';
-                                setTimeout(() => {
-                                    this.innerHTML = originalText;
-                                    this.disabled = false;
-                                }, 2000);
-                            }
-                            
-                        } catch (error) {
-                            console.error('Error in getMapData:', error);
-                            this.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i>Error';
-                            setTimeout(() => {
-                                this.innerHTML = originalText;
-                                this.disabled = false;
-                            }, 2000);
-                        }
-                    });
-                }
                 
                 // Initialize map
                 const map = L.map('location-map-{{ $span->id }}').setView([
@@ -344,6 +325,5 @@
                 @endif
             });
         </script>
-        @endpush
     @endif
 @endif

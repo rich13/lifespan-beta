@@ -105,16 +105,17 @@
 
 @if(isset($comparisons) && count($comparisons) > 0)
 <div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h6 class="card-title mb-0">
+            <i class="bi bi-arrow-left-right me-2"></i>
+            Comparison
+        </h6>
+        <a href="{{ route('spans.compare', $span) }}" class="btn btn-sm btn-primary">
+            Full Comparison
+        </a>
+    </div>
+
     <div class="card-body">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2 class="card-title h5 mb-0">
-                <i class="bi bi-arrow-left-right text-primary me-2"></i>
-                Comparison
-            </h2>
-            <a href="{{ route('spans.compare', $span) }}" class="btn btn-sm btn-primary">
-                Full Comparison
-            </a>
-        </div>
         
         <div class="comparison-timeline position-relative">
             @foreach($comparisons as $comparison)

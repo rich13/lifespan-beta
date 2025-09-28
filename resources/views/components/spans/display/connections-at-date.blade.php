@@ -1,8 +1,8 @@
 @props(['span', 'date'])
 
 @php
-    // Get connections where this span is the subject (parent) and has temporal information
-    $connections = $span->connectionsAsSubjectWithAccess()
+    // Base query for connections where this span is the subject (parent) and has temporal information
+    $baseQuery = $span->connectionsAsSubjectWithAccess()
         ->whereNotNull('connection_span_id')
         ->whereHas('connectionSpan', function($query) use ($date) {
             $query->where('start_year', '<=', $date->year)
@@ -13,10 +13,30 @@
         })
         ->where('child_id', '!=', $span->id) // Exclude self-referential connections
         ->where('type_id', '!=', 'contains') // Exclude contains connections
-        ->with(['connectionSpan', 'child', 'type'])
-        ->inRandomOrder() // Choose connections at random
-        ->limit(3) // Limit to 3 random connections
+        ->with(['connectionSpan', 'child', 'type']);
+
+    // First, try to get preferred connection types (residence, education, employment, and has_role)
+    $preferredConnections = (clone $baseQuery)
+        ->whereIn('type_id', ['residence', 'education', 'employment', 'has_role'])
+        ->inRandomOrder()
+        ->limit(3)
         ->get();
+
+    $connections = $preferredConnections;
+
+    // If we don't have enough preferred connections, fill with other connections
+    if ($connections->count() < 3) {
+        $remainingSlots = 3 - $connections->count();
+        $excludedTypes = $connections->pluck('type_id')->toArray();
+        
+        $otherConnections = (clone $baseQuery)
+            ->whereNotIn('type_id', $excludedTypes)
+            ->inRandomOrder()
+            ->limit($remainingSlots)
+            ->get();
+        
+        $connections = $connections->merge($otherConnections);
+    }
 @endphp
 
 @if($connections->isNotEmpty())
