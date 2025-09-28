@@ -22,13 +22,14 @@ class ConnectionConstraintService
         Connection $connection,
         string $constraintType
     ): ConnectionConstraintResult {
-        if (!in_array($constraintType, ['single', 'non_overlapping'])) {
+        if (!in_array($constraintType, ['single', 'non_overlapping', 'timeless'])) {
             throw new \InvalidArgumentException("Unknown constraint type: {$constraintType}");
         }
 
         return match($constraintType) {
             'single' => $this->validateSingleConstraint($connection),
             'non_overlapping' => $this->validateNonOverlappingConstraint($connection),
+            'timeless' => $this->validateTimelessConstraint($connection),
             default => throw new \InvalidArgumentException("Unknown constraint type: {$constraintType}")
         };
     }
@@ -97,5 +98,25 @@ class ConnectionConstraintService
         }
 
         return ConnectionConstraintResult::success();
+    }
+
+    /**
+     * Validate that only one timeless connection of this type exists between these spans
+     * Timeless connections don't have temporal constraints, so we only check for uniqueness
+     */
+    private function validateTimelessConstraint(
+        Connection $connection
+    ): ConnectionConstraintResult {
+        $exists = Connection::where([
+            'parent_id' => $connection->parent_id,
+            'child_id' => $connection->child_id,
+            'type_id' => $connection->type_id,
+        ])
+        ->where('id', '!=', $connection->id)
+        ->exists();
+
+        return $exists 
+            ? ConnectionConstraintResult::failure('Only one connection of this type is allowed between these spans')
+            : ConnectionConstraintResult::success();
     }
 }

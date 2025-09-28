@@ -59,6 +59,17 @@ class ConnectionConstraintServiceTest extends TestCase
                 'constraint_type' => 'non_overlapping'
             ]
         );
+
+        ConnectionType::firstOrCreate(
+            ['type' => 'features'],
+            [
+                'forward_predicate' => 'features',
+                'forward_description' => 'The subject features the object',
+                'inverse_predicate' => 'is subject of',
+                'inverse_description' => 'The object is the subject of the subject',
+                'constraint_type' => 'timeless'
+            ]
+        );
     }
 
     public function test_validates_single_constraint_with_no_existing_connection(): void
@@ -286,5 +297,176 @@ class ConnectionConstraintServiceTest extends TestCase
         ]);
 
         $this->service->validateConstraint($connection, 'invalid');
+    }
+
+    public function test_validates_timeless_constraint_with_no_existing_connection(): void
+    {
+        $connectionSpan = Span::factory()->create([
+            'type_id' => 'connection',
+            'start_year' => null, // Timeless connections don't require dates
+            'start_month' => null,
+            'start_day' => null,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
+            'metadata' => ['timeless' => true]
+        ]);
+
+        $connection = new Connection([
+            'parent_id' => $this->parent->id,
+            'child_id' => $this->child->id,
+            'type_id' => 'features',
+            'connection_span_id' => $connectionSpan->id
+        ]);
+
+        $result = $this->service->validateConstraint($connection, 'timeless');
+        
+        $this->assertTrue($result->isValid());
+        $this->assertNull($result->getError());
+    }
+
+    public function test_validates_timeless_constraint_with_existing_connection(): void
+    {
+        // Create existing timeless connection
+        $existingSpan = Span::factory()->create([
+            'type_id' => 'connection',
+            'start_year' => null,
+            'start_month' => null,
+            'start_day' => null,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
+            'metadata' => ['timeless' => true]
+        ]);
+
+        Connection::create([
+            'parent_id' => $this->parent->id,
+            'child_id' => $this->child->id,
+            'type_id' => 'features',
+            'connection_span_id' => $existingSpan->id
+        ]);
+
+        // Try to create another timeless connection between the same spans
+        $newSpan = Span::factory()->create([
+            'type_id' => 'connection',
+            'start_year' => null,
+            'start_month' => null,
+            'start_day' => null,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
+            'metadata' => ['timeless' => true]
+        ]);
+
+        $connection = new Connection([
+            'parent_id' => $this->parent->id,
+            'child_id' => $this->child->id,
+            'type_id' => 'features',
+            'connection_span_id' => $newSpan->id
+        ]);
+
+        $result = $this->service->validateConstraint($connection, 'timeless');
+        
+        $this->assertFalse($result->isValid());
+        $this->assertEquals(
+            'Only one connection of this type is allowed between these spans',
+            $result->getError()
+        );
+    }
+
+    public function test_validates_timeless_constraint_ignores_temporal_validation(): void
+    {
+        // Create existing timeless connection with dates (should be ignored)
+        $existingSpan = Span::factory()->create([
+            'type_id' => 'connection',
+            'start_year' => 2000,
+            'start_month' => 1,
+            'start_day' => 1,
+            'end_year' => 2005,
+            'end_month' => 12,
+            'end_day' => 31,
+            'metadata' => ['timeless' => true]
+        ]);
+
+        Connection::create([
+            'parent_id' => $this->parent->id,
+            'child_id' => $this->child->id,
+            'type_id' => 'features',
+            'connection_span_id' => $existingSpan->id
+        ]);
+
+        // Try to create another timeless connection with overlapping dates
+        // This should still fail due to uniqueness constraint, not temporal overlap
+        $newSpan = Span::factory()->create([
+            'type_id' => 'connection',
+            'start_year' => 2002, // Overlapping dates
+            'start_month' => 1,
+            'start_day' => 1,
+            'end_year' => 2007,
+            'end_month' => 12,
+            'end_day' => 31,
+            'metadata' => ['timeless' => true]
+        ]);
+
+        $connection = new Connection([
+            'parent_id' => $this->parent->id,
+            'child_id' => $this->child->id,
+            'type_id' => 'features',
+            'connection_span_id' => $newSpan->id
+        ]);
+
+        $result = $this->service->validateConstraint($connection, 'timeless');
+        
+        $this->assertFalse($result->isValid());
+        $this->assertEquals(
+            'Only one connection of this type is allowed between these spans',
+            $result->getError()
+        );
+    }
+
+    public function test_validates_timeless_constraint_allows_different_connection_types(): void
+    {
+        // Create existing timeless connection
+        $existingSpan = Span::factory()->create([
+            'type_id' => 'connection',
+            'start_year' => null,
+            'start_month' => null,
+            'start_day' => null,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
+            'metadata' => ['timeless' => true]
+        ]);
+
+        Connection::create([
+            'parent_id' => $this->parent->id,
+            'child_id' => $this->child->id,
+            'type_id' => 'features',
+            'connection_span_id' => $existingSpan->id
+        ]);
+
+        // Create a different connection type between the same spans (should be allowed)
+        $newSpan = Span::factory()->create([
+            'type_id' => 'connection',
+            'start_year' => null,
+            'start_month' => null,
+            'start_day' => null,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
+            'metadata' => ['timeless' => true]
+        ]);
+
+        $connection = new Connection([
+            'parent_id' => $this->parent->id,
+            'child_id' => $this->child->id,
+            'type_id' => 'family', // Different connection type
+            'connection_span_id' => $newSpan->id
+        ]);
+
+        $result = $this->service->validateConstraint($connection, 'timeless');
+        
+        $this->assertTrue($result->isValid());
+        $this->assertNull($result->getError());
     }
 } 
