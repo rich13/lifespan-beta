@@ -26,7 +26,7 @@ Route::middleware('auth:sanctum')->group(function () {
 });
 
 // Admin-only API endpoints
-Route::middleware(['auth:sanctum', 'admin'])->group(function () {
+Route::middleware(['auth', 'admin'])->group(function () {
     // Fetch OSM data for a place
     Route::post('/places/{span}/fetch-osm-data', function (Request $request, \App\Models\Span $span) {
         if ($span->type_id !== 'place') {
@@ -61,6 +61,55 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
                 'message' => 'An error occurred while fetching OSM data'
             ], 500);
         }
+    });
+
+    // Update contains-connection description for a track in a set (admin or set owner)
+    Route::post('/sets/{set}/tracks/{track}/contains-description', function (Request $request, \App\Models\Span $set, \App\Models\Span $track) {
+        if (!$set->isSet()) {
+            return response()->json(['success' => false, 'message' => 'Not a set'], 400);
+        }
+        if ($track->type_id !== 'thing') {
+            return response()->json(['success' => false, 'message' => 'Not a track'], 400);
+        }
+        
+        // Check if user is admin or set owner
+        if (!auth()->user()->is_admin && $set->owner_id !== auth()->id()) {
+            return response()->json(['success' => false, 'message' => 'Not authorized'], 403);
+        }
+
+        $validated = $request->validate([
+            'description' => 'nullable|string|max:1000'
+        ]);
+
+        $connection = \App\Models\Connection::where('parent_id', $set->id)
+            ->where('child_id', $track->id)
+            ->where('type_id', 'contains')
+            ->with('connectionSpan')
+            ->first();
+
+        if (!$connection || !$connection->connectionSpan) {
+            return response()->json(['success' => false, 'message' => 'Contains connection not found'], 404);
+        }
+
+        $connection->connectionSpan->description = $validated['description'] ?? null;
+        $connection->connectionSpan->save();
+
+        // Prepare linked description HTML using WikipediaSpanMatcherService
+        $linkedDescription = null;
+        if (!empty($connection->connectionSpan->description)) {
+            $matcherService = new \App\Services\WikipediaSpanMatcherService();
+            $linkedDescription = $matcherService->highlightMatches($connection->connectionSpan->description);
+        }
+
+        // Clear relevant caches
+        $connection->clearSetCaches();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Description updated',
+            'description' => $connection->connectionSpan->description,
+            'linked_description' => $linkedDescription
+        ]);
     });
 });
 

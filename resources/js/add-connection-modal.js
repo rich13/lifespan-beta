@@ -4,7 +4,6 @@ $(document).ready(function() {
     let currentSpanType = null;
     let connectionTypes = [];
     let searchTimeout = null;
-    let isReverseMode = false;
 
     // Initialize modal when opened
     $('#addConnectionModal').on('show.bs.modal', function(event) {
@@ -13,97 +12,29 @@ $(document).ready(function() {
         currentSpanName = button.data('span-name');
         currentSpanType = button.data('span-type');
         
-        // Reset form and state
+        // Reset form
         $('#addConnectionForm')[0].reset();
-        $('#connectionObjectSearch').prop('disabled', true);
-        $('#connectionSubjectSearch').prop('disabled', true);
+        $('#connectionObject').prop('disabled', true);
+        $('#searchObjectBtn').prop('disabled', true);
         $('#connectionObjectId').val('');
-        $('#connectionSubjectId').val('');
         $('#searchResults').empty();
-        isReverseMode = false;
         
-        // Reset toggle button
-        $('#directionLabel').text('Forward');
-        
-        // Initialize in forward mode
-        setupForwardMode();
+        // Update subject display
+        $('#connectionSubject').text(currentSpanName);
+        $('#connectionSubjectType').text(currentSpanType);
         
         // Load connection types
         loadConnectionTypes();
     });
 
-    // Handle direction toggle
-    $('#directionToggle').on('click', function() {
-        isReverseMode = !isReverseMode;
-        
-        if (isReverseMode) {
-            setupReverseMode();
-        } else {
-            setupForwardMode();
-        }
-        
-        // Reload connection types for the new mode
-        loadConnectionTypes();
-    });
-
-    // Setup forward mode (default)
-    function setupForwardMode() {
-        $('#directionLabel').text('Forward');
-        
-        // Subject: current span (read-only) - always the same
-        $('#connectionSubject').removeClass('d-none').text(currentSpanName);
-        $('#connectionSubjectSearch').addClass('d-none').prop('disabled', true).val('');
-        $('#connectionSubjectId').val('');
-        
-        // Object: search field - always the same
-        $('#connectionObject').addClass('d-none');
-        $('#connectionObjectSearch').removeClass('d-none').val('').prop('disabled', false);
-        $('#connectionObjectId').val('');
-        
-        // Clear search results
-        $('#searchResults').empty();
-        
-        // Reset predicate selection
-        $('#connectionPredicate').val('');
-    }
-
-    // Setup reverse mode
-    function setupReverseMode() {
-        $('#directionLabel').text('Reverse');
-        
-        // Subject: current span (read-only) - always the same
-        $('#connectionSubject').removeClass('d-none').text(currentSpanName);
-        $('#connectionSubjectSearch').addClass('d-none').prop('disabled', true).val('');
-        $('#connectionSubjectId').val('');
-        
-        // Object: search field - always the same
-        $('#connectionObject').addClass('d-none');
-        $('#connectionObjectSearch').removeClass('d-none').val('').prop('disabled', false);
-        $('#connectionObjectId').val('');
-        
-        // Clear search results
-        $('#searchResults').empty();
-        
-        // Reset predicate selection
-        $('#connectionPredicate').val('');
-    }
-
     // Load connection types from the database
     function loadConnectionTypes() {
         const params = new URLSearchParams();
-        
-        if (isReverseMode) {
-            // In reverse mode, filter by connection types where current span type is in 'child' array
-            // This means the current span will be the object, and we need to find connection types
-            // that allow the current span type as a child
-            params.append('span_type', currentSpanType);
-            params.append('mode', 'reverse');
-        } else {
-            // In forward mode, filter by connection types where current span type is in 'parent' array
+        if (currentSpanType) {
             params.append('span_type', currentSpanType);
         }
         
-        console.log('Loading connection types for span type:', currentSpanType, 'mode:', isReverseMode ? 'reverse' : 'forward');
+        console.log('Loading connection types for span type:', currentSpanType);
         
         $.ajax({
             url: `/api/connection-types?${params.toString()}`,
@@ -119,8 +50,7 @@ $(document).ready(function() {
                 dropdown.append('<option value="">Select connection type...</option>');
                 
                 data.forEach(function(type) {
-                    // Use inverse predicate in reverse mode, forward predicate in forward mode
-                    const displayText = isReverseMode ? (type.inverse_predicate || type.type) : (type.forward_predicate || type.type);
+                    const displayText = type.forward_predicate || type.type;
                     dropdown.append(`<option value="${type.type}">${displayText}</option>`);
                 });
             },
@@ -134,37 +64,31 @@ $(document).ready(function() {
     // Handle predicate selection
     $('#connectionPredicate').on('change', function() {
         const selectedType = $(this).val();
+        const objectField = $('#connectionObject');
+        const searchBtn = $('#searchObjectBtn');
         
         if (selectedType) {
+            objectField.prop('disabled', false);
+            
             // Get allowed span types for this connection type
             const connectionType = connectionTypes.find(t => t.type === selectedType);
             console.log('Selected connection type:', connectionType);
-            
-            if (connectionType && connectionType.allowed_span_types) {
-                let allowedTypes;
-                if (isReverseMode) {
-                    // In reverse mode, we need parent types (since we're creating a reverse connection)
-                    allowedTypes = connectionType.allowed_span_types.parent ? connectionType.allowed_span_types.parent.join(',') : '';
-                } else {
-                    // In forward mode, we need child types (since current span is the subject)
-                    allowedTypes = connectionType.allowed_span_types.child ? connectionType.allowed_span_types.child.join(',') : '';
-                }
-                
+            if (connectionType && connectionType.allowed_span_types && connectionType.allowed_span_types.child) {
+                const allowedTypes = connectionType.allowed_span_types.child.join(',');
                 $('#allowedSpanTypes').val(allowedTypes);
                 console.log('Allowed span types:', allowedTypes);
             } else {
                 console.log('No allowed span types found for:', selectedType);
             }
         } else {
-            // Clear values
+            objectField.prop('disabled', true);
             $('#connectionObjectId').val('');
-            $('#connectionSubjectId').val('');
             $('#searchResults').empty();
         }
     });
 
-    // Handle live search on input for object search field
-    $('#connectionObjectSearch').on('input', function() {
+    // Handle live search on input
+    $('#connectionObject').on('input', function() {
         const query = $(this).val().trim();
         const allowedTypes = $('#allowedSpanTypes').val();
         
@@ -181,9 +105,7 @@ $(document).ready(function() {
         
         // Debounce search
         searchTimeout = setTimeout(function() {
-            // If no connection type is selected, search without type filtering
-            // This allows users to search and see results before selecting a connection type
-            performSearch(query, allowedTypes || null);
+            performSearch(query, allowedTypes);
         }, 300);
     });
     
@@ -206,7 +128,7 @@ $(document).ready(function() {
     let selectedIndex = -1;
     let searchResults = [];
     
-    $('#connectionObjectSearch').on('keydown', function(e) {
+    $('#connectionObject').on('keydown', function(e) {
         const resultsContainer = $('#searchResults');
         const resultItems = resultsContainer.find('.search-result-item');
         
@@ -251,10 +173,8 @@ $(document).ready(function() {
         const spanId = resultItem.data('span-id');
         const spanName = resultItem.data('span-name');
         
-        // Always populate the object field since that's always the searchable field
-        $('#connectionObjectSearch').val(spanName);
+        $('#connectionObject').val(spanName);
         $('#connectionObjectId').val(spanId);
-        
         $('#searchResults').empty();
         selectedIndex = -1;
     }
@@ -265,11 +185,10 @@ $(document).ready(function() {
         
         const params = new URLSearchParams({
             q: query,
-            exclude: currentSpanId // Always exclude the current span
+            exclude: currentSpanId
         });
         
-        // Only add types filter if we have allowed types
-        if (allowedTypes && allowedTypes.trim() !== '') {
+        if (allowedTypes) {
             params.append('types', allowedTypes);
         }
         
@@ -308,7 +227,7 @@ $(document).ready(function() {
         console.log('Search results - Real spans:', realSpans.length, 'Placeholder spans:', placeholderSpans.length);
         
         if (realSpans.length === 0) {
-            const query = $('#connectionObjectSearch').val().trim();
+            const query = $('#connectionObject').val().trim();
             const allowedTypes = $('#allowedSpanTypes').val();
             
             console.log('No real search results found. Query:', query, 'Allowed types:', allowedTypes);
@@ -437,12 +356,12 @@ $(document).ready(function() {
     $('#addConnectionForm').on('submit', function(e) {
         e.preventDefault();
         
-        // Gather form data - always the same structure since UI layout is consistent
+        // Gather form data
         const formData = {
             type: $('#connectionPredicate').val(),
-            parent_id: currentSpanId, // Subject is always the current span
-            child_id: $('#connectionObjectId').val(), // Object is always the searchable field
-            direction: isReverseMode ? 'inverse' : 'forward',
+            parent_id: currentSpanId,
+            child_id: $('#connectionObjectId').val(),
+            direction: 'forward', // Always forward for now
             state: $('input[name="state"]:checked').val(),
             connection_year: $('#startYear').val() ? parseInt($('#startYear').val()) : null,
             connection_month: $('#startMonth').val() ? parseInt($('#startMonth').val()) : null,
@@ -458,8 +377,8 @@ $(document).ready(function() {
             return;
         }
         
-        if (!formData.parent_id || !formData.child_id) {
-            showStatus('Please select an object to connect to', 'danger');
+        if (!formData.child_id) {
+            showStatus('Please select a span to connect to', 'danger');
             return;
         }
         

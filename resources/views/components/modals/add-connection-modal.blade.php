@@ -15,15 +15,12 @@
                     
                     <!-- Subject, Predicate, Object Row -->
                     <div class="row g-3 mb-4">
-                        <!-- Subject Field (Dynamic) -->
+                        <!-- Subject (Current Span) - Read Only -->
                         <div class="col-md-4">
-                            <label class="form-label fw-medium" id="subjectLabel">Subject</label>
+                            <label class="form-label fw-medium">Subject</label>
                             <div class="form-control-plaintext bg-light" id="connectionSubject" style="min-height: 38px;">
                                 <!-- Will be populated by JavaScript -->
                             </div>
-                            <input type="text" class="form-control d-none" id="connectionSubjectSearch" 
-                                   name="subject_search" placeholder="Search..." disabled>
-                            <input type="hidden" id="connectionSubjectId" name="subject_id">
                         </div>
 
                         <!-- Predicate (Connection Type) -->
@@ -35,24 +32,14 @@
                             </select>
                         </div>
 
-                        <!-- Object Field (Dynamic) -->
+                        <!-- Object (Target Span) -->
                         <div class="col-md-4">
-                            <label class="form-label fw-medium" id="objectLabel">Object</label>
-                            <div class="form-control-plaintext bg-light d-none" id="connectionObject" style="min-height: 38px;">
-                                <!-- Will be populated by JavaScript -->
-                            </div>
-                            <input type="text" class="form-control" id="connectionObjectSearch" 
+                            <label for="connectionObject" class="form-label fw-medium">Object</label>
+                            <input type="text" class="form-control" id="connectionObject" 
                                    name="object_search" placeholder="Search..." disabled>
                             <input type="hidden" id="connectionObjectId" name="object_id">
                             <input type="hidden" id="allowedSpanTypes" name="allowed_span_types">
                         </div>
-                    </div>
-                    
-                    <!-- Direction Toggle -->
-                    <div class="mb-3 text-center">
-                        <button type="button" class="btn btn-sm btn-outline-secondary" id="directionToggle">
-                            <i class="bi bi-arrow-left-right me-1"></i><span id="directionLabel">Forward</span>
-                        </button>
                     </div>
                     
                     <!-- Search Results (Full Width) -->
