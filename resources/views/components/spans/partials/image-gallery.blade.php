@@ -79,14 +79,14 @@
 
     <div class="card mb-4">
         <div class="card-header d-flex justify-content-between align-items-center">
-            <h2 class="card-title h5 mb-0">
+            <h6 class="card-title mb-0">
                 <i class="bi bi-images me-2"></i>
                 @if($isPhotoSpan)
                     Related Photos
                 @else
                     Photos featuring this {{ $span->type->name ?? 'span' }}
                 @endif
-            </h2>
+            </h6>
             @auth
                 @if(auth()->user()->is_admin)
                     <a href="{{ route('admin.import.wikimedia-commons.index') }}?search={{ urlencode($span->name) }}&span_uuid={{ $span->id }}" 
@@ -109,9 +109,9 @@
                         @endphp
                         
                         <div class="col-md-6 col-lg-4">
-                            <div class="card h-100 image-gallery-card">
+                            <div class="card h-100 image-gallery-card position-relative">
                                 @if($imageUrl)
-                                    <a href="{{ route('spans.show', $imageSpan) }}" 
+                                    <a href="{{ \App\Helpers\RouteHelper::getSpanRoute($imageSpan) }}" 
                                        class="text-decoration-none">
                                         <img src="{{ $imageUrl }}" 
                                          alt="{{ $imageSpan->name }}" 
@@ -126,6 +126,38 @@
                                     </div>
                                 @endif
                                 
+                                {{-- Date badge --}}
+                                @if($imageSpan && ($imageSpan->start_year || $imageSpan->end_year))
+                                    @php
+                                        $dateText = null;
+                                        $dateUrl = null;
+                                        
+                                        if ($imageSpan->start_year) {
+                                            if ($imageSpan->start_day && $imageSpan->start_month) {
+                                                // Full date: YYYY-MM-DD
+                                                $dateText = $imageSpan->start_day . ' ' . date('F', mktime(0, 0, 0, $imageSpan->start_month, 1)) . ', ' . $imageSpan->start_year;
+                                                $dateUrl = route('date.explore', ['date' => sprintf('%04d-%02d-%02d', $imageSpan->start_year, $imageSpan->start_month, $imageSpan->start_day)]);
+                                            } elseif ($imageSpan->start_month) {
+                                                // Month and year: YYYY-MM
+                                                $dateText = date('F', mktime(0, 0, 0, $imageSpan->start_month, 1)) . ' ' . $imageSpan->start_year;
+                                                $dateUrl = route('date.explore', ['date' => sprintf('%04d-%02d', $imageSpan->start_year, $imageSpan->start_month)]);
+                                            } else {
+                                                // Year only: YYYY
+                                                $dateText = (string) $imageSpan->start_year;
+                                                $dateUrl = route('date.explore', ['date' => $imageSpan->start_year]);
+                                            }
+                                        }
+                                    @endphp
+                                    
+                                    @if($dateText)
+                                        <div class="position-absolute bottom-0 start-50 translate-middle-x mb-2">
+                                            <a href="{{ $dateUrl }}" class="badge bg-dark bg-opacity-75 text-white text-decoration-none" 
+                                               style="font-size: 0.75rem; backdrop-filter: blur(4px);">
+                                                <i class="bi bi-calendar3 me-1"></i>{{ $dateText }}
+                                            </a>
+                                        </div>
+                                    @endif
+                                @endif
 
                             </div>
                         </div>

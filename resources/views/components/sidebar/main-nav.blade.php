@@ -28,6 +28,12 @@
             <i class="bi bi-share me-1"></i> <span>Shared</span>
         </a>
     </li>
+
+    <li class="nav-item">
+        <a class="nav-link {{ request()->routeIs('photos.*') ? 'active' : '' }}" href="{{ route('photos.index') }}">
+            <i class="bi bi-images me-1"></i> <span>Photos</span>
+        </a>
+    </li>
         
     <li class="nav-item">
         <a class="nav-link {{ request()->routeIs('sets.*') ? 'active' : '' }}" href="{{ route('sets.index') }}">
@@ -35,11 +41,11 @@
         </a>
     </li>
 
-    <li class="nav-item">
+    <!--<li class="nav-item">
         <a class="nav-link {{ request()->routeIs('viewer.*') ? 'active' : '' }}" href="{{ route('viewer.index') }}">
             <i class="bi bi-body-text me-1"></i> <span>Timeline</span>
         </a>
-    </li>
+    </li>-->
     
     <li class="nav-item">
         <a class="nav-link {{ request()->routeIs('explore.*') ? 'active' : '' }}" href="{{ route('explore.index') }}">

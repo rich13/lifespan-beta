@@ -531,6 +531,32 @@ class SpanController extends Controller
                     ->with('status', session('status')); // Preserve flash message
             }
 
+            // If this is a set span, redirect to the sets route
+            if ($subject->type_id === 'set') {
+                \Illuminate\Support\Facades\Log::info('Redirecting set span to sets route', [
+                    'span_id' => $subject->id,
+                    'span_name' => $subject->name,
+                    'subtype' => $subject->subtype
+                ]);
+                
+                return redirect()
+                    ->route('sets.show', ['set' => $subject], 301)
+                    ->with('status', session('status')); // Preserve flash message
+            }
+
+            // If this is a photo span, redirect to the photos route
+            if ($subject->type_id === 'thing' && ($subject->metadata['subtype'] ?? null) === 'photo') {
+                \Illuminate\Support\Facades\Log::info('Redirecting photo span to photos route', [
+                    'span_id' => $subject->id,
+                    'span_name' => $subject->name,
+                    'subtype' => $subject->metadata['subtype'] ?? null
+                ]);
+                
+                return redirect()
+                    ->route('photos.show', ['photo' => $subject], 301)
+                    ->with('status', session('status')); // Preserve flash message
+            }
+
             // Check for global time travel cookie and redirect if it exists
             $timeTravelDate = $request->cookie('time_travel_date');
             
@@ -665,10 +691,14 @@ class SpanController extends Controller
             // Calculate the span's age at this date
             $ageInfo = $this->calculateSpanAgeAtDate($span, $year, $month, $day);
 
+            // Generate story for this span at this date
+            $storyGenerator = app(\App\Services\ConfigurableStoryGeneratorService::class);
+            $story = $storyGenerator->generateStoryAtDate($span, $date);
+
             // Set global time travel cookie
             $cookie = cookie('time_travel_date', $date, 60 * 24 * 30); // 30 days
 
-            return response()->view('spans.at-date', compact('span', 'date', 'displayDate', 'ongoingConnections', 'ageInfo'))
+            return response()->view('spans.at-date', compact('span', 'date', 'displayDate', 'ongoingConnections', 'ageInfo', 'story'))
                 ->withCookie($cookie);
         } catch (AuthorizationException $e) {
             return view('errors.403');
@@ -976,6 +1006,13 @@ class SpanController extends Controller
      */
     public function compare(Span $span)
     {
+        // If this is a photo span, redirect to the photos compare route
+        if ($span->type_id === 'thing' && ($span->metadata['subtype'] ?? null) === 'photo') {
+            return redirect()
+                ->route('photos.compare', ['photo' => $span], 301)
+                ->with('status', session('status')); // Preserve flash message
+        }
+
         if ($span->is_private && !auth()->check()) {
             return redirect()->route('login');
         }
@@ -1003,6 +1040,13 @@ class SpanController extends Controller
      */
     public function edit(Span $span)
     {
+        // If this is a photo span, redirect to the photos edit route
+        if ($span->type_id === 'thing' && ($span->metadata['subtype'] ?? null) === 'photo') {
+            return redirect()
+                ->route('photos.edit', ['photo' => $span], 301)
+                ->with('status', session('status')); // Preserve flash message
+        }
+
         $this->authorize('update', $span);
 
         $spanTypes = SpanType::all();
@@ -2483,8 +2527,15 @@ class SpanController extends Controller
     /**
      * Display a story for a span.
      */
-    public function story(Request $request, Span $span): View
+    public function story(Request $request, Span $span): View|\Illuminate\Http\RedirectResponse
     {
+        // If this is a photo span, redirect to the photos story route
+        if ($span->type_id === 'thing' && ($span->metadata['subtype'] ?? null) === 'photo') {
+            return redirect()
+                ->route('photos.story', ['photo' => $span], 301)
+                ->with('status', session('status')); // Preserve flash message
+        }
+
         $storyGenerator = app(ConfigurableStoryGeneratorService::class);
         $story = $storyGenerator->generateStory($span);
 
