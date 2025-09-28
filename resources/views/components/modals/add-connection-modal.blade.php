@@ -42,6 +42,13 @@
                         </div>
                     </div>
                     
+                    <!-- Direction Toggle -->
+                    <div class="mb-3 text-center">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="directionToggle">
+                            <i class="bi bi-arrow-left-right me-1"></i><span id="directionLabel">Forward</span>
+                        </button>
+                    </div>
+                    
                     <!-- Search Results (Full Width) -->
                     <div class="mb-3">
                         <div id="searchResults" class="border rounded" style="max-height: 200px; overflow-y: auto;"></div>

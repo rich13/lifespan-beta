@@ -552,4 +552,170 @@ class AddConnectionModalTest extends TestCase
         
         $this->assertNotNull($connection);
     }
+
+    /**
+     * Test connection types API with forward mode
+     */
+    public function test_connection_types_api_forward_mode(): void
+    {
+        $this->actingAs($this->user);
+
+        $response = $this->getJson('/api/connection-types?span_type=person&mode=forward');
+
+        $response->assertStatus(200);
+        $data = $response->json();
+        
+        // Should return connection types where person can be the parent
+        $this->assertIsArray($data);
+        
+        // Check that we get forward predicates
+        $educationType = collect($data)->firstWhere('type', 'education');
+        $this->assertNotNull($educationType);
+        $this->assertEquals('studied at', $educationType['forward_predicate']);
+        
+        $employmentType = collect($data)->firstWhere('type', 'employment');
+        $this->assertNotNull($employmentType);
+        $this->assertEquals('worked at', $employmentType['forward_predicate']);
+    }
+
+    /**
+     * Test connection types API with reverse mode
+     */
+    public function test_connection_types_api_reverse_mode(): void
+    {
+        $this->actingAs($this->user);
+
+        $response = $this->getJson('/api/connection-types?span_type=person&mode=reverse');
+
+        $response->assertStatus(200);
+        $data = $response->json();
+        
+        // Should return connection types where person can be the child
+        $this->assertIsArray($data);
+        
+        // Check that we get inverse predicates
+        $featuresType = collect($data)->firstWhere('type', 'features');
+        $this->assertNotNull($featuresType);
+        $this->assertEquals('is subject of', $featuresType['inverse_predicate']);
+        
+        $duringType = collect($data)->firstWhere('type', 'during');
+        $this->assertNotNull($duringType);
+        $this->assertEquals('includes', $duringType['inverse_predicate']);
+    }
+
+    /**
+     * Test creating a reverse connection
+     */
+    public function test_can_create_reverse_connection(): void
+    {
+        $this->actingAs($this->user);
+
+        // Create a thing span that can feature a person
+        $thingSpan = Span::create([
+            'name' => 'Test Photo',
+            'type_id' => 'thing',
+            'owner_id' => $this->user->id,
+            'updater_id' => $this->user->id,
+            'start_year' => 2020,
+            'slug' => $this->uniqueSlug('test-photo'),
+            'access_level' => 'public',
+            'state' => 'complete',
+        ]);
+
+        $response = $this->postJson('/api/connections/create', [
+            'type' => 'features',
+            'parent_id' => $this->personSpan->id,
+            'child_id' => $thingSpan->id,
+            'direction' => 'inverse',
+            'state' => 'placeholder'
+        ]);
+
+        if ($response->status() !== 200) {
+            $this->fail('Response failed with status ' . $response->status() . ': ' . $response->getContent());
+        }
+        
+        $response->assertStatus(200);
+        $data = $response->json();
+        
+        $this->assertTrue($data['success']);
+        
+        // Verify connection was created (after inverse direction swap)
+        $connection = Connection::where('parent_id', $thingSpan->id)
+            ->where('child_id', $this->personSpan->id)
+            ->where('type_id', 'features')
+            ->first();
+        
+        $this->assertNotNull($connection);
+        $this->assertNotNull($connection->connectionSpan);
+        $this->assertEquals('placeholder', $connection->connectionSpan->state);
+    }
+
+    /**
+     * Test that forward and reverse modes return different connection types
+     */
+    public function test_forward_and_reverse_modes_return_different_types(): void
+    {
+        $this->actingAs($this->user);
+
+        // Get forward mode types
+        $forwardResponse = $this->getJson('/api/connection-types?span_type=person&mode=forward');
+        $forwardResponse->assertStatus(200);
+        $forwardTypes = $forwardResponse->json();
+        
+        // Get reverse mode types
+        $reverseResponse = $this->getJson('/api/connection-types?span_type=person&mode=reverse');
+        $reverseResponse->assertStatus(200);
+        $reverseTypes = $reverseResponse->json();
+        
+        // Convert to arrays of type names for easier comparison
+        $forwardTypeNames = collect($forwardTypes)->pluck('type')->toArray();
+        $reverseTypeNames = collect($reverseTypes)->pluck('type')->toArray();
+        
+        // They should have different sets of connection types
+        $this->assertNotEquals($forwardTypeNames, $reverseTypeNames);
+        
+        // Forward mode should include types like education, employment, residence
+        $this->assertContains('education', $forwardTypeNames);
+        $this->assertContains('employment', $forwardTypeNames);
+        $this->assertContains('residence', $forwardTypeNames);
+        
+        // Reverse mode should include types like features, during
+        $this->assertContains('features', $reverseTypeNames);
+        $this->assertContains('during', $reverseTypeNames);
+        
+        // Some types should appear in both (like family, relationship)
+        $commonTypes = array_intersect($forwardTypeNames, $reverseTypeNames);
+        $this->assertContains('family', $commonTypes);
+        $this->assertContains('relationship', $commonTypes);
+    }
+
+    /**
+     * Test that connection types show correct predicates for each mode
+     */
+    public function test_connection_types_show_correct_predicates(): void
+    {
+        $this->actingAs($this->user);
+
+        // Test education type in forward mode
+        $forwardResponse = $this->getJson('/api/connection-types?span_type=person&mode=forward');
+        $forwardResponse->assertStatus(200);
+        $forwardTypes = $forwardResponse->json();
+        
+        $educationForward = collect($forwardTypes)->firstWhere('type', 'education');
+        $this->assertNotNull($educationForward);
+        $this->assertEquals('studied at', $educationForward['forward_predicate']);
+        
+        // Test education type in reverse mode (should not appear since person can't be educated by education)
+        $reverseResponse = $this->getJson('/api/connection-types?span_type=person&mode=reverse');
+        $reverseResponse->assertStatus(200);
+        $reverseTypes = $reverseResponse->json();
+        
+        $educationReverse = collect($reverseTypes)->firstWhere('type', 'education');
+        $this->assertNull($educationReverse); // Education shouldn't appear in reverse mode for person
+        
+        // Test features type in reverse mode
+        $featuresReverse = collect($reverseTypes)->firstWhere('type', 'features');
+        $this->assertNotNull($featuresReverse);
+        $this->assertEquals('is subject of', $featuresReverse['inverse_predicate']);
+    }
 } 

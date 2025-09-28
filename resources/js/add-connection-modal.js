@@ -4,6 +4,7 @@ $(document).ready(function() {
     let currentSpanType = null;
     let connectionTypes = [];
     let searchTimeout = null;
+    let isReverseMode = false;
 
     // Initialize modal when opened
     $('#addConnectionModal').on('show.bs.modal', function(event) {
@@ -12,12 +13,16 @@ $(document).ready(function() {
         currentSpanName = button.data('span-name');
         currentSpanType = button.data('span-type');
         
-        // Reset form
+        // Reset form and state
         $('#addConnectionForm')[0].reset();
         $('#connectionObject').prop('disabled', true);
         $('#searchObjectBtn').prop('disabled', true);
         $('#connectionObjectId').val('');
         $('#searchResults').empty();
+        isReverseMode = false;
+        
+        // Reset toggle button
+        $('#directionLabel').text('Forward');
         
         // Update subject display
         $('#connectionSubject').text(currentSpanName);
@@ -27,14 +32,35 @@ $(document).ready(function() {
         loadConnectionTypes();
     });
 
+    // Handle direction toggle
+    $('#directionToggle').on('click', function() {
+        isReverseMode = !isReverseMode;
+        
+        if (isReverseMode) {
+            $('#directionLabel').text('Reverse');
+            $(this).removeClass('btn-outline-secondary').addClass('btn-outline-primary');
+        } else {
+            $('#directionLabel').text('Forward');
+            $(this).removeClass('btn-outline-primary').addClass('btn-outline-secondary');
+        }
+        
+        // Clear current selection and reload connection types for the new mode
+        $('#connectionPredicate').val('');
+        $('#connectionObject').val('').prop('disabled', true);
+        $('#connectionObjectId').val('');
+        $('#searchResults').empty();
+        loadConnectionTypes();
+    });
+
     // Load connection types from the database
     function loadConnectionTypes() {
         const params = new URLSearchParams();
         if (currentSpanType) {
             params.append('span_type', currentSpanType);
+            params.append('mode', isReverseMode ? 'reverse' : 'forward');
         }
         
-        console.log('Loading connection types for span type:', currentSpanType);
+        console.log('Loading connection types for span type:', currentSpanType, 'reverse mode:', isReverseMode);
         
         $.ajax({
             url: `/api/connection-types?${params.toString()}`,
@@ -50,8 +76,10 @@ $(document).ready(function() {
                 dropdown.append('<option value="">Select connection type...</option>');
                 
                 data.forEach(function(type) {
-                    const displayText = type.forward_predicate || type.type;
+                    // Use inverse predicate for reverse mode, forward predicate for forward mode
+                    const displayText = isReverseMode ? (type.inverse_predicate || type.type) : (type.forward_predicate || type.type);
                     dropdown.append(`<option value="${type.type}">${displayText}</option>`);
+                    console.log('Added option:', type.type, '->', displayText, '(mode:', isReverseMode ? 'reverse' : 'forward', ')');
                 });
             },
             error: function(xhr) {
@@ -73,10 +101,19 @@ $(document).ready(function() {
             // Get allowed span types for this connection type
             const connectionType = connectionTypes.find(t => t.type === selectedType);
             console.log('Selected connection type:', connectionType);
-            if (connectionType && connectionType.allowed_span_types && connectionType.allowed_span_types.child) {
-                const allowedTypes = connectionType.allowed_span_types.child.join(',');
-                $('#allowedSpanTypes').val(allowedTypes);
-                console.log('Allowed span types:', allowedTypes);
+            
+            if (connectionType && connectionType.allowed_span_types) {
+                // In reverse mode, we need parent types; in forward mode, we need child types
+                const allowedTypesKey = isReverseMode ? 'parent' : 'child';
+                const allowedTypes = connectionType.allowed_span_types[allowedTypesKey];
+                
+                if (allowedTypes && allowedTypes.length > 0) {
+                    const allowedTypesString = allowedTypes.join(',');
+                    $('#allowedSpanTypes').val(allowedTypesString);
+                    console.log('Allowed span types for', isReverseMode ? 'reverse' : 'forward', 'mode:', allowedTypesString);
+                } else {
+                    console.log('No allowed span types found for:', selectedType, 'in', isReverseMode ? 'reverse' : 'forward', 'mode');
+                }
             } else {
                 console.log('No allowed span types found for:', selectedType);
             }
@@ -361,7 +398,7 @@ $(document).ready(function() {
             type: $('#connectionPredicate').val(),
             parent_id: currentSpanId,
             child_id: $('#connectionObjectId').val(),
-            direction: 'forward', // Always forward for now
+            direction: isReverseMode ? 'inverse' : 'forward',
             state: $('input[name="state"]:checked').val(),
             connection_year: $('#startYear').val() ? parseInt($('#startYear').val()) : null,
             connection_month: $('#startMonth').val() ? parseInt($('#startMonth').val()) : null,
