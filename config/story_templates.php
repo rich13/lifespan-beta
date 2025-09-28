@@ -254,4 +254,79 @@ return [
             ],
         ],
     ],
+    'thing_photo' => [
+        'story_template' => '{photo_subject}{photo_date}{photo_age}',
+        'sentences' => [
+            'photo_subject' => [
+                'template' => 'This is a photo of {featured_span}.',
+                'data_methods' => [
+                    'featured_span' => 'getFeaturedSpanName',
+                ],
+                'condition' => 'hasFeaturedSpan',
+            ],
+            'photo_date' => [
+                'template' => 'It was taken {date_preposition} {photo_date}.',
+                'data_methods' => [
+                    'date_preposition' => 'getPhotoDatePreposition',
+                    'photo_date' => 'getPhotoDate',
+                ],
+                'condition' => 'hasPhotoDate',
+            ],
+            'photo_age' => [
+                'template' => 'At the time, {age}.',
+                'data_methods' => [
+                    'age' => 'getFeaturedSpanAgeAtPhotoDate',
+                ],
+                'condition' => 'hasFeaturedSpanAgeAtPhotoDate',
+            ],
+        ],
+    ],
+    'person_at_date' => [
+        'story_template' => '{age_at_date}{residence_at_date}{employment_at_date}{education_at_date}{relationship_at_date}',
+        'sentences' => [
+            'age_at_date' => [
+                'template' => 'On {date}, {name} was {age} years old.',
+                'data_methods' => [
+                    'date' => 'getAtDateDisplay',
+                    'name' => 'getName',
+                    'age' => 'getAgeAtDate',
+                ],
+                'condition' => 'hasAgeAtDate',
+            ],
+            'residence_at_date' => [
+                'template' => 'At this time, {subject} lived in {place}.',
+                'data_methods' => [
+                    'subject' => 'getPronoun',
+                    'place' => 'getResidenceAtDate',
+                ],
+                'condition' => 'hasResidenceAtDate',
+            ],
+            'employment_at_date' => [
+                'template' => '{subject} worked as {role} at {organisation}.',
+                'fallback_template' => '{subject} worked as {role}.',
+                'data_methods' => [
+                    'subject' => 'getPronoun',
+                    'role' => 'getEmploymentRoleAtDate',
+                    'organisation' => 'getEmploymentOrganisationAtDate',
+                ],
+                'condition' => 'hasEmploymentAtDate',
+            ],
+            'education_at_date' => [
+                'template' => '{subject} went to {institution}.',
+                'data_methods' => [
+                    'subject' => 'getPronoun',
+                    'institution' => 'getEducationAtDate',
+                ],
+                'condition' => 'hasEducationAtDate',
+            ],
+            'relationship_at_date' => [
+                'template' => '{subject} was in a relationship with {person}.',
+                'data_methods' => [
+                    'subject' => 'getPronoun',
+                    'person' => 'getRelationshipAtDate',
+                ],
+                'condition' => 'hasRelationshipAtDate',
+            ],
+        ],
+    ],
 ]; 

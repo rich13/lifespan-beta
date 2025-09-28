@@ -36,6 +36,13 @@
 @section('content')
     <div class="container-fluid">
         
+        <!-- Story Card -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <x-spans.partials.story :span="$span" :story="$story" />
+            </div>
+        </div>
+        
         <!-- Timeline Card -->
         <div class="row mb-4">
             <div class="col-12">

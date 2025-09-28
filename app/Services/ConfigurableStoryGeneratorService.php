@@ -11,6 +11,7 @@ class ConfigurableStoryGeneratorService
 {
     protected $templates;
     protected $currentUser;
+    protected $contextDate;
 
     public function __construct()
     {
@@ -28,7 +29,7 @@ class ConfigurableStoryGeneratorService
         $debug = [];
         
         // First try to find templates for the specific subtype
-        $templateKey = $spanSubtype ? "{$spanType}_{$spanSubtype}" : $spanType;
+        $templateKey = $spanSubtype ? $spanType . '_' . $spanSubtype : $spanType;
         $template = $this->templates[$templateKey] ?? null;
         
         // If no subtype-specific template found, fall back to type-based template
@@ -81,6 +82,8 @@ class ConfigurableStoryGeneratorService
                     'included' => false,
                     'reason' => 'Sentence key not found in template'
                 ];
+                // Remove the placeholder from the story text
+                $storyText = str_replace("{{$sentenceKey}}", '', $storyText);
                 continue;
             }
             
@@ -117,6 +120,8 @@ class ConfigurableStoryGeneratorService
                     } else {
                         $sentenceDebug['included'] = false;
                         $sentenceDebug['reason'] = 'Sentence generation failed';
+                        // Remove the placeholder if sentence generation failed
+                        $storyText = str_replace("{{$sentenceKey}}", '', $storyText);
                     }
                 } else {
                     $sentenceDebug['included'] = false;
@@ -124,10 +129,14 @@ class ConfigurableStoryGeneratorService
                     $sentenceDebug['missing_data'] = array_filter($data, function($value) {
                         return $value === null || $value === '';
                     });
+                    // Remove the placeholder if we don't have required data
+                    $storyText = str_replace("{{$sentenceKey}}", '', $storyText);
                 }
             } else {
                 $sentenceDebug['included'] = false;
                 $sentenceDebug['reason'] = 'Condition failed';
+                // Remove the placeholder if condition failed
+                $storyText = str_replace("{{$sentenceKey}}", '', $storyText);
             }
             
             $debug['sentences'][$sentenceKey] = $sentenceDebug;
@@ -170,6 +179,156 @@ class ConfigurableStoryGeneratorService
 
         return [
             'title' => "The Story of {$span->name}",
+            'paragraphs' => $this->groupIntoSentences($sentences),
+            'metadata' => $this->generateMetadata($span),
+            'debug' => $debug,
+        ];
+    }
+
+    /**
+     * Generate a story for a span at a specific date
+     */
+    public function generateStoryAtDate(Span $span, string $date): array
+    {
+        // Set the context date for this story generation
+        $this->contextDate = $date;
+        
+        $spanType = $span->type_id;
+        $debug = [];
+        
+        // For at-date stories, use a special template key
+        $templateKey = $spanType . '_at_date';
+        $template = $this->templates[$templateKey] ?? null;
+        
+        // If no at-date template found, fall back to regular story generation
+        if (!$template) {
+            $this->contextDate = null; // Reset context
+            return $this->generateStory($span);
+        }
+
+        $debug['templates_found'] = count($template['sentences']);
+        $debug['template_key'] = $templateKey;
+        $debug['context_date'] = $date;
+        
+        // Check if we have a story template
+        if (!isset($template['story_template'])) {
+            $debug['error'] = "No story template found for at-date span type: {$spanType}";
+            $debug['used_fallback'] = true;
+            $this->contextDate = null; // Reset context
+            return $this->generateStory($span);
+        }
+
+        $storyTemplate = $template['story_template'];
+        $debug['story_template'] = $storyTemplate;
+        
+        // Extract sentence keys from the story template
+        preg_match_all('/\{([^}]+)\}/', $storyTemplate, $matches);
+        $sentenceKeys = $matches[1] ?? [];
+        $debug['sentence_keys'] = $sentenceKeys;
+        
+        $generatedSentences = [];
+        $storyText = $storyTemplate;
+        
+        foreach ($sentenceKeys as $sentenceKey) {
+            if (!isset($template['sentences'][$sentenceKey])) {
+                $debug['sentences'][$sentenceKey] = [
+                    'included' => false,
+                    'reason' => 'Sentence key not found in template'
+                ];
+                // Remove the placeholder from the story text
+                $storyText = str_replace("{{$sentenceKey}}", '', $storyText);
+                continue;
+            }
+            
+            $sentenceConfig = $template['sentences'][$sentenceKey];
+            $sentenceDebug = [
+                'key' => $sentenceKey,
+                'template' => $sentenceConfig['template'] ?? 'No template',
+                'condition' => $sentenceConfig['condition'] ?? 'No condition',
+            ];
+            
+            // Check condition
+            $conditionPassed = $this->shouldIncludeSentence($span, $sentenceConfig);
+            $sentenceDebug['condition_passed'] = $conditionPassed;
+            
+            if ($conditionPassed) {
+                // Get data for sentence
+                $data = $this->getSentenceData($span, $sentenceConfig['data_methods']);
+                $sentenceDebug['data'] = $data;
+                
+                // Check if we have required data
+                $hasRequiredData = $this->hasRequiredData($data, $sentenceConfig);
+                $sentenceDebug['has_required_data'] = $hasRequiredData;
+                
+                if ($hasRequiredData) {
+                    $selectedTemplate = $this->selectTemplate($sentenceConfig, $data, $span);
+                    $sentenceDebug['selected_template'] = $selectedTemplate;
+                    
+                    $sentence = $this->replacePlaceholders($selectedTemplate, $data);
+                    $sentenceDebug['final_sentence'] = $sentence;
+                    
+                    if ($sentence) {
+                        $generatedSentences[$sentenceKey] = $sentence;
+                        $storyText = str_replace("{{$sentenceKey}}", $sentence, $storyText);
+                    } else {
+                        // Remove the placeholder if sentence generation failed
+                        $storyText = str_replace("{{$sentenceKey}}", '', $storyText);
+                    }
+                } else {
+                    // Try fallback template if main template doesn't have required data
+                    if (isset($sentenceConfig['fallback_template'])) {
+                        $selectedTemplate = $this->selectTemplate($sentenceConfig, $data, $span);
+                        $sentenceDebug['selected_template'] = $selectedTemplate;
+                        
+                        $sentence = $this->replacePlaceholders($selectedTemplate, $data);
+                        $sentenceDebug['final_sentence'] = $sentence;
+                        
+                        if ($sentence) {
+                            $generatedSentences[$sentenceKey] = $sentence;
+                            $storyText = str_replace("{{$sentenceKey}}", $sentence, $storyText);
+                        } else {
+                            // Remove the placeholder if fallback sentence generation failed
+                            $storyText = str_replace("{{$sentenceKey}}", '', $storyText);
+                        }
+                    } else {
+                        // Remove the placeholder if we don't have required data and no fallback
+                        $storyText = str_replace("{{$sentenceKey}}", '', $storyText);
+                    }
+                }
+            } else {
+                // Remove the placeholder if condition failed
+                $storyText = str_replace("{{$sentenceKey}}", '', $storyText);
+            }
+            
+            $debug['sentences'][$sentenceKey] = $sentenceDebug;
+        }
+        
+        // Split into sentences and filter out empty ones
+        $sentences = array_filter(array_map('trim', explode('.', $storyText)), function($sentence) {
+            return !empty($sentence);
+        });
+
+        // Capitalize the first letter of each sentence and add periods back
+        $sentences = array_map(function($sentence) {
+            $sentence = ltrim($sentence);
+            return mb_strtoupper(mb_substr($sentence, 0, 1)) . mb_substr($sentence, 1) . '.';
+        }, $sentences);
+        
+        $debug['total_sentences_generated'] = count($sentences);
+        $debug['final_story_text'] = $storyText;
+
+        // If no sentences were generated, use the fallback message
+        if (empty($sentences)) {
+            $fallbackSentence = $this->generateFallbackSentence($span);
+            $sentences = [$fallbackSentence];
+            $debug['used_fallback'] = true;
+        }
+
+        // Reset context
+        $this->contextDate = null;
+
+        return [
+            'title' => "The Story of {$span->name} on {$date}",
             'paragraphs' => $this->groupIntoSentences($sentences),
             'metadata' => $this->generateMetadata($span),
             'debug' => $debug,
@@ -393,6 +552,17 @@ class ConfigurableStoryGeneratorService
             'hasTrackArtist' => $this->hasTrackArtist($span),
             'hasTrackReleaseDate' => $this->hasTrackReleaseDate($span),
             'hasTrackAlbum' => $this->hasTrackAlbum($span),
+            'hasFeaturedSpan' => $this->hasFeaturedSpan($span),
+            'hasPhotoDate' => $this->hasPhotoDate($span),
+            'hasFeaturedSpanAgeAtPhotoDate' => $this->hasFeaturedSpanAgeAtPhotoDate($span),
+            'hasAgeAtDate' => $this->hasAgeAtDate($span),
+            'hasCurrentActivitiesAtDate' => $this->hasCurrentActivitiesAtDate($span),
+            'hasRecentEventsAtDate' => $this->hasRecentEventsAtDate($span),
+            'hasUpcomingEventsAtDate' => $this->hasUpcomingEventsAtDate($span),
+            'hasResidenceAtDate' => $this->hasResidenceAtDate($span),
+            'hasEmploymentAtDate' => $this->hasEmploymentAtDate($span),
+            'hasEducationAtDate' => $this->hasEducationAtDate($span),
+            'hasRelationshipAtDate' => $this->hasRelationshipAtDate($span),
             default => false,
         };
     }
@@ -463,6 +633,20 @@ class ConfigurableStoryGeneratorService
             'getTrackArtist' => $this->getTrackArtist($span),
             'getTrackReleaseDate' => $this->getTrackReleaseDate($span),
             'getTrackAlbum' => $this->getTrackAlbum($span),
+            'getFeaturedSpanName' => $this->getFeaturedSpanName($span),
+            'getPhotoDate' => $this->getPhotoDate($span),
+            'getPhotoDatePreposition' => $this->getPhotoDatePreposition($span),
+            'getFeaturedSpanAgeAtPhotoDate' => $this->getFeaturedSpanAgeAtPhotoDate($span),
+            'getAtDateDisplay' => $this->getAtDateDisplay($span),
+            'getAgeAtDate' => $this->getAgeAtDate($span),
+            'getCurrentActivitiesAtDate' => $this->getCurrentActivitiesAtDate($span),
+            'getRecentEventsAtDate' => $this->getRecentEventsAtDate($span),
+            'getUpcomingEventsAtDate' => $this->getUpcomingEventsAtDate($span),
+            'getResidenceAtDate' => $this->getResidenceAtDate($span),
+            'getEmploymentRoleAtDate' => $this->getEmploymentRoleAtDate($span),
+            'getEmploymentOrganisationAtDate' => $this->getEmploymentOrganisationAtDate($span),
+            'getEducationAtDate' => $this->getEducationAtDate($span),
+            'getRelationshipAtDate' => $this->getRelationshipAtDate($span),
             default => null,
         };
 
@@ -482,10 +666,16 @@ class ConfigurableStoryGeneratorService
         return $result;
     }
 
-    protected function makeSpanLink($name, $span = null)
+    protected function makeSpanLink($name, $span = null, $date = null)
     {
         if ($span && $span instanceof \App\Models\Span) {
-            $link = route('spans.show', $span);
+            // Use time-travel route if date is provided
+            if ($date) {
+                $link = route('spans.at-date', ['span' => $span, 'date' => $date]);
+            } else {
+                $link = route('spans.show', $span);
+            }
+            
             $classes = 'text-decoration-none';
             
             // Add placeholder class if the span is in placeholder state
@@ -597,6 +787,25 @@ class ConfigurableStoryGeneratorService
 
         // If we have month and year, or just year, use "born in"
         return 'born in';
+    }
+
+    /**
+     * Get the appropriate preposition for a date based on precision
+     * Returns "on" for full dates (day + month + year) and "in" for partial dates (year only or month + year)
+     */
+    protected function getGenericDatePreposition(?int $year, ?int $month, ?int $day): string
+    {
+        if (!$year) {
+            return 'in';
+        }
+
+        // Only use "on" if we have day, month, AND year (full date)
+        if ($day && $month) {
+            return 'on';
+        }
+
+        // Use "in" for year only, month+year, or any other partial date
+        return 'in';
     }
 
     /**
@@ -872,8 +1081,7 @@ class ConfigurableStoryGeneratorService
                 ->get()
                 ->firstWhere('child.name', $edu['organisation'])?->child;
             if ($org) {
-                $link = route('spans.show', $org);
-                return '<a href="' . $link . '" class="text-decoration-none">' . e($edu['organisation']) . '</a>';
+                return $this->makeSpanLink($edu['organisation'], $org);
             }
             return e($edu['organisation']);
         })->toArray();
@@ -911,8 +1119,7 @@ class ConfigurableStoryGeneratorService
                 ->get()
                 ->firstWhere('child.name', $work['organisation'])?->child;
             if ($org) {
-                $link = route('spans.show', $org);
-                return '<a href="' . $link . '" class="text-decoration-none">' . e($work['organisation']) . '</a>';
+                return $this->makeSpanLink($work['organisation'], $org);
             }
             return e($work['organisation']);
         })->toArray();
@@ -926,7 +1133,13 @@ class ConfigurableStoryGeneratorService
         $latest = null;
         
         foreach ($work as $job) {
-            if ($job['end_date']) {
+            // Prioritize ongoing jobs (no end_date) over past jobs
+            if (!$job['end_date']) {
+                // This is an ongoing job - it's automatically the most recent
+                $mostRecent = $job;
+                break;
+            } else {
+                // This is a past job - check if it's the latest past job
                 $end = Carbon::parse($job['end_date']);
                 if (!$latest || $end->gt($latest)) {
                     $latest = $end;
@@ -945,7 +1158,13 @@ class ConfigurableStoryGeneratorService
         $latest = null;
         
         foreach ($work as $job) {
-            if ($job['end_date']) {
+            // Prioritize ongoing jobs (no end_date) over past jobs
+            if (!$job['end_date']) {
+                // This is an ongoing job - it's automatically the most recent
+                $mostRecent = $job;
+                break;
+            } else {
+                // This is a past job - check if it's the latest past job
                 $end = Carbon::parse($job['end_date']);
                 if (!$latest || $end->gt($latest)) {
                     $latest = $end;
@@ -1099,8 +1318,7 @@ class ConfigurableStoryGeneratorService
     {
         $parentSpans = $person->parents;
         $parentLinks = $parentSpans->map(function ($parent) {
-            $link = route('spans.show', $parent);
-            return '<a href="' . $link . '" class="text-decoration-none">' . e($parent->name) . '</a>';
+            return $this->makeSpanLink($parent->name, $parent);
         })->toArray();
         return $this->formatList($parentLinks);
     }
@@ -1109,8 +1327,7 @@ class ConfigurableStoryGeneratorService
     {
         $childSpans = $person->children;
         $childLinks = $childSpans->map(function ($child) {
-            $link = route('spans.show', $child);
-            return '<a href="' . $link . '" class="text-decoration-none">' . e($child->name) . '</a>';
+            return $this->makeSpanLink($child->name, $child);
         })->toArray();
         return $this->formatList($childLinks);
     }
@@ -1119,8 +1336,7 @@ class ConfigurableStoryGeneratorService
     {
         $siblingSpans = $person->siblings();
         $siblingLinks = $siblingSpans->map(function ($sibling) {
-            $link = route('spans.show', $sibling);
-            return '<a href="' . $link . '" class="text-decoration-none">' . e($sibling->name) . '</a>';
+            return $this->makeSpanLink($sibling->name, $sibling);
         })->toArray();
         return $this->formatList($siblingLinks);
     }
@@ -1148,8 +1364,7 @@ class ConfigurableStoryGeneratorService
     {
         $members = $this->getBandMembers($band);
         $memberLinks = $members->pluck('person_span')->map(function ($span) {
-            $link = route('spans.show', $span);
-            return '<a href="' . $link . '" class="text-decoration-none">' . e($span->name) . '</a>';
+            return $this->makeSpanLink($span->name, $span);
         })->toArray();
         return $this->formatList($memberLinks);
     }
@@ -1177,8 +1392,7 @@ class ConfigurableStoryGeneratorService
     {
         $bands = $this->getBandMemberships($person);
         $bandLinks = $bands->pluck('band_span')->map(function ($span) {
-            $link = route('spans.show', $span);
-            return '<a href="' . $link . '" class="text-decoration-none">' . e($span->name) . '</a>';
+            return $this->makeSpanLink($span->name, $span);
         })->toArray();
         return $this->formatList($bandLinks);
     }
@@ -1443,15 +1657,19 @@ class ConfigurableStoryGeneratorService
             // Both start and end dates
             $startDate = $this->formatHumanReadableDate($span->start_year, $span->start_month, $span->start_day);
             $endDate = $this->formatHumanReadableDate($span->end_year, $span->end_month, $span->end_day);
-            return "{$name} {$tense} {$article} {$subtypeText}{$spanType}. It started on {$startDate} and ended on {$endDate}. That's all for now.";
+            $startPreposition = $this->getGenericDatePreposition($span->start_year, $span->start_month, $span->start_day);
+            $endPreposition = $this->getGenericDatePreposition($span->end_year, $span->end_month, $span->end_day);
+            return "{$name} {$tense} {$article} {$subtypeText}{$spanType}. It started {$startPreposition} {$startDate} and ended {$endPreposition} {$endDate}. That's all for now.";
         } elseif ($hasStartDate) {
             // Only start date
             $startDate = $this->formatHumanReadableDate($span->start_year, $span->start_month, $span->start_day);
-            return "{$name} {$tense} {$article} {$subtypeText}{$spanType}. It started on {$startDate}. That's all for now.";
+            $startPreposition = $this->getGenericDatePreposition($span->start_year, $span->start_month, $span->start_day);
+            return "{$name} {$tense} {$article} {$subtypeText}{$spanType}. It started {$startPreposition} {$startDate}. That's all for now.";
         } elseif ($hasEndDate) {
             // Only end date
             $endDate = $this->formatHumanReadableDate($span->end_year, $span->end_month, $span->end_day);
-            return "{$name} {$tense} {$article} {$subtypeText}{$spanType}. It ended on {$endDate}. That's all for now.";
+            $endPreposition = $this->getGenericDatePreposition($span->end_year, $span->end_month, $span->end_day);
+            return "{$name} {$tense} {$article} {$subtypeText}{$spanType}. It ended {$endPreposition} {$endDate}. That's all for now.";
         } else {
             // No dates
             return "{$name} {$tense} {$article} {$subtypeText}{$spanType}. That's all for now.";
@@ -1596,11 +1814,11 @@ class ConfigurableStoryGeneratorService
         $age = $endYear - $startYear;
 
         if ($age === 0) {
-            return 'less than a year old';
+            return 'less than a year';
         } elseif ($age === 1) {
-            return '1 year old';
+            return '1';
         } else {
-            return "{$age} years old";
+            return (string) $age;
         }
     }
 
@@ -1875,5 +2093,607 @@ class ConfigurableStoryGeneratorService
     protected function hasTrackAlbum(Span $span): bool
     {
         return $this->getTrackAlbum($span) !== null;
+    }
+
+    // Photo-specific methods
+    protected function getFeaturedSpanName(Span $photo): ?string
+    {
+        // Look for "features" connections to find what this photo is of
+        $featuresConnections = $photo->connectionsAsSubject()
+            ->where('type_id', 'features')
+            ->whereHas('child')
+            ->with(['child'])
+            ->get();
+        
+        if ($featuresConnections->isEmpty()) {
+            return null;
+        }
+        
+        $featuredSpans = $featuresConnections->map(function ($connection) {
+            return $this->makeSpanLink($connection->child->name, $connection->child);
+        });
+        
+        // Join multiple spans with commas and "and" for the last one
+        if ($featuredSpans->count() === 1) {
+            return $featuredSpans->first();
+        } elseif ($featuredSpans->count() === 2) {
+            return $featuredSpans->join(' and ');
+        } else {
+            $lastSpan = $featuredSpans->pop();
+            return $featuredSpans->join(', ') . ' and ' . $lastSpan;
+        }
+    }
+
+    protected function getPhotoDate(Span $photo): ?string
+    {
+        // Use the photo's start date if available
+        if ($photo->start_year) {
+            return $this->formatHumanReadableDate($photo->start_year, $photo->start_month, $photo->start_day);
+        }
+        
+        // Fallback to metadata date_taken if available
+        if (isset($photo->metadata['date_taken'])) {
+            return $photo->metadata['date_taken'];
+        }
+        
+        return null;
+    }
+
+    protected function getPhotoDatePreposition(Span $photo): string
+    {
+        return $this->getGenericDatePreposition($photo->start_year, $photo->start_month, $photo->start_day);
+    }
+
+    protected function formatPhotoDateForUrl(Span $photo): string
+    {
+        // Format the photo date for use in URL (YYYY-MM-DD format)
+        if ($photo->start_year && $photo->start_month && $photo->start_day) {
+            return sprintf('%04d-%02d-%02d', $photo->start_year, $photo->start_month, $photo->start_day);
+        } elseif ($photo->start_year && $photo->start_month) {
+            return sprintf('%04d-%02d-01', $photo->start_year, $photo->start_month);
+        } elseif ($photo->start_year) {
+            return sprintf('%04d-01-01', $photo->start_year);
+        }
+        
+        return '';
+    }
+
+    protected function createDateFromSpan(Span $span): ?\DateTime
+    {
+        // Create a DateTime object from span date information
+        if ($span->start_year && $span->start_month && $span->start_day) {
+            return new \DateTime(sprintf('%04d-%02d-%02d', $span->start_year, $span->start_month, $span->start_day));
+        } elseif ($span->start_year && $span->start_month) {
+            return new \DateTime(sprintf('%04d-%02d-%02d', $span->start_year, $span->start_month, 1));
+        } elseif ($span->start_year) {
+            return new \DateTime(sprintf('%04d-%02d-%02d', $span->start_year, 1, 1));
+        }
+        
+        return null;
+    }
+
+    protected function getFeaturedSpanAgeAtPhotoDate(Span $photo): ?string
+    {
+        // Get all featured people
+        $featuresConnections = $photo->connectionsAsSubject()
+            ->where('type_id', 'features')
+            ->whereHas('child', function ($query) {
+                $query->where('type_id', 'person');
+            })
+            ->with(['child'])
+            ->get();
+        
+        if ($featuresConnections->isEmpty()) {
+            return null;
+        }
+        
+        $ageDescriptions = [];
+        
+        foreach ($featuresConnections as $connection) {
+            $person = $connection->child;
+            
+            // Calculate age at photo date using proper date arithmetic
+            if ($person->start_year && $photo->start_year) {
+                // Create proper dates for calculation
+                $photoDate = $this->createDateFromSpan($photo);
+                $birthDate = $this->createDateFromSpan($person);
+                
+                if ($photoDate && $birthDate) {
+                    $ageInterval = $birthDate->diff($photoDate);
+                    $age = $ageInterval->y; // Years only, which automatically rounds down
+                    
+                    // Only include age if it's reasonable (between 0 and 150)
+                    if ($age >= 0 && $age <= 150) {
+                        // Create a link to the person's span at the photo date for the entire age sentence
+                        $photoDateUrl = $this->formatPhotoDateForUrl($photo);
+                        $ageText = $person->name . ' was ' . $age . ' years old';
+                        $ageLink = $this->makeSpanLink($ageText, $person, $photoDateUrl);
+                        $ageDescriptions[] = $ageLink;
+                    }
+                }
+            }
+        }
+        
+        if (empty($ageDescriptions)) {
+            return null;
+        }
+        
+        // Join multiple age descriptions with commas and "and" for the last one
+        if (count($ageDescriptions) === 1) {
+            return $ageDescriptions[0];
+        } elseif (count($ageDescriptions) === 2) {
+            return implode(' and ', $ageDescriptions);
+        } else {
+            $lastAge = array_pop($ageDescriptions);
+            return implode(', ', $ageDescriptions) . ' and ' . $lastAge;
+        }
+    }
+
+    // Photo condition methods
+    protected function hasFeaturedSpan(Span $photo): bool
+    {
+        return $this->getFeaturedSpanName($photo) !== null;
+    }
+
+    protected function hasPhotoDate(Span $photo): bool
+    {
+        return $this->getPhotoDate($photo) !== null;
+    }
+
+    protected function hasFeaturedSpanAgeAtPhotoDate(Span $photo): bool
+    {
+        return $this->getFeaturedSpanAgeAtPhotoDate($photo) !== null;
+    }
+
+    // At-date specific methods
+    protected function getAtDateDisplay(Span $span): string
+    {
+        if (!$this->contextDate) {
+            return '';
+        }
+        
+        // Parse the context date and format it nicely
+        $dateParts = explode('-', $this->contextDate);
+        if (count($dateParts) === 3) {
+            $year = (int) $dateParts[0];
+            $month = (int) $dateParts[1];
+            $day = (int) $dateParts[2];
+            
+            $date = new \DateTime("{$year}-{$month}-{$day}");
+            return $date->format('j F Y'); // e.g., "25 June 2006"
+        }
+        
+        return $this->contextDate;
+    }
+
+    protected function getAgeAtDate(Span $span): ?int
+    {
+        if (!$this->contextDate || !$span->start_year) {
+            return null;
+        }
+        
+        // Create proper dates for calculation
+        $contextDate = $this->createDateFromContextDate();
+        $birthDate = $this->createDateFromSpan($span);
+        
+        if ($contextDate && $birthDate) {
+            $ageInterval = $birthDate->diff($contextDate);
+            $age = $ageInterval->y; // Years only, which automatically rounds down
+            
+            // Only return age if it's reasonable (between 0 and 150)
+            if ($age >= 0 && $age <= 150) {
+                return $age;
+            }
+        }
+        
+        return null;
+    }
+
+    protected function getCurrentActivitiesAtDate(Span $span): ?string
+    {
+        if (!$this->contextDate) {
+            return null;
+        }
+        
+        // Get ongoing connections at this date
+        $contextDate = $this->createDateFromContextDate();
+        if (!$contextDate) {
+            return null;
+        }
+        
+        $activities = [];
+        
+        // Check employment connections
+        $employmentConnections = $span->connectionsAsSubject()
+            ->where('type_id', 'employment')
+            ->whereHas('connectionSpan', function ($query) use ($contextDate) {
+                $query->where(function ($q) use ($contextDate) {
+                    $q->whereNull('start_year')
+                      ->orWhere(function ($q2) use ($contextDate) {
+                          $q2->where('start_year', '<=', $contextDate->format('Y'))
+                             ->where(function ($q3) use ($contextDate) {
+                                 $q3->whereNull('end_year')
+                                    ->orWhere('end_year', '>=', $contextDate->format('Y'));
+                             });
+                      });
+                });
+            })
+            ->with(['child', 'connectionSpan'])
+            ->get();
+        
+        foreach ($employmentConnections as $connection) {
+            $activities[] = 'working at ' . $connection->child->name;
+        }
+        
+        // Check education connections
+        $educationConnections = $span->connectionsAsSubject()
+            ->where('type_id', 'education')
+            ->whereHas('connectionSpan', function ($query) use ($contextDate) {
+                $query->where(function ($q) use ($contextDate) {
+                    $q->whereNull('start_year')
+                      ->orWhere(function ($q2) use ($contextDate) {
+                          $q2->where('start_year', '<=', $contextDate->format('Y'))
+                             ->where(function ($q3) use ($contextDate) {
+                                 $q3->whereNull('end_year')
+                                    ->orWhere('end_year', '>=', $contextDate->format('Y'));
+                             });
+                      });
+                });
+            })
+            ->with(['child', 'connectionSpan'])
+            ->get();
+        
+        foreach ($educationConnections as $connection) {
+            $activities[] = 'studying at ' . $connection->child->name;
+        }
+        
+        if (empty($activities)) {
+            return null;
+        }
+        
+        // Format the activities list
+        if (count($activities) === 1) {
+            return $activities[0];
+        } elseif (count($activities) === 2) {
+            return implode(' and ', $activities);
+        } else {
+            $lastActivity = array_pop($activities);
+            return implode(', ', $activities) . ' and ' . $lastActivity;
+        }
+    }
+
+    protected function getResidenceAtDate(Span $span): ?string
+    {
+        if (!$this->contextDate) {
+            return null;
+        }
+        
+        $contextDate = $this->createDateFromContextDate();
+        if (!$contextDate) {
+            return null;
+        }
+        
+        // Get the most recent residence that was active at this date
+        $residenceConnection = $span->connectionsAsSubject()
+            ->where('connections.type_id', 'residence')
+            ->whereHas('connectionSpan', function ($query) use ($contextDate) {
+                $query->where(function ($q) use ($contextDate) {
+                    $q->whereNull('start_year')
+                      ->orWhere(function ($q2) use ($contextDate) {
+                          $q2->where('start_year', '<=', $contextDate->format('Y'))
+                             ->where(function ($q3) use ($contextDate) {
+                                 $q3->whereNull('end_year')
+                                    ->orWhere('end_year', '>=', $contextDate->format('Y'));
+                             });
+                      });
+                });
+            })
+            ->with(['child', 'connectionSpan'])
+            ->join('spans as connection_spans', 'connections.connection_span_id', '=', 'connection_spans.id')
+            ->orderBy('connection_spans.start_year', 'desc')
+            ->orderBy('connection_spans.start_month', 'desc')
+            ->orderBy('connection_spans.start_day', 'desc')
+            ->select('connections.*')
+            ->first();
+        
+        $residenceSpan = $residenceConnection?->child;
+        return $residenceSpan ? $this->makeSpanLink($residenceSpan->name, $residenceSpan) : null;
+    }
+
+    protected function getEmploymentRoleAtDate(Span $span): ?string
+    {
+        if (!$this->contextDate) {
+            return null;
+        }
+        
+        $contextDate = $this->createDateFromContextDate();
+        if (!$contextDate) {
+            return null;
+        }
+        
+        // Get the most recent role that was active at this date
+        $roleConnection = $span->connectionsAsSubject()
+            ->where('connections.type_id', 'has_role')
+            ->whereHas('connectionSpan', function ($query) use ($contextDate) {
+                $query->where(function ($q) use ($contextDate) {
+                    $q->whereNull('start_year')
+                      ->orWhere(function ($q2) use ($contextDate) {
+                          $q2->where('start_year', '<=', $contextDate->format('Y'))
+                             ->where(function ($q3) use ($contextDate) {
+                                 $q3->whereNull('end_year')
+                                    ->orWhere('end_year', '>=', $contextDate->format('Y'));
+                             });
+                      });
+                });
+            })
+            ->with(['child', 'connectionSpan'])
+            ->join('spans as connection_spans', 'connections.connection_span_id', '=', 'connection_spans.id')
+            ->orderBy('connection_spans.start_year', 'desc')
+            ->orderBy('connection_spans.start_month', 'desc')
+            ->orderBy('connection_spans.start_day', 'desc')
+            ->select('connections.*')
+            ->first();
+        
+        $roleSpan = $roleConnection?->child;
+        return $roleSpan ? $this->makeSpanLink($roleSpan->name, $roleSpan) : null;
+    }
+
+    protected function getEmploymentOrganisationAtDate(Span $span): ?string
+    {
+        if (!$this->contextDate) {
+            return null;
+        }
+        
+        $contextDate = $this->createDateFromContextDate();
+        if (!$contextDate) {
+            return null;
+        }
+        
+        // Get the most recent role that was active at this date
+        $roleConnection = $span->connectionsAsSubject()
+            ->where('connections.type_id', 'has_role')
+            ->whereHas('connectionSpan', function ($query) use ($contextDate) {
+                $query->where(function ($q) use ($contextDate) {
+                    $q->whereNull('start_year')
+                      ->orWhere(function ($q2) use ($contextDate) {
+                          $q2->where('start_year', '<=', $contextDate->format('Y'))
+                             ->where(function ($q3) use ($contextDate) {
+                                 $q3->whereNull('end_year')
+                                    ->orWhere('end_year', '>=', $contextDate->format('Y'));
+                             });
+                      });
+                });
+            })
+            ->with(['child', 'connectionSpan'])
+            ->join('spans as connection_spans', 'connections.connection_span_id', '=', 'connection_spans.id')
+            ->orderBy('connection_spans.start_year', 'desc')
+            ->orderBy('connection_spans.start_month', 'desc')
+            ->orderBy('connection_spans.start_day', 'desc')
+            ->select('connections.*')
+            ->first();
+        
+        if (!$roleConnection) {
+            return null;
+        }
+        
+        // Look for at_organisation connections on the connection span itself
+        $organisationConnection = $roleConnection->connectionSpan->connectionsAsSubject()
+            ->where('connections.type_id', 'at_organisation')
+            ->whereHas('connectionSpan', function ($query) use ($contextDate) {
+                $query->where(function ($q) use ($contextDate) {
+                    $q->whereNull('start_year')
+                      ->orWhere(function ($q2) use ($contextDate) {
+                          $q2->where('start_year', '<=', $contextDate->format('Y'))
+                             ->where(function ($q3) use ($contextDate) {
+                                 $q3->whereNull('end_year')
+                                    ->orWhere('end_year', '>=', $contextDate->format('Y'));
+                             });
+                      });
+                });
+            })
+            ->with(['child', 'connectionSpan'])
+            ->join('spans as connection_spans', 'connections.connection_span_id', '=', 'connection_spans.id')
+            ->orderBy('connection_spans.start_year', 'desc')
+            ->orderBy('connection_spans.start_month', 'desc')
+            ->orderBy('connection_spans.start_day', 'desc')
+            ->select('connections.*')
+            ->first();
+        
+        $organisationSpan = $organisationConnection?->child;
+        return $organisationSpan ? $this->makeSpanLink($organisationSpan->name, $organisationSpan) : null;
+    }
+
+    protected function getRelationshipAtDate(Span $span): ?string
+    {
+        if (!$this->contextDate) {
+            return null;
+        }
+        
+        $contextDate = $this->createDateFromContextDate();
+        if (!$contextDate) {
+            return null;
+        }
+        
+        // Check relationships where this person is the subject (parent)
+        $relationshipAsSubject = $span->connectionsAsSubject()
+            ->where('connections.type_id', 'relationship')
+            ->whereHas('connectionSpan', function ($query) use ($contextDate) {
+                $query->where(function ($q) use ($contextDate) {
+                    $q->whereNull('start_year')
+                      ->orWhere(function ($q2) use ($contextDate) {
+                          $q2->where('start_year', '<=', $contextDate->format('Y'))
+                             ->where(function ($q3) use ($contextDate) {
+                                 $q3->whereNull('end_year')
+                                    ->orWhere('end_year', '>=', $contextDate->format('Y'));
+                             });
+                      });
+                });
+            })
+            ->with(['child', 'connectionSpan'])
+            ->join('spans as connection_spans', 'connections.connection_span_id', '=', 'connection_spans.id')
+            ->orderBy('connection_spans.start_year', 'desc')
+            ->orderBy('connection_spans.start_month', 'desc')
+            ->orderBy('connection_spans.start_day', 'desc')
+            ->select('connections.*')
+            ->first();
+        
+        // Check relationships where this person is the object (child)
+        $relationshipAsChild = $span->connectionsAsObject()
+            ->where('connections.type_id', 'relationship')
+            ->whereHas('connectionSpan', function ($query) use ($contextDate) {
+                $query->where(function ($q) use ($contextDate) {
+                    $q->whereNull('start_year')
+                      ->orWhere(function ($q2) use ($contextDate) {
+                          $q2->where('start_year', '<=', $contextDate->format('Y'))
+                             ->where(function ($q3) use ($contextDate) {
+                                 $q3->whereNull('end_year')
+                                    ->orWhere('end_year', '>=', $contextDate->format('Y'));
+                             });
+                      });
+                });
+            })
+            ->with(['parent', 'connectionSpan'])
+            ->join('spans as connection_spans', 'connections.connection_span_id', '=', 'connection_spans.id')
+            ->orderBy('connection_spans.start_year', 'desc')
+            ->orderBy('connection_spans.start_month', 'desc')
+            ->orderBy('connection_spans.start_day', 'desc')
+            ->select('connections.*')
+            ->first();
+        
+        // Return the most recent relationship (either direction)
+        $relationshipConnection = null;
+        $relationshipSpan = null;
+        
+        if ($relationshipAsSubject && $relationshipAsChild) {
+            // Compare dates to get the most recent
+            $subjectDate = $relationshipAsSubject->connectionSpan->start_year ?? 0;
+            $childDate = $relationshipAsChild->connectionSpan->start_year ?? 0;
+            
+            if ($subjectDate >= $childDate) {
+                $relationshipConnection = $relationshipAsSubject;
+                $relationshipSpan = $relationshipAsSubject->child;
+            } else {
+                $relationshipConnection = $relationshipAsChild;
+                $relationshipSpan = $relationshipAsChild->parent;
+            }
+        } elseif ($relationshipAsSubject) {
+            $relationshipConnection = $relationshipAsSubject;
+            $relationshipSpan = $relationshipAsSubject->child;
+        } elseif ($relationshipAsChild) {
+            $relationshipConnection = $relationshipAsChild;
+            $relationshipSpan = $relationshipAsChild->parent;
+        }
+        
+        return $relationshipSpan ? $this->makeSpanLink($relationshipSpan->name, $relationshipSpan) : null;
+    }
+
+    protected function getEducationAtDate(Span $span): ?string
+    {
+        if (!$this->contextDate) {
+            return null;
+        }
+        
+        $contextDate = $this->createDateFromContextDate();
+        if (!$contextDate) {
+            return null;
+        }
+        
+        // Get the most recent education connection that was active at this date
+        $educationConnection = $span->connectionsAsSubject()
+            ->where('connections.type_id', 'education')
+            ->whereHas('connectionSpan', function ($query) use ($contextDate) {
+                $query->where(function ($q) use ($contextDate) {
+                    $q->whereNull('start_year')
+                      ->orWhere(function ($q2) use ($contextDate) {
+                          $q2->where('start_year', '<=', $contextDate->format('Y'))
+                             ->where(function ($q3) use ($contextDate) {
+                                 $q3->whereNull('end_year')
+                                    ->orWhere('end_year', '>=', $contextDate->format('Y'));
+                             });
+                      });
+                });
+            })
+            ->with(['child', 'connectionSpan'])
+            ->join('spans as connection_spans', 'connections.connection_span_id', '=', 'connection_spans.id')
+            ->orderBy('connection_spans.start_year', 'desc')
+            ->orderBy('connection_spans.start_month', 'desc')
+            ->orderBy('connection_spans.start_day', 'desc')
+            ->select('connections.*')
+            ->first();
+        
+        $educationSpan = $educationConnection?->child;
+        return $educationSpan ? $this->makeSpanLink($educationSpan->name, $educationSpan) : null;
+    }
+
+    protected function getRecentEventsAtDate(Span $span): ?string
+    {
+        // This would require more complex logic to find recent events
+        // For now, return null to keep it simple
+        return null;
+    }
+
+    protected function getUpcomingEventsAtDate(Span $span): ?string
+    {
+        // This would require more complex logic to find upcoming events
+        // For now, return null to keep it simple
+        return null;
+    }
+
+    protected function createDateFromContextDate(): ?\DateTime
+    {
+        if (!$this->contextDate) {
+            return null;
+        }
+        
+        $dateParts = explode('-', $this->contextDate);
+        if (count($dateParts) === 3) {
+            $year = (int) $dateParts[0];
+            $month = (int) $dateParts[1];
+            $day = (int) $dateParts[2];
+            return new \DateTime("{$year}-{$month}-{$day}");
+        }
+        
+        return null;
+    }
+
+    // At-date condition methods
+    protected function hasAgeAtDate(Span $span): bool
+    {
+        return $this->getAgeAtDate($span) !== null;
+    }
+
+    protected function hasCurrentActivitiesAtDate(Span $span): bool
+    {
+        return $this->getCurrentActivitiesAtDate($span) !== null;
+    }
+
+    protected function hasRecentEventsAtDate(Span $span): bool
+    {
+        return $this->getRecentEventsAtDate($span) !== null;
+    }
+
+    protected function hasUpcomingEventsAtDate(Span $span): bool
+    {
+        return $this->getUpcomingEventsAtDate($span) !== null;
+    }
+
+    protected function hasResidenceAtDate(Span $span): bool
+    {
+        return $this->getResidenceAtDate($span) !== null;
+    }
+
+    protected function hasEmploymentAtDate(Span $span): bool
+    {
+        return $this->getEmploymentRoleAtDate($span) !== null;
+    }
+
+    protected function hasRelationshipAtDate(Span $span): bool
+    {
+        return $this->getRelationshipAtDate($span) !== null;
+    }
+
+    protected function hasEducationAtDate(Span $span): bool
+    {
+        return $this->getEducationAtDate($span) !== null;
     }
 } 

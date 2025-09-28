@@ -1,24 +1,31 @@
-@props(['span'])
+@props(['span', 'story' => null])
 
 @php
-    try {
-        $storyGenerator = app(App\Services\ConfigurableStoryGeneratorService::class);
-        $story = $storyGenerator->generateStory($span);
-    } catch (Exception $e) {
-        $story = [
-            'paragraphs' => [],
-            'metadata' => [],
-            'error' => $e->getMessage()
-        ];
+    // Use pre-generated story if provided, otherwise generate one
+    if (!$story) {
+        try {
+            $storyGenerator = app(App\Services\ConfigurableStoryGeneratorService::class);
+            $story = $storyGenerator->generateStory($span);
+        } catch (Exception $e) {
+            $story = [
+                'paragraphs' => [],
+                'metadata' => [],
+                'error' => $e->getMessage()
+            ];
+        }
     }
 @endphp
 
 <div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h6 class="card-title mb-0">
+            <i class="bi bi-book me-2"></i>
+            Story
+        </h6>
+    </div>
+
     <div class="card-body">
-        <h2 class="card-title h5 mb-3">
-            <i class="bi bi-book me-2"></i>Story
-        </h2>
-        
+
         @if(isset($story['error']))
             <div class="text-center py-3">
                 <i class="bi bi-exclamation-triangle text-warning" style="font-size: 2rem;"></i>
