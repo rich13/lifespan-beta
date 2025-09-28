@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SpanController;
+use App\Http\Controllers\PhotoController;
 use App\Http\Controllers\FamilyController;
 use App\Http\Controllers\JourneyController;
 use App\Http\Controllers\Auth\EmailFirstAuthController;
@@ -540,6 +541,38 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
     Route::middleware('span.access')->group(function () {
         Route::get('/history/{span}', [\App\Http\Controllers\SpanController::class, 'history'])->name('spans.history');
         Route::get('/history/{span}/{version}', [\App\Http\Controllers\SpanController::class, 'showVersion'])->name('spans.history.version');
+    });
+
+    // Photo routes - dedicated routes for photo spans (thing type with photo subtype)
+    Route::prefix('photos')->group(function () {
+        // Public routes with photo access control
+        Route::middleware('span.access')->group(function () {
+            // Primary route structure - handle both photo show and connections
+            Route::get('/', [PhotoController::class, 'index'])->name('photos.index');
+            
+            Route::get('/{photo}', [PhotoController::class, 'show'])->name('photos.show');
+            
+            // Specific photo routes
+            Route::get('/{photo}/story', [PhotoController::class, 'story'])->name('photos.story');
+            
+            // Time travel routes for photos
+            Route::get('/{photo}/at/{date}', [PhotoController::class, 'showAtDate'])
+                ->where('date', '[0-9]{4}-[0-9]{2}-[0-9]{2}')
+                ->name('photos.at-date');
+            
+            // Connection routes for photos (more specific routes first)
+            Route::get('/{photo}/connections', [PhotoController::class, 'allConnections'])->name('photos.all-connections');
+            Route::get('/{photo}/{predicate}', [PhotoController::class, 'listConnections'])->name('photos.connections');
+            Route::get('/{photo}/{predicate}/{object}', [PhotoController::class, 'showConnection'])->name('photos.connection');
+        });
+
+        // Protected routes for photo management
+        Route::middleware('auth')->group(function () {
+            Route::get('/{photo}/edit', [PhotoController::class, 'edit'])->name('photos.edit');
+            Route::put('/{photo}', [PhotoController::class, 'update'])->name('photos.update');
+            Route::delete('/{photo}', [PhotoController::class, 'destroy'])->name('photos.destroy');
+            Route::get('/{photo}/compare', [PhotoController::class, 'compare'])->name('photos.compare');
+        });
     });
 
     // Sets routes with access control
