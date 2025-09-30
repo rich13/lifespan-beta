@@ -4,6 +4,7 @@
     $user = Auth::user();
     $personalSpan = $user->personalSpan;
     $canCalculateReflection = false;
+    $personDiedBeforeReachingUserAge = false;
     
     if ($personalSpan && $span->id !== $personalSpan->id) {
         // Get start dates with precision
@@ -96,15 +97,15 @@
                     $reflectionType = 'person_older';
                     
                     // Check if person died before reaching viewer's current age
-                    $diedBeforeReflection = false;
+                    $personDiedBeforeReachingUserAge = false;
                     if (!$personIsAlive && $personAgeAtDeath) {
-                        $diedBeforeReflection = $personAgeAtDeath['years'] < $yourAge['years'] || 
+                        $personDiedBeforeReachingUserAge = $personAgeAtDeath['years'] < $yourAge['years'] || 
                             ($personAgeAtDeath['years'] == $yourAge['years'] && $personAgeAtDeath['months'] < $yourAge['months']) ||
                             ($personAgeAtDeath['years'] == $yourAge['years'] && $personAgeAtDeath['months'] == $personAgeAtDeath['months'] && $personAgeAtDeath['days'] < $yourAge['days']);
                     }
                     
                     // If they died before reaching your age, calculate when you were their age at death
-                    if ($diedBeforeReflection && $personAgeAtDeath) {
+                    if ($personDiedBeforeReachingUserAge && $personAgeAtDeath) {
                         $userAtPersonDeathAge = $viewerBirthDate->copy()
                             ->addYears($personAgeAtDeath['years'])
                             ->addMonths($personAgeAtDeath['months'])
@@ -152,6 +153,25 @@
                         'day' => $reflectionDate->day,
                     ];
 
+                    // Generate stories for both the person and user at the reflection date
+                    $storyGenerator = app(\App\Services\ConfigurableStoryGeneratorService::class);
+                    $personStory = null;
+                    $userStory = null;
+                    
+                    if (!$isReflectionBeforePersonBirth) {
+                        $personStory = $storyGenerator->generateStoryAtDate($span, $reflectionDate->format('Y-m-d'));
+                    }
+                    
+                    if (!$isReflectionBeforeBirth) {
+                        $userStory = $storyGenerator->generateStoryAtDate($personalSpan, $reflectionDate->format('Y-m-d'));
+                    }
+
+                    // Generate story for special case: when person died before reaching user's age
+                    $userAtDeathStory = null;
+                    if ($personDiedBeforeReachingUserAge && isset($userAtPersonDeathAge)) {
+                        $userAtDeathStory = $storyGenerator->generateStoryAtDate($personalSpan, $userAtPersonDeathAge->format('Y-m-d'));
+                    }
+
                     // Calculate durations using DateDurationCalculator
                     if ($isReflectionBeforeBirth) {
                         $duration = \App\Helpers\DateDurationCalculator::calculateDuration(
@@ -184,20 +204,34 @@
 
 @if($personalSpan && $span->id !== $personalSpan->id && $canCalculateReflection)
     <div class="card mb-4">
-        <div class="card-header d-flex justify-content-between align-items-center">
+        <div class="card-header">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
             <h6 class="card-title mb-0">
                 <i class="bi bi-symmetry-vertical me-2"></i>
                 Reflection
             </h6>
+                
+                <!-- View Toggle -->
+        <div class="btn-group btn-group-sm" role="group" aria-label="Reflection view toggle">
+            <input type="radio" class="btn-check" name="reflection-view-toggle-{{ $span->id }}" id="story-view-{{ $span->id }}" autocomplete="off" checked>
+            <label class="btn btn-outline-primary" for="story-view-{{ $span->id }}">
+                <i class="bi bi-book me-1"></i>Story View
+            </label>
+            
+            <input type="radio" class="btn-check" name="reflection-view-toggle-{{ $span->id }}" id="connections-view-{{ $span->id }}" autocomplete="off">
+            <label class="btn btn-outline-primary" for="connections-view-{{ $span->id }}">
+                <i class="bi bi-link-45deg me-1"></i>Connections View
+            </label>
+        </div>
+            </div>
         </div>
 
         <div class="card-body">
-            
+            {{-- Connections View Heading --}}
+            <div class="connections-view" style="display: none;">
             <p class="mb-3">
                 @if($reflectionType === 'person_older')
-                    @if(!$personIsAlive && $personAgeAtDeath && ($personAgeAtDeath['years'] < $yourAge['years'] || 
-                        ($personAgeAtDeath['years'] == $yourAge['years'] && $personAgeAtDeath['months'] < $yourAge['months']) ||
-                        ($personAgeAtDeath['years'] == $yourAge['years'] && $personAgeAtDeath['months'] == $personAgeAtDeath['months'] && $personAgeAtDeath['days'] < $yourAge['days'])))
+                    @if($personDiedBeforeReachingUserAge)
                         {{ $span->name }} died at {{ $personAgeAtDeath['years'] }} years, {{ $personAgeAtDeath['months'] }} months, and {{ $personAgeAtDeath['days'] }} days old, which was before reaching your current age.
                     @elseif(!$isReflectionInPast)
                         When {{ $span->name }} is your current age, it will be 
@@ -210,9 +244,7 @@
                     When you were {{ $span->name }}'s age at death ({{ $personAgeAtDeath['years'] }} years, {{ $personAgeAtDeath['months'] }} months, and {{ $personAgeAtDeath['days'] }} days old), it was 
                 @endif
                 
-                @if($reflectionType === 'person_older' && !$personIsAlive && $personAgeAtDeath && ($personAgeAtDeath['years'] < $yourAge['years'] || 
-                    ($personAgeAtDeath['years'] == $yourAge['years'] && $personAgeAtDeath['months'] < $yourAge['months']) ||
-                    ($personAgeAtDeath['years'] == $yourAge['years'] && $personAgeAtDeath['months'] == $personAgeAtDeath['months'] && $personAgeAtDeath['days'] < $yourAge['days'])))
+                @if($personDiedBeforeReachingUserAge)
                     {{-- Don't show date link when person died before reaching viewer's age --}}
                 @else
                     <a href="{{ route('date.explore', ['date' => $reflectionDateObj->year . '-' . 
@@ -225,9 +257,7 @@
             </p>
             
             @if(isset($duration))
-                @if($reflectionType === 'person_older' && !$personIsAlive && $personAgeAtDeath && ($personAgeAtDeath['years'] < $yourAge['years'] || 
-                    ($personAgeAtDeath['years'] == $yourAge['years'] && $personAgeAtDeath['months'] < $yourAge['months']) ||
-                    ($personAgeAtDeath['years'] == $yourAge['years'] && $personAgeAtDeath['months'] == $personAgeAtDeath['months'] && $personAgeAtDeath['days'] < $yourAge['days'])))
+                @if($personDiedBeforeReachingUserAge)
                     {{-- Don't show any additional text when person died before reaching viewer's age --}}
                 @elseif($isReflectionBeforeBirth)
                     @if($isReflectionAfterDeath && isset($timeAfterDeath))
@@ -241,12 +271,12 @@
                     @endif
                 @endif
             @endif
+            </div>
 
             {{-- Connection elements --}}
-            @if($reflectionType === 'person_older' && !$personIsAlive && $personAgeAtDeath && ($personAgeAtDeath['years'] < $yourAge['years'] || 
-                ($personAgeAtDeath['years'] == $yourAge['years'] && $personAgeAtDeath['months'] < $yourAge['months']) ||
-                ($personAgeAtDeath['years'] == $yourAge['years'] && $personAgeAtDeath['months'] == $personAgeAtDeath['months'] && $personAgeAtDeath['days'] < $yourAge['days'])))
+            @if($personDiedBeforeReachingUserAge)
                 {{-- Show what was happening in user's life when they were the person's age at death --}}
+                <div class="connections-view" style="display: none;">
                 @if(isset($userAtPersonDeathAgeObj))
                     <div class="mt-4">
                         <p class="text-muted mb-2">
@@ -265,8 +295,161 @@
                             :date="$userAtPersonDeathAgeObj" />
                     </div>
                 @endif
-            @elseif(!$isReflectionBeforeBirth)
-                <div class="mt-4">
+                </div>
+
+                <!-- Story View for special case -->
+                <div class="story-view mt-4">
+                    @if(isset($userAtPersonDeathAgeObj))
+                        {{-- Show story for the user at the person's death age --}}
+                        @if($userAtDeathStory && !empty($userAtDeathStory['paragraphs']))
+                            <div class="card mb-3">
+                                <div class="card-header py-2">
+                                    <h6 class="mb-0">
+                                        When you were the same age as {{ $span->name }} when they died, it was {{ \App\Helpers\DateHelper::formatDate($userAtPersonDeathAgeObj->year, $userAtPersonDeathAgeObj->month, $userAtPersonDeathAgeObj->day) }}
+                                    </h6>
+                                </div>
+                                <div class="card-body py-3">
+                                    @foreach($userAtDeathStory['paragraphs'] as $paragraph)
+                                        <p class="mb-2">{!! $paragraph !!}</p>
+                                    @endforeach
+                                </div>
+                            </div>
+                        @else
+                            <div class="alert alert-info mb-3">
+                                <i class="bi bi-info-circle me-1"></i>
+                                No story available for you on this date. Try the connections view instead.
+                            </div>
+                        @endif
+                    @endif
+                </div>
+            @else
+                <!-- Story View -->
+                <div class="story-view mt-4">
+                    @if($reflectionType === 'person_older')
+                        {{-- Show story for the person at the reflection date --}}
+                        @if(!$isReflectionBeforePersonBirth && $personStory && !empty($personStory['paragraphs']))
+                            <div class="card mb-3">
+                                <div class="card-header py-2">
+                                    <h6 class="mb-0">
+                                        @if($reflectionType === 'person_older')
+                                            @if($personDiedBeforeReachingUserAge)
+                                                {{ $span->name }} died at {{ $personAgeAtDeath['years'] }} years, {{ $personAgeAtDeath['months'] }} months, and {{ $personAgeAtDeath['days'] }} days old, which was before reaching your current age.
+                                            @elseif(!$isReflectionInPast)
+                                                When {{ $span->name }} is your current age, it will be {{ \App\Helpers\DateHelper::formatDate($reflectionDateObj->year, $reflectionDateObj->month, $reflectionDateObj->day) }}
+                                            @else
+                                                When {{ $span->name }} was your current age, it was {{ \App\Helpers\DateHelper::formatDate($reflectionDateObj->year, $reflectionDateObj->month, $reflectionDateObj->day) }}
+                                            @endif
+                                        @endif
+                                    </h6>
+                                </div>
+                                <div class="card-body py-3">
+                                    @foreach($personStory['paragraphs'] as $paragraph)
+                                        <p class="mb-2">{!! $paragraph !!}</p>
+                                    @endforeach
+                                </div>
+                            </div>
+                        @endif
+                        
+                        {{-- Show story for the user at the reflection date (only if reflection is not before birth) --}}
+                        @if(!$isReflectionBeforeBirth)
+                            @if($userStory && !empty($userStory['paragraphs']))
+                                <div class="card mb-3">
+                                    <div class="card-header py-2">
+                                        <h6 class="mb-0">
+                                            @if(isset($duration))
+                                                This is when you {{ $isReflectionAgeInPast ? 'were' : 'will be' }} {{ $duration['years'] ?? 0 }} years, {{ $duration['months'] ?? 0 }} months, and {{ $duration['days'] ?? 0 }} days old.
+                                            @endif
+                                        </h6>
+                                    </div>
+                                    <div class="card-body py-3">
+                                        @foreach($userStory['paragraphs'] as $paragraph)
+                                            <p class="mb-2">{!! $paragraph !!}</p>
+                                        @endforeach
+                                    </div>
+                                </div>
+                            @else
+                                <div class="alert alert-info mb-3">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    No story available for you on this date. Try the connections view instead.
+                                </div>
+                            @endif
+                        @endif
+                    @else
+                        {{-- For younger people, show user's story first, then person's --}}
+                        {{-- Show story for the user at the reflection date --}}
+                        @if($userStory && !empty($userStory['paragraphs']))
+                            <div class="card mb-3">
+                                <div class="card-header py-2">
+                                    <h6 class="mb-0">
+                                        @if($reflectionType === 'person_younger')
+                                            When you were {{ $span->name }}'s current age, it was {{ \App\Helpers\DateHelper::formatDate($reflectionDateObj->year, $reflectionDateObj->month, $reflectionDateObj->day) }}
+                                        @elseif($reflectionType === 'person_younger_dead')
+                                            When you were the same age as {{ $span->name }} when they died, it was {{ \App\Helpers\DateHelper::formatDate($reflectionDateObj->year, $reflectionDateObj->month, $reflectionDateObj->day) }}
+                                        @endif
+                                    </h6>
+                                </div>
+                                <div class="card-body py-3">
+                                    @foreach($userStory['paragraphs'] as $paragraph)
+                                        <p class="mb-2">{!! $paragraph !!}</p>
+                                    @endforeach
+                                </div>
+                            </div>
+                        @else
+                            <div class="alert alert-info mb-3">
+                                <i class="bi bi-info-circle me-1"></i>
+                                No story available for you on this date. Try the connections view instead.
+                            </div>
+                        @endif
+                        
+                        {{-- Show story for the person at the reflection date --}}
+                        @if(!$isReflectionBeforePersonBirth && $personStory && !empty($personStory['paragraphs']))
+                            <div class="card mb-3">
+                                <div class="card-header py-2">
+                                    <h6 class="mb-0">
+                                        @if($reflectionType === 'person_younger')
+                                            @php
+                                                if (!$isReflectionBeforePersonBirth) {
+                                                    // Calculate the person's age as of the reflection date, not their current age
+                                                    $personAgeAtReflection = \App\Helpers\DateDurationCalculator::calculateDuration(
+                                                        (object)['year' => $personBirthDate->year, 'month' => $personBirthDate->month, 'day' => $personBirthDate->day],
+                                                        (object)['year' => $reflectionDate->year, 'month' => $reflectionDate->month, 'day' => $reflectionDate->day]
+                                                    );
+                                                }
+                                            @endphp
+                                            @if(!$isReflectionBeforePersonBirth)
+                                                This is when {{ $span->name }} {{ $isReflectionAgeInPast ? 'was' : 'will be' }} {{ $personAgeAtReflection['years'] ?? 0 }} years, {{ $personAgeAtReflection['months'] ?? 0 }} months, and {{ $personAgeAtReflection['days'] ?? 0 }} days old.
+                                            @else
+                                                @php
+                                                    // Calculate time before person's birth
+                                                    $timeBeforePersonBirth = \App\Helpers\DateDurationCalculator::calculateDuration(
+                                                        (object)['year' => $reflectionDate->year, 'month' => $reflectionDate->month, 'day' => $reflectionDate->day],
+                                                        (object)['year' => $personBirthDate->year, 'month' => $personBirthDate->month, 'day' => $personBirthDate->day]
+                                                    );
+                                                @endphp
+                                                This is {{ $timeBeforePersonBirth['years'] ?? 0 }} years, {{ $timeBeforePersonBirth['months'] ?? 0 }} months, and {{ $timeBeforePersonBirth['days'] ?? 0 }} days before {{ $span->name }} was born.
+                                            @endif
+                                        @elseif($reflectionType === 'person_younger_dead')
+                                            This is when {{ $span->name }} {{ $isReflectionAgeInPast ? 'was' : 'would have been' }} {{ $personAgeAtDeath['years'] ?? 0 }} years, {{ $personAgeAtDeath['months'] ?? 0 }} months, and {{ $personAgeAtDeath['days'] ?? 0 }} days old.
+                                        @endif
+                                    </h6>
+                                </div>
+                                <div class="card-body py-3">
+                                    @foreach($personStory['paragraphs'] as $paragraph)
+                                        <p class="mb-2">{!! $paragraph !!}</p>
+                                    @endforeach
+                                </div>
+                            </div>
+                        @elseif(!$isReflectionBeforePersonBirth)
+                            <div class="alert alert-info mb-3">
+                                <i class="bi bi-info-circle me-1"></i>
+                                No story available for {{ $span->name }} on this date. Try the connections view instead.
+                            </div>
+                        @endif
+                    @endif
+                </div>
+
+                <!-- Connections View -->
+                <div class="connections-view mt-4" style="display: none;">
                     @if($reflectionType === 'person_older')
                         {{-- Show connections for the person at the reflection date --}}
                         @if(!$isReflectionBeforePersonBirth)
@@ -336,4 +519,22 @@
             @endif
         </div>
     </div>
+
+    <script>
+    $(document).ready(function() {
+        // Handle reflection view toggle
+        $('input[name="reflection-view-toggle-{{ $span->id }}"]').change(function() {
+            const selectedView = $(this).attr('id');
+            const cardContainer = $(this).closest('.card');
+            
+            if (selectedView === 'story-view-{{ $span->id }}') {
+                cardContainer.find('.story-view').show();
+                cardContainer.find('.connections-view').hide();
+            } else if (selectedView === 'connections-view-{{ $span->id }}') {
+                cardContainer.find('.story-view').hide();
+                cardContainer.find('.connections-view').show();
+            }
+        });
+    });
+    </script>
 @endif 
