@@ -22,8 +22,34 @@ class PhotoController extends Controller
     public function index(Request $request): View
     {
         $query = Span::where('type_id', 'thing')
-            ->whereJsonContains('metadata->subtype', 'photo')
-            ->accessibleSpans();
+            // Use direct JSON equality; subtype is stored as a string, not an array
+            ->where('metadata->subtype', 'photo');
+
+        // Apply access control (mirror Span::applyAccessControl logic for listing)
+        $user = auth()->user();
+        if (!$user) {
+            // Guests: only public
+            $query->where('access_level', 'public');
+        } elseif (!$user->is_admin) {
+            // Non-admin: public, own, user or group permissions
+            $query->where(function ($q) use ($user) {
+                $q->where('access_level', 'public')
+                  ->orWhere('owner_id', $user->id)
+                  ->orWhereHas('spanPermissions', function ($permQ) use ($user) {
+                      $permQ->where('user_id', $user->id)
+                            ->whereIn('permission_type', ['view', 'edit']);
+                  })
+                  ->orWhereHas('spanPermissions', function ($permQ) use ($user) {
+                      $permQ->whereNotNull('group_id')
+                            ->whereIn('permission_type', ['view', 'edit'])
+                            ->whereHas('group', function ($groupQ) use ($user) {
+                                $groupQ->whereHas('users', function ($userQ) use ($user) {
+                                    $userQ->where('user_id', $user->id);
+                                });
+                            });
+                  });
+            });
+        }
 
         // Apply search filter
         if ($request->filled('search')) {
@@ -41,7 +67,14 @@ class PhotoController extends Controller
             $query->where('state', $request->state);
         }
 
-        $photos = $query->orderBy('name')->paginate(20);
+        $photos = $query
+            ->with(['connectionsAsSubject' => function ($q) {
+                $q->whereHas('type', function ($t) {
+                    $t->where('type', 'features');
+                })->with('child');
+            }])
+            ->orderBy('name')
+            ->paginate(24);
 
         return view('photos.index', compact('photos'));
     }

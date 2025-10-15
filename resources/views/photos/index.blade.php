@@ -1,49 +1,33 @@
 @extends('layouts.app')
 
-@section('title', 'Photos')
+@section('page_title')
+    <x-breadcrumb :items="[
+        [
+            'text' => 'Photos',
+            'url' => route('photos.index'),
+            'icon' => 'image',
+            'icon_category' => 'action'
+        ]
+    ]" />
+@endsection
 
 @section('content')
 <div class="container-fluid">
     <div class="row">
         <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <div>
-                    <h1 class="h3 mb-0">
-                        <i class="bi bi-images me-2"></i>Photos
-                    </h1>
-                    <p class="text-muted mb-0">Browse and manage your photo collection</p>
-                </div>
-                
-                @auth
-                    <div>
-                        <a href="{{ route('spans.create') }}" class="btn btn-primary">
-                            <i class="bi bi-plus-circle me-1"></i>Add Photo
-                        </a>
-                    </div>
-                @endauth
-            </div>
+            <div class="mb-4"></div>
 
             <!-- Filters -->
-            <div class="card mb-4">
+            <div class="card mb-3">
                 <div class="card-body">
                     <form method="GET" action="{{ route('photos.index') }}" class="row g-3">
-                        <div class="col-md-4">
+                        <div class="col-md-6 col-lg-4">
                             <label for="search" class="form-label">Search</label>
                             <input type="text" class="form-control" id="search" name="search" 
                                    value="{{ request('search') }}" placeholder="Search photos...">
                         </div>
                         
-                        <div class="col-md-3">
-                            <label for="access_level" class="form-label">Access Level</label>
-                            <select class="form-select" id="access_level" name="access_level">
-                                <option value="">All Access Levels</option>
-                                <option value="public" {{ request('access_level') === 'public' ? 'selected' : '' }}>Public</option>
-                                <option value="private" {{ request('access_level') === 'private' ? 'selected' : '' }}>Private</option>
-                                <option value="shared" {{ request('access_level') === 'shared' ? 'selected' : '' }}>Shared</option>
-                            </select>
-                        </div>
-                        
-                        <div class="col-md-3">
+                        <div class="col-md-6 col-lg-4">
                             <label for="state" class="form-label">State</label>
                             <select class="form-select" id="state" name="state">
                                 <option value="">All States</option>
@@ -52,8 +36,7 @@
                                 <option value="complete" {{ request('state') === 'complete' ? 'selected' : '' }}>Complete</option>
                             </select>
                         </div>
-                        
-                        <div class="col-md-2">
+                        <div class="col-md-12 col-lg-4">
                             <label class="form-label">&nbsp;</label>
                             <div class="d-grid">
                                 <button type="submit" class="btn btn-outline-primary">
@@ -65,19 +48,67 @@
                 </div>
             </div>
 
+            <!-- Access Level Tabs -->
+            @php
+                $activeLevel = strtolower((string) request('access_level'));
+                $baseParams = request()->except(['page','access_level']);
+            @endphp
+            <ul class="nav nav-pills mb-4">
+                @php
+                    $tabs = [
+                        ['label' => 'All', 'value' => ''],
+                        ['label' => 'Public', 'value' => 'public'],
+                        ['label' => 'Shared', 'value' => 'shared'],
+                        ['label' => 'Private', 'value' => 'private'],
+                    ];
+                @endphp
+                @foreach($tabs as $tab)
+                    @php
+                        $params = $baseParams;
+                        if ($tab['value'] !== '') { $params['access_level'] = $tab['value']; }
+                        $url = route('photos.index', $params);
+                        $isActive = ($tab['value'] === '' && $activeLevel === '') || $activeLevel === $tab['value'];
+                    @endphp
+                    <li class="nav-item me-2 mb-2">
+                        <a class="nav-link {{ $isActive ? 'active' : '' }}" href="{{ $url }}">
+                            {{ $tab['label'] }}
+                        </a>
+                    </li>
+                @endforeach
+            </ul>
+
             <!-- Photos Grid -->
             @if($photos->count() > 0)
-                <div class="row">
+                <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-5 row-cols-xl-6 row-cols-xxl-8">
                     @foreach($photos as $photo)
-                        <div class="col-lg-3 col-md-4 col-sm-6 mb-4">
+                        <div class="col mb-4">
                             <div class="card h-100 photo-card">
                                 <div class="card-img-top-container" style="height: 200px; overflow: hidden; background-color: #f8f9fa;">
-                                    @if(isset($photo->metadata['image_url']) && $photo->metadata['image_url'])
-                                        <img src="{{ $photo->metadata['image_url'] }}" 
-                                             alt="{{ $photo->name }}"
-                                             class="card-img-top"
-                                             style="width: 100%; height: 100%; object-fit: cover;"
-                                             loading="lazy">
+                                    @php
+                                        $meta = $photo->metadata ?? [];
+                                        $imgSrc = $meta['thumbnail_url']
+                                            ?? $meta['medium_url']
+                                            ?? null;
+
+                                        if (!$imgSrc && isset($meta['filename']) && $meta['filename']) {
+                                            // Use proxy route if we have a stored filename
+                                            $imgSrc = route('images.proxy', ['spanId' => $photo->id, 'size' => 'thumbnail']);
+                                        }
+
+                                        if (!$imgSrc && isset($meta['image_url']) && $meta['image_url']) {
+                                            // Legacy direct URL fallback
+                                            $imgSrc = $meta['image_url'];
+                                        }
+                                    @endphp
+
+                                    @if($imgSrc)
+                                        <a href="{{ route('photos.show', $photo) }}" class="d-block">
+                                            <img src="{{ $imgSrc }}"
+                                                 alt="{{ $photo->name }}"
+                                                 class="card-img-top"
+                                                 style="width: 100%; height: 100%; object-fit: cover;"
+                                                 loading="lazy">
+                                        </a>
                                     @else
                                         <div class="d-flex align-items-center justify-content-center h-100 text-muted">
                                             <div class="text-center">
@@ -100,67 +131,70 @@
                                             <span class="badge bg-{{ $photo->state === 'complete' ? 'success' : ($photo->state === 'draft' ? 'warning' : 'secondary') }}">
                                                 {{ ucfirst($photo->state) }}
                                             </span>
-                                            <span class="badge bg-{{ $photo->access_level === 'public' ? 'primary' : ($photo->access_level === 'private' ? 'danger' : 'info') }}">
-                                                {{ ucfirst($photo->access_level) }}
-                                            </span>
+                                            @php
+                                                $level = strtolower(trim($photo->access_level ?? 'public'));
+                                                $levelClass = match ($level) {
+                                                    'public' => 'primary',
+                                                    'private' => 'danger',
+                                                    'shared' => 'info',
+                                                    default => 'secondary',
+                                                };
+                                                $label = $level ? ucfirst($level) : 'Public';
+                                                $canChangeAccess = auth()->check() && ($photo->isEditableBy(auth()->user()) || auth()->user()->is_admin || $photo->owner_id === auth()->id());
+                                            @endphp
+                                            @if($canChangeAccess)
+                                                <button type="button"
+                                                        class="badge bg-{{ $levelClass }} border-0"
+                                                        title="Change access level"
+                                                        data-model-id="{{ $photo->id }}"
+                                                        data-model-class="App\\Models\\Span"
+                                                        data-current-level="{{ $level }}"
+                                                        onclick="openAccessLevelModal(this)">
+                                                    {{ $label }}
+                                                </button>
+                                            @else
+                                                <span class="badge bg-{{ $levelClass }}">
+                                                    {{ $label }}
+                                                </span>
+                                            @endif
                                         </div>
                                         
                                         @if($photo->start_year)
-                                            <small class="text-muted">
+                                            <small class="text-muted d-block mb-2">
                                                 <i class="bi bi-calendar me-1"></i>{{ $photo->start_year }}
                                             </small>
+                                        @endif
+
+                                        @php
+                                            $features = $photo->connectionsAsSubject()
+                                                ->whereHas('type', function($q){ $q->where('type','features'); })
+                                                ->with('child')
+                                                ->get();
+                                        @endphp
+                                        @if($features->isNotEmpty())
+                                            <div class="mb-1">
+                                                @foreach($features->take(6) as $conn)
+                                                    <a href="{{ route('spans.show', $conn->child) }}" class="badge bg-secondary text-decoration-none me-1 mb-1">
+                                                        <i class="bi bi-person me-1"></i>{{ $conn->child->name }}
+                                                    </a>
+                                                @endforeach
+                                                @if($features->count() > 6)
+                                                    <span class="badge bg-light text-dark">+{{ $features->count() - 6 }}</span>
+                                                @endif
+                                            </div>
                                         @endif
                                     </div>
                                 </div>
                                 
-                                <div class="card-footer bg-transparent">
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <small class="text-muted">
-                                            <i class="bi bi-person me-1"></i>{{ $photo->owner->name ?? 'Unknown' }}
-                                        </small>
-                                        
-                                        @auth
-                                            @if($photo->isEditableBy(auth()->user()))
-                                                <div class="dropdown">
-                                                    <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown">
-                                                        <i class="bi bi-three-dots"></i>
-                                                    </button>
-                                                    <ul class="dropdown-menu">
-                                                        <li>
-                                                            <a class="dropdown-item" href="{{ route('photos.edit', $photo) }}">
-                                                                <i class="bi bi-pencil me-2"></i>Edit
-                                                            </a>
-                                                        </li>
-                                                        <li>
-                                                            <a class="dropdown-item" href="{{ route('photos.compare', $photo) }}">
-                                                                <i class="bi bi-arrow-left-right me-2"></i>Compare
-                                                            </a>
-                                                        </li>
-                                                        <li><hr class="dropdown-divider"></li>
-                                                        <li>
-                                                            <form method="POST" action="{{ route('photos.destroy', $photo) }}" 
-                                                                  onsubmit="return confirm('Are you sure you want to delete this photo?')">
-                                                                @csrf
-                                                                @method('DELETE')
-                                                                <button type="submit" class="dropdown-item text-danger">
-                                                                    <i class="bi bi-trash me-2"></i>Delete
-                                                                </button>
-                                                            </form>
-                                                        </li>
-                                                    </ul>
-                                                </div>
-                                            @endif
-                                        @endauth
-                                    </div>
-                                </div>
+                                
                             </div>
                         </div>
                     @endforeach
                 </div>
 
                 <!-- Pagination -->
-                <div class="d-flex justify-content-center">
-                    {{ $photos->links() }}
+                <div class="mt-4">
+                    <x-pagination :paginator="$photos->appends(request()->query())" />
                 </div>
             @else
                 <div class="text-center py-5">

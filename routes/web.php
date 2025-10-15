@@ -543,6 +543,11 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
         Route::get('/history/{span}/{version}', [\App\Http\Controllers\SpanController::class, 'showVersion'])->name('spans.history.version');
     });
 
+    // Quick Education creation (scoped feature)
+    Route::post('/spans/quick-education', [\App\Http\Controllers\SpanController::class, 'quickAddEducation'])
+        ->middleware('auth')
+        ->name('spans.quick-education.store');
+
     // Photo routes - dedicated routes for photo spans (thing type with photo subtype)
     Route::prefix('photos')->group(function () {
         // Public routes with photo access control
