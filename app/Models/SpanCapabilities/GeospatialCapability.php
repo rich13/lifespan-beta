@@ -60,7 +60,11 @@ class GeospatialCapability implements SpanCapability
         $metadata = $this->span->metadata ?? [];
         
         if (isset($metadata['coordinates'])) {
-            $this->validateCoordinates($metadata['coordinates']);
+            // Normalise coordinates to array if provided as a string "lat,lon"
+            $coords = $this->normaliseCoordinates($metadata['coordinates']);
+            if ($coords !== null) {
+                $this->validateCoordinates($coords);
+            }
         }
         
         if (isset($metadata['osm_data'])) {
@@ -91,7 +95,8 @@ class GeospatialCapability implements SpanCapability
      */
     public function getCoordinates(): ?array
     {
-        return $this->span->metadata['coordinates'] ?? null;
+        $raw = $this->span->metadata['coordinates'] ?? null;
+        return $this->normaliseCoordinates($raw);
     }
 
     /**
@@ -158,6 +163,44 @@ class GeospatialCapability implements SpanCapability
         if (!is_numeric($lng) || $lng < -180 || $lng > 180) {
             throw new \InvalidArgumentException('Invalid longitude value');
         }
+    }
+
+    /**
+     * Convert various coordinate formats to a standard array structure.
+     * Accepts:
+     * - array with 'latitude' and 'longitude' keys (strings or numbers)
+     * - string in format "lat,lon"
+     */
+    protected function normaliseCoordinates($value): ?array
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        if (is_string($value)) {
+            $parts = array_map('trim', explode(',', $value));
+            if (count($parts) === 2 && is_numeric($parts[0]) && is_numeric($parts[1])) {
+                return [
+                    'latitude' => (float) $parts[0],
+                    'longitude' => (float) $parts[1],
+                ];
+            }
+            // Unrecognised string format
+            return null;
+        }
+
+        if (is_array($value)) {
+            // Cast to floats if present
+            if (isset($value['latitude']) && isset($value['longitude'])) {
+                return [
+                    'latitude' => is_numeric($value['latitude']) ? (float) $value['latitude'] : $value['latitude'],
+                    'longitude' => is_numeric($value['longitude']) ? (float) $value['longitude'] : $value['longitude'],
+                ];
+            }
+            return null;
+        }
+
+        return null;
     }
 
     /**

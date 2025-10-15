@@ -5,7 +5,7 @@ namespace App\Helpers;
 class GitVersionHelper
 {
     private const VERSION_PREFIX = 'Lifespan Prototype';
-    private const VERSION_NUMBER = '0.644'; // Update this when deploying
+    private const VERSION_NUMBER = '0.645'; // Update this when deploying
 
     public static function getVersion(): string
     {
