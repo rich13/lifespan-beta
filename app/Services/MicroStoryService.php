@@ -124,6 +124,46 @@ class MicroStoryService
         
         return $result;
     }
+
+    /**
+     * Custom data method: get phase name for 'during' connections
+     */
+    private function createPhaseName(Connection $connection): string
+    {
+        // For 'during' connections, subject is phase or object is phase; prefer the non-connection span
+        $phase = null;
+        if ($connection->parent && $connection->parent->type_id !== 'connection') {
+            $phase = $connection->parent;
+        } elseif ($connection->child && $connection->child->type_id !== 'connection') {
+            $phase = $connection->child;
+        }
+        return $phase ? e($phase->name) : 'a phase';
+    }
+
+    /**
+     * Custom data method: from a 'during' connection, infer the organisation from the linked education
+     */
+    private function createOrganisationFromDuring(Connection $connection): string
+    {
+        // Find the linked education connection span (the other end of the 'during') and then the organisation
+        $educationSpan = null;
+        if ($connection->parent && $connection->parent->type_id === 'connection') {
+            $educationSpan = $connection->child; // likely connection span on child
+        }
+        if ($connection->child && $connection->child->type_id === 'connection') {
+            $educationSpan = $connection->parent; // or on parent
+        }
+
+        // The educationSpan here should be the connection span for the education link (type_id=connection)
+        if ($educationSpan && $educationSpan->type_id === 'connection') {
+            // Find the actual education connection that uses this connection span
+            $eduConn = Connection::where('connection_span_id', $educationSpan->id)->where('type_id', 'education')->first();
+            if ($eduConn && $eduConn->child) {
+                return '<a href="' . route('spans.show', $eduConn->child) . '" class="text-decoration-none" title="' . e($eduConn->child->name) . '">' . e($eduConn->child->name) . '</a>';
+            }
+        }
+        return 'the organisation';
+    }
     
     /**
      * Call a data method for spans

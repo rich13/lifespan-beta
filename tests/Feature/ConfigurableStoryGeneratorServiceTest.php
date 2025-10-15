@@ -239,4 +239,79 @@ class ConfigurableStoryGeneratorServiceTest extends TestCase
         // Should not include album (since no album connection)
         $this->assertStringNotContainsString('It appears on', $storyText);
     }
+
+    public function test_plaque_story_generation_with_features_and_location(): void
+    {
+        // Create a person that the plaque features
+        $person = Span::factory()->create([
+            'name' => 'William Morris',
+            'type_id' => 'person',
+        ]);
+
+        // Create a location for the plaque
+        $location = Span::factory()->create([
+            'name' => 'Woodford Hall',
+            'type_id' => 'place',
+        ]);
+
+        // Create a plaque
+        $plaque = Span::factory()->create([
+            'name' => 'William Morris and Woodford Hall white plaque',
+            'type_id' => 'thing',
+            'metadata' => ['subtype' => 'plaque', 'colour' => 'white'],
+            'start_year' => 1847,
+        ]);
+
+        // Connect plaque to person (plaque FEATURES person - plaque is parent, person is child)
+        Connection::factory()->create([
+            'parent_id' => $plaque->id,
+            'child_id' => $person->id,
+            'type_id' => 'features',
+        ]);
+
+        // Connect plaque to location (plaque is LOCATED at location - plaque is parent, location is child)
+        Connection::factory()->create([
+            'parent_id' => $plaque->id,
+            'child_id' => $location->id,
+            'type_id' => 'located',
+        ]);
+
+        $service = new ConfigurableStoryGeneratorService();
+        $story = $service->generateStory($plaque);
+
+        $storyText = $story['paragraphs'][0] ?? '';
+
+        // Should include the featured person
+        $this->assertStringContainsString('This plaque features', $storyText);
+        $this->assertStringContainsString('William Morris', $storyText);
+
+        // Should include the location
+        $this->assertStringContainsString('located at', $storyText);
+        $this->assertStringContainsString('Woodford Hall', $storyText);
+
+        // Should NOT use the fallback template
+        $this->assertStringNotContainsString('was a plaque thing', $storyText);
+        $this->assertStringNotContainsString("That's all for now", $storyText);
+    }
+
+    public function test_plaque_story_without_connections_uses_fallback(): void
+    {
+        // Create a plaque without any connections
+        $plaque = Span::factory()->create([
+            'name' => 'Unknown Plaque',
+            'type_id' => 'thing',
+            'metadata' => ['subtype' => 'plaque'],
+            'start_year' => 1900,
+        ]);
+
+        $service = new ConfigurableStoryGeneratorService();
+        $story = $service->generateStory($plaque);
+
+        $storyText = $story['paragraphs'][0] ?? '';
+
+        // Without connections, should use the fallback template
+        $this->assertStringContainsString('Unknown Plaque', $storyText);
+        $this->assertStringContainsString('plaque thing', $storyText);
+        $this->assertStringContainsString("That's all for now", $storyText);
+    }
 } 

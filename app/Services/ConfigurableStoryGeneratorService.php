@@ -20,10 +20,309 @@ class ConfigurableStoryGeneratorService
     }
 
     /**
+     * Generate a story for a connection span (e.g., 'during' phase connection span)
+     */
+    private function generateConnectionSpanStory(Span $connectionSpan): ?array
+    {
+        // Find the connection that uses this span as its connection_span_id
+        $connection = Connection::where('connection_span_id', $connectionSpan->id)->first();
+        if (!$connection) {
+            return null;
+        }
+
+        // Build connection story sentence exclusively here (no microstory)
+        $sentence = '';
+        if ($connection->type_id === 'during') {
+            // Determine which end is the phase span (non-connection) and which end is the education connection span (type=connection)
+            $phaseSpan = null;
+            $educationConnSpan = null;
+            if ($connection->parent && $connection->parent->type_id === 'connection') {
+                $educationConnSpan = $connection->parent;
+                $phaseSpan = $connection->child && $connection->child->type_id !== 'connection' ? $connection->child : $phaseSpan;
+            }
+            if ($connection->child && $connection->child->type_id === 'connection') {
+                $educationConnSpan = $connection->child;
+                $phaseSpan = $connection->parent && $connection->parent->type_id !== 'connection' ? $connection->parent : $phaseSpan;
+            }
+
+            // Resolve the person and organisation via the education connection that uses the education connection span
+            $educationConn = $educationConnSpan
+                ? Connection::where('type_id', 'education')
+                    ->where('connection_span_id', $educationConnSpan->id)
+                    ->with(['parent','child'])
+                    ->first()
+                : null;
+
+            $person = $educationConn?->parent;       // subject
+            $organisation = $educationConn?->child;  // object
+
+            // Prefer dates from the current connection span; fallback to phase span dates
+            $startHtml = $this->formatDateLink($connectionSpan->start_year, $connectionSpan->start_month, $connectionSpan->start_day);
+            $endHtml = $this->formatDateLink($connectionSpan->end_year, $connectionSpan->end_month, $connectionSpan->end_day);
+            if (!$startHtml && $phaseSpan) {
+                $startHtml = $this->formatDateLink($phaseSpan->start_year, $phaseSpan->start_month, $phaseSpan->start_day);
+            }
+            if (!$endHtml && $phaseSpan) {
+                $endHtml = $this->formatDateLink($phaseSpan->end_year, $phaseSpan->end_month, $phaseSpan->end_day);
+            }
+
+            $subjectHtml = $person
+                ? '<a href="' . route('spans.show', $person) . '" class="text-decoration-none" title="' . e($person->name) . '">' . e($person->name) . '</a>'
+                : 'They';
+            $phaseHtml = $phaseSpan
+                ? '<a href="' . route('spans.show', $phaseSpan) . '" class="text-decoration-none" title="' . e($phaseSpan->name) . '">' . e($phaseSpan->name) . '</a>'
+                : 'a phase';
+            $orgHtml = $organisation
+                ? '<a href="' . route('spans.show', $organisation) . '" class="text-decoration-none" title="' . e($organisation->name) . '">' . e($organisation->name) . '</a>'
+                : 'an organisation';
+
+            $sentence = "$subjectHtml was in $phaseHtml at $orgHtml";
+            if ($startHtml && $endHtml) {
+                $sentence .= " between $startHtml and $endHtml.";
+            } elseif ($startHtml) {
+                $sentence .= " from $startHtml.";
+            } else {
+                $sentence .= ".";
+            }
+        } else {
+            // Generic connection sentence if needed later
+            $sentence = e($connectionSpan->name);
+        }
+
+        return [
+            'title' => $connectionSpan->name,
+            'paragraphs' => [$sentence],
+            'metadata' => [],
+        ];
+    }
+
+    /**
+     * Condition: hasEducationPhases
+     */
+    public function hasEducationPhases(Span $span): bool
+    {
+        if ($span->type_id !== 'person') {
+            return false;
+        }
+        // Person → education connections
+        $educationConnections = $span->connectionsAsSubject()
+            ->where('type_id', 'education')
+            ->with('connectionSpan')
+            ->get();
+        foreach ($educationConnections as $edu) {
+            $connSpan = $edu->connectionSpan;
+            if (!$connSpan) continue;
+            // Look for during connections that reference this connection span
+            $phaseLinks = Connection::where('type_id', 'during')
+                ->where(function($q) use ($connSpan) {
+                    $q->where('child_id', $connSpan->id)
+                      ->orWhere('parent_id', $connSpan->id);
+                })
+                ->exists();
+            if ($phaseLinks) return true;
+        }
+        return false;
+    }
+
+    // person_at_date support: hasEducationPhaseAtDate
+    public function hasEducationPhaseAtDate(Span $span): bool
+    {
+        return (bool) $this->getEducationPhaseAtDate($span);
+    }
+
+    // person_at_date support: getEducationPhaseAtDate -> returns linked phase name (neutral) or null
+    public function getEducationPhaseAtDate(Span $span): ?string
+    {
+        if (!$this->contextDate) return null;
+        $contextDate = $this->createDateFromContextDate();
+        if (!$contextDate) return null;
+
+        // Find active education connection (most recent) as in getEducationAtDate
+        $educationConnection = $span->connectionsAsSubject()
+            ->where('connections.type_id', 'education')
+            ->whereHas('connectionSpan', function ($query) use ($contextDate) {
+                $query->where(function ($q) use ($contextDate) {
+                    $q->whereNull('start_year')
+                      ->orWhere(function ($q2) use ($contextDate) {
+                          $q2->where('start_year', '<=', $contextDate->format('Y'))
+                             ->where(function ($q3) use ($contextDate) {
+                                 $q3->whereNull('end_year')
+                                    ->orWhere('end_year', '>=', $contextDate->format('Y'));
+                             });
+                      });
+                });
+            })
+            ->with(['child', 'connectionSpan'])
+            ->join('spans as connection_spans', 'connections.connection_span_id', '=', 'connection_spans.id')
+            ->orderBy('connection_spans.start_year', 'desc')
+            ->orderBy('connection_spans.start_month', 'desc')
+            ->orderBy('connection_spans.start_day', 'desc')
+            ->select('connections.*')
+            ->first();
+
+        // If not found as subject, try as object (some data may be inverse)
+        if (!$educationConnection) {
+            $educationConnection = $span->connectionsAsObject()
+                ->where('connections.type_id', 'education')
+                ->whereHas('connectionSpan', function ($query) use ($contextDate) {
+                    $query->where(function ($q) use ($contextDate) {
+                        $q->whereNull('start_year')
+                          ->orWhere(function ($q2) use ($contextDate) {
+                              $q2->where('start_year', '<=', $contextDate->format('Y'))
+                                 ->where(function ($q3) use ($contextDate) {
+                                     $q3->whereNull('end_year')
+                                        ->orWhere('end_year', '>=', $contextDate->format('Y'));
+                                 });
+                          });
+                    });
+                })
+                ->with(['parent', 'connectionSpan'])
+                ->join('spans as connection_spans', 'connections.connection_span_id', '=', 'connection_spans.id')
+                ->orderBy('connection_spans.start_year', 'desc')
+                ->orderBy('connection_spans.start_month', 'desc')
+                ->orderBy('connection_spans.start_day', 'desc')
+                ->select('connections.*')
+                ->first();
+        }
+
+        $educationSpan = $educationConnection?->connectionSpan;
+        if (!$educationSpan) return null;
+
+        // Find a phase 'during' connection active on the context date linking to this education-connection span
+        $phaseDuring = Connection::where('type_id', 'during')
+            ->where(function($q) use ($educationSpan){
+                $q->where('child_id', $educationSpan->id)->orWhere('parent_id', $educationSpan->id);
+            })
+            ->with(['parent','child','connectionSpan'])
+            ->get()
+            ->first(function($c) use ($contextDate) {
+                // The 'during' connection has its own connection span with the date range
+                $span = $c->connectionSpan;
+                if (!$span) return false;
+                
+                // Compare by full date if available, falling back to year
+                $y = (int)$contextDate->format('Y');
+                $m = (int)$contextDate->format('m');
+                $d = (int)$contextDate->format('d');
+                $startOk = true; $endOk = true;
+                if ($span->start_year) {
+                    if ($span->start_month && $span->start_day) {
+                        $startOk = [$y,$m,$d] >= [$span->start_year, $span->start_month, $span->start_day];
+                    } else {
+                        $startOk = $y >= $span->start_year;
+                    }
+                }
+                if ($span->end_year) {
+                    if ($span->end_month && $span->end_day) {
+                        $endOk = [$y,$m,$d] <= [$span->end_year, $span->end_month, $span->end_day];
+                    } else {
+                        $endOk = $y <= $span->end_year;
+                    }
+                }
+                return $startOk && $endOk;
+            });
+
+        if (!$phaseDuring) return null;
+        $phaseSpan = ($phaseDuring->parent && $phaseDuring->parent->type_id !== 'connection') ? $phaseDuring->parent : $phaseDuring->child;
+        return $phaseSpan ? $this->makeSpanLink($phaseSpan->name, $phaseSpan) : null;
+    }
+
+    /**
+     * Data: getEducationPhasesSentence
+     * Example: "Richard was in Class 7 at St Saviours between September 1980 and July 1981."
+     */
+    public function getEducationPhasesSentence(Span $span): string
+    {
+        if ($span->type_id !== 'person') return '';
+        $sentences = [];
+        // Gather person → education connections
+        $educationConnections = $span->connectionsAsSubject()
+            ->where('type_id', 'education')
+            ->with(['connectionSpan', 'child'])
+            ->get();
+
+        foreach ($educationConnections as $edu) {
+            $connSpan = $edu->connectionSpan; // the dated connection span
+            $org = $edu->child;              // organisation
+            if (!$connSpan || !$org) continue;
+
+            // Find during connections from phase → connSpan
+            $phases = Connection::where('type_id', 'during')
+                ->where(function($q) use ($connSpan){
+                    $q->where('child_id', $connSpan->id)->orWhere('parent_id', $connSpan->id);
+                })
+                ->with(['parent','child'])
+                ->get()
+                ->sortBy(function($c){
+                    $p = $c->getEffectiveSortDate();
+                    return sprintf('%08d-%02d-%02d', $p[0] ?? 99999999, $p[1] ?? 99, $p[2] ?? 99);
+                });
+
+            foreach ($phases as $i => $link) {
+                // Phase span is the non-connection end
+                $phaseSpan = ($link->parent && $link->parent->type_id !== 'connection') ? $link->parent : $link->child;
+                if (!$phaseSpan) continue;
+                $phaseName = $phaseSpan->name;
+
+                // Build dates using helper methods from story generator if available
+                $startDate = $this->formatDate($phaseSpan->start_year, $phaseSpan->start_month, $phaseSpan->start_day);
+                $endDate = $this->formatDate($phaseSpan->end_year, $phaseSpan->end_month, $phaseSpan->end_day, true);
+
+                $subject = e($span->name);
+                $organisationLink = '<a href="' . route('spans.show', $org) . '" class="text-decoration-none" title="' . e($org->name) . '">' . e($org->name) . '</a>';
+                $sentence = "$subject was in " . e($phaseName) . " at $organisationLink";
+                if ($startDate && $endDate) {
+                    $sentence .= " between $startDate and $endDate.";
+                } elseif ($startDate) {
+                    $sentence .= " from $startDate.";
+                } else {
+                    $sentence .= ".";
+                }
+                $sentences[] = $sentence;
+            }
+        }
+
+        return implode(' ', $sentences);
+    }
+
+    private function formatDate($y, $m, $d, bool $end = false): ?string
+    {
+        if (!$y) return null;
+        // Month/day optional; fall back to month names if present
+        if ($m && $d) {
+            return Carbon::createFromDate($y, $m, $d)->format('F j, Y');
+        }
+        if ($m) {
+            return Carbon::createFromDate($y, $m, 1)->format('F Y');
+        }
+        return (string)$y;
+    }
+
+    private function formatDateLink($y, $m, $d): ?string
+    {
+        if (!$y) return null;
+        $display = $this->formatDate($y, $m, $d);
+        // Build date route like /date/YYYY[-MM[-DD]] if available
+        $parts = [$y];
+        if ($m) $parts[] = str_pad((string)$m, 2, '0', STR_PAD_LEFT);
+        if ($d) $parts[] = str_pad((string)$d, 2, '0', STR_PAD_LEFT);
+        $dateStr = implode('-', $parts);
+        return '<a href="' . route('date.explore', ['date' => $dateStr]) . '" class="text-decoration-none">' . e($display) . '</a>';
+    }
+
+    /**
      * Generate a story for a span using configuration templates
      */
     public function generateStory(Span $span): array
     {
+        // Handle connection spans explicitly (e.g., during phase connections)
+        if ($span->type_id === 'connection') {
+            $connectionStory = $this->generateConnectionSpanStory($span);
+            if ($connectionStory) {
+                return $connectionStory;
+            }
+        }
+
         $spanType = $span->type_id;
         $spanSubtype = $span->metadata['subtype'] ?? null;
         $debug = [];
@@ -555,6 +854,8 @@ class ConfigurableStoryGeneratorService
             'hasFeaturedSpan' => $this->hasFeaturedSpan($span),
             'hasPhotoDate' => $this->hasPhotoDate($span),
             'hasFeaturedSpanAgeAtPhotoDate' => $this->hasFeaturedSpanAgeAtPhotoDate($span),
+            'hasPlaqueFeatures' => $this->hasPlaqueFeatures($span),
+            'hasPlaqueLocation' => $this->hasPlaqueLocation($span),
             'hasAgeAtDate' => $this->hasAgeAtDate($span),
             'hasCurrentActivitiesAtDate' => $this->hasCurrentActivitiesAtDate($span),
             'hasRecentEventsAtDate' => $this->hasRecentEventsAtDate($span),
@@ -562,6 +863,7 @@ class ConfigurableStoryGeneratorService
             'hasResidenceAtDate' => $this->hasResidenceAtDate($span),
             'hasEmploymentAtDate' => $this->hasEmploymentAtDate($span),
             'hasEducationAtDate' => $this->hasEducationAtDate($span),
+            'hasEducationPhaseAtDate' => $this->hasEducationPhaseAtDate($span),
             'hasRelationshipAtDate' => $this->hasRelationshipAtDate($span),
             default => false,
         };
@@ -637,6 +939,8 @@ class ConfigurableStoryGeneratorService
             'getPhotoDate' => $this->getPhotoDate($span),
             'getPhotoDatePreposition' => $this->getPhotoDatePreposition($span),
             'getFeaturedSpanAgeAtPhotoDate' => $this->getFeaturedSpanAgeAtPhotoDate($span),
+            'getPlaqueFeatures' => $this->getPlaqueFeatures($span),
+            'getPlaqueLocation' => $this->getPlaqueLocation($span),
             'getAtDateDisplay' => $this->getAtDateDisplay($span),
             'getAgeAtDate' => $this->getAgeAtDate($span),
             'getCurrentActivitiesAtDate' => $this->getCurrentActivitiesAtDate($span),
@@ -646,6 +950,7 @@ class ConfigurableStoryGeneratorService
             'getEmploymentRoleAtDate' => $this->getEmploymentRoleAtDate($span),
             'getEmploymentOrganisationAtDate' => $this->getEmploymentOrganisationAtDate($span),
             'getEducationAtDate' => $this->getEducationAtDate($span),
+            'getEducationPhaseAtDate' => $this->getEducationPhaseAtDate($span),
             'getRelationshipAtDate' => $this->getRelationshipAtDate($span),
             default => null,
         };
@@ -2243,6 +2548,63 @@ class ConfigurableStoryGeneratorService
     protected function hasFeaturedSpanAgeAtPhotoDate(Span $photo): bool
     {
         return $this->getFeaturedSpanAgeAtPhotoDate($photo) !== null;
+    }
+
+    // Plaque-specific methods
+    protected function getPlaqueFeatures(Span $plaque): ?string
+    {
+        // Look for "features" connections to find what/who this plaque features
+        // Like photos: Plaque (parent/subject) features Person (child/object)
+        $featuresConnections = $plaque->connectionsAsSubject()
+            ->where('type_id', 'features')
+            ->whereHas('child')
+            ->with(['child'])
+            ->get();
+        
+        if ($featuresConnections->isEmpty()) {
+            return null;
+        }
+        
+        $featuredSpans = $featuresConnections->map(function ($connection) {
+            return $this->makeSpanLink($connection->child->name, $connection->child);
+        });
+        
+        // Join multiple spans with commas and "and" for the last one
+        if ($featuredSpans->count() === 1) {
+            return $featuredSpans->first();
+        } elseif ($featuredSpans->count() === 2) {
+            return $featuredSpans->join(' and ');
+        } else {
+            $lastSpan = $featuredSpans->pop();
+            return $featuredSpans->join(', ') . ' and ' . $lastSpan;
+        }
+    }
+
+    protected function getPlaqueLocation(Span $plaque): ?string
+    {
+        // Look for "located" connections to find where this plaque is
+        $locationConnection = \App\Models\Connection::where('type_id', 'located')
+            ->where('parent_id', $plaque->id)
+            ->whereHas('child')
+            ->with(['child'])
+            ->first();
+        
+        if (!$locationConnection) {
+            return null;
+        }
+        
+        return $this->makeSpanLink($locationConnection->child->name, $locationConnection->child);
+    }
+
+    // Plaque condition methods
+    protected function hasPlaqueFeatures(Span $plaque): bool
+    {
+        return $this->getPlaqueFeatures($plaque) !== null;
+    }
+
+    protected function hasPlaqueLocation(Span $plaque): bool
+    {
+        return $this->getPlaqueLocation($plaque) !== null;
     }
 
     // At-date specific methods

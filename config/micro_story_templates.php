@@ -98,6 +98,40 @@ return [
         ],
     ],
     'connections' => [
+        'during' => [
+            'templates' => [
+                'with_start_and_end' => [
+                    'template' => '{subject} was in {phase} at {organisation} between {start_date} and {end_date}.',
+                    'data_methods' => [
+                        'subject' => 'createSubjectLink',
+                        'phase' => 'createPhaseName',
+                        'organisation' => 'createOrganisationFromDuring',
+                        'start_date' => 'createDateLink',
+                        'end_date' => 'createEndDateLink',
+                    ],
+                    'condition' => 'hasStartAndEndYear',
+                ],
+                'with_start_only' => [
+                    'template' => '{subject} started {phase} at {organisation} on {start_date}.',
+                    'data_methods' => [
+                        'subject' => 'createSubjectLink',
+                        'phase' => 'createPhaseName',
+                        'organisation' => 'createOrganisationFromDuring',
+                        'start_date' => 'createDateLink',
+                    ],
+                    'condition' => 'hasStartYearOnly',
+                ],
+                'with_no_dates' => [
+                    'template' => '{subject} was in {phase} at {organisation}.',
+                    'data_methods' => [
+                        'subject' => 'createSubjectLink',
+                        'phase' => 'createPhaseName',
+                        'organisation' => 'createOrganisationFromDuring',
+                    ],
+                    'condition' => 'hasNoDates',
+                ],
+            ],
+        ],
         'residence' => [
             'templates' => [
                 'with_start_and_end' => [

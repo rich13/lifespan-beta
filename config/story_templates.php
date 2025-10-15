@@ -2,7 +2,7 @@
 
 return [
     'person' => [
-        'story_template' => '{birth}{age}{current_role}{band_memberships}{residence}{longest_residence}{education}{work}{most_recent_job}{relationships}{current_relationship}{parents}{children}{siblings}',
+        'story_template' => '{birth}{age}{current_role}{band_memberships}{residence}{longest_residence}{education}{education_phases}{work}{most_recent_job}{relationships}{current_relationship}{parents}{children}{siblings}',
         'sentences' => [
             'birth' => [
                 'template' => '{name} was {birth_preposition} {birth_date} in {birth_location}.',
@@ -51,6 +51,13 @@ return [
                     'institutions' => 'getEducationInstitutions',
                 ],
                 'condition' => 'hasEducation',
+            ],
+            'education_phases' => [
+                'template' => '{education_phases_sentence}',
+                'data_methods' => [
+                    'education_phases_sentence' => 'getEducationPhasesSentence',
+                ],
+                'condition' => 'hasEducationPhases',
             ],
             'work' => [
                 'template' => '{subject} {has_verb} worked for {organisations}.',
@@ -281,8 +288,27 @@ return [
             ],
         ],
     ],
+    'thing_plaque' => [
+        'story_template' => '{plaque_features}{plaque_location}',
+        'sentences' => [
+            'plaque_features' => [
+                'template' => 'This plaque features {featured_span}.',
+                'data_methods' => [
+                    'featured_span' => 'getPlaqueFeatures',
+                ],
+                'condition' => 'hasPlaqueFeatures',
+            ],
+            'plaque_location' => [
+                'template' => 'It\'s located at {location}.',
+                'data_methods' => [
+                    'location' => 'getPlaqueLocation',
+                ],
+                'condition' => 'hasPlaqueLocation',
+            ],
+        ],
+    ],
     'person_at_date' => [
-        'story_template' => '{age_at_date}{residence_at_date}{employment_at_date}{education_at_date}{relationship_at_date}',
+        'story_template' => '{age_at_date}{residence_at_date}{employment_at_date}{education_at_date}{education_phase_at_date}{relationship_at_date}',
         'sentences' => [
             'age_at_date' => [
                 'template' => 'On {date}, {name} was {age} years old.',
@@ -318,6 +344,14 @@ return [
                     'institution' => 'getEducationAtDate',
                 ],
                 'condition' => 'hasEducationAtDate',
+            ],
+            'education_phase_at_date' => [
+                'template' => 'At this time, {subject} was in {education_phase}.',
+                'data_methods' => [
+                    'subject' => 'getPronoun',
+                    'education_phase' => 'getEducationPhaseAtDate',
+                ],
+                'condition' => 'hasEducationPhaseAtDate',
             ],
             'relationship_at_date' => [
                 'template' => '{subject} was in a relationship with {person}.',
