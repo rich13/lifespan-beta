@@ -12,14 +12,40 @@
             <div class="modal-body">
                 @php
                     $currentTimeTravelDate = request()->cookie('time_travel_date');
+                    
+                    // Check if we're on a date exploration page
+                    $route = request()->route();
+                    $currentDateBeingViewed = null;
+                    if ($route && $route->hasParameter('date')) {
+                        $routeName = $route->getName();
+                        if (in_array($routeName, ['date.explore', 'spans.at-date'])) {
+                            try {
+                                $dateParam = $route->parameter('date');
+                                $dateParts = explode('-', $dateParam);
+                                $year = (int) $dateParts[0];
+                                $month = isset($dateParts[1]) ? (int) $dateParts[1] : 1;
+                                $day = isset($dateParts[2]) ? (int) $dateParts[2] : 1;
+                                $currentDateBeingViewed = sprintf('%04d-%02d-%02d', $year, $month, $day);
+                            } catch (\Exception $e) {
+                                // If parsing fails, ignore
+                            }
+                        }
+                    }
                 @endphp
                 
                 @if($currentTimeTravelDate)
                     <p class="mb-3">
-                        <strong>Currently viewing:</strong> {{ date('j F Y', strtotime($currentTimeTravelDate)) }}
+                        <strong>Currently in time travel mode:</strong> {{ date('j F Y', strtotime($currentTimeTravelDate)) }}
                     </p>
                     <p class="mb-3">
                         Choose a different date to travel to, or modify the current date.
+                    </p>
+                @elseif($currentDateBeingViewed)
+                    <p class="mb-3">
+                        <strong>Currently viewing:</strong> {{ date('j F Y', strtotime($currentDateBeingViewed)) }}
+                    </p>
+                    <p class="mb-3">
+                        Choose a date to travel to from this point, or modify the current date.
                     </p>
                 @else
                     <p class="mb-3">
@@ -33,7 +59,34 @@
                         <label class="form-label">Travel to Date</label>
                         @php
                             $currentTimeTravelDate = request()->cookie('time_travel_date');
-                            if ($currentTimeTravelDate) {
+                            
+                            // Check if we're on a date exploration page and use that date
+                            $route = request()->route();
+                            $currentDateBeingViewed = null;
+                            if ($route && $route->hasParameter('date')) {
+                                $routeName = $route->getName();
+                                if (in_array($routeName, ['date.explore', 'spans.at-date'])) {
+                                    try {
+                                        $dateParam = $route->parameter('date');
+                                        // Parse the date parameter (could be YYYY, YYYY-MM, or YYYY-MM-DD)
+                                        $dateParts = explode('-', $dateParam);
+                                        $year = (int) $dateParts[0];
+                                        $month = isset($dateParts[1]) ? (int) $dateParts[1] : 1;
+                                        $day = isset($dateParts[2]) ? (int) $dateParts[2] : 1;
+                                        $currentDateBeingViewed = sprintf('%04d-%02d-%02d', $year, $month, $day);
+                                    } catch (\Exception $e) {
+                                        // If parsing fails, ignore
+                                    }
+                                }
+                            }
+                            
+                            // Use current date being viewed, then time travel cookie, then today
+                            if ($currentDateBeingViewed) {
+                                $currentDate = new DateTime($currentDateBeingViewed);
+                                $defaultDay = $currentDate->format('j');
+                                $defaultMonth = $currentDate->format('n');
+                                $defaultYear = $currentDate->format('Y');
+                            } elseif ($currentTimeTravelDate) {
                                 $currentDate = new DateTime($currentTimeTravelDate);
                                 $defaultDay = $currentDate->format('j');
                                 $defaultMonth = $currentDate->format('n');

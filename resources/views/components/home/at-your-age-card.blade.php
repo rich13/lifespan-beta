@@ -14,20 +14,48 @@
         $personalSpan->start_day ?? 1
     );
     
-    $age = $birthDate->diff($today);
+    // Check if we're in time travel mode and the date is before birth
+    $isBeforeBirth = $today->lt($birthDate);
+    
+    if ($isBeforeBirth) {
+        // Calculate time before birth
+        $timeBeforeBirth = $today->diff($birthDate);
+        $ageText = "viewing a time {$timeBeforeBirth->y} years, {$timeBeforeBirth->m} months, and {$timeBeforeBirth->d} days before you were born";
+        // Create a dummy age object for compatibility with existing code
+        $age = (object)['y' => 0, 'm' => 0, 'd' => 0];
+    } else {
+        // Calculate normal age
+        $age = $birthDate->diff($today);
+        $ageText = "{$age->y} years, {$age->m} months, and {$age->d} days old";
+    }
 
     // Get random person spans that the user can see (excluding the user themselves)
-    $randomSpans = \App\Models\Span::where('type_id', 'person')
+    $query = \App\Models\Span::where('type_id', 'person')
         ->where('id', '!=', $personalSpan->id) // Exclude the user
         ->where('access_level', 'public') // Only public spans
         ->where('state', 'complete') // Only complete spans (includes living and deceased)
         ->whereNotNull('start_year') // Only spans with birth dates
         ->whereNotNull('start_month')
-        ->whereNotNull('start_day')
-        ->where('start_year', '<', $personalSpan->start_year) // Only people older than the user
-                    ->inRandomOrder()
-            ->limit(50) // Increased to ensure we find 3 people with sufficient connections
-            ->get();
+        ->whereNotNull('start_day');
+    
+    if ($isBeforeBirth) {
+        // When in time travel mode before birth, show people who were alive on that date
+        // and were born before the current time travel date
+        $query->where('start_year', '<=', $today->year);
+        
+        // Also filter out people who died before the time travel date
+        $query->where(function($q) use ($today) {
+            $q->whereNull('end_year') // Still alive
+              ->orWhere('end_year', '>=', $today->year); // Or died after the time travel date
+        });
+    } else {
+        // Normal mode: only people older than the user
+        $query->where('start_year', '<', $personalSpan->start_year);
+    }
+    
+    $randomSpans = $query->inRandomOrder()
+        ->limit(50) // Increased to ensure we find 3 people with sufficient connections
+        ->get();
     
     $randomComparisons = [];
     $connectionThreshold = 5; // Start with requiring 5+ connections
@@ -39,29 +67,34 @@
             $randomSpan->start_day ?? 1
         );
         
-        // Calculate the date when this person was the user's current age
-        $randomAgeDate = $randomBirthDate->copy()->addYears($age->y)
-            ->addMonths($age->m)
-            ->addDays($age->d);
-        
-        // Check if this person was already dead when they were the user's current age
-        $wasDeadAtUserAge = false;
-        if ($randomSpan->end_year && $randomSpan->end_month && $randomSpan->end_day) {
-            $deathDate = \Carbon\Carbon::createFromDate(
-                $randomSpan->end_year,
-                $randomSpan->end_month,
-                $randomSpan->end_day
-            );
+        if ($isBeforeBirth) {
+            // In time travel mode before birth, just use the current time travel date
+            $randomAgeDate = $today;
+        } else {
+            // Calculate the date when this person was the user's current age
+            $randomAgeDate = $randomBirthDate->copy()->addYears($age->y)
+                ->addMonths($age->m)
+                ->addDays($age->d);
             
-            // If they died before reaching the user's current age, exclude them
-            if ($deathDate->lt($randomAgeDate)) {
-                $wasDeadAtUserAge = true;
+            // Check if this person was already dead when they were the user's current age
+            $wasDeadAtUserAge = false;
+            if ($randomSpan->end_year && $randomSpan->end_month && $randomSpan->end_day) {
+                $deathDate = \Carbon\Carbon::createFromDate(
+                    $randomSpan->end_year,
+                    $randomSpan->end_month,
+                    $randomSpan->end_day
+                );
+                
+                // If they died before reaching the user's current age, exclude them
+                if ($deathDate->lt($randomAgeDate)) {
+                    $wasDeadAtUserAge = true;
+                }
             }
-        }
-        
-        // Skip if they were dead at the user's age
-        if ($wasDeadAtUserAge) {
-            continue;
+            
+            // Skip if they were dead at the user's age
+            if ($wasDeadAtUserAge) {
+                continue;
+            }
         }
         
         // Check if this person has enough connections that will be visible at the target date
@@ -169,7 +202,7 @@
     <div class="card-header">
         <h3 class="h6 mb-0">
             <i class="bi bi-arrow-left-right text-primary me-2"></i>
-            You are {{ $age->y }} years, {{ $age->m }} months, and {{ $age->d }} days old
+            You are {{ $ageText }}
         </h3>
     </div>
     <div class="card-body">
@@ -187,7 +220,12 @@
                         $isFutureDate = $comparison['date']->isFuture();
                     @endphp
                     
-                    @if($isFutureDate)
+                    @if($isBeforeBirth)
+                        <p class="text-muted small mb-2">
+                            <i class="bi bi-info-circle me-1"></i>
+                            <strong>{{ $comparison['span']->name }}</strong> was alive on {{ \App\Helpers\DateHelper::formatDate($comparisonDateObj->year, $comparisonDateObj->month, $comparisonDateObj->day) }}.
+                        </p>
+                    @elseif($isFutureDate)
                         <p class="text-muted small mb-2">
                             <i class="bi bi-info-circle me-1"></i>
                             <strong>{{ $comparison['span']->name }}</strong> will be your age in {{ $comparisonDateObj->year }}.
