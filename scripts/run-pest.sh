@@ -31,6 +31,11 @@ for arg in "$@"; do
             # Convert --verbose to Pest's --verbose option
             PEST_ARGS+=("--verbose")
             ;;
+        --filter=*)
+            # Ensure filter value is quoted in the inner shell so pipes are not treated as pipelines
+            FILTER_VALUE="${arg#--filter=}"
+            PEST_ARGS+=("--filter='${FILTER_VALUE}'")
+            ;;
         --help|-h)
             # Show help for the script
             echo "Usage: $0 [options]"
@@ -67,8 +72,15 @@ log_message "Starting Pest test run with ID: $TEST_RUN_ID"
 log_message "Using test database: $TEST_DATABASE"
 
 # Run the tests with database isolation
+# Detect TTY: use -it when interactive, -i when headless (CI/automation)
+if [ -t 1 ]; then
+    DOCKER_FLAGS="-it"
+else
+    DOCKER_FLAGS="-i"
+fi
+
 # Pass arguments as separate parameters to preserve them properly
-docker exec -it "$CONTAINER_NAME" bash -c "cd /var/www && \
+docker exec $DOCKER_FLAGS "$CONTAINER_NAME" bash -c "cd /var/www && \
     XDEBUG_MODE=coverage \
     php artisan config:clear && \
     php artisan cache:clear && \
@@ -76,7 +88,7 @@ docker exec -it "$CONTAINER_NAME" bash -c "cd /var/www && \
     export DB_CONNECTION=pgsql && \
     export DB_DATABASE=$TEST_DATABASE && \
     php artisan migrate:fresh --env=testing && \
-    php -d memory_limit=1024M ./vendor/bin/pest --compact --colors=always ${PEST_ARGS[*]}"
+    php -d memory_limit=1024M ./vendor/bin/pest --compact --colors=always ${PEST_ARGS[@]}"
 
 TEST_EXIT_CODE=$?
 
