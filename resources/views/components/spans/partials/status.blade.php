@@ -21,35 +21,33 @@
 </style>
 
         <div class="btn-group btn-group-sm" role="group">
-            <!-- Visibility -->
-            @if($span->isPublic())
-                <button type="button" 
-                        class="btn btn-success status-disabled" 
-                        data-bs-toggle="tooltip" 
-                        data-bs-placement="top" 
-                        data-bs-custom-class="tooltip-mini"
-                        data-bs-title="This span is publicly visible to all users">
-                    <i class="bi bi-globe me-1"></i>Public
-                </button>
-            @elseif($span->isPrivate())
-                <button type="button" 
-                        class="btn btn-danger status-disabled" 
-                        data-bs-toggle="tooltip" 
-                        data-bs-placement="top" 
-                        data-bs-custom-class="tooltip-mini"
-                        data-bs-title="This span is private and only visible to you">
-                    <i class="bi bi-lock me-1"></i>Private
-                </button>
-            @else
-                <button type="button" 
-                        class="btn btn-info status-disabled" 
-                        data-bs-toggle="tooltip" 
-                        data-bs-placement="top" 
-                        data-bs-custom-class="tooltip-mini"
-                        data-bs-title="This span is shared with a specific group">
-                    <i class="bi bi-people me-1"></i>Group
-                </button>
-            @endif
+            <!-- Visibility (clickable to change if permitted) -->
+            @php
+                $canChangeAccess = auth()->check() && ($span->isEditableBy(auth()->user()) || auth()->user()->is_admin || $span->owner_id === auth()->id());
+                $level = $span->access_level ?? 'private';
+                $isPublic = $level === 'public';
+                $isPrivate = $level === 'private';
+                $btnClass = $isPublic ? 'btn-success' : ($isPrivate ? 'btn-danger' : 'btn-info');
+                $icon = $isPublic ? 'globe' : ($isPrivate ? 'lock' : 'people');
+                $title = $isPublic
+                    ? 'This span is publicly visible to all users'
+                    : ($isPrivate ? 'This span is private and only visible to you' : 'This span is shared with a specific group');
+            @endphp
+
+            <button type="button"
+                    class="btn {{ $btnClass }} {{ $canChangeAccess ? '' : 'status-disabled' }}"
+                    data-bs-toggle="tooltip"
+                    data-bs-placement="top"
+                    data-bs-custom-class="tooltip-mini"
+                    data-bs-title="{{ $title }}"
+                    @if($canChangeAccess)
+                        data-model-id="{{ $span->id }}"
+                        data-model-class="App\\Models\\Span"
+                        data-current-level="{{ $level }}"
+                        onclick="openAccessLevelModal(this)"
+                    @endif>
+                <i class="bi bi-{{ $icon }} me-1"></i>{{ ucfirst($level) }}
+            </button>
 
             <!-- Personal Span Indicator -->
             @if($span->is_personal_span)

@@ -195,6 +195,21 @@
                 <!-- Image Gallery -->
                 <x-spans.partials.image-gallery :span="$span" />
                 
+                <!-- Education Card (for people) - placed under photo gallery -->
+                @if($span->type_id === 'person')
+                    <x-spans.cards.education-card :span="$span" />
+                @endif
+                
+                <!-- Employment Card (for people) - placed under education card -->
+                @if($span->type_id === 'person')
+                    <x-spans.cards.employment-card :span="$span" />
+                @endif
+                
+                <!-- Employee Card (for organisations) - placed under employment card -->
+                @if($span->type_id === 'organisation')
+                    <x-spans.cards.employee-card :span="$span" />
+                @endif
+                
                 <!-- Legacy Album Cover (only for albums) -->
                 @if($span->subtype === 'album' && $span->has_cover_art && $span->cover_art_url)
                     <div class="card mb-4">

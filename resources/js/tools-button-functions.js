@@ -600,34 +600,51 @@ window.updateAccessLevel = function(newLevel) {
     
     console.log('Updating access level:', { modelId, modelClass, currentLevel, newLevel });
     
-    // Update button appearance immediately for responsive feedback
+    // Update button/badge appearance immediately for responsive feedback
     const icon = button.querySelector('i');
-    console.log('Updating icon from', icon.className, 'to new level:', newLevel);
-    
-    // Update button class
-    button.classList.remove('btn-success', 'btn-danger', 'btn-warning');
-    if (newLevel === 'public') {
-        button.classList.add('btn-success');
-        icon.className = 'bi bi-globe';
-        console.log('Set icon to globe');
-    } else if (newLevel === 'private') {
-        button.classList.add('btn-danger');
-        icon.className = 'bi bi-lock';
-        console.log('Set icon to lock');
-    } else if (newLevel === 'shared') {
-        button.classList.add('btn-warning');
-        icon.className = 'bi bi-people';
-        console.log('Set icon to people');
+    const isBadge = button.classList.contains('badge');
+    console.log('Updating access visual. isBadge:', isBadge, 'newLevel:', newLevel);
+
+    if (isBadge) {
+        // Badge style (photos grid)
+        button.classList.remove('bg-primary', 'bg-danger', 'bg-warning', 'bg-info', 'bg-success', 'bg-secondary');
+        if (newLevel === 'public') {
+            button.classList.add('bg-primary');
+        } else if (newLevel === 'private') {
+            button.classList.add('bg-danger');
+        } else if (newLevel === 'shared') {
+            button.classList.add('bg-info');
+        } else {
+            button.classList.add('bg-secondary');
+        }
+        // Update text label
+        button.textContent = newLevel.charAt(0).toUpperCase() + newLevel.slice(1);
+    } else {
+        // Button style (status/tools)
+        button.classList.remove('btn-success', 'btn-danger', 'btn-warning', 'btn-info', 'btn-secondary');
+        if (newLevel === 'public') {
+            button.classList.add('btn-success');
+            if (icon) icon.className = 'bi bi-globe';
+        } else if (newLevel === 'private') {
+            button.classList.add('btn-danger');
+            if (icon) icon.className = 'bi bi-lock';
+        } else if (newLevel === 'shared') {
+            button.classList.add('btn-info');
+            if (icon) icon.className = 'bi bi-people';
+        } else {
+            button.classList.add('btn-secondary');
+        }
+        // Force icon update if present
+        if (icon) {
+            icon.style.display = 'none';
+            setTimeout(() => {
+                icon.style.display = '';
+            }, 10);
+        }
     }
     
     // Update tooltip
     button.setAttribute('title', `Access: ${newLevel.charAt(0).toUpperCase() + newLevel.slice(1)}`);
-    
-    // Force icon update by ensuring the element is properly updated
-    icon.style.display = 'none';
-    setTimeout(() => {
-        icon.style.display = '';
-    }, 10);
     
     // Show visual feedback
     button.style.transform = 'scale(1.1)';
@@ -666,27 +683,35 @@ window.updateAccessLevel = function(newLevel) {
             }
             new bootstrap.Tooltip(button);
             
-            // Show success message and close modal
+            // Close modal (no alert)
             const modal = bootstrap.Modal.getInstance(document.getElementById('accessLevelModal'));
             modal.hide();
-            
-            // Show success toast or alert
-            alert(`Access level changed to ${newLevel.charAt(0).toUpperCase() + newLevel.slice(1)} successfully!`);
         } else {
             console.error('Failed to update access level:', data.message);
             // Revert changes on failure
-            if (currentLevel === 'public') {
-                button.classList.remove('btn-success');
-                button.classList.add('btn-success');
-                icon.className = 'bi bi-globe';
-            } else if (currentLevel === 'private') {
-                button.classList.remove('btn-danger');
-                button.classList.add('btn-danger');
-                icon.className = 'bi bi-lock';
-            } else if (currentLevel === 'shared') {
-                button.classList.remove('btn-warning');
-                button.classList.add('btn-warning');
-                icon.className = 'bi bi-people';
+            if (isBadge) {
+                // revert badge style/text
+                button.classList.remove('bg-primary', 'bg-danger', 'bg-warning', 'bg-info', 'bg-success', 'bg-secondary');
+                if (currentLevel === 'public') button.classList.add('bg-primary');
+                else if (currentLevel === 'private') button.classList.add('bg-danger');
+                else if (currentLevel === 'shared') button.classList.add('bg-info');
+                else button.classList.add('bg-secondary');
+                button.textContent = currentLevel.charAt(0).toUpperCase() + currentLevel.slice(1);
+            } else {
+                // revert button style/icon
+                button.classList.remove('btn-success', 'btn-danger', 'btn-warning', 'btn-info', 'btn-secondary');
+                if (currentLevel === 'public') {
+                    button.classList.add('btn-success');
+                    if (icon) icon.className = 'bi bi-globe';
+                } else if (currentLevel === 'private') {
+                    button.classList.add('btn-danger');
+                    if (icon) icon.className = 'bi bi-lock';
+                } else if (currentLevel === 'shared') {
+                    button.classList.add('btn-info');
+                    if (icon) icon.className = 'bi bi-people';
+                } else {
+                    button.classList.add('btn-secondary');
+                }
             }
             button.setAttribute('title', `Access: ${currentLevel.charAt(0).toUpperCase() + currentLevel.slice(1)}`);
             alert('Failed to update access level: ' + (data.message || 'Unknown error'));
@@ -695,18 +720,30 @@ window.updateAccessLevel = function(newLevel) {
     .catch(error => {
         console.error('Error updating access level:', error);
         // Revert changes on error
-        if (currentLevel === 'public') {
-            button.classList.remove('btn-success');
-            button.classList.add('btn-success');
-            icon.className = 'bi bi-globe';
-        } else if (currentLevel === 'private') {
-            button.classList.remove('btn-danger');
-            button.classList.add('btn-danger');
-            icon.className = 'bi bi-lock';
-        } else if (currentLevel === 'shared') {
-            button.classList.remove('btn-warning');
-            button.classList.add('btn-warning');
-            icon.className = 'bi bi-people';
+        if (isBadge) {
+            button.classList.remove('bg-primary', 'bg-danger', 'bg-warning', 'bg-info', 'bg-success', 'bg-secondary');
+            if (currentLevel === 'public') button.classList.add('bg-primary');
+            else if (currentLevel === 'private') button.classList.add('bg-danger');
+            else if (currentLevel === 'shared') button.classList.add('bg-info');
+            else button.classList.add('bg-secondary');
+            button.textContent = currentLevel.charAt(0).toUpperCase() + currentLevel.slice(1);
+        } else {
+            if (currentLevel === 'public') {
+                button.classList.remove('btn-success', 'btn-danger', 'btn-warning', 'btn-info', 'btn-secondary');
+                button.classList.add('btn-success');
+                if (icon) icon.className = 'bi bi-globe';
+            } else if (currentLevel === 'private') {
+                button.classList.remove('btn-success', 'btn-danger', 'btn-warning', 'btn-info', 'btn-secondary');
+                button.classList.add('btn-danger');
+                if (icon) icon.className = 'bi bi-lock';
+            } else if (currentLevel === 'shared') {
+                button.classList.remove('btn-success', 'btn-danger', 'btn-warning', 'btn-info', 'btn-secondary');
+                button.classList.add('btn-info');
+                if (icon) icon.className = 'bi bi-people';
+            } else {
+                button.classList.remove('btn-success', 'btn-danger', 'btn-warning', 'btn-info');
+                button.classList.add('btn-secondary');
+            }
         }
         button.setAttribute('title', `Access: ${currentLevel.charAt(0).toUpperCase() + currentLevel.slice(1)}`);
         alert('Error updating access level. Please try again.');

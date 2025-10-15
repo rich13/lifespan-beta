@@ -375,6 +375,204 @@ class SpanController extends Controller
     }
 
     /**
+     * Quick create education connection and generate academic year phases (Sep–Jul)
+     * Or add phases to existing education connection
+     */
+    public function quickAddEducation(Request $request)
+    {
+        // Handle adding phases to existing education connection
+        if ($request->input('action') === 'add_phases_to_existing') {
+            return $this->addPhasesToExistingEducation($request);
+        }
+
+        $validated = $request->validate([
+            'person_id' => 'required|uuid|exists:spans,id',
+            'organisation_name' => 'required|string|max:255',
+            'organisation_id' => 'nullable|uuid|exists:spans,id',
+            'start_year' => 'required|integer|min:1800|max:2100',
+            'end_year' => 'required|integer|min:1800|max:2100',
+        ]);
+
+        $person = Span::findOrFail($validated['person_id']);
+        $this->authorize('update', $person);
+
+        if ($person->type_id !== 'person') {
+            return response()->json(['success' => false, 'message' => 'Only person spans can have education added'], 422);
+        }
+
+        DB::beginTransaction();
+        try {
+            // Use selected organisation if provided, otherwise find or create by name
+            if (!empty($validated['organisation_id'])) {
+                $organisation = Span::findOrFail($validated['organisation_id']);
+            } else {
+                $organisation = Span::firstOrCreate(
+                    ['name' => $validated['organisation_name'], 'type_id' => 'organisation'],
+                    [
+                        'owner_id' => Auth::id(),
+                        'updater_id' => Auth::id(),
+                        'state' => 'draft',
+                        'access_level' => 'private'
+                    ]
+                );
+            }
+
+            // Create connection span for education dates
+            $connectionSpan = Span::create([
+                'name' => $person->name . ' – education at ' . $organisation->name,
+                'type_id' => 'connection',
+                'owner_id' => Auth::id(),
+                'updater_id' => Auth::id(),
+                'state' => 'draft',
+                'access_level' => 'private',
+                'start_year' => $validated['start_year'],
+                'start_month' => 9,
+                'start_day' => 1,
+                'end_year' => $validated['end_year'],
+                'end_month' => 7,
+                'end_day' => 31,
+                'start_precision' => 'day',
+                'end_precision' => 'day'
+            ]);
+
+            // Link person to organisation with education connection
+            $educationConnection = Connection::create([
+                'type_id' => 'education',
+                'parent_id' => $person->id,
+                'child_id' => $organisation->id,
+                'connection_span_id' => $connectionSpan->id,
+            ]);
+
+            // Generate academic year phases (Sep to Jul)
+            $this->generateAcademicYearPhases($connectionSpan, $person);
+
+            DB::commit();
+            return response()->json(['success' => true]);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('quickAddEducation failed', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Add phases to an existing education connection
+     */
+    private function addPhasesToExistingEducation(Request $request)
+    {
+        $validated = $request->validate([
+            'connection_span_id' => 'required|uuid|exists:spans,id',
+        ]);
+
+        $connectionSpan = Span::findOrFail($validated['connection_span_id']);
+        
+        // Check if this is an education connection span
+        if ($connectionSpan->type_id !== 'connection') {
+            return response()->json(['success' => false, 'message' => 'Invalid connection span'], 422);
+        }
+
+        // Find the education connection that uses this span
+        $educationConnection = Connection::where('connection_span_id', $connectionSpan->id)
+            ->where('type_id', 'education')
+            ->first();
+
+        if (!$educationConnection) {
+            return response()->json(['success' => false, 'message' => 'No education connection found for this span'], 422);
+        }
+
+        // Get the person from the education connection
+        $person = $educationConnection->parent;
+        $this->authorize('update', $person);
+
+        // Check if phases already exist
+        $existingPhases = Connection::where('type_id', 'during')
+            ->where(function($q) use ($connectionSpan) {
+                $q->where('parent_id', $connectionSpan->id)
+                  ->orWhere('child_id', $connectionSpan->id);
+            })
+            ->count();
+
+        if ($existingPhases > 0) {
+            return response()->json(['success' => false, 'message' => 'Phases already exist for this education connection'], 422);
+        }
+
+        DB::beginTransaction();
+        try {
+            // Generate phases using the same logic as quickAddEducation
+            $this->generateAcademicYearPhases($connectionSpan, $person);
+
+            DB::commit();
+            return response()->json(['success' => true]);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('addPhasesToExistingEducation failed', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Generate academic year phases for an education connection span
+     */
+    private function generateAcademicYearPhases(Span $connectionSpan, Span $person)
+    {
+        $startYear = $connectionSpan->start_year;
+        $endYear = $connectionSpan->end_year;
+
+        if (!$startYear || !$endYear) {
+            throw new \Exception('Education connection must have start and end years to generate phases');
+        }
+
+        // Generate phases for each academic year (Sep to Jul)
+        $currentYear = $startYear;
+        $yearCounter = 1;
+
+        while ($currentYear < $endYear) {
+            $phaseStartYear = $currentYear;
+            $phaseEndYear = $currentYear + 1;
+
+            // Create phase span (e.g., "Year 1 - 1990 - Alleyn's")
+            $phaseSpan = Span::create([
+                'id' => Str::uuid(),
+                'name' => "Year {$yearCounter} - {$phaseStartYear} - " . $connectionSpan->name,
+                'type_id' => 'phase',
+                'state' => 'complete',
+                'start_year' => $phaseStartYear,
+                'start_month' => 9, // September
+                'end_year' => $phaseEndYear,
+                'end_month' => 7, // July
+                'owner_id' => $person->owner_id,
+                'access_level' => $person->access_level,
+            ]);
+
+            // Create phase connection span (e.g., "Year 1 - 1990 - Alleyn's (during - Richard Northover - education at Alleyn's)")
+            $phaseConnectionSpan = Span::create([
+                'id' => Str::uuid(),
+                'name' => "Year {$yearCounter} - {$phaseStartYear} - " . $connectionSpan->name . " (during - " . $person->name . " - " . $connectionSpan->name . ")",
+                'type_id' => 'connection',
+                'state' => 'complete',
+                'start_year' => $phaseStartYear,
+                'start_month' => 9, // September
+                'end_year' => $phaseEndYear,
+                'end_month' => 7, // July
+                'owner_id' => $person->owner_id,
+                'access_level' => $person->access_level,
+            ]);
+
+            // Create "during" connection (education_connection_span -> phase_span)
+            Connection::create([
+                'id' => Str::uuid(),
+                'type_id' => 'during',
+                'parent_id' => $connectionSpan->id,
+                'child_id' => $phaseSpan->id,
+                'connection_span_id' => $phaseConnectionSpan->id,
+            ]);
+
+            $currentYear++;
+            $yearCounter++;
+        }
+    }
+
+    /**
      * Store a span with AI-generated YAML data
      */
     private function storeWithAiYaml(Request $request)
@@ -905,22 +1103,34 @@ class SpanController extends Controller
     }
 
     /**
-     * Global exit time travel mode - clear cookie and redirect to current span
+     * Global exit time travel mode - clear cookie and redirect to current page
      */
     public function exitTimeTravelGlobal(Request $request): \Illuminate\Http\RedirectResponse
     {
         // Clear the global time travel cookie
         $cookie = cookie('time_travel_date', null, -1); // Expire immediately
 
-        // Try to get the span from the current URL path
+        // Try to get the current URL path
         $path = $request->path();
+        
+        // Check if we're on a span at-date page
         if (preg_match('/^spans\/([^\/]+)\/at\/\d{4}-\d{2}-\d{2}$/', $path, $matches)) {
             $spanIdentifier = $matches[1];
             return redirect()->route('spans.show', ['subject' => $spanIdentifier])->withCookie($cookie);
         }
         
-        // Fallback to home page if we can't determine the span
-        return redirect()->route('spans.index')->withCookie($cookie);
+        // Check if we're on a date exploration page
+        if (preg_match('/^date\/\d{4}(-\d{2}(-\d{2})?)?$/', $path)) {
+            return redirect('/' . $path)->withCookie($cookie);
+        }
+        
+        // Check if we're on an explore page
+        if (preg_match('/^explore\//', $path)) {
+            return redirect('/' . $path)->withCookie($cookie);
+        }
+        
+        // For spans index or any other page, redirect to homepage
+        return redirect()->route('home')->withCookie($cookie);
     }
 
     /**
@@ -938,13 +1148,34 @@ class SpanController extends Controller
             $referrer = $request->headers->get('referer');
             if ($referrer) {
                 $path = parse_url($referrer, PHP_URL_PATH);
+                
+                // Check if we're on a span page
                 if ($path && preg_match('/^\/spans\/([^\/]+)(?:\/at\/\d{4}-\d{2}-\d{2})?$/', $path, $matches)) {
                     $spanIdentifier = $matches[1];
                     return redirect()->route('spans.show', ['subject' => $spanIdentifier])->withCookie($cookie);
                 }
+                
+                // Check if we're on the homepage
+                if ($path === '/') {
+                    return redirect()->route('home')->withCookie($cookie);
+                }
+                
+                // Check if we're on the spans index
+                if ($path === '/spans') {
+                    return redirect()->route('spans.index')->withCookie($cookie);
+                }
+                
+                // Check if we're on other pages (explore, date exploration, etc.)
+                if ($path && preg_match('/^\/(explore|date)\//', $path)) {
+                    // Redirect to the same page without time travel
+                    return redirect($path)->withCookie($cookie);
+                }
+                
+                // For any other page, redirect to homepage
+                return redirect()->route('home')->withCookie($cookie);
             }
             
-            return redirect()->route('spans.index')->withCookie($cookie);
+            return redirect()->route('home')->withCookie($cookie);
         } else {
             // Time travel is inactive, redirect to modal
             return redirect()->route('time-travel.modal');
@@ -2734,7 +2965,7 @@ class SpanController extends Controller
         }
 
         $personalSpan = $user->personalSpan;
-        $today = \Carbon\Carbon::now();
+        $today = \App\Helpers\DateHelper::getCurrentDate();
         
         // Calculate age
         $birthDate = \Carbon\Carbon::createFromDate(
@@ -2743,18 +2974,43 @@ class SpanController extends Controller
             $personalSpan->start_day ?? 1
         );
         
-        $age = $birthDate->diff($today);
+        // Check if we're in time travel mode and the date is before birth
+        $isBeforeBirth = $today->lt($birthDate);
+        
+        if ($isBeforeBirth) {
+            // Calculate time before birth
+            $timeBeforeBirth = $today->diff($birthDate);
+            $age = (object)['y' => 0, 'm' => 0, 'd' => 0]; // Dummy age for compatibility
+        } else {
+            // Calculate normal age
+            $age = $birthDate->diff($today);
+        }
 
         // Get random person spans that the user can see (excluding the user themselves)
-        $randomSpans = Span::where('type_id', 'person')
+        $query = Span::where('type_id', 'person')
             ->where('id', '!=', $personalSpan->id) // Exclude the user
             ->where('access_level', 'public') // Only public spans
             ->where('state', 'complete') // Only complete spans (includes living and deceased)
             ->whereNotNull('start_year') // Only spans with birth dates
             ->whereNotNull('start_month')
-            ->whereNotNull('start_day')
-            ->where('start_year', '<', $personalSpan->start_year) // Only people older than the user
-            ->inRandomOrder()
+            ->whereNotNull('start_day');
+        
+        if ($isBeforeBirth) {
+            // When in time travel mode before birth, show people who were alive on that date
+            // and were born before the current time travel date
+            $query->where('start_year', '<=', $today->year);
+            
+            // Also filter out people who died before the time travel date
+            $query->where(function($q) use ($today) {
+                $q->whereNull('end_year') // Still alive
+                  ->orWhere('end_year', '>=', $today->year); // Or died after the time travel date
+            });
+        } else {
+            // Normal mode: only people older than the user
+            $query->where('start_year', '<', $personalSpan->start_year);
+        }
+        
+        $randomSpans = $query->inRandomOrder()
             ->limit(100) // Increased significantly to ensure we find 9 people with sufficient connections
             ->get();
         
@@ -2768,29 +3024,34 @@ class SpanController extends Controller
                 $randomSpan->start_day ?? 1
             );
             
-            // Calculate the date when this person was the user's current age
-            $randomAgeDate = $randomBirthDate->copy()->addYears($age->y)
-                ->addMonths($age->m)
-                ->addDays($age->d);
-            
-            // Check if this person was already dead when they were the user's current age
-            $wasDeadAtUserAge = false;
-            if ($randomSpan->end_year && $randomSpan->end_month && $randomSpan->end_day) {
-                $deathDate = \Carbon\Carbon::createFromDate(
-                    $randomSpan->end_year,
-                    $randomSpan->end_month,
-                    $randomSpan->end_day
-                );
+            if ($isBeforeBirth) {
+                // In time travel mode before birth, just use the current time travel date
+                $randomAgeDate = $today;
+            } else {
+                // Calculate the date when this person was the user's current age
+                $randomAgeDate = $randomBirthDate->copy()->addYears($age->y)
+                    ->addMonths($age->m)
+                    ->addDays($age->d);
                 
-                // If they died before reaching the user's current age, exclude them
-                if ($deathDate->lt($randomAgeDate)) {
-                    $wasDeadAtUserAge = true;
+                // Check if this person was already dead when they were the user's current age
+                $wasDeadAtUserAge = false;
+                if ($randomSpan->end_year && $randomSpan->end_month && $randomSpan->end_day) {
+                    $deathDate = \Carbon\Carbon::createFromDate(
+                        $randomSpan->end_year,
+                        $randomSpan->end_month,
+                        $randomSpan->end_day
+                    );
+                    
+                    // If they died before reaching the user's current age, exclude them
+                    if ($deathDate->lt($randomAgeDate)) {
+                        $wasDeadAtUserAge = true;
+                    }
                 }
-            }
-            
-            // Skip if they were dead at the user's age
-            if ($wasDeadAtUserAge) {
-                continue;
+                
+                // Skip if they were dead at the user's age
+                if ($wasDeadAtUserAge) {
+                    continue;
+                }
             }
             
             // Check if this person has enough connections that will be visible at the target date
@@ -2894,18 +3155,32 @@ class SpanController extends Controller
             }
         }
 
+        // Generate stories for each comparison using the at-date story generator
+        $storyGenerator = app(\App\Services\ConfigurableStoryGeneratorService::class);
+        $enhancedComparisons = [];
+        
+        foreach ($randomComparisons as $comparison) {
+            $story = $storyGenerator->generateStoryAtDate($comparison['span'], $comparison['date']->format('Y-m-d'));
+            $enhancedComparisons[] = [
+                'span' => $comparison['span'],
+                'date' => $comparison['date'],
+                'story' => $story
+            ];
+        }
+
         // Log the results for debugging
         \Illuminate\Support\Facades\Log::info('At Your Age search results', [
             'user_id' => $user->id,
             'user_age' => $age->y . 'y ' . $age->m . 'm ' . $age->d . 'd',
             'candidates_searched' => $randomSpans->count(),
-            'valid_comparisons_found' => count($randomComparisons),
+            'valid_comparisons_found' => count($enhancedComparisons),
             'target_count' => 6,
             'connection_threshold_used' => $connectionThreshold,
-            'connection_check_type' => 'connections_at_target_date'
+            'connection_check_type' => 'connections_at_target_date',
+            'stories_generated' => true
         ]);
 
-        return view('explore.at-your-age', compact('randomComparisons', 'age', 'personalSpan'));
+        return view('explore.at-your-age', compact('enhancedComparisons', 'age', 'personalSpan', 'isBeforeBirth', 'today'));
     }
 
     /**

@@ -130,8 +130,15 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
             }
             
             .sidebar.collapsed .sidebar-footer {
-                display: none;
+                display: block;
             }
+            
+            .sidebar.collapsed .sidebar-footer .p-3 {
+                padding: 0.5rem !important;
+                text-align: center;
+            }
+            
+            
             
             .sidebar.collapsed .sidebar-brand span {
                 display: none;
@@ -406,6 +413,9 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
         
         <!-- Modals -->
         @stack('modals')
+        
+        <!-- About Lifespan Modal -->
+        <x-modals.about-lifespan-modal />
         
         <!-- Global Access Level Modal -->
         <x-modals.access-level-modal />

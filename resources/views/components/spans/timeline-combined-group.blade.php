@@ -189,26 +189,20 @@ function initializeCombinedTimeline_{{ str_replace('-', '_', $span->id) }}() {
                     );
                     timelineData.push(...otherSubjects);
                     
-                    // Collect all during connections and nested connections from all timelines
-                    const allDuringConnections = [];
+                    // Collect nested connections from each timeline and add them to that timeline's duringConnections
                     timelineData.forEach(timeline => {
-                        if (timeline.duringConnections) {
-                            allDuringConnections.push(...timeline.duringConnections);
-                        }
-                        // Also collect nested connections from the timeline data itself
                         if (timeline.timeline.connections) {
                             timeline.timeline.connections.forEach(connection => {
                                 if (connection.nested_connections) {
-                                    allDuringConnections.push(...connection.nested_connections);
+                                    // Add nested connections to this timeline's duringConnections
+                                    if (!timeline.duringConnections) {
+                                        timeline.duringConnections = [];
+                                    }
+                                    timeline.duringConnections.push(...connection.nested_connections);
                                 }
                             });
                         }
                     });
-                    
-                    // Add all during connections to the person's timeline (assuming the first timeline is the person)
-                    if (timelineData.length > 0) {
-                        timelineData[0].duringConnections = allDuringConnections;
-                    }
                     
                     const finishRender = (timelineData) => {
                         // Calculate the final height for the timeline
@@ -520,8 +514,8 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
         }
 
         // Add "during" connections for this timeline (nested within the span)
-        if (timeline.duringConnections && timeline.duringConnections.length > 0 && index === 0) {
-            // Only show during connections in the person's timeline (first timeline)
+        if (timeline.duringConnections && timeline.duringConnections.length > 0) {
+            // Show during connections for any timeline that has them (phases for person spans)
             timeline.duringConnections.forEach(connection => {
                 const connectionStartYear = mode === 'absolute' ? connection.start_year : connection.start_year - timelineSpan.start_year;
                 const connectionEndYear = mode === 'absolute' 
