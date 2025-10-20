@@ -80,8 +80,8 @@ class FlickrImportController extends Controller
                     'user_id' => $userId
                 ]);
             } else {
-                // Fall back to API key method
-                $response = Http::get('https://api.flickr.com/services/rest/', [
+                // Fall back to API key method with timeout
+                $response = Http::timeout(10)->get('https://api.flickr.com/services/rest/', [
                     'method' => 'flickr.people.getInfo',
                     'api_key' => $apiKey,
                     'user_id' => $userId,
@@ -90,10 +90,25 @@ class FlickrImportController extends Controller
                 ]);
 
                 if (!$response->successful()) {
+                    $statusCode = $response->status();
+                    $errorMessage = match($statusCode) {
+                        502, 503 => 'Flickr API is temporarily unavailable (HTTP ' . $statusCode . '). Please try again in a few moments.',
+                        429 => 'Rate limit exceeded. Please wait a few minutes before trying again.',
+                        401, 403 => 'Authentication failed. Please check your API key and user ID.',
+                        404 => 'User ID not found. Please verify your Flickr user ID.',
+                        default => 'Failed to connect to Flickr API (HTTP ' . $statusCode . ')'
+                    };
+                    
+                    Log::warning('Flickr API connection test failed', [
+                        'status_code' => $statusCode,
+                        'user_id' => $userId,
+                        'has_api_key' => !empty($apiKey)
+                    ]);
+                    
                     return response()->json([
                         'success' => false,
-                        'message' => 'Failed to connect to Flickr API'
-                    ], 500);
+                        'message' => $errorMessage
+                    ], $statusCode >= 500 ? 503 : 400);
                 }
 
                 $data = $response->json();
@@ -102,7 +117,7 @@ class FlickrImportController extends Controller
                 if ($data['stat'] === 'ok') {
                     return response()->json([
                         'success' => true,
-                        'message' => 'Connection successful',
+                        'message' => 'Connection successful! Connected to ' . ($data['person']['username']['_content'] ?? 'Flickr user'),
                         'user_info' => $data['person']
                     ]);
                 } else {
@@ -111,6 +126,16 @@ class FlickrImportController extends Controller
                         'message' => 'Flickr API error: ' . ($data['message'] ?? 'Unknown error')
                     ], 400);
                 }
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            Log::error('Flickr API connection timeout', [
+                'error' => $e->getMessage(),
+                'user_id' => $user->id
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Connection timeout: Unable to reach Flickr API. Please check your internet connection and try again.'
+            ], 504);
         } catch (\Exception $e) {
             Log::error('Flickr API test failed', [
                 'error' => $e->getMessage(),
