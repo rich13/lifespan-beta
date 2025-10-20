@@ -893,13 +893,12 @@ class SpanController extends Controller
             $storyGenerator = app(\App\Services\ConfigurableStoryGeneratorService::class);
             $story = $storyGenerator->generateStoryAtDate($span, $date);
 
-            // Set global time travel cookie
-            $cookie = cookie('time_travel_date', $date, 60 * 24 * 30); // 30 days
+            // Don't set global time travel cookie - only set it when explicitly using the time travel modal
+            // This allows viewing a span at a specific date without affecting the rest of the site
 
-            return response()->view('spans.at-date', compact('span', 'date', 'displayDate', 'ongoingConnections', 'ageInfo', 'story'))
-                ->withCookie($cookie);
+            return response()->view('spans.at-date', compact('span', 'date', 'displayDate', 'ongoingConnections', 'ageInfo', 'story'));
         } catch (AuthorizationException $e) {
-            return view('errors.403');
+            return response()->view('errors.403');
         } catch (\Exception $e) {
             Log::error('Error in spans showAtDate', [
                 'message' => $e->getMessage(),
@@ -909,9 +908,9 @@ class SpanController extends Controller
             ]);
             
             if (app()->environment('production')) {
-                return view('errors.500');
+                return response()->view('errors.500');
             } else {
-                return view('errors.500', [
+                return response()->view('errors.500', [
                     'error' => $e->getMessage(),
                     'trace' => $e->getTraceAsString()
                 ]);

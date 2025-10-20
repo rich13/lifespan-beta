@@ -74,7 +74,7 @@ function initializeCombinedTimeline_{{ str_replace('-', '_', $span->id) }}() {
         fetch(`/api/spans/${spanId}/during-connections`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }).then(response => response.json())
     ])
     .then(([currentSpanData, objectConnectionsData, duringConnectionsData]) => {
-        // Extract unique subjects from the object connections, excluding connection spans and photos
+        // Extract unique subjects from the object connections, excluding connection spans, photos, and family connections
         const subjects = [...new Set(
             objectConnectionsData.connections
                 .filter(conn => {
@@ -86,6 +86,8 @@ function initializeCombinedTimeline_{{ str_replace('-', '_', $span->id) }}() {
                         conn.target_type === 'thing' &&
                         (conn.target_metadata?.subtype === 'photo' || conn.target_metadata?.subtype === 'set')
                     ) return false;
+                    // Exclude family connections (children/parents shouldn't appear as swimlanes)
+                    if (conn.type_id === 'family') return false;
                     return true;
                 })
                 .map(conn => conn.target_id)
@@ -1238,7 +1240,7 @@ function setupModeToggle_{{ str_replace('-', '_', $span->id) }}(timelineData, cu
     });
 }
 
-// Helper function to filter out unwanted connections (created/photos/sets) recursively
+// Helper function to filter out unwanted connections (created/photos/sets/family) recursively
 function filterConnectionsDeep(connections) {
     return connections
         .filter(conn => {
@@ -1248,6 +1250,8 @@ function filterConnectionsDeep(connections) {
                 conn.target_type === 'thing' &&
                 (conn.target_metadata?.subtype === 'photo' || conn.target_metadata?.subtype === 'set')
             ) return false;
+            // Exclude family connections from timeline visualization
+            if (conn.type_id === 'family') return false;
             return true;
         })
         .map(conn => {
