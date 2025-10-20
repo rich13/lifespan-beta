@@ -88,14 +88,22 @@
                 @endif
             </h6>
             @auth
-                @if(auth()->user()->is_admin)
-                    <a href="{{ route('admin.import.wikimedia-commons.index') }}?search={{ urlencode($span->name) }}&span_uuid={{ $span->id }}" 
+                <div class="btn-group" role="group">
+                    <a href="{{ route('settings.upload.photos.create') }}" 
                        class="btn btn-outline-primary btn-sm"
-                       title="Import images from Wikimedia Commons">
-                        <i class="bi bi-plus-circle me-1"></i>
-                        Add Images
+                       title="Upload photos">
+                        <i class="bi bi-upload me-1"></i>
+                        Upload
                     </a>
-                @endif
+                    @if(auth()->user()->is_admin)
+                        <a href="{{ route('admin.import.wikimedia-commons.index') }}?search={{ urlencode($span->name) }}&span_uuid={{ $span->id }}" 
+                           class="btn btn-outline-primary btn-sm"
+                           title="Import images from Wikimedia Commons">
+                            <i class="bi bi-plus-circle me-1"></i>
+                            Import
+                        </a>
+                    @endif
+                </div>
             @endauth
         </div>
         <div class="card-body">
