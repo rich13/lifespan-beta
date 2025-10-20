@@ -28,6 +28,9 @@
         $age = $birthDate->diff($today);
         $ageText = "{$age->y} years, {$age->m} months, and {$age->d} days old";
     }
+    
+    // Initialize story generator for later use
+    $storyGenerator = app(\App\Services\ConfigurableStoryGeneratorService::class);
 
     // Get random person spans that the user can see (excluding the user themselves)
     $query = \App\Models\Span::where('type_id', 'person')
@@ -196,6 +199,17 @@
             }
         }
     }
+    
+    // Generate stories for each comparison
+    $enhancedComparisons = [];
+    foreach ($randomComparisons as $comparison) {
+        $story = $storyGenerator->generateStoryAtDate($comparison['span'], $comparison['date']->format('Y-m-d'));
+        $enhancedComparisons[] = [
+            'span' => $comparison['span'],
+            'date' => $comparison['date'],
+            'story' => $story
+        ];
+    }
 @endphp
 
 <div class="card mb-3">
@@ -207,8 +221,8 @@
     </div>
     <div class="card-body">
         
-        @if(!empty($randomComparisons))
-            @foreach($randomComparisons as $comparison)
+        @if(!empty($enhancedComparisons))
+            @foreach($enhancedComparisons as $comparison)
                 <div class="mb-3">
                     @php
                         $comparisonDateObj = (object)[
@@ -231,11 +245,30 @@
                             <strong>{{ $comparison['span']->name }}</strong> will be your age in {{ $comparisonDateObj->year }}.
                         </p>
                     @else
-                        <x-spans.display.statement-card 
-                            :span="$comparison['span']" 
-                            eventType="custom"
-                            :eventDate="$comparison['date']->format('Y-m-d')"
-                            customEventText="was your age on" />
+                        {{-- Story-based display --}}
+                        @if(!empty($comparison['story']['paragraphs']))
+                            <div class="card mb-2">
+                                <div class="card-header py-2">
+                                    <h6 class="mb-0 small">
+                                        <a href="{{ route('spans.at-date', ['span' => $comparison['span']->slug, 'date' => $comparison['date']->format('Y-m-d')]) }}" class="text-decoration-none">
+                                            {{ $comparison['span']->name }} was your age on {{ $comparison['date']->format('j F Y') }}
+                                        </a>
+                                    </h6>
+                                </div>
+                                <div class="card-body py-2">
+                                    @foreach($comparison['story']['paragraphs'] as $paragraph)
+                                        <p class="mb-2 small">{!! $paragraph !!}</p>
+                                    @endforeach
+                                </div>
+                            </div>
+                        @else
+                            {{-- Fallback to statement card if no story --}}
+                            <x-spans.display.statement-card 
+                                :span="$comparison['span']" 
+                                eventType="custom"
+                                :eventDate="$comparison['date']->format('Y-m-d')"
+                                customEventText="was your age on" />
+                        @endif
                     @endif
                 </div>
             @endforeach

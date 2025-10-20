@@ -769,8 +769,8 @@
                 @endif
             </div>
 
-            <!-- Recently Created Card -->
-            <div class="mb-4">
+            {{-- Recently Created Card --}}
+            {{-- <div class="mb-4">
                 @php
                     // Get recently created public spans
                     $recentlyCreatedSpans = \App\Models\Span::where('access_level', 'public')
@@ -813,7 +813,7 @@
                         @endif
                     </div>
                 </div>
-            </div>
+            </div> --}}
 
             <!-- Starred Set Card -->
             <div class="mb-4">
