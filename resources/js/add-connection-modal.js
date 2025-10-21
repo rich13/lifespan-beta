@@ -479,9 +479,6 @@ $(document).ready(function() {
     function validateDate(year, month, day) {
         if (!year) return false;
         
-        // If month is provided, day must also be provided
-        if (month && !day) return false;
-        
         // If day is provided, month must also be provided
         if (day && !month) return false;
         

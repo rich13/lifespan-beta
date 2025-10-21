@@ -111,7 +111,25 @@ class MusicBrainzCoverArtService
             'url' => "{$this->coverArtApiUrl}/release-group/{$releaseGroupId}"
         ]);
 
-        $response = $this->makeRateLimitedRequest("{$this->coverArtApiUrl}/release-group/{$releaseGroupId}");
+        try {
+            $response = $this->makeRateLimitedRequest("{$this->coverArtApiUrl}/release-group/{$releaseGroupId}");
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            Log::error('Cover Art Archive connection error', [
+                'release_group_id' => $releaseGroupId,
+                'error' => $e->getMessage(),
+            ]);
+            // Cache the null result for a short time to avoid repeated failed requests
+            Cache::put($cacheKey, null, 300); // 5 minutes for connection errors
+            return null;
+        } catch (\Exception $e) {
+            Log::error('Unexpected error fetching cover art', [
+                'release_group_id' => $releaseGroupId,
+                'error' => $e->getMessage(),
+            ]);
+            // Cache the null result for a short time
+            Cache::put($cacheKey, null, 300); // 5 minutes for unexpected errors
+            return null;
+        }
 
         if (!$response->successful()) {
             if ($response->status() === 404) {
