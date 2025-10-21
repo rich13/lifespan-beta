@@ -138,7 +138,7 @@
             @if($hasLocationConnections)
                 <x-spans.cards.unified-location-card :span="$photo" />
             @else
-                <!-- Technical Details (fallback when no location) -->
+                <!-- Technical Details (fallback when no location)
                 <div class="card mb-4">
                     <div class="card-header">
                         <h5 class="card-title mb-0">
@@ -176,7 +176,7 @@
                             @endif
                         </dl>
                     </div>
-                </div>
+                </div>-->
             @endif
 
             <!-- Photo Status -->
