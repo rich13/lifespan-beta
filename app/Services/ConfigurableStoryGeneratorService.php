@@ -453,16 +453,16 @@ class ConfigurableStoryGeneratorService
         $storyText = $this->cleanupTemplateText($storyText);
         
         // Add spaces between sentence placeholders that were replaced
-        // But only outside of HTML href attributes to avoid breaking URLs
+        // But only outside of HTML tags and href attributes to avoid breaking URLs
         $storyText = preg_replace_callback(
-            '/(<a[^>]*href="[^"]*"[^>]*>.*?<\/a>)|\.([A-Z])/',
+            '/(href="[^"]*")|(<a[^>]*>.*?<\/a>)|\.([A-Z])/',
             function($matches) {
-                // If this is a link (group 1), return it unchanged
-                if (!empty($matches[1])) {
-                    return $matches[1];
+                // If this is an href attribute (group 1) or a link tag (group 2), return unchanged
+                if (!empty($matches[1]) || !empty($matches[2])) {
+                    return $matches[0];
                 }
-                // Otherwise, add space after period + capital letter (group 2)
-                return '. ' . $matches[2];
+                // Otherwise, add space after period + capital letter (group 3)
+                return '. ' . $matches[3];
             },
             $storyText
         );

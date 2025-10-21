@@ -451,6 +451,15 @@ class Span extends Model
     }
 
     /**
+     * Get the route key for the model.
+     * Use slug if available, otherwise fall back to UUID
+     */
+    public function getRouteKey()
+    {
+        return $this->slug ?? $this->id;
+    }
+
+    /**
      * Resolve the model for route model binding.
      * Supports both UUID and slug resolution.
      */
