@@ -453,7 +453,19 @@ class ConfigurableStoryGeneratorService
         $storyText = $this->cleanupTemplateText($storyText);
         
         // Add spaces between sentence placeholders that were replaced
-        $storyText = preg_replace('/\.([A-Z])/', '. $1', $storyText);
+        // But only outside of HTML href attributes to avoid breaking URLs
+        $storyText = preg_replace_callback(
+            '/(<a[^>]*href="[^"]*"[^>]*>.*?<\/a>)|\.([A-Z])/',
+            function($matches) {
+                // If this is a link (group 1), return it unchanged
+                if (!empty($matches[1])) {
+                    return $matches[1];
+                }
+                // Otherwise, add space after period + capital letter (group 2)
+                return '. ' . $matches[2];
+            },
+            $storyText
+        );
         
         // Split into sentences and filter out empty ones
         $sentences = array_filter(array_map('trim', explode('.', $storyText)), function($sentence) {
@@ -856,6 +868,8 @@ class ConfigurableStoryGeneratorService
             'hasFeaturedSpanAgeAtPhotoDate' => $this->hasFeaturedSpanAgeAtPhotoDate($span),
             'hasPlaqueFeatures' => $this->hasPlaqueFeatures($span),
             'hasPlaqueLocation' => $this->hasPlaqueLocation($span),
+            'wasDeadAtDate' => $this->wasDeadAtDate($span),
+            'notYetBornAtDate' => $this->notYetBornAtDate($span),
             'hasAgeAtDate' => $this->hasAgeAtDate($span),
             'hasCurrentActivitiesAtDate' => $this->hasCurrentActivitiesAtDate($span),
             'hasRecentEventsAtDate' => $this->hasRecentEventsAtDate($span),
@@ -942,6 +956,8 @@ class ConfigurableStoryGeneratorService
             'getPlaqueFeatures' => $this->getPlaqueFeatures($span),
             'getPlaqueLocation' => $this->getPlaqueLocation($span),
             'getAtDateDisplay' => $this->getAtDateDisplay($span),
+            'getYearsDeadAtDate' => $this->getYearsDeadAtDate($span),
+            'getYearsUntilBirthAtDate' => $this->getYearsUntilBirthAtDate($span),
             'getAgeAtDate' => $this->getAgeAtDate($span),
             'getCurrentActivitiesAtDate' => $this->getCurrentActivitiesAtDate($span),
             'getRecentEventsAtDate' => $this->getRecentEventsAtDate($span),
@@ -2639,6 +2655,11 @@ class ConfigurableStoryGeneratorService
         $birthDate = $this->createDateFromSpan($span);
         
         if ($contextDate && $birthDate) {
+            // Check if person wasn't born yet
+            if ($contextDate < $birthDate) {
+                return null;
+            }
+            
             $ageInterval = $birthDate->diff($contextDate);
             $age = $ageInterval->y; // Years only, which automatically rounds down
             
@@ -2649,6 +2670,77 @@ class ConfigurableStoryGeneratorService
         }
         
         return null;
+    }
+
+    protected function getYearsDeadAtDate(Span $span): ?string
+    {
+        if (!$this->contextDate || $span->type_id !== 'person' || !$span->end_year) {
+            return null;
+        }
+        
+        $contextDate = $this->createDateFromContextDate();
+        if (!$contextDate) {
+            return null;
+        }
+        
+        // Create end date from span's end date (death date for persons)
+        $endDate = null;
+        if ($span->end_year && $span->end_month && $span->end_day) {
+            $endDate = new \DateTime(sprintf('%04d-%02d-%02d', $span->end_year, $span->end_month, $span->end_day));
+        } elseif ($span->end_year && $span->end_month) {
+            // If we only have month precision, use the first day of the month
+            $endDate = new \DateTime(sprintf('%04d-%02d-%02d', $span->end_year, $span->end_month, 1));
+        } elseif ($span->end_year) {
+            // If we only have year precision, use the start of the year
+            $endDate = new \DateTime(sprintf('%04d-%02d-%02d', $span->end_year, 1, 1));
+        }
+        
+        if (!$endDate || $contextDate <= $endDate) {
+            return null;
+        }
+        
+        // Calculate years between death and context date
+        $yearsInterval = $endDate->diff($contextDate);
+        $years = $yearsInterval->y;
+        
+        // Format the output with proper grammar
+        if ($years === 0) {
+            return 'less than a year';
+        } elseif ($years === 1) {
+            return '1 year';
+        } else {
+            return $years . ' years';
+        }
+    }
+
+    protected function getYearsUntilBirthAtDate(Span $span): ?string
+    {
+        if (!$this->contextDate || $span->type_id !== 'person' || !$span->start_year) {
+            return null;
+        }
+        
+        $contextDate = $this->createDateFromContextDate();
+        if (!$contextDate) {
+            return null;
+        }
+        
+        $birthDate = $this->createDateFromSpan($span);
+        if (!$birthDate || $contextDate >= $birthDate) {
+            return null;
+        }
+        
+        // Calculate years between context date and birth
+        $yearsInterval = $contextDate->diff($birthDate);
+        $years = $yearsInterval->y;
+        
+        // Format the output with proper grammar
+        if ($years === 0) {
+            return 'less than a year';
+        } elseif ($years === 1) {
+            return '1 year';
+        } else {
+            return $years . ' years';
+        }
     }
 
     protected function getCurrentActivitiesAtDate(Span $span): ?string
@@ -3019,9 +3111,89 @@ class ConfigurableStoryGeneratorService
     }
 
     // At-date condition methods
+    protected function wasDeadAtDate(Span $span): bool
+    {
+        // Only applies to person spans with an end date (death date)
+        if ($span->type_id !== 'person' || !$span->end_year || !$this->contextDate) {
+            return false;
+        }
+        
+        $contextDate = $this->createDateFromContextDate();
+        if (!$contextDate) {
+            return false;
+        }
+        
+        // Create end date from span's end date (death date for persons)
+        $endDate = null;
+        if ($span->end_year && $span->end_month && $span->end_day) {
+            $endDate = new \DateTime(sprintf('%04d-%02d-%02d', $span->end_year, $span->end_month, $span->end_day));
+        } elseif ($span->end_year && $span->end_month) {
+            // If we only have month precision, use the last day of the month
+            $endDate = new \DateTime(sprintf('%04d-%02d-%02d', $span->end_year, $span->end_month, 
+                cal_days_in_month(CAL_GREGORIAN, $span->end_month, $span->end_year)));
+        } elseif ($span->end_year) {
+            // If we only have year precision, use the end of the year
+            $endDate = new \DateTime(sprintf('%04d-%02d-%02d', $span->end_year, 12, 31));
+        }
+        
+        // Return true if the person had already died by this date
+        return $endDate && $contextDate > $endDate;
+    }
+
+    protected function notYetBornAtDate(Span $span): bool
+    {
+        // Only applies to person spans
+        if ($span->type_id !== 'person' || !$span->start_year || !$this->contextDate) {
+            return false;
+        }
+        
+        $contextDate = $this->createDateFromContextDate();
+        if (!$contextDate) {
+            return false;
+        }
+        
+        $birthDate = $this->createDateFromSpan($span);
+        if (!$birthDate) {
+            return false;
+        }
+        
+        // Return true if the person wasn't born yet at this date
+        return $contextDate < $birthDate;
+    }
+
     protected function hasAgeAtDate(Span $span): bool
     {
-        return $this->getAgeAtDate($span) !== null;
+        // First check if we can calculate an age
+        if ($this->getAgeAtDate($span) === null) {
+            return false;
+        }
+        
+        // For person spans, check if they were still alive at the context date
+        if ($span->type_id === 'person' && $span->end_year && $this->contextDate) {
+            $contextDate = $this->createDateFromContextDate();
+            
+            if ($contextDate) {
+                // Create end date from span's end date (death date for persons)
+                $endDate = null;
+                if ($span->end_year && $span->end_month && $span->end_day) {
+                    $endDate = new \DateTime(sprintf('%04d-%02d-%02d', $span->end_year, $span->end_month, $span->end_day));
+                } elseif ($span->end_year && $span->end_month) {
+                    // If we only have month precision, use the last day of the month
+                    $endDate = new \DateTime(sprintf('%04d-%02d-%02d', $span->end_year, $span->end_month, 
+                        cal_days_in_month(CAL_GREGORIAN, $span->end_month, $span->end_year)));
+                } elseif ($span->end_year) {
+                    // If we only have year precision, use the end of the year
+                    $endDate = new \DateTime(sprintf('%04d-%02d-%02d', $span->end_year, 12, 31));
+                }
+                
+                // If the person had already died by this date, don't show the age
+                if ($endDate && $contextDate > $endDate) {
+                    return false;
+                }
+            }
+        }
+        
+        return true;
     }
 
     protected function hasCurrentActivitiesAtDate(Span $span): bool

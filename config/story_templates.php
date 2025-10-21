@@ -308,8 +308,26 @@ return [
         ],
     ],
     'person_at_date' => [
-        'story_template' => '{age_at_date}{residence_at_date}{employment_at_date}{education_at_date}{education_phase_at_date}{relationship_at_date}',
+        'story_template' => '{dead_at_date}{not_yet_born_at_date}{age_at_date}{residence_at_date}{employment_at_date}{education_at_date}{education_phase_at_date}{relationship_at_date}',
         'sentences' => [
+            'dead_at_date' => [
+                'template' => 'On {date}, {name} had been dead for {years_dead}.',
+                'data_methods' => [
+                    'date' => 'getAtDateDisplay',
+                    'name' => 'getName',
+                    'years_dead' => 'getYearsDeadAtDate',
+                ],
+                'condition' => 'wasDeadAtDate',
+            ],
+            'not_yet_born_at_date' => [
+                'template' => 'On {date}, {name} would not be born for another {years_until_birth}.',
+                'data_methods' => [
+                    'date' => 'getAtDateDisplay',
+                    'name' => 'getName',
+                    'years_until_birth' => 'getYearsUntilBirthAtDate',
+                ],
+                'condition' => 'notYetBornAtDate',
+            ],
             'age_at_date' => [
                 'template' => 'On {date}, {name} was {age} years old.',
                 'data_methods' => [
