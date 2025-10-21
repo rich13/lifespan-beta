@@ -131,9 +131,6 @@
                                 <p class="text-muted mt-2">
                                     No ongoing connections found for {{ $span->getDisplayTitle() }} on {{ $displayDate }}.
                                 </p>
-                                <p class="text-muted small">
-                                    This could mean the span had no connections at this time, or the connections don't have temporal data.
-                                </p>
                             </div>
                         @endif
                     </div>
