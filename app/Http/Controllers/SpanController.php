@@ -3768,7 +3768,8 @@ class SpanController extends Controller
             Log::error('AI span improvement preview error', [
                 'error' => $e->getMessage(),
                 'span_id' => $span->id,
-                'span_name' => $span->name
+                'span_name' => $span->name,
+                'trace' => $e->getTraceAsString()
             ]);
 
             return response()->json([
