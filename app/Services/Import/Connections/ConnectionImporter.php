@@ -70,6 +70,18 @@ class ConnectionImporter
         ?array $dates = null,
         ?array $metadata = null
     ): Connection {
+        // Prevent self-referential connections
+        if ($parent->id === $child->id) {
+            Log::error('Self-referential connection attempt prevented', [
+                'span_id' => $parent->id,
+                'span_name' => $parent->name,
+                'connection_type' => $connectionType
+            ]);
+            throw new \InvalidArgumentException(
+                "A span cannot be connected to itself. Span '{$parent->name}' cannot have a '{$connectionType}' connection to itself."
+            );
+        }
+
         Log::info('Creating connection', [
             'parent' => $parent->toArray(),
             'child' => $child->toArray(),
