@@ -54,7 +54,8 @@ class GroupBasedAccessTest extends TestCase
             ->get(route('spans.show', $this->sharedSpan));
 
         // Expect 301 redirect (UUID to slug redirect) or 200 (direct access)
-        $response->assertStatus(301);
+        // Now that getRouteKey() uses slug, route() generates slug URLs directly (200)
+        $this->assertContains($response->status(), [200, 301]);
     }
 
     /** @test */

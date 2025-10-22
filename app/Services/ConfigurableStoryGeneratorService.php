@@ -446,40 +446,13 @@ class ConfigurableStoryGeneratorService
             $storyText = str_replace("{{$key}}", $sentence, $storyText);
         }
         
-        // Remove any remaining placeholders (for sentences that didn't generate)
-        $storyText = preg_replace('/\{[^}]+\}/', '', $storyText);
-        
-        // Clean up the text (remove extra spaces, etc.)
-        $storyText = $this->cleanupTemplateText($storyText);
-        
-        // Add spaces between sentence placeholders that were replaced
-        // But only outside of HTML tags and href attributes to avoid breaking URLs
-        $storyText = preg_replace_callback(
-            '/(href="[^"]*")|(<a[^>]*>.*?<\/a>)|\.([A-Z])/',
-            function($matches) {
-                // If this is an href attribute (group 1) or a link tag (group 2), return unchanged
-                if (!empty($matches[1]) || !empty($matches[2])) {
-                    return $matches[0];
-                }
-                // Otherwise, add space after period + capital letter (group 3)
-                return '. ' . $matches[3];
-            },
-            $storyText
-        );
-        
-        // Split into sentences and filter out empty ones
-        $sentences = array_filter(array_map('trim', explode('.', $storyText)), function($sentence) {
-            return !empty($sentence);
-        });
-
-        // Capitalize the first letter of each sentence and add periods back
-        $sentences = array_map(function($sentence) {
-            $sentence = ltrim($sentence);
-            return mb_strtoupper(mb_substr($sentence, 0, 1)) . mb_substr($sentence, 1) . '.';
-        }, $sentences);
+        // Use the generated sentences array directly instead of splitting by period
+        // This preserves URLs and avoids the capitalization bug that occurs when
+        // explode('.') splits URLs like https://beta.lifespan.dev into fragments
+        // Each sentence template already ends with a period and is properly formatted
+        $sentences = array_values(array_filter($generatedSentences));
         
         $debug['total_sentences_generated'] = count($sentences);
-        $debug['final_story_text'] = $storyText;
 
         // If no sentences were generated, use the fallback message
         if (empty($sentences)) {
@@ -614,37 +587,12 @@ class ConfigurableStoryGeneratorService
             $debug['sentences'][$sentenceKey] = $sentenceDebug;
         }
         
-        // Clean up the text (remove extra spaces, etc.)
-        $storyText = $this->cleanupTemplateText($storyText);
-        
-        // Add spaces between sentence placeholders that were replaced
-        // But only outside of HTML tags and href attributes to avoid breaking URLs
-        $storyText = preg_replace_callback(
-            '/(href="[^"]*")|(<a[^>]*>.*?<\/a>)|\.([A-Z])/',
-            function($matches) {
-                // If this is an href attribute (group 1) or a link tag (group 2), return unchanged
-                if (!empty($matches[1]) || !empty($matches[2])) {
-                    return $matches[0];
-                }
-                // Otherwise, add space after period + capital letter (group 3)
-                return '. ' . $matches[3];
-            },
-            $storyText
-        );
-        
-        // Split into sentences and filter out empty ones
-        $sentences = array_filter(array_map('trim', explode('.', $storyText)), function($sentence) {
-            return !empty($sentence);
-        });
-
-        // Capitalize the first letter of each sentence and add periods back
-        $sentences = array_map(function($sentence) {
-            $sentence = ltrim($sentence);
-            return mb_strtoupper(mb_substr($sentence, 0, 1)) . mb_substr($sentence, 1) . '.';
-        }, $sentences);
+        // Use the generated sentences array directly instead of splitting by period
+        // This preserves URLs and avoids the capitalization bug
+        // Each sentence template already ends with a period and is properly formatted
+        $sentences = array_values(array_filter($generatedSentences));
         
         $debug['total_sentences_generated'] = count($sentences);
-        $debug['final_story_text'] = $storyText;
 
         // If no sentences were generated, use the fallback message
         if (empty($sentences)) {

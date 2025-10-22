@@ -31,7 +31,7 @@ class PhotoRedirectTest extends TestCase
         // Test slug redirect (if slug exists) - should redirect to photos
         if ($photo->slug) {
             $response = $this->get("/spans/{$photo->slug}");
-            $response->assertRedirect("/photos/{$photo->id}");
+            $response->assertRedirect("/photos/{$photo->slug}");
             $response->assertStatus(301);
         }
     }
@@ -67,7 +67,8 @@ class PhotoRedirectTest extends TestCase
         ]);
 
         $response = $this->get("/spans/{$photo->id}/edit");
-        $response->assertRedirect("/photos/{$photo->id}/edit");
+        $expectedRedirect = $photo->slug ? "/photos/{$photo->slug}/edit" : "/photos/{$photo->id}/edit";
+        $response->assertRedirect($expectedRedirect);
         $response->assertStatus(301);
     }
 
@@ -85,7 +86,8 @@ class PhotoRedirectTest extends TestCase
         ]);
 
         $response = $this->get("/spans/{$photo->id}/compare");
-        $response->assertRedirect("/photos/{$photo->id}/compare");
+        $expectedRedirect = $photo->slug ? "/photos/{$photo->slug}/compare" : "/photos/{$photo->id}/compare";
+        $response->assertRedirect($expectedRedirect);
         $response->assertStatus(301);
     }
 
@@ -103,7 +105,8 @@ class PhotoRedirectTest extends TestCase
         ]);
 
         $response = $this->get("/spans/{$photo->id}/story");
-        $response->assertRedirect("/photos/{$photo->id}/story");
+        $expectedRedirect = $photo->slug ? "/photos/{$photo->slug}/story" : "/photos/{$photo->id}/story";
+        $response->assertRedirect($expectedRedirect);
         $response->assertStatus(301);
     }
 }

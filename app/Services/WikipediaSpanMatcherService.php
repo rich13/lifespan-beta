@@ -268,7 +268,9 @@ class WikipediaSpanMatcherService
             
             if ($type === 'span' && !empty($match['spans'])) {
                 $span = $match['spans'][0]; // Use the first matching span
-                $link = route('spans.show', $span['id']);
+                // Use slug if available, otherwise fall back to ID
+                $routeKey = $span['slug'] ?? $span['id'];
+                $link = route('spans.show', $routeKey);
                 
                 $classes = 'text-decoration-none';
                 // Add placeholder class if the span is in placeholder state

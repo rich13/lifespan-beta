@@ -43,12 +43,16 @@ class WikipediaSpanMatcherTest extends TestCase
         $result = $matcher->highlightMatches($text);
 
         // Should find both occurrences of "Nirvana" and both occurrences of "Foo Fighters"
-        $this->assertStringContainsString('href="' . route('spans.show', $nirvana->id) . '"', $result);
-        $this->assertStringContainsString('href="' . route('spans.show', $fooFighters->id) . '"', $result);
+        // With getRouteKey() using slug, route() now generates slug-based URLs
+        $nirvanaUrl = route('spans.show', $nirvana);
+        $fooFightersUrl = route('spans.show', $fooFighters);
+        
+        $this->assertStringContainsString('href="' . $nirvanaUrl . '"', $result);
+        $this->assertStringContainsString('href="' . $fooFightersUrl . '"', $result);
         
         // Count the number of links to each span
-        $nirvanaLinks = substr_count($result, 'href="' . route('spans.show', $nirvana->id) . '"');
-        $fooFightersLinks = substr_count($result, 'href="' . route('spans.show', $fooFighters->id) . '"');
+        $nirvanaLinks = substr_count($result, 'href="' . $nirvanaUrl . '"');
+        $fooFightersLinks = substr_count($result, 'href="' . $fooFightersUrl . '"');
         
         $this->assertEquals(2, $nirvanaLinks, 'Should find 2 occurrences of Nirvana');
         $this->assertEquals(2, $fooFightersLinks, 'Should find 2 occurrences of Foo Fighters');
@@ -84,10 +88,12 @@ class WikipediaSpanMatcherTest extends TestCase
         $result = $matcher->highlightMatches($text);
 
         // Should find the quoted album name
-        $this->assertStringContainsString('href="' . route('spans.show', $nevermind->id) . '"', $result);
+        // With getRouteKey() using slug, route() now generates slug-based URLs
+        $nevermindUrl = route('spans.show', $nevermind);
+        $this->assertStringContainsString('href="' . $nevermindUrl . '"', $result);
         
         // Count the number of links to the album
-        $nevermindLinks = substr_count($result, 'href="' . route('spans.show', $nevermind->id) . '"');
+        $nevermindLinks = substr_count($result, 'href="' . $nevermindUrl . '"');
         $this->assertEquals(2, $nevermindLinks, 'Should find 2 occurrences of Nevermind');
     }
 }
