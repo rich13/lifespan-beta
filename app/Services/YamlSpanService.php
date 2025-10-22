@@ -109,213 +109,244 @@ class YamlSpanService
      */
     public function spanToArray(Span $span): array
     {
-        // Load all necessary relationships including connection spans for dates
-        // Note: We don't load 'type' relationship to avoid expanding type field to full object
-        $span->load([
-            'connectionsAsSubject.child.type',
-            'connectionsAsObject.parent.type', 
-            'connectionsAsSubject.type',
-            'connectionsAsObject.type',
-            'connectionsAsSubject.connectionSpan',
-            'connectionsAsObject.connectionSpan',
-            'owner'
-        ]);
+        try {
+            // Load all necessary relationships including connection spans for dates
+            // Note: We don't load 'type' relationship to avoid expanding type field to full object
+            $span->load([
+                'connectionsAsSubject.child.type',
+                'connectionsAsObject.parent.type', 
+                'connectionsAsSubject.type',
+                'connectionsAsObject.type',
+                'connectionsAsSubject.connectionSpan',
+                'connectionsAsObject.connectionSpan',
+                'owner'
+            ]);
 
-        // Special handling for connection spans
-        if ($span->type_id === 'connection') {
-            return $this->connectionSpanToArray($span);
-        }
+            // Special handling for connection spans
+            if ($span->type_id === 'connection') {
+                return $this->connectionSpanToArray($span);
+            }
 
-        $data = [
-            'name' => $span->name,
-            'slug' => $span->slug,
-            'type' => $span->type_id, // Always use type_id, not the loaded relationship
-            'state' => $span->state,
-            'description' => $span->description,
-            'notes' => $span->notes,
-            'metadata' => $span->metadata ?? [],
-            'sources' => $span->sources,
-            'access_level' => $span->access_level,
-        ];
-        // Add start and end as strings if present
-        $start = $span->getFormattedStartDateAttribute();
-        if ($start) {
-            $data['start'] = $start;
-        }
-        $end = $span->getFormattedEndDateAttribute();
-        if ($end) {
-            $data['end'] = $end;
-        }
-
-        // Add optional fields
-        if ($span->description) {
-            $data['description'] = $span->description;
-        }
-        if ($span->notes) {
-            $data['notes'] = $span->notes;
-        }
-
-        // Add metadata (always include for consistency)
-        $data['metadata'] = $span->metadata ?? [];
-        
-        // Ensure required metadata fields are present for place spans
-        if ($span->type_id === 'place' && !isset($data['metadata']['subtype'])) {
-            $data['metadata']['subtype'] = 'city_district'; // Default to a common place type
-        }
-        
-        // Ensure required metadata fields are present for organisation spans
-        if ($span->type_id === 'organisation' && !isset($data['metadata']['subtype'])) {
-            $data['metadata']['subtype'] = 'corporation'; // Default to a common organisation type
-        }
-
-        // Add sources if present
-        if (!empty($span->sources)) {
-            $data['sources'] = $span->sources;
-        }
-
-        // Add access control information
-        $data['access_level'] = $span->access_level;
-
-        // Group connections by type with special handling for family relationships
-        $connections = [];
-        
-        // Process outgoing connections (where this span is the subject/parent)
-        foreach ($span->connectionsAsSubject as $connection) {
-            $connectionType = $connection->type_id;
-            $targetSpan = $connection->child;
-            
-            $connectionData = [
-                'name' => $targetSpan->name,
-                'id' => $targetSpan->id,
-                'type' => $targetSpan->type_id, // Always use type_id, not the loaded relationship
-                'connection_id' => $connection->id,
+            $data = [
+                'name' => $span->name,
+                'slug' => $span->slug,
+                'type' => $span->type_id, // Always use type_id, not the loaded relationship
+                'state' => $span->state,
+                'description' => $span->description,
+                'notes' => $span->notes,
+                'metadata' => $span->metadata ?? [],
+                'sources' => $span->sources,
+                'access_level' => $span->access_level,
             ];
-            // Always include metadata from the connected span if present
-            if (!empty($targetSpan->metadata)) {
-                $connectionData['metadata'] = $targetSpan->metadata;
-            }
-            // Add span dates and state
-            $start = $targetSpan->getFormattedStartDateAttribute();
+            
+            // Add start and end as strings if present
+            $start = $span->getFormattedStartDateAttribute();
             if ($start) {
-                $connectionData['start'] = $start;
+                $data['start'] = $start;
             }
-            $end = $targetSpan->getFormattedEndDateAttribute();
+            $end = $span->getFormattedEndDateAttribute();
             if ($end) {
-                $connectionData['end'] = $end;
+                $data['end'] = $end;
             }
-            if ($targetSpan->state) {
-                $connectionData['state'] = $targetSpan->state;
+
+            // Add optional fields
+            if ($span->description) {
+                $data['description'] = $span->description;
+            }
+            if ($span->notes) {
+                $data['notes'] = $span->notes;
+            }
+
+            // Add metadata (always include for consistency)
+            $data['metadata'] = $span->metadata ?? [];
+            
+            // Ensure required metadata fields are present for place spans
+            if ($span->type_id === 'place' && !isset($data['metadata']['subtype'])) {
+                $data['metadata']['subtype'] = 'city_district'; // Default to a common place type
             }
             
-            // Add connection dates from the connection span if available
-            if ($connection->connectionSpan) {
-                $this->addConnectionDates($connectionData, $connection->connectionSpan);
-                
-                // Add nested connections from the connection span
-                $nestedConnections = $this->getNestedConnections($connection->connectionSpan);
-                if (!empty($nestedConnections)) {
-                    $connectionData['nested_connections'] = $nestedConnections;
-                }
-                
-                // Special handling for has_role connections: extract dates from nested at_organisation connection span
-                if ($connectionType === 'has_role' && !isset($connectionData['start']) && !isset($connectionData['end'])) {
-                    $this->extractDatesFromNestedConnections($connectionData, $connection->connectionSpan);
-                }
+            // Ensure required metadata fields are present for organisation spans
+            if ($span->type_id === 'organisation' && !isset($data['metadata']['subtype'])) {
+                $data['metadata']['subtype'] = 'corporation'; // Default to a common organisation type
             }
             
-            // Add connection metadata if present
-            if (!empty($connection->metadata)) {
-                $connectionData['connection_metadata'] = $connection->metadata;
+            // Ensure required metadata fields are present for person spans
+            if ($span->type_id === 'person' && !isset($data['metadata']['subtype'])) {
+                $data['metadata']['subtype'] = 'private_individual'; // Default to private individual
             }
-            
-            // Special handling for family connections
-            if ($connectionType === 'family') {
-                // For outgoing family connections, these are children
-                if (!isset($connections['children'])) {
-                    $connections['children'] = [];
-                }
-                $connections['children'][] = $connectionData;
-            } else {
-                // Regular connection handling for non-family types
-                if (!isset($connections[$connectionType])) {
-                    $connections[$connectionType] = [];
-                }
-                $connections[$connectionType][] = $connectionData;
+
+            // Add sources if present
+            if (!empty($span->sources)) {
+                $data['sources'] = $span->sources;
             }
-        }
+
+            // Add access control information
+            $data['access_level'] = $span->access_level;
+
+            // Group connections by type with special handling for family relationships
+            $connections = [];
         
-        // Process incoming connections (where this span is the object/child)
-        foreach ($span->connectionsAsObject as $connection) {
-            $connectionType = $connection->type_id;
-            $sourceSpan = $connection->parent;
+            // Process outgoing connections (where this span is the subject/parent)
+            foreach ($span->connectionsAsSubject as $connection) {
+                $connectionType = $connection->type_id;
+                $targetSpan = $connection->child;
+                
+                $connectionData = [
+                    'name' => $targetSpan->name,
+                    'id' => $targetSpan->id,
+                    'type' => $targetSpan->type_id, // Always use type_id, not the loaded relationship
+                    'connection_id' => $connection->id,
+                ];
+                // Always include metadata from the connected span if present
+                if (!empty($targetSpan->metadata)) {
+                    $connectionData['metadata'] = $targetSpan->metadata;
+                }
+                // Add span dates and state
+                $start = $targetSpan->getFormattedStartDateAttribute();
+                if ($start) {
+                    $connectionData['start'] = $start;
+                }
+                $end = $targetSpan->getFormattedEndDateAttribute();
+                if ($end) {
+                    $connectionData['end'] = $end;
+                }
+                if ($targetSpan->state) {
+                    $connectionData['state'] = $targetSpan->state;
+                }
+                
+                // Add connection dates from the connection span if available
+                if ($connection->connectionSpan) {
+                    $this->addConnectionDates($connectionData, $connection->connectionSpan);
+                    
+                    // Add nested connections from the connection span
+                    $nestedConnections = $this->getNestedConnections($connection->connectionSpan);
+                    if (!empty($nestedConnections)) {
+                        $connectionData['nested_connections'] = $nestedConnections;
+                    }
+                    
+                    // Special handling for has_role connections: extract dates from nested at_organisation connection span
+                    if ($connectionType === 'has_role' && !isset($connectionData['start']) && !isset($connectionData['end'])) {
+                        $this->extractDatesFromNestedConnections($connectionData, $connection->connectionSpan);
+                    }
+                }
+                
+                // Add connection metadata if present
+                if (!empty($connection->metadata)) {
+                    $connectionData['connection_metadata'] = $connection->metadata;
+                }
+                
+                // Special handling for family connections
+                if ($connectionType === 'family') {
+                    // For outgoing family connections, these are children
+                    if (!isset($connections['children'])) {
+                        $connections['children'] = [];
+                    }
+                    $connections['children'][] = $connectionData;
+                } else {
+                    // Regular connection handling for non-family types
+                    if (!isset($connections[$connectionType])) {
+                        $connections[$connectionType] = [];
+                    }
+                    $connections[$connectionType][] = $connectionData;
+                }
+            }
+        
+            // Process incoming connections (where this span is the object/child)
+            foreach ($span->connectionsAsObject as $connection) {
+                $connectionType = $connection->type_id;
+                $sourceSpan = $connection->parent;
+                
+                $connectionData = [
+                    'name' => $sourceSpan->name,
+                    'id' => $sourceSpan->id,
+                    'type' => $sourceSpan->type_id,
+                    'connection_id' => $connection->id,
+                ];
+                // Always include metadata from the connected span if present
+                if (!empty($sourceSpan->metadata)) {
+                    $connectionData['metadata'] = $sourceSpan->metadata;
+                }
+                // Add span dates and state
+                $start = $sourceSpan->getFormattedStartDateAttribute();
+                if ($start) {
+                    $connectionData['start'] = $start;
+                }
+                $end = $sourceSpan->getFormattedEndDateAttribute();
+                if ($end) {
+                    $connectionData['end'] = $end;
+                }
+                if ($sourceSpan->state) {
+                    $connectionData['state'] = $sourceSpan->state;
+                }
+                
+                // Add connection dates from the connection span if available
+                if ($connection->connectionSpan) {
+                    $this->addConnectionDates($connectionData, $connection->connectionSpan);
+                    
+                    // Add nested connections from the connection span
+                    $nestedConnections = $this->getNestedConnections($connection->connectionSpan);
+                    if (!empty($nestedConnections)) {
+                        $connectionData['nested_connections'] = $nestedConnections;
+                    }
+                    
+                    // Special handling for has_role connections: extract dates from nested at_organisation connection span
+                    if ($connectionType === 'has_role' && !isset($connectionData['start']) && !isset($connectionData['end'])) {
+                        $this->extractDatesFromNestedConnections($connectionData, $connection->connectionSpan);
+                    }
+                }
+                
+                // Add connection metadata if present
+                if (!empty($connection->metadata)) {
+                    $connectionData['connection_metadata'] = $connection->metadata;
+                }
+                
+                // Special handling for family connections
+                if ($connectionType === 'family') {
+                    // For incoming family connections, these are parents
+                    if (!isset($connections['parents'])) {
+                        $connections['parents'] = [];
+                    }
+                    $connections['parents'][] = $connectionData;
+                } else {
+                    // For non-family incoming connections, use the original approach
+                    $incomingKey = $connectionType . '_incoming';
+                    if (!isset($connections[$incomingKey])) {
+                        $connections[$incomingKey] = [];
+                    }
+                    $connections[$incomingKey][] = $connectionData;
+                }
+            }
+
+            // Add connections to data if any exist
+            if (!empty($connections)) {
+                $data['connections'] = $connections;
+            }
+
+            return $data;
             
-            $connectionData = [
-                'name' => $sourceSpan->name,
-                'id' => $sourceSpan->id,
-                'type' => $sourceSpan->type_id,
-                'connection_id' => $connection->id,
+        } catch (\Exception $e) {
+            Log::error('Failed to convert span to array', [
+                'span_id' => $span->id,
+                'span_name' => $span->name,
+                'span_type' => $span->type_id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            // Return a minimal safe representation
+            return [
+                'id' => $span->id,
+                'name' => $span->name,
+                'type' => $span->type_id,
+                'state' => $span->state,
+                'description' => $span->description,
+                'notes' => $span->notes,
+                'metadata' => $span->metadata ?? [],
+                'sources' => $span->sources ?? [],
+                'access_level' => $span->access_level,
+                'error' => 'Serialization failed: ' . $e->getMessage()
             ];
-            // Always include metadata from the connected span if present
-            if (!empty($sourceSpan->metadata)) {
-                $connectionData['metadata'] = $sourceSpan->metadata;
-            }
-            // Add span dates and state
-            $start = $sourceSpan->getFormattedStartDateAttribute();
-            if ($start) {
-                $connectionData['start'] = $start;
-            }
-            $end = $sourceSpan->getFormattedEndDateAttribute();
-            if ($end) {
-                $connectionData['end'] = $end;
-            }
-            if ($sourceSpan->state) {
-                $connectionData['state'] = $sourceSpan->state;
-            }
-            
-            // Add connection dates from the connection span if available
-            if ($connection->connectionSpan) {
-                $this->addConnectionDates($connectionData, $connection->connectionSpan);
-                
-                // Add nested connections from the connection span
-                $nestedConnections = $this->getNestedConnections($connection->connectionSpan);
-                if (!empty($nestedConnections)) {
-                    $connectionData['nested_connections'] = $nestedConnections;
-                }
-                
-                // Special handling for has_role connections: extract dates from nested at_organisation connection span
-                if ($connectionType === 'has_role' && !isset($connectionData['start']) && !isset($connectionData['end'])) {
-                    $this->extractDatesFromNestedConnections($connectionData, $connection->connectionSpan);
-                }
-            }
-            
-            // Add connection metadata if present
-            if (!empty($connection->metadata)) {
-                $connectionData['connection_metadata'] = $connection->metadata;
-            }
-            
-            // Special handling for family connections
-            if ($connectionType === 'family') {
-                // For incoming family connections, these are parents
-                if (!isset($connections['parents'])) {
-                    $connections['parents'] = [];
-                }
-                $connections['parents'][] = $connectionData;
-            } else {
-                // For non-family incoming connections, use the original approach
-                $incomingKey = $connectionType . '_incoming';
-                if (!isset($connections[$incomingKey])) {
-                    $connections[$incomingKey] = [];
-                }
-                $connections[$incomingKey][] = $connectionData;
-            }
         }
-
-        // Add connections to data if any exist
-        if (!empty($connections)) {
-            $data['connections'] = $connections;
-        }
-
-        return $data;
     }
 
     /**
@@ -3407,6 +3438,11 @@ class YamlSpanService
         // Ensure required metadata fields are present for organisation spans
         if ($span->type_id === 'organisation' && !isset($data['metadata']['subtype'])) {
             $data['metadata']['subtype'] = 'corporation'; // Default to a common organisation type
+        }
+        
+        // Ensure required metadata fields are present for person spans
+        if ($span->type_id === 'person' && !isset($data['metadata']['subtype'])) {
+            $data['metadata']['subtype'] = 'private_individual'; // Default to private individual
         }
 
         // Add dates if they exist
