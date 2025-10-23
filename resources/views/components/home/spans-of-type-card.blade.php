@@ -1,30 +1,40 @@
 @props([
     'type' => 'organisation',
-    'subtype' => 'museum',
-    'title' => 'Museums',
+    'subtype' => null,
+    'title' => 'Items',
     'icon' => 'building',
     'limit' => 5
 ])
 
 @php
-    // Get spans matching the specified type and subtype
-    $items = \App\Models\Span::where('type_id', $type)
-        ->whereJsonContains('metadata->subtype', $subtype)
-        ->where(function($query) {
+    // Get spans matching the specified type and optionally subtype
+    $query = \App\Models\Span::where('type_id', $type);
+    
+    // Only filter by subtype if one is provided
+    if ($subtype) {
+        $query->whereJsonContains('metadata->subtype', $subtype);
+    }
+    
+    $items = $query->where(function($query) {
             $query->where('access_level', 'public')
                 ->orWhere('owner_id', auth()->id());
         })
-        ->orderBy('name')
+        ->whereNotNull('start_year')
+        ->inRandomOrder()
         ->limit($limit)
         ->get();
     
     // Check if there are more items beyond the limit
-    $hasMoreItems = \App\Models\Span::where('type_id', $type)
-        ->whereJsonContains('metadata->subtype', $subtype)
-        ->where(function($query) {
+    $countQuery = \App\Models\Span::where('type_id', $type);
+    if ($subtype) {
+        $countQuery->whereJsonContains('metadata->subtype', $subtype);
+    }
+    
+    $hasMoreItems = $countQuery->where(function($query) {
             $query->where('access_level', 'public')
                 ->orWhere('owner_id', auth()->id());
         })
+        ->whereNotNull('start_year')
         ->count() > $limit;
 @endphp
 
@@ -47,10 +57,17 @@
             
             @if($hasMoreItems)
                 <div class="text-center mt-3">
-                    <a href="{{ route('spans.types.subtypes.show', ['type' => $type, 'subtype' => $subtype]) }}" class="btn btn-sm btn-outline-info">
-                        <i class="bi bi-arrow-right me-1"></i>
-                        View all {{ strtolower($title) }}
-                    </a>
+                    @if($subtype)
+                        <a href="{{ route('spans.types.subtypes.show', ['type' => $type, 'subtype' => $subtype]) }}" class="btn btn-sm btn-outline-info">
+                            <i class="bi bi-arrow-right me-1"></i>
+                            View all {{ strtolower($title) }}
+                        </a>
+                    @else
+                        <a href="{{ route('spans.types.show', ['type' => $type]) }}" class="btn btn-sm btn-outline-info">
+                            <i class="bi bi-arrow-right me-1"></i>
+                            View all {{ strtolower($title) }}
+                        </a>
+                    @endif
                 </div>
             @endif
         @endif
