@@ -85,8 +85,30 @@ class ConfigurableStoryGeneratorService
                 $sentence .= ".";
             }
         } else {
-            // Generic connection sentence if needed later
-            $sentence = e($connectionSpan->name);
+            // Generic connection sentence for other connection types
+            $subjectHtml = $connection->parent
+                ? '<a href="' . route('spans.show', $connection->parent) . '" class="text-decoration-none" title="' . e($connection->parent->name) . '">' . e($connection->parent->name) . '</a>'
+                : 'Subject';
+            $objectHtml = $connection->child
+                ? '<a href="' . route('spans.show', $connection->child) . '" class="text-decoration-none" title="' . e($connection->child->name) . '">' . e($connection->child->name) . '</a>'
+                : 'object';
+            
+            $predicate = $connection->type?->forward_predicate ?? 'is connected to';
+            
+            $sentence = "$subjectHtml $predicate $objectHtml";
+            
+            // Add date information if available
+            if ($connectionSpan->start_year) {
+                $startHtml = $this->formatDateLink($connectionSpan->start_year, $connectionSpan->start_month, $connectionSpan->start_day);
+                if ($connectionSpan->end_year && $connectionSpan->end_year !== $connectionSpan->start_year) {
+                    $endHtml = $this->formatDateLink($connectionSpan->end_year, $connectionSpan->end_month, $connectionSpan->end_day);
+                    $sentence .= " between $startHtml and $endHtml";
+                } else {
+                    $sentence .= " from $startHtml";
+                }
+            }
+            
+            $sentence .= ".";
         }
 
         return [
