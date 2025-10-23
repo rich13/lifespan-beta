@@ -702,72 +702,6 @@
                 });
             </script>
 
-            <div class="mb-4">
-                @php
-                    // Get placeholder connections that are connected to the current user's personal span
-                    $placeholderConnections = collect();
-                    
-                    if (auth()->user()->personalSpan) {
-                        $personalSpan = auth()->user()->personalSpan;
-                        
-                        // Get connections where the user's personal span is either the parent or child
-                        $placeholderConnections = \App\Models\Connection::where(function($query) use ($personalSpan) {
-                                $query->where('parent_id', $personalSpan->id)
-                                      ->orWhere('child_id', $personalSpan->id);
-                            })
-                            ->whereHas('connectionSpan', function($query) {
-                                $query->where('state', 'placeholder');
-                            })
-                            ->with(['connectionSpan', 'parent', 'child', 'type'])
-                            ->orderBy('created_at', 'desc')
-                            ->limit(5)
-                            ->get();
-                    }
-                @endphp
-
-                @if($placeholderConnections->isEmpty())
-                    <div class="card">
-                        <div class="card-header">
-                            <h3 class="h6 mb-0">
-                                <i class="bi bi-border-style text-primary me-2"></i>
-                                Your Placeholders
-                            </h3>
-                        </div>
-                        <div class="card-body">
-                            <p class="text-center text-muted my-5">No placeholder connections found.</p>
-                        </div>
-                    </div>
-                @else
-                    <div class="card">
-                        <div class="card-header">
-                            <h3 class="h6 mb-0">
-                                <i class="bi bi-border-style text-primary me-2"></i>
-                                Your Placeholders
-                            </h3>
-                        </div>
-                        <div class="card-body">
-                            <div class="spans-list">
-                                @foreach($placeholderConnections as $connection)
-                                    
-                                        <div class="flex-grow-1">
-                                            <x-connections.interactive-card :connection="$connection" />
-                                        </div>
-                                    
-                                @endforeach
-                            </div>
-                            
-                            @if($placeholderConnections->count() >= 5)
-                                <!-- TODO: Add a link to the placeholder connections page
-                                <div class="text-center mt-3">
-                                    <a href="#" class="btn btn-sm btn-outline-secondary">
-                                        Work on this...
-                                    </a>
-                                </div> -->
-                            @endif
-                        </div>
-                    </div>
-                @endif
-            </div>
 
             {{-- Recently Created Card --}}
             {{-- <div class="mb-4">
@@ -815,52 +749,15 @@
                 </div>
             </div> --}}
 
-            <!-- Starred Set Card -->
-            <div class="mb-4">
-                @php
-                    // Get the user's starred set
-                    $starredSet = \App\Models\Span::where('owner_id', auth()->id())
-                    ->where('type_id', 'set')
-                    ->whereJsonContains('metadata->is_default', true)
-                    ->whereJsonContains('metadata->subtype', 'starred')
-                    ->first();
-                    $starredItems = $starredSet->getSetContents();
-                @endphp
 
-                <div class="card">
-                    <div class="card-header">
-                        <h3 class="h6 mb-0">
-                            <i class="bi bi-star-fill text-warning me-2"></i>
-                            <a href="{{ route('sets.show', $starredSet) }}" class="text-decoration-none">
-                                Starred Items
-                            </a>
-                        </h3>
-                    </div>
-                    <div class="card-body">
-                        @if($starredItems->isEmpty())
-                            <p class="text-center text-muted my-3">No starred items yet.</p>
-                            <div class="text-center">
-                                <a href="{{ route('sets.show', $starredSet) }}" class="btn btn-sm btn-outline-primary">
-                                    <i class="bi bi-plus-circle me-1"></i>Add Items
-                                </a>
-                            </div>
-                        @else
-                            <div class="spans-list">
-                                @foreach($starredItems->take(5) as $item)
-                                    <x-spans.display.interactive-card :span="$item" />
-                                @endforeach
-                            </div>
-                            
-                            @if($starredItems->count() > 5)
-                                <div class="text-center mt-3">
-                                    <a href="{{ route('sets.show', $starredSet) }}" class="btn btn-sm btn-outline-secondary">
-                                        View all {{ $starredItems->count() }} items
-                                    </a>
-                                </div>
-                            @endif
-                        @endif
-                    </div>
-                </div>
+            
+            <!-- Bands Card -->
+            <div class="mb-4">
+                <x-home.spans-of-type-card 
+                    :type="'band'"
+                    :title="'Bands'"
+                    :icon="'cassette'"
+                />
             </div>
 
             <!-- Museums Card -->
@@ -947,7 +844,7 @@
             </div>
             <div class="modal-body">
                 <p class="mb-3">
-                    You've now got a span, and some placeholders.
+                    You've now got a span to work with!
                 </p>
                 <p class="mb-0">
                     You can now:
@@ -955,7 +852,7 @@
                 <ul class="mb-3">
                     <li>Explore generally...</li>
                     <li>Add more connections...</li>
-                    <li>Edit the placeholders you just created...</li>
+                    <li>Edit and enhance your span...</li>
                     <li>...and dismiss this message <i class="bi bi-emoji-smile"></i></li>
                 </ul>
             </div>
