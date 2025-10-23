@@ -651,10 +651,13 @@ $(document).ready(function() {
                 const form = $('#new-span-form');
                 const formDataObj = new FormData(form[0]);
                 
+                // Get CSRF token from meta tag
+                const csrfToken = $('meta[name="csrf-token"]').attr('content');
+                
                 // Add stored data
                 formDataObj.append('name', formData.name);
                 formDataObj.append('type_id', formData.type_id);
-                formDataObj.append('_token', $('meta[name="csrf-token"]').attr('content'));
+                formDataObj.append('_token', csrfToken);
                 
                 // Ensure state is set
                 const selectedState = $('input[name="state"]:checked').val();
@@ -669,6 +672,11 @@ $(document).ready(function() {
                 $('.is-invalid').removeClass('is-invalid');
                 $('.invalid-feedback').text('');
                 
+                // Log CSRF token for debugging (only if it's missing)
+                if (!csrfToken) {
+                    console.error('CSRF token not found in meta tag');
+                }
+                
                 $.ajax({
                     url: '{{ route("spans.store") }}',
                     method: 'POST',
@@ -676,7 +684,7 @@ $(document).ready(function() {
                     processData: false,
                     contentType: false,
                     headers: {
-                        'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content'),
+                        'X-CSRF-TOKEN': csrfToken,
                         'Accept': 'application/json'
                     },
                     success: function(response) {
@@ -695,7 +703,91 @@ $(document).ready(function() {
                         }
                     },
                     error: function(xhr) {
-                        if (xhr.status === 422) {
+                        if (xhr.status === 419) {
+                            // CSRF token mismatch - try to refresh and retry
+                            console.warn('419 CSRF token mismatch - attempting to refresh token and retry');
+                            
+                            // Refresh the CSRF token
+                            fetch('/sanctum/csrf-cookie', {
+                                method: 'GET',
+                                credentials: 'include'
+                            })
+                            .then(response => {
+                                if (response.ok) {
+                                    // Get the new token from meta tag
+                                    const newCsrfToken = $('meta[name="csrf-token"]').attr('content');
+                                    
+                                    // Re-create FormData with new CSRF token
+                                    const form = $('#new-span-form');
+                                    const formDataObj = new FormData(form[0]);
+                                    
+                                    // Add stored data with new token
+                                    formDataObj.set('_token', newCsrfToken);
+                                    formDataObj.append('name', formData.name);
+                                    formDataObj.append('type_id', formData.type_id);
+                                    
+                                    // Set state again
+                                    const selectedState = $('input[name="state"]:checked').val();
+                                    if (!selectedState) {
+                                        $('#state_placeholder').prop('checked', true);
+                                        formDataObj.set('state', 'placeholder');
+                                    } else {
+                                        formDataObj.set('state', selectedState);
+                                    }
+                                    
+                                    // Retry the request with new token
+                                    $.ajax({
+                                        url: '{{ route("spans.store") }}',
+                                        method: 'POST',
+                                        data: formDataObj,
+                                        processData: false,
+                                        contentType: false,
+                                        headers: {
+                                            'X-CSRF-TOKEN': newCsrfToken,
+                                            'Accept': 'application/json'
+                                        },
+                                        success: function(response) {
+                                            $('#newSpanModal').modal('hide');
+                                            
+                                            if (typeof showAlert === 'function') {
+                                                showAlert('Span created successfully!', 'success');
+                                            } else {
+                                                alert('Span created successfully!');
+                                            }
+                                            
+                                            if (response.span_id) {
+                                                window.location.href = '/spans/' + response.span_id;
+                                            } else {
+                                                window.location.reload();
+                                            }
+                                        },
+                                        error: function(retryXhr) {
+                                            console.error('Retry failed:', retryXhr.status, retryXhr.responseText);
+                                            if (typeof showAlert === 'function') {
+                                                showAlert('Session expired. Please refresh the page and try again.', 'error');
+                                            } else {
+                                                alert('Session expired. Please refresh the page and try again.');
+                                            }
+                                        }
+                                    });
+                                } else {
+                                    console.error('Failed to refresh CSRF token');
+                                    if (typeof showAlert === 'function') {
+                                        showAlert('Session error. Please refresh the page and try again.', 'error');
+                                    } else {
+                                        alert('Session error. Please refresh the page and try again.');
+                                    }
+                                }
+                            })
+                            .catch(err => {
+                                console.error('Error refreshing CSRF token:', err);
+                                if (typeof showAlert === 'function') {
+                                    showAlert('Network error. Please try again.', 'error');
+                                } else {
+                                    alert('Network error. Please try again.');
+                                }
+                            });
+                        } else if (xhr.status === 422) {
                             const errors = xhr.responseJSON.errors;
                             Object.keys(errors).forEach(function(field) {
                                 let input;
@@ -710,7 +802,12 @@ $(document).ready(function() {
                                 errorDiv.text(errors[field][0]);
                             });
                         } else {
-                            alert('An error occurred while creating the span. Please try again.');
+                            console.error('Span creation error:', xhr.status, xhr.responseText);
+                            if (typeof showAlert === 'function') {
+                                showAlert('An error occurred while creating the span. Please try again.', 'error');
+                            } else {
+                                alert('An error occurred while creating the span. Please try again.');
+                            }
                         }
                     }
                 });
@@ -796,6 +893,10 @@ $(document).ready(function() {
                             ai_yaml: aiData.yaml,
                             _token: $('meta[name="csrf-token"]').attr('content')
                         },
+                        headers: {
+                            'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content'),
+                            'Accept': 'application/json'
+                        },
                         success: function(response) {
                             if (response.merge_available) {
                                 window.mergeData = response;
@@ -808,8 +909,15 @@ $(document).ready(function() {
                             // Reset button state
                             btn.prop('disabled', false);
                             btn.html(originalText);
-                            showStep(5);
-                            alert('Failed to create span with AI data. Please try again.');
+                            
+                            if (xhr.status === 419) {
+                                console.warn('419 CSRF token mismatch - refreshing token');
+                                alert('Session expired. Please try again.');
+                                showStep(5);
+                            } else {
+                                showStep(5);
+                                alert('Failed to create span with AI data. Please try again.');
+                            }
                         }
                     });
                 }
@@ -838,6 +946,10 @@ $(document).ready(function() {
                         confirm_merge: true,
                         _token: $('meta[name="csrf-token"]').attr('content')
                     },
+                    headers: {
+                        'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content'),
+                        'Accept': 'application/json'
+                    },
                     success: function(response) {
                         showCreationSuccess(response);
                     },
@@ -845,7 +957,13 @@ $(document).ready(function() {
                         // Reset button state
                         btn.prop('disabled', false);
                         btn.html(originalText);
-                        alert('Failed to merge and update span. Please try again.');
+                        
+                        if (xhr.status === 419) {
+                            console.warn('419 CSRF token mismatch - session expired');
+                            alert('Session expired. Please try again.');
+                        } else {
+                            alert('Failed to merge and update span. Please try again.');
+                        }
                     }
                 });
             });
@@ -1232,6 +1350,15 @@ $(document).ready(function() {
     
     // Initialize modal
     $('#newSpanModal').on('show.bs.modal', function() {
+        // Ensure we have a fresh CSRF token before showing the modal
+        fetch('/sanctum/csrf-cookie', {
+            method: 'GET',
+            credentials: 'include'
+        })
+        .catch(err => {
+            console.warn('Could not refresh CSRF token, proceeding anyway:', err);
+        });
+        
         showStep(1);
     });
     

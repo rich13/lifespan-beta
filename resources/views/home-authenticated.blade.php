@@ -862,6 +862,26 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Museums Card -->
+            <div class="mb-4">
+                <x-home.spans-of-type-card 
+                    :type="'organisation'"
+                    :subtype="'museum'"
+                    :title="'Museums'"
+                    :icon="'building'"
+                />
+            </div>
+
+            <!-- Books Card -->
+            <div class="mb-4">
+                <x-home.spans-of-type-card 
+                    :type="'thing'"
+                    :subtype="'book'"
+                    :title="'Books'"
+                    :icon="'book'"
+                />
+            </div>
         </div>
     </div>
 </div>

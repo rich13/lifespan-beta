@@ -3744,16 +3744,41 @@ class SpanController extends Controller
             }
 
             // Generate merged data to see what the final state would be
-            $mergedData = $yamlService->mergeYamlWithExistingSpan($span, $validationResult['data']);
+            try {
+                $mergedData = $yamlService->mergeYamlWithExistingSpan($span, $validationResult['data']);
+            } catch (\Exception $e) {
+                Log::warning('Error merging YAML (using new data only)', ['span_id' => $span->id, 'error' => $e->getMessage()]);
+                $mergedData = $validationResult['data'];
+            }
             
             // Analyze the impacts of the changes
-            $impacts = $yamlService->analyzeChangeImpacts($mergedData, $span);
+            try {
+                $impacts = $yamlService->analyzeChangeImpacts($validationResult['data'], $span);
+            } catch (\Exception $e) {
+                Log::warning('Error analyzing impacts', ['span_id' => $span->id, 'error' => $e->getMessage()]);
+                $impacts = [];
+            }
             
-            // Get current span data for comparison
-            $currentData = $yamlService->spanToArray($span);
+            // Get current span data for comparison (use safe method to avoid deep nesting issues)
+            try {
+                $currentData = $yamlService->spanToArraySafe($span);
+            } catch (\Exception $e) {
+                Log::warning('Error converting span to array', ['span_id' => $span->id, 'error' => $e->getMessage()]);
+                $currentData = ['name' => $span->name, 'type' => $span->type_id, 'state' => $span->state];
+            }
             
             // Create a structured diff showing what will change
-            $diff = $this->createStructuredDiff($currentData, $mergedData);
+            try {
+                $diff = $this->createStructuredDiff($currentData, $mergedData);
+            } catch (\Exception $e) {
+                Log::warning('Error creating diff', ['span_id' => $span->id, 'error' => $e->getMessage()]);
+                $diff = [
+                    'basic_fields' => [],
+                    'metadata' => [],
+                    'sources' => [],
+                    'connections' => []
+                ];
+            }
             
             return response()->json([
                 'success' => true,
@@ -5015,7 +5040,17 @@ class SpanController extends Controller
             ];
             
             // Create a structured diff showing what will change
-            $diff = $this->createStructuredDiff($currentData, $validated);
+            try {
+                $diff = $this->createStructuredDiff($currentData, $validated);
+            } catch (\Exception $e) {
+                Log::warning('Error creating diff', ['span_id' => $span->id, 'error' => $e->getMessage()]);
+                $diff = [
+                    'basic_fields' => [],
+                    'metadata' => [],
+                    'sources' => [],
+                    'connections' => []
+                ];
+            }
             
             // Debug: Log what changes were detected
             Log::channel('spans')->info('Diff results', [
