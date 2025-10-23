@@ -12,7 +12,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        DB::table('span_types')->insert([
+        DB::table('span_types')->insertOrIgnore([
             'type_id' => 'band',
             'name' => 'Band',
             'description' => 'A musical group or ensemble',
