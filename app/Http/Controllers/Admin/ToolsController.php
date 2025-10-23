@@ -8,6 +8,7 @@ use App\Models\Connection;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class ToolsController extends Controller
 {
@@ -1356,6 +1357,111 @@ class ToolsController extends Controller
 
             return redirect()->route('admin.tools.family-connection-date-sync')
                 ->withErrors(['general' => 'Sync failed: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Show the fix connection slugs tool
+     */
+    public function fixConnectionSlugs(Request $request)
+    {
+        // Find all connections with "connection-between-spans" slugs
+        $problematicConnections = Connection::whereHas('connectionSpan', function($q) {
+            $q->whereRaw("slug LIKE ?", ['%connection-between-spans%']);
+        })->with(['subject', 'object', 'type', 'connectionSpan'])->get();
+
+        $stats = [
+            'total_connections_to_fix' => $problematicConnections->count(),
+            'fixed_connections' => 0
+        ];
+
+        return view('admin.tools.fix-connection-slugs', compact('stats', 'problematicConnections'));
+    }
+
+    /**
+     * Execute the fix connection slugs operation
+     */
+    public function fixConnectionSlugsAction(Request $request)
+    {
+        $request->validate([
+            'dry_run' => 'boolean'
+        ]);
+
+        $dryRun = $request->boolean('dry_run', true);
+        $fixedCount = 0;
+        $errors = [];
+
+        try {
+            // Find all connections with "connection-between-spans" slugs
+            $problematicConnections = Connection::whereHas('connectionSpan', function($q) {
+                $q->whereRaw("slug LIKE ?", ['%connection-between-spans%']);
+            })->with(['subject', 'object', 'type', 'connectionSpan'])->get();
+
+            foreach ($problematicConnections as $connection) {
+                try {
+                    $subject = $connection->subject;
+                    $object = $connection->object;
+                    $connectionType = $connection->type;
+                    $connectionSpan = $connection->connectionSpan;
+
+                    if (!$subject || !$object || !$connectionType || !$connectionSpan) {
+                        $errors[] = "Connection {$connection->id} is missing required relationships.";
+                        continue;
+                    }
+
+                    // Generate new name using the proper convention
+                    $newName = "{$subject->name} {$connectionType->forward_predicate} {$object->name}";
+                    
+                    // Generate new slug from the name
+                    $baseSlug = Str::slug($newName);
+                    $newSlug = $baseSlug;
+                    $counter = 1;
+
+                    // Check for slug uniqueness (excluding the current span)
+                    while (Span::where('slug', $newSlug)->where('id', '!=', $connectionSpan->id)->exists()) {
+                        $newSlug = $baseSlug . '-' . ++$counter;
+                    }
+
+                    if (!$dryRun) {
+                        $connectionSpan->name = $newName;
+                        $connectionSpan->slug = $newSlug;
+                        $connectionSpan->save();
+                        
+                        Log::info('Fixed connection slug', [
+                            'connection_id' => $connection->id,
+                            'old_name' => $connectionSpan->getOriginal('name'),
+                            'new_name' => $newName,
+                            'old_slug' => $connectionSpan->getOriginal('slug'),
+                            'new_slug' => $newSlug,
+                            'fixed_by' => auth()->id(),
+                        ]);
+                    }
+
+                    $fixedCount++;
+                } catch (\Exception $e) {
+                    $errors[] = "Failed to fix connection {$connection->id}: " . $e->getMessage();
+                }
+            }
+
+            $message = $dryRun 
+                ? "Dry run: Would fix {$fixedCount} connection slugs."
+                : "Successfully fixed {$fixedCount} connection slugs.";
+            
+            if (!empty($errors)) {
+                $message .= " Errors: " . implode(', ', $errors);
+            }
+
+            return redirect()->route('admin.tools.fix-connection-slugs')
+                ->with('status', $message);
+
+        } catch (\Exception $e) {
+            Log::error('Failed to fix connection slugs', [
+                'error' => $e->getMessage(),
+                'user_id' => auth()->id(),
+            ]);
+
+            return redirect()->route('admin.tools.fix-connection-slugs')
+                ->withErrors(['general' => 'Failed to fix connection slugs: ' . $e->getMessage()]);
         }
     }
 } 

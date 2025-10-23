@@ -245,6 +245,27 @@
                 </div>
             </div>
         </div>
+
+        <!-- Fix Connection Slugs -->
+        <div class="col-lg-3 col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-link-45deg"></i>
+                        Fix Connection Slugs
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">Fix connections with "connection-between-spans" slugs and rename them using the proper naming convention.</p>
+                    
+                    <div class="d-grid">
+                        <a href="{{ route('admin.tools.fix-connection-slugs') }}" class="btn btn-info btn-sm">
+                            <i class="bi bi-link-45deg me-1"></i>Fix Slugs
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Row 2: Span Management Tools -->

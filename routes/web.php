@@ -258,6 +258,7 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                 
                 // Get the parent span to calculate the connection date
                 $parentSpan = \App\Models\Span::find($validated['parent_id']);
+                $childSpan = \App\Models\Span::find($validated['child_id']);
                 $connectionYear = null;
                 
                 // Use provided date if available, otherwise calculate from age
@@ -267,9 +268,20 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                     $connectionYear = $parentSpan->start_year + $validated['age'];
                 }
                 
+                // Generate connection span name using the connection type predicate
+                $connectionTypeName = "Connection";
+                if ($parentSpan && $childSpan) {
+                    $connectionType = \App\Models\ConnectionType::find($validated['type_id']);
+                    if ($connectionType) {
+                        $connectionTypeName = "{$parentSpan->name} {$connectionType->forward_predicate} {$childSpan->name}";
+                    } else {
+                        $connectionTypeName = "{$parentSpan->name} - {$childSpan->name}";
+                    }
+                }
+                
                 // Create a connection span with temporal information
                 $connectionSpanData = [
-                    'name' => "Connection between spans",
+                    'name' => $connectionTypeName,
                     'type_id' => 'connection',
                     'owner_id' => auth()->id(),
                     'updater_id' => auth()->id(),
@@ -1080,6 +1092,13 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
                 ->name('tools.family-connection-date-sync');
             Route::post('/tools/family-connection-date-sync', [App\Http\Controllers\Admin\ToolsController::class, 'familyConnectionDateSyncAction'])
                 ->name('tools.family-connection-date-sync-action');
+
+            // Fix Connection Slugs Tool
+            Route::get('/tools/fix-connection-slugs', [App\Http\Controllers\Admin\ToolsController::class, 'fixConnectionSlugs'])
+                ->name('tools.fix-connection-slugs');
+            Route::post('/tools/fix-connection-slugs', [App\Http\Controllers\Admin\ToolsController::class, 'fixConnectionSlugsAction'])
+                ->name('tools.fix-connection-slugs-action');
+
             Route::get('/tools/find-similar-spans', [App\Http\Controllers\Admin\ToolsController::class, 'findSimilarSpans'])
                 ->name('tools.find-similar-spans');
             Route::post('/tools/merge-spans', [App\Http\Controllers\Admin\ToolsController::class, 'mergeSpans'])
