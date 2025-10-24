@@ -439,6 +439,12 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
         @auth
         <script>
             $(document).ready(function() {
+                // Store bridge token from session if available
+                const bridgeToken = '{{ session()->get('bridge_token', '') }}';
+                if (bridgeToken) {
+                    SessionBridge.storeBridgeTokenFromServer(bridgeToken);
+                }
+
                 // Get stored sidebar state from cookie
                 const sidebarCollapsed = document.cookie.split('; ').find(row => row.startsWith('sidebarCollapsed='))?.split('=')[1] === 'true';
                 

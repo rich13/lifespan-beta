@@ -64,6 +64,9 @@ class EmailFirstAuthController extends Controller
             $user = Auth::user();
             $user->ensureDefaultSetsExist();
             
+            // Generate session bridge token for handling redeploys
+            $this->generateSessionBridgeToken($user);
+            
             return redirect()->intended(RouteServiceProvider::HOME);
         }
 
@@ -121,8 +124,27 @@ class EmailFirstAuthController extends Controller
         event(new Registered($user));
         
         Auth::login($user);
+        
+        // Generate session bridge token for handling redeploys
+        $this->generateSessionBridgeToken($user);
 
         return redirect(RouteServiceProvider::HOME);
+    }
+
+    /**
+     * Generate a session bridge token that can restore the session after a redeploy
+     * Token is stored in session so it can be passed to the view
+     */
+    private function generateSessionBridgeToken($user)
+    {
+        // Delete any existing bridge tokens
+        $user->tokens()->where('name', 'session-bridge')->delete();
+        
+        // Create a new bridge token that never expires (for prototype)
+        $token = $user->createToken('session-bridge');
+        
+        // Store token in session so it can be passed to views
+        request()->session()->put('bridge_token', $token->plainTextToken);
     }
 
     /**
@@ -130,6 +152,12 @@ class EmailFirstAuthController extends Controller
      */
     public function destroy(Request $request): RedirectResponse
     {
+        $user = Auth::user();
+        if ($user) {
+            // Delete the session bridge token
+            $user->tokens()->where('name', 'session-bridge')->delete();
+        }
+
         Auth::guard('web')->logout();
 
         $request->session()->invalidate();

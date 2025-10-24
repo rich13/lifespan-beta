@@ -4,6 +4,10 @@ import './dropdown-debug';
 import './debug';
 import './routes';
 import './tools-button-functions';
+import SessionBridge from './session-bridge';
+
+// Expose SessionBridge globally for use in templates
+window.SessionBridge = SessionBridge;
 
 // Import timeline manager
 import './timeline/timeline-manager';

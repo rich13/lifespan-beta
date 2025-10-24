@@ -39,7 +39,7 @@ use Illuminate\Support\Facades\Auth;
 @if($variant === 'mobile')
     <hr class="my-3">
     
-    <form method="POST" action="{{ route('logout') }}">
+    <form method="POST" action="{{ route('logout') }}" onsubmit="if(window.SessionBridge) { SessionBridge.logout(); }">
         @csrf
         <button type="submit" class="btn btn-outline-danger w-100">
             <i class="bi bi-box-arrow-right me-2"></i>Sign Out
@@ -48,7 +48,7 @@ use Illuminate\Support\Facades\Auth;
 @else
     <hr class="my-2">
     
-    <form method="POST" action="{{ route('logout') }}">
+    <form method="POST" action="{{ route('logout') }}" onsubmit="if(window.SessionBridge) { SessionBridge.logout(); }">
         @csrf
         <button type="submit" class="d-block w-100 text-start p-2 border-0 bg-transparent text-danger rounded hover-bg-light">
             <i class="bi bi-box-arrow-right me-2"></i>Sign Out

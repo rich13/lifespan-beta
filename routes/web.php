@@ -6,6 +6,7 @@ use App\Http\Controllers\PhotoController;
 use App\Http\Controllers\FamilyController;
 use App\Http\Controllers\JourneyController;
 use App\Http\Controllers\Auth\EmailFirstAuthController;
+use App\Http\Controllers\Auth\SessionBridgeController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\SpanController as AdminSpanController;
 
@@ -1225,6 +1226,15 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
         Route::post('register', [App\Http\Controllers\Auth\RegisteredUserController::class, 'store'])
             ->name('register.store');
     });
+
+    // Session Bridge endpoints - for handling redeploy session recovery
+    Route::post('api/session-bridge/restore', [SessionBridgeController::class, 'restoreSession'])
+        ->name('session-bridge.restore');
+    Route::post('api/session-bridge/check', [SessionBridgeController::class, 'checkSession'])
+        ->name('session-bridge.check');
+    Route::post('api/session-bridge/refresh', [SessionBridgeController::class, 'refreshBridgeToken'])
+        ->middleware('auth')
+        ->name('session-bridge.refresh');
 
     // Email verification routes
     Route::middleware('auth')->group(function () {
