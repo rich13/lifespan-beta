@@ -47,6 +47,8 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
         <!-- Scripts and Styles -->
         @viteReactRefresh
         @vite(['resources/scss/app.scss', 'resources/js/app.js', 'resources/js/routes.js'])
+        
+        <!-- Session Bridge: Enabled for seamless redeploy recovery -->
 
         <x-google-analytics />
 
