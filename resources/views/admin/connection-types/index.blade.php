@@ -56,8 +56,12 @@
                                 <td>
                                     @if($type->constraint_type === 'single')
                                         <span class="badge bg-info">Single</span>
-                                    @else
+                                    @elseif($type->constraint_type === 'non_overlapping')
                                         <span class="badge bg-warning">Non-overlapping</span>
+                                    @elseif($type->constraint_type === 'timeless')
+                                        <span class="badge bg-success">Timeless</span>
+                                    @else
+                                        <span class="badge bg-secondary">{{ ucfirst(str_replace('_', ' ', $type->constraint_type)) }}</span>
                                     @endif
                                 </td>
                                 <td>

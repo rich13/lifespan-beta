@@ -1,7 +1,7 @@
 @php
 use Illuminate\Support\Facades\Auth;
 @endphp
-@if(Auth::user() && Auth::user()->is_admin)
+@if(Auth::user() && Auth::user()->getEffectiveAdminStatus())
     <hr class="sidebar-divider">
     <ul class="nav flex-column">
         <li class="nav-item">

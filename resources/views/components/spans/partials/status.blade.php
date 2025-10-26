@@ -20,10 +20,10 @@
     }
 </style>
 
-        <div class="btn-group btn-group-sm" role="group">
+        <div class="btn-group btn-group-sm" role="group" data-component="status-buttons">
             <!-- Visibility (clickable to change if permitted) -->
             @php
-                $canChangeAccess = auth()->check() && ($span->isEditableBy(auth()->user()) || auth()->user()->is_admin || $span->owner_id === auth()->id());
+                $canChangeAccess = auth()->check() && ($span->isEditableBy(auth()->user()) || auth()->user()->getEffectiveAdminStatus() || $span->owner_id === auth()->id());
                 $level = $span->access_level ?? 'private';
                 $isPublic = $level === 'public';
                 $isPrivate = $level === 'private';
@@ -48,6 +48,35 @@
                     @endif>
                 <i class="bi bi-{{ $icon }} me-1"></i>{{ ucfirst($level) }}
             </button>
+
+            <!-- Shared Groups Count -->
+            @if($span->access_level === 'shared')
+                @php
+                    $sharedGroupsCount = $span->spanPermissions()
+                        ->whereNotNull('group_id')
+                        ->pluck('group_id')
+                        ->unique()
+                        ->count();
+                    $groupsList = $span->spanPermissions()
+                        ->whereNotNull('group_id')
+                        ->with('group')
+                        ->get()
+                        ->unique('group_id')
+                        ->pluck('group.name')
+                        ->join(', ');
+                @endphp
+                <button type="button" class="btn btn-sm btn-outline-info {{ $canChangeAccess ? '' : 'status-disabled' }}"
+                        data-bs-toggle="tooltip" 
+                        data-bs-placement="top" 
+                        data-bs-custom-class="tooltip-mini"
+                        data-bs-title="Shared with: {{ $groupsList }}"
+                        @if($canChangeAccess)
+                            data-span-id="{{ $span->id }}"
+                            onclick="openGroupPermissionsModal(this)"
+                        @endif>
+                    <i class="bi bi-people me-1"></i>{{ $sharedGroupsCount }} {{ $sharedGroupsCount === 1 ? 'group' : 'groups' }}
+                </button>
+            @endif
 
             <!-- Personal Span Indicator -->
             @if($span->is_personal_span)
@@ -100,7 +129,6 @@
                 {{ ucfirst($span->state) }}
             </button>
         </div>
-    
 
 @push('scripts')
 <script>

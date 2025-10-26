@@ -23,7 +23,7 @@
         } else {
             // Fallback: check if user is admin or if there's an owner_id field
             $isEditable = auth()->check() && (
-                auth()->user()->is_admin || 
+                auth()->user()->getEffectiveAdminStatus() || 
                 (isset($model->owner_id) && $model->owner_id === auth()->id())
             );
             $isViewable = auth()->check();
@@ -114,7 +114,7 @@
                 <i class="bi bi-info-circle"></i>
             </button>
             
-            @if(auth()->check() && auth()->user()->is_admin)
+            @if(auth()->check() && auth()->user()->getEffectiveAdminStatus())
                 <button type="button" 
                         class="btn btn-{{ $accessLevel === 'public' ? 'success' : ($accessLevel === 'private' ? 'danger' : 'warning') }} tools-expanded" 
                         title="Access: {{ ucfirst($accessLevel) }}"
@@ -129,7 +129,7 @@
                 </button>
             @endif
             
-            @if($model instanceof \App\Models\Span && auth()->check() && (auth()->user()->is_admin || $model->owner_id === auth()->id()))
+            @if($model instanceof \App\Models\Span && auth()->check() && (auth()->user()->getEffectiveAdminStatus() || $model->owner_id === auth()->id()))
                 <button type="button" 
                         class="btn btn-danger tools-expanded" 
                         title="Delete Span"
@@ -143,7 +143,7 @@
                 </button>
             @endif
             
-            @if($model instanceof \App\Models\Connection && auth()->check() && (auth()->user()->is_admin || ($model->connectionSpan && $model->connectionSpan->owner_id === auth()->id())))
+            @if($model instanceof \App\Models\Connection && auth()->check() && (auth()->user()->getEffectiveAdminStatus() || ($model->connectionSpan && $model->connectionSpan->owner_id === auth()->id())))
                 <button type="button" 
                         class="btn btn-danger tools-expanded" 
                         title="Delete Connection"

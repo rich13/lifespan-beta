@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Session;
 @endphp
 
 <!-- Shared User Switcher Component -->
-@if(Auth::user()->is_admin)
+@if(Auth::user()->getEffectiveAdminStatus())
     @if($variant === 'mobile')
         <div class="mt-3">
             <div class="text-muted small mb-2">Switch User</div>

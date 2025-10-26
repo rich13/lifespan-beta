@@ -62,7 +62,7 @@
                     Location
                 </h6>
                 @auth
-                    @if(auth()->user()->is_admin && $needsOsmData)
+                    @if(auth()->user()->getEffectiveAdminStatus() && $needsOsmData)
                         <button type="button" class="btn btn-sm btn-outline-primary" id="getMapDataBtn" title="Fetch OSM data for places without map data" onclick="
                             console.log('Button clicked directly!');
                             const button = this;
@@ -111,8 +111,8 @@
                                         headers['X-CSRF-TOKEN'] = csrfToken.getAttribute('content');
                                     }
                                     
-                                    console.log('Making API call to:', '/api/places/' + placeId + '/fetch-osm-data');
-                                    const response = await fetch('/api/places/' + placeId + '/fetch-osm-data', {
+                                    console.log('Making API call to:', '/admin/places/' + placeId + '/fetch-osm-data');
+                                    const response = await fetch('/admin/places/' + placeId + '/fetch-osm-data', {
                                         method: 'POST',
                                         headers: headers,
                                         credentials: 'same-origin'

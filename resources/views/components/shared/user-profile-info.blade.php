@@ -34,6 +34,13 @@ use Illuminate\Support\Facades\Auth;
     <a href="{{ route('settings.index') }}" class="d-block p-2 text-decoration-none text-dark rounded hover-bg-light">
         <i class="bi bi-gear me-2"></i>Settings
     </a>
+
+    <!-- Admin Mode Toggle - only show for admin users -->
+    @if(Auth::user()->canToggleAdminMode())
+        <a href="#" class="d-block p-2 text-decoration-none text-dark rounded hover-bg-light admin-mode-toggle-btn" data-admin-mode-action="toggle" title="Toggle admin mode on/off">
+            <i class="bi bi-shield-lock me-2"></i><span class="admin-mode-toggle-text">Admin Mode</span>
+        </a>
+    @endif
 @endif
 
 @if($variant === 'mobile')

@@ -21,7 +21,7 @@
         } else {
             // Fallback: check if user is admin or if there's an owner_id field
             $isEditable = auth()->check() && (
-                auth()->user()->is_admin || 
+                auth()->user()->getEffectiveAdminStatus() || 
                 (isset($model->owner_id) && $model->owner_id === auth()->id())
             );
         }
