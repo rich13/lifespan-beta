@@ -149,6 +149,19 @@ class Span extends Model
             if ($span->type_id === 'thing' && !isset($span->access_level)) {
                 $span->access_level = 'public';
             }
+            
+            // System-owned spans should always be public (sets, connections, etc.)
+            if (!isset($span->access_level)) {
+                $systemUser = User::where('email', 'system@lifespan.app')->first();
+                if ($systemUser && $span->owner_id === $systemUser->id) {
+                    $span->access_level = 'public';
+                }
+            }
+            
+            // Connection spans should always be public
+            if ($span->type_id === 'connection' && !isset($span->access_level)) {
+                $span->access_level = 'public';
+            }
         });
 
         // Validate metadata for all capabilities
@@ -476,7 +489,18 @@ class Span extends Model
             }
             
             // If not a UUID or not found by UUID, try to find by slug
-            return static::where('slug', $value)->first();
+            $span = static::where('slug', $value)->first();
+            if ($span) {
+                return $span;
+            }
+            
+            // Log when we can't find a span
+            \Log::warning('Route binding failed for span value', [
+                'value' => $value,
+                'is_uuid' => Str::isUuid($value)
+            ]);
+            
+            return null;
         }
         
         // If a specific field is provided, use the default behavior
@@ -696,6 +720,77 @@ class Span extends Model
     {
         // TODO: Implement type-specific descriptions
         return $this->getMeta('description', '');
+    }
+
+    /**
+     * Get a formatted date range for the span
+     * Returns a human-readable string like "Jan 15, 2020 - Mar 3, 2021"
+     *
+     * @return string
+     */
+    public function getFormattedDateRange(): string
+    {
+        $startDate = $this->getStartDate();
+        $endDate = $this->getEndDate();
+
+        if (!$startDate && !$endDate) {
+            return 'Date unknown';
+        }
+
+        if ($startDate && !$endDate) {
+            return $startDate;
+        }
+
+        if (!$startDate && $endDate) {
+            return 'Until ' . $endDate;
+        }
+
+        // If start and end are the same day
+        if ($startDate === $endDate) {
+            return $startDate;
+        }
+
+        return $startDate . ' - ' . $endDate;
+    }
+
+    /**
+     * Get the formatted start date
+     *
+     * @return string|null
+     */
+    private function getStartDate(): ?string
+    {
+        if (!$this->start_year) {
+            return null;
+        }
+
+        if ($this->start_month && $this->start_day) {
+            return \Carbon\Carbon::createFromDate($this->start_year, $this->start_month, $this->start_day)->format('M d, Y');
+        } elseif ($this->start_month) {
+            return \Carbon\Carbon::createFromDate($this->start_year, $this->start_month, 1)->format('M Y');
+        }
+
+        return (string) $this->start_year;
+    }
+
+    /**
+     * Get the formatted end date
+     *
+     * @return string|null
+     */
+    private function getEndDate(): ?string
+    {
+        if (!$this->end_year) {
+            return null;
+        }
+
+        if ($this->end_month && $this->end_day) {
+            return \Carbon\Carbon::createFromDate($this->end_year, $this->end_month, $this->end_day)->format('M d, Y');
+        } elseif ($this->end_month) {
+            return \Carbon\Carbon::createFromDate($this->end_year, $this->end_month, 1)->format('M Y');
+        }
+
+        return (string) $this->end_year;
     }
 
     /**
@@ -2064,8 +2159,8 @@ class Span extends Model
             return false;
         }
         
-        // Admins can do anything
-        if (isset($user->is_admin) && $user->is_admin) {
+        // Admins can do anything (respects admin mode toggle)
+        if ($user->getEffectiveAdminStatus()) {
             return true;
         }
         

@@ -198,6 +198,7 @@ class ConnectionImporter
             'end_day' => $dates['end_day'] ?? null,
             'owner_id' => $this->user->id,
             'updater_id' => $this->user->id,
+            'access_level' => 'public',
             'state' => 'placeholder',  // Always start as placeholder
             'metadata' => $connectionMetadata
         ]);
