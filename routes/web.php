@@ -5,6 +5,7 @@ use App\Http\Controllers\SpanController;
 use App\Http\Controllers\PhotoController;
 use App\Http\Controllers\FamilyController;
 use App\Http\Controllers\JourneyController;
+use App\Http\Controllers\NoteController;
 use App\Http\Controllers\Auth\EmailFirstAuthController;
 use App\Http\Controllers\Auth\SessionBridgeController;
 use App\Http\Controllers\Admin\DashboardController;
@@ -19,6 +20,7 @@ use App\Http\Controllers\Admin\ConnectionController;
 use App\Http\Controllers\Admin\ImportController;
 use App\Http\Controllers\Admin\VisualizerController;
 use App\Http\Controllers\Admin\MusicBrainzImportController;
+use App\Http\Controllers\AdminModeController;
 use App\Http\Controllers\FriendsController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Log;
@@ -498,6 +500,151 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                     ], 500);
                 }
             });
+
+            // Get notes that fall within a date range
+            Route::post('/api/notes-in-date-range', function (Request $request) {
+                $validated = $request->validate([
+                    'span_id' => 'required|string|exists:spans,id',
+                    'start_year' => 'nullable|integer|min:1000|max:2100',
+                    'start_month' => 'nullable|integer|min:1|max:12',
+                    'start_day' => 'nullable|integer|min:1|max:31',
+                    'end_year' => 'nullable|integer|min:1000|max:2100',
+                    'end_month' => 'nullable|integer|min:1|max:12',
+                    'end_day' => 'nullable|integer|min:1|max:31'
+                ]);
+
+                $user = auth()->user();
+                $span = \App\Models\Span::findOrFail($validated['span_id']);
+
+                // Check if user can access this span
+                if (!$span->isAccessibleBy($user)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'You do not have permission to access this span.'
+                    ], 403);
+                }
+
+                // Find notes that fall within the span's date range
+                $notes = \App\Models\Span::where('type_id', 'note')
+                    ->where(function ($q) use ($user) {
+                        $q->where('owner_id', $user->id)
+                          ->orWhere('access_level', 'public')
+                          ->orWhereHas('spanPermissions', function ($pq) use ($user) {
+                              $pq->whereHas('group', function ($gq) use ($user) {
+                                  $gq->whereHas('users', function ($uq) use ($user) {
+                                      $uq->where('users.id', $user->id);
+                                  });
+                              });
+                          });
+                    })
+                    ->where(function ($q) use ($validated) {
+                        if ($validated['start_year']) {
+                            $q->where('start_year', '>=', $validated['start_year']);
+                        }
+                        if ($validated['end_year']) {
+                            $q->where('start_year', '<=', $validated['end_year']);
+                        }
+                    })
+                    ->get()
+                    ->map(function ($note) {
+                        return [
+                            'id' => $note->id,
+                            'description' => $note->description,
+                            'formatted_date' => $note->getFormattedDateRange(),
+                            'author_name' => $note->owner?->personalSpan?->name ?? 'Unknown'
+                        ];
+                    });
+
+                return response()->json([
+                    'success' => true,
+                    'notes' => $notes
+                ]);
+            });
+
+            // Create annotates connection between a note and a span
+            Route::post('/api/connections/create-annotates', function (Request $request) {
+                $validated = $request->validate([
+                    'note_id' => 'required|string|exists:spans,id',
+                    'span_id' => 'required|string|exists:spans,id|different:note_id'
+                ]);
+
+                $user = auth()->user();
+                $note = \App\Models\Span::findOrFail($validated['note_id']);
+                $span = \App\Models\Span::findOrFail($validated['span_id']);
+
+                // Verify the first span is a note
+                if ($note->type_id !== 'note') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'The first span must be a note.'
+                    ], 422);
+                }
+
+                // Check permissions
+                if (!$note->isAccessibleBy($user) || !$span->isAccessibleBy($user)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'You do not have permission to access these spans.'
+                    ], 403);
+                }
+
+                // Check if connection already exists
+                $existing = \App\Models\Connection::where('type_id', 'annotates')
+                    ->where('parent_id', $note->id)
+                    ->where('child_id', $span->id)
+                    ->exists();
+
+                if ($existing) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'This note is already connected to this span.'
+                    ], 422);
+                }
+
+                try {
+                    // Create connection span
+                    $connectionSpan = \App\Models\Span::create([
+                        'name' => "{$note->name} annotates {$span->name}",
+                        'type_id' => 'connection',
+                        'owner_id' => $user->id,
+                        'updater_id' => $user->id,
+                        'access_level' => 'private',
+                        'state' => 'complete',
+                        'start_year' => $note->start_year,
+                        'start_month' => $note->start_month,
+                        'start_day' => $note->start_day,
+                        'end_year' => $note->end_year,
+                        'end_month' => $note->end_month,
+                        'end_day' => $note->end_day,
+                        'start_precision' => $note->start_precision ?? 'day',
+                        'end_precision' => $note->end_precision ?? 'day',
+                        'metadata' => ['connection_type' => 'annotates']
+                    ]);
+
+                    // Create the connection
+                    \App\Models\Connection::create([
+                        'parent_id' => $note->id,
+                        'child_id' => $span->id,
+                        'type_id' => 'annotates',
+                        'connection_span_id' => $connectionSpan->id
+                    ]);
+
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Note connected successfully!'
+                    ]);
+                } catch (\Exception $e) {
+                    \Log::error('Error creating annotates connection', [
+                        'error' => $e->getMessage(),
+                        'trace' => $e->getTraceAsString()
+                    ]);
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => $e->getMessage()
+                    ], 500);
+                }
+            });
         });
 
         // Public routes with span access control
@@ -602,6 +749,9 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
         Route::get('/api/sets/{set}/membership/{item}', [\App\Http\Controllers\SetsController::class, 'checkMembership'])->name('sets.membership');
     });
 
+    // Notes routes
+    Route::get('/notes', [\App\Http\Controllers\NoteController::class, 'index'])->name('notes.index');
+
     // Protected routes
     Route::middleware('auth')->group(function () {
         // Connection Management (for regular users) - must be before wildcard routes
@@ -612,6 +762,14 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
         Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password.update');
         Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
         Route::post('logout', [EmailFirstAuthController::class, 'destroy'])->name('logout');
+
+        // Admin Mode Toggle routes - allows admins to see what normal users see
+        Route::prefix('admin-mode')->name('admin-mode.')->group(function () {
+            Route::get('/status', [AdminModeController::class, 'getStatus'])->name('status');
+            Route::post('/disable', [AdminModeController::class, 'disable'])->name('disable');
+            Route::post('/enable', [AdminModeController::class, 'enable'])->name('enable');
+            Route::post('/toggle', [AdminModeController::class, 'toggle'])->name('toggle');
+        });
 
         // Family routes
         Route::post('/api/family/connections', [FamilyController::class, 'createConnection'])->name('family.connections.create');
@@ -681,6 +839,13 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
                 Route::post('/preview', [\App\Http\Controllers\PhotoTimelineImportController::class, 'preview'])->name('preview');
                 Route::post('/import', [\App\Http\Controllers\PhotoTimelineImportController::class, 'import'])->name('import');
                 Route::post('/osm-lookup', [\App\Http\Controllers\PhotoTimelineImportController::class, 'osmLookup'])->name('osm-lookup');
+            });
+            
+            // Twitter Archive Import routes
+            Route::prefix('import/twitter')->name('import.twitter.')->group(function () {
+                Route::get('/', [\App\Http\Controllers\Settings\ImportController::class, 'showTwitter'])->name('index');
+                Route::post('/upload', [\App\Http\Controllers\Settings\ImportController::class, 'uploadTwitter'])->name('upload');
+                Route::post('/import-tweet', [\App\Http\Controllers\Settings\ImportController::class, 'importTweet'])->name('import-tweet');
             });
         });
 
@@ -998,6 +1163,140 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
                 ]);
             })->name('spans.access-level.update');
 
+            // Group permissions GET/PUT API
+            Route::get('/spans/{span}/group-permissions', function (Request $request, $span) {
+                $user = auth()->user();
+                if (!$user || !$span->isEditableBy($user)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized'
+                    ], 403);
+                }
+
+                // Get all groups the user is a member of
+                $userGroups = $user->groups()->with('spanPermissions')->get();
+                
+                $groups = $userGroups->map(function ($group) use ($span) {
+                    $hasPermission = $group->spanPermissions()
+                        ->where('span_id', $span->id)
+                        ->where('permission_type', 'view')
+                        ->exists();
+                    
+                    return [
+                        'id' => $group->id,
+                        'name' => $group->name,
+                        'user_count' => $group->users()->count(),
+                        'has_permission' => $hasPermission
+                    ];
+                });
+
+                return response()->json([
+                    'success' => true,
+                    'groups' => $groups
+                ]);
+            })->name('spans.group-permissions.get');
+
+            Route::put('/spans/{span}/group-permissions', function (Request $request, $span) {
+                $user = auth()->user();
+                if (!$user || !$span->isEditableBy($user)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized'
+                    ], 403);
+                }
+
+                $request->validate([
+                    'groups' => 'required|array',
+                    'groups.*' => 'uuid|exists:groups,id'
+                ]);
+
+                // Get the groups the user is a member of
+                $userGroupIds = $user->groups()->pluck('id')->toArray();
+                
+                // Only allow updating permissions for groups the user is a member of
+                $validGroupIds = array_intersect($request->groups, $userGroupIds);
+
+                // Remove all existing permissions for this span from user's groups
+                \App\Models\SpanPermission::where('span_id', $span->id)
+                    ->whereIn('group_id', $userGroupIds)
+                    ->delete();
+
+                // Add new permissions for selected groups
+                foreach ($validGroupIds as $groupId) {
+                    \App\Models\SpanPermission::firstOrCreate([
+                        'span_id' => $span->id,
+                        'group_id' => $groupId,
+                    ], [
+                        'permission_type' => 'view'
+                    ]);
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Group permissions updated successfully'
+                ]);
+            })->name('spans.group-permissions.update');
+
+            // Update span notes
+            Route::put('/spans/{span}/notes', function (Request $request, \App\Models\Span $span) {
+                $user = auth()->user();
+                if (!$user || !($span->isEditableBy($user) || $user->is_admin || $span->owner_id === $user->id)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized'
+                    ], 403);
+                }
+
+                $request->validate([
+                    'notes' => 'nullable|string'
+                ]);
+
+                $span->update(['notes' => $request->notes]);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Notes updated successfully',
+                    'notes' => $span->notes
+                ]);
+            })->name('spans.notes.update');
+
+
+            // Fetch OSM data for a place
+            Route::post('/places/{span}/fetch-osm-data', function (Request $request, \App\Models\Span $span) {
+                if ($span->type_id !== 'place') {
+                    return response()->json(['success' => false, 'message' => 'Span is not a place'], 400);
+                }
+                
+                try {
+                    $geocodingWorkflow = app(\App\Services\PlaceGeocodingWorkflowService::class);
+                    $success = $geocodingWorkflow->resolvePlace($span);
+                    
+                    if ($success) {
+                        return response()->json([
+                            'success' => true, 
+                            'message' => 'OSM data fetched successfully',
+                            'has_osm_data' => $span->fresh()->getOsmData() !== null,
+                            'has_coordinates' => $span->fresh()->getCoordinates() !== null
+                        ]);
+                    } else {
+                        return response()->json([
+                            'success' => false, 
+                            'message' => 'Could not fetch OSM data for this place'
+                        ], 422);
+                    }
+                } catch (\Exception $e) {
+                    \Illuminate\Support\Facades\Log::error('Error fetching OSM data', [
+                        'span_id' => $span->id,
+                        'error' => $e->getMessage()
+                    ]);
+                    
+                    return response()->json([
+                        'success' => false, 
+                        'message' => 'An error occurred while fetching OSM data'
+                    ], 500);
+                }
+            })->name('places.fetch-osm-data');
+
             // User Management
             Route::get('/users', [UserController::class, 'index'])
                 ->name('users.index');
@@ -1204,6 +1503,183 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
             Route::post('user-switcher/switch-back', [App\Http\Controllers\Admin\UserSwitcherController::class, 'switchBack'])
                 ->name('user-switcher.switch-back');
         });
+
+        // User's groups and note creation
+        Route::get('/user/groups', function (Request $request) {
+            $user = auth()->user();
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Not authenticated'
+                ], 401);
+            }
+            
+            $groups = $user->groups()->get(['id', 'name']);
+            
+            return response()->json([
+                'success' => true,
+                'groups' => $groups
+            ]);
+        });
+
+        Route::post('/notes/create', function (Request $request) {
+            $user = auth()->user();
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You must be logged in to create notes'
+                ], 401);
+            }
+
+            $request->validate([
+                'span_id' => 'required|uuid|exists:spans,id',
+                'description' => 'required|string',
+                'tags' => 'nullable|string',
+                'state' => 'required|in:draft,complete',
+                'access_level' => 'required|in:private,shared',
+                'groups' => 'nullable|array',
+                'groups.*' => 'uuid|exists:groups,id',
+                'note_date' => 'required|date',
+                'note_date_end' => 'nullable|date'
+            ]);
+
+            try {
+                $today = now();
+                
+                // Parse dates from request
+                $noteDate = \Carbon\Carbon::parse($request->note_date);
+                $noteDateEnd = $request->note_date_end ? \Carbon\Carbon::parse($request->note_date_end) : $noteDate;
+                
+                // Get target span for naming
+                $targetSpan = \App\Models\Span::find($request->span_id);
+                $shortUuid = substr(\Illuminate\Support\Str::uuid(), 0, 8);
+                
+                // Create the note span with new naming convention
+                $note = new \App\Models\Span([
+                    'name' => $user->personalSpan->name . ' note ' . $shortUuid,
+                    'type_id' => 'note',
+                    'description' => $request->description,
+                    'notes' => $request->tags,
+                    'state' => $request->state,
+                    'start_year' => $noteDate->year,
+                    'start_month' => $noteDate->month,
+                    'start_day' => $noteDate->day,
+                    'end_year' => $noteDateEnd->year,
+                    'end_month' => $noteDateEnd->month,
+                    'end_day' => $noteDateEnd->day,
+                    'start_precision' => 'day',
+                    'end_precision' => 'day',
+                    'access_level' => $request->access_level,
+                    'owner_id' => $user->id,
+                    'updater_id' => $user->id
+                ]);
+                $note->save();
+                
+                // If shared, add group permissions
+                if ($request->access_level === 'shared' && $request->groups) {
+                    foreach ($request->groups as $groupId) {
+                        // Get the group and verify user is a member
+                        $group = \App\Models\Group::find($groupId);
+                        if ($group && $group->hasMember($user)) {
+                            \App\Models\SpanPermission::create([
+                                'span_id' => $note->id,
+                                'group_id' => $groupId,
+                                'permission_type' => 'view'
+                            ]);
+                        }
+                    }
+                }
+
+                // Create "created" connection: user created note
+                $createdConnectionSpan = new \App\Models\Span([
+                    'name' => $user->personalSpan->name . ' created ' . $note->name,
+                    'type_id' => 'connection',
+                    'state' => 'complete',
+                    'access_level' => 'private',
+                    'start_year' => $noteDate->year,
+                    'start_month' => $noteDate->month,
+                    'start_day' => $noteDate->day,
+                    'end_year' => $noteDateEnd->year,
+                    'end_month' => $noteDateEnd->month,
+                    'end_day' => $noteDateEnd->day,
+                    'start_precision' => 'day',
+                    'end_precision' => 'day',
+                    'metadata' => [
+                        'connection_type' => 'created',
+                        'source' => 'note_modal'
+                    ],
+                    'owner_id' => $user->id,
+                    'updater_id' => $user->id
+                ]);
+                $createdConnectionSpan->save();
+
+                $createdConnection = new \App\Models\Connection([
+                    'parent_id' => $user->personalSpan->id,
+                    'child_id' => $note->id,
+                    'type_id' => 'created',
+                    'connection_span_id' => $createdConnectionSpan->id
+                ]);
+                $createdConnection->save();
+
+                // Create "annotates" connection: note annotates span
+                $annotatesSpan = \App\Models\Span::find($request->span_id);
+                if (!$annotatesSpan || !$annotatesSpan->isAccessibleBy($user)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Cannot access the span to annotate'
+                    ], 403);
+                }
+
+                $annotatesConnectionSpan = new \App\Models\Span([
+                    'name' => $note->name . ' annotates ' . $annotatesSpan->name,
+                    'type_id' => 'connection',
+                    'state' => 'complete',
+                    'access_level' => 'private',
+                    'start_year' => $noteDate->year,
+                    'start_month' => $noteDate->month,
+                    'start_day' => $noteDate->day,
+                    'end_year' => $noteDateEnd->year,
+                    'end_month' => $noteDateEnd->month,
+                    'end_day' => $noteDateEnd->day,
+                    'start_precision' => 'day',
+                    'end_precision' => 'day',
+                    'metadata' => [
+                        'connection_type' => 'annotates',
+                        'source' => 'note_modal'
+                    ],
+                    'owner_id' => $user->id,
+                    'updater_id' => $user->id
+                ]);
+                $annotatesConnectionSpan->save();
+
+                $annotatesConnection = new \App\Models\Connection([
+                    'parent_id' => $note->id,
+                    'child_id' => $annotatesSpan->id,
+                    'type_id' => 'annotates',
+                    'connection_span_id' => $annotatesConnectionSpan->id
+                ]);
+                $annotatesConnection->save();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Note created successfully',
+                    'note_id' => $note->id
+                ]);
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error('Error creating note', [
+                    'user_id' => $user->id,
+                    'span_id' => $request->span_id,
+                    'error' => $e->getMessage()
+                ]);
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to create note: ' . $e->getMessage()
+                ], 500);
+            }
+        })->name('notes.create');
+
+        // User Switcher - moved outside admin middleware but still under auth
     });
 
     // Auth routes - Email First Flow
@@ -1256,6 +1732,8 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
         Route::get('/viewer', [App\Http\Controllers\TimelineViewerController::class, 'index'])->name('viewer.index');
         Route::get('/viewer/spans', [App\Http\Controllers\TimelineViewerController::class, 'getSpansInViewport'])->name('viewer.spans');
     });
+
+    // Family routes
 });
 
 // Remove the test-log route if not needed for production

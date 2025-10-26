@@ -16,6 +16,9 @@ import './timeline/timeline-manager';
 import './shared/user-switcher';
 import './mobile-right-nav';
 
+// Import admin mode toggle
+import './admin-mode-toggle';
+
 // Import page-specific scripts
 import './spans/show';
 import './spans/index';

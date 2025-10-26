@@ -498,4 +498,102 @@ class User extends Authenticatable
 
         return $this;
     }
+
+    /**
+     * Check if admin mode is currently disabled for this user via session override
+     * 
+     * This allows an actual admin to temporarily disable their admin status
+     * to see what normal users see, while maintaining the ability to toggle back on.
+     * 
+     * @return bool True if admin mode is disabled (hidden)
+     */
+    public function isAdminModeDisabled(): bool
+    {
+        // Only actual admins can have their admin mode disabled
+        if (!$this->is_admin) {
+            return false;
+        }
+
+        // Check session for admin mode disabled flag
+        $sessionKey = 'admin_mode_disabled_' . $this->id;
+        return session()->get($sessionKey, false) === true;
+    }
+
+    /**
+     * Get the effective admin status, accounting for admin mode toggle
+     * 
+     * Returns false if the user is an admin but has disabled admin mode.
+     * This allows all is_admin checks throughout the app to automatically
+     * respect the toggle without code changes.
+     * 
+     * @return bool The effective admin status
+     */
+    public function getEffectiveAdminStatus(): bool
+    {
+        if (!$this->is_admin) {
+            return false;
+        }
+
+        return !$this->isAdminModeDisabled();
+    }
+
+    /**
+     * Toggle admin mode off (hide admin status) for this user
+     * 
+     * Only works if the user is actually an admin.
+     * Sets a session flag that will be checked by all admin authorization.
+     * 
+     * @return bool True if admin mode was successfully disabled
+     */
+    public function disableAdminMode(): bool
+    {
+        if (!$this->is_admin) {
+            Log::warning('Non-admin user attempted to disable admin mode', ['user_id' => $this->id]);
+            return false;
+        }
+
+        $sessionKey = 'admin_mode_disabled_' . $this->id;
+        session()->put($sessionKey, true);
+        
+        Log::info('Admin mode disabled', ['user_id' => $this->id, 'user_email' => $this->email]);
+        
+        return true;
+    }
+
+    /**
+     * Toggle admin mode on (show admin status) for this user
+     * 
+     * Only works if the user is actually an admin.
+     * Removes the session flag that was hiding admin status.
+     * 
+     * @return bool True if admin mode was successfully enabled
+     */
+    public function enableAdminMode(): bool
+    {
+        if (!$this->is_admin) {
+            Log::warning('Non-admin user attempted to enable admin mode', ['user_id' => $this->id]);
+            return false;
+        }
+
+        $sessionKey = 'admin_mode_disabled_' . $this->id;
+        session()->forget($sessionKey);
+        
+        Log::info('Admin mode enabled', ['user_id' => $this->id, 'user_email' => $this->email]);
+        
+        return true;
+    }
+
+    /**
+     * Determine if the user can toggle admin mode
+     * 
+     * Returns true only if the user is actually an admin in the database.
+     * The existence of a can_toggle_admin capability is based solely on the
+     * is_admin flag - never on the current admin mode state.
+     * 
+     * @return bool True if the user is capable of toggling admin mode
+     */
+    public function canToggleAdminMode(): bool
+    {
+        return (bool) $this->is_admin;
+    }
 }
