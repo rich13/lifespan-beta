@@ -28,7 +28,7 @@ class SpanAccessMiddleware
                 $request->merge(['access_filter' => 'public_only']);
             } else {
                 $user = Auth::user();
-                if (!$user->is_admin) {
+                if (!$user->getEffectiveAdminStatus()) {
                     $request->merge(['access_filter' => 'user_accessible']);
                 }
             }
@@ -56,13 +56,38 @@ class SpanAccessMiddleware
             $user = Auth::user();
             
             // Admin can access all spans
-            if ($user->is_admin) {
+            if ($user->getEffectiveAdminStatus()) {
                 return $next($request);
             }
 
             // Owner can access their spans
             if ($span->owner_id === $user->id) {
                 return $next($request);
+            }
+
+            // Fallback: Users can access spans they last updated
+            // This covers spans created through various import paths where owner_id might be NULL or incorrect
+            if ($span->updater_id === $user->id) {
+                return $next($request);
+            }
+
+            // Special handling for connection spans
+            // Users can access connection spans if they can access both the connected spans
+            if ($span->type_id === 'connection') {
+                // Find the connection record for this span
+                $connection = \App\Models\Connection::where('connection_span_id', $span->id)->first();
+                
+                if ($connection) {
+                    $parent = $connection->parent;
+                    $child = $connection->child;
+                    
+                    $canAccessParent = $parent ? $parent->hasPermission($user, 'view') : false;
+                    $canAccessChild = $child ? $child->hasPermission($user, 'view') : false;
+                    
+                    if ($parent && $child && $canAccessParent && $canAccessChild) {
+                        return $next($request);
+                    }
+                }
             }
 
             // Public spans are visible to everyone
@@ -121,7 +146,7 @@ class SpanAccessMiddleware
                 $user = Auth::user();
                 
                 // Admin can access all spans
-                if ($user->is_admin) {
+                if ($user->getEffectiveAdminStatus()) {
                     return $next($request);
                 }
 
@@ -184,12 +209,17 @@ class SpanAccessMiddleware
                 $user = Auth::user();
                 
                 // Admin can access all spans
-                if ($user->is_admin) {
+                if ($user->getEffectiveAdminStatus()) {
                     return $next($request);
                 }
 
                 // Owner can access their spans
                 if ($subject->owner_id === $user->id) {
+                    return $next($request);
+                }
+
+                // Fallback: Users can access spans they last updated
+                if ($subject->updater_id === $user->id) {
                     return $next($request);
                 }
 
@@ -245,13 +275,38 @@ class SpanAccessMiddleware
             $user = Auth::user();
             
             // Admin can access all spans
-            if ($user->is_admin) {
+            if ($user->getEffectiveAdminStatus()) {
                 return $next($request);
             }
 
             // Owner can access their spans
             if ($span->owner_id === $user->id) {
                 return $next($request);
+            }
+
+            // Fallback: Users can access spans they last updated
+            // This covers spans created through various import paths where owner_id might be NULL or incorrect
+            if ($span->updater_id === $user->id) {
+                return $next($request);
+            }
+
+            // Special handling for connection spans
+            // Users can access connection spans if they can access both the connected spans
+            if ($span->type_id === 'connection') {
+                // Find the connection record for this span
+                $connection = \App\Models\Connection::where('connection_span_id', $span->id)->first();
+                
+                if ($connection) {
+                    $parent = $connection->parent;
+                    $child = $connection->child;
+                    
+                    $canAccessParent = $parent ? $parent->hasPermission($user, 'view') : false;
+                    $canAccessChild = $child ? $child->hasPermission($user, 'view') : false;
+                    
+                    if ($parent && $child && $canAccessParent && $canAccessChild) {
+                        return $next($request);
+                    }
+                }
             }
 
             // Public spans are visible to everyone

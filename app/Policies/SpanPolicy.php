@@ -31,6 +31,37 @@ class SpanPolicy
             return true;
         }
 
+        // Fallback: Users can view spans they last updated
+        // This covers spans created through various import paths where owner_id might be NULL or incorrect
+        if ($span->updater_id === $user->id) {
+            return true;
+        }
+
+        // Special handling for connection spans
+        // Users can view connection spans if they can view both the connected spans
+        if ($span->type_id === 'connection') {
+            // Find the connection record for this span
+            $connection = \App\Models\Connection::where('connection_span_id', $span->id)->first();
+            if ($connection) {
+                $parent = $connection->parent;
+                $child = $connection->child;
+                
+                // Check if user can access both parent and child spans
+                if ($parent && $child) {
+                    $canAccessParent = $parent->access_level === 'public' || 
+                                      $parent->owner_id === $user->id ||
+                                      $parent->hasPermission($user, 'view');
+                    $canAccessChild = $child->access_level === 'public' || 
+                                     $child->owner_id === $user->id ||
+                                     $child->hasPermission($user, 'view');
+                    
+                    if ($canAccessParent && $canAccessChild) {
+                        return true;
+                    }
+                }
+            }
+        }
+
         // Check for user-based permissions
         if ($span->hasPermission($user, 'view')) {
             return true;
@@ -89,7 +120,7 @@ class SpanPolicy
     public function delete(User $user, Span $span): bool
     {
         // Only owner and admin can delete
-        return $user->is_admin || $span->owner_id === $user->id;
+        return $user->getEffectiveAdminStatus() || $span->owner_id === $user->id || $span->updater_id === $user->id;
     }
 
     /**
@@ -98,6 +129,6 @@ class SpanPolicy
     public function managePermissions(User $user, Span $span): bool
     {
         // Only owner and admin can manage permissions
-        return $user->is_admin || $user->id === $span->owner_id;
+        return $user->getEffectiveAdminStatus() || $user->id === $span->owner_id || $user->id === $span->updater_id;
     }
 }
