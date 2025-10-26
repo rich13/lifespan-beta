@@ -184,9 +184,12 @@
                 </div>
                 
                 <!-- Description Card - Only show for public figures, not private individuals -->
-                @if(!($span->type_id === 'person' && $span->getMeta('subtype') === 'private_individual'))
+                @if(!($span->type_id === 'person' && $span->getMeta('subtype') === 'private_individual') && $span->type_id !== 'connection')
                     <x-spans.cards.description-card :span="$span" />
                 @endif
+                
+                <!-- Annotations Card - Show notes that annotate this span -->
+                <x-spans.cards.note-spans-card :span="$span" />
                 
                 <x-spans.partials.connections :span="$span" />
             </div>
@@ -277,6 +280,7 @@
                 @endif
                 <x-spans.partials.sources :span="$span" />
                 <x-spans.partials.status :span="$span" />
+                {{-- <x-spans.partials.notes :span="$span" /> --}}
 
             </div>
         </div>

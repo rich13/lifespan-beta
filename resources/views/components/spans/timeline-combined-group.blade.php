@@ -80,6 +80,8 @@ function initializeCombinedTimeline_{{ str_replace('-', '_', $span->id) }}() {
                 .filter(conn => {
                     // Exclude connections to connection spans
                     if (conn.target_type === 'connection') return false;
+                    // Exclude connections to note spans
+                    if (conn.target_type === 'note') return false;
                     // Exclude "created" connections to photos or sets
                     if (
                         conn.type_id === 'created' &&
@@ -759,9 +761,10 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
 
     function showCombinedTooltip_{{ str_replace('-', '_', $span->id) }}(event, connections, timelineName, isCurrentSpan, hoverYear, mode = 'absolute', isDuring = false) {
         tooltip.transition().duration(200).style('opacity', 1);
-        let tooltipContent = '';
         
         console.log('showCombinedTooltip called with hoverYear:', hoverYear, 'timelineName:', timelineName, 'isDuring:', isDuring);
+        
+        let tooltipContent = '';
         
         if (mode === 'relative') {
             // In relative mode, show "At age X" as the main header
@@ -1245,6 +1248,7 @@ function filterConnectionsDeep(connections) {
     return connections
         .filter(conn => {
             if (conn.target_type === 'connection') return false;
+            if (conn.target_type === 'note') return false;
             if (
                 conn.type_id === 'created' &&
                 conn.target_type === 'thing' &&

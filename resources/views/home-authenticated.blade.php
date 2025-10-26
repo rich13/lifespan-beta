@@ -478,8 +478,9 @@
 
                 @endphp
 
+                {{-- Commented out: Started Today section
                 @if($spansStartingOnDate->isNotEmpty())
-                    <div class="card mb-3">
+                    
                         <div class="card-header">
                             <h3 class="h6 mb-0">
                                 <i class="bi bi-calendar-plus text-success me-2"></i>
@@ -499,7 +500,9 @@
                         </div>
                     </div>
                 @endif
+                --}}
 
+                {{-- Commented out: Ended Today section
                 @if($spansEndingOnDate->isNotEmpty())
                     <div class="card mb-3">
                         <div class="card-header">
@@ -521,6 +524,7 @@
                         </div>
                     </div>
                 @endif
+                --}}
 
                 <x-upcoming-anniversaries />
 
@@ -750,7 +754,15 @@
             </div> --}}
 
 
-            
+            <!-- Bands Card -->
+            <div class="mb-4">
+                <x-home.spans-of-type-card 
+                    :type="'band'"
+                    :title="'Bands'"
+                    :icon="'cassette'"
+                />
+            </div>
+
             <!-- Bands Card -->
             <div class="mb-4">
                 <x-home.spans-of-type-card 

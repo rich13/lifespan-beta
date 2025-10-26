@@ -51,6 +51,25 @@ class PhotoController extends Controller
             });
         }
 
+        // Apply "photos_filter" - show my photos, public (not my) photos, or all accessible photos
+        // Default to "my" if user is authenticated, otherwise "public"
+        $photosFilter = $request->filled('photos_filter') ? $request->photos_filter : ($user ? 'my' : 'public');
+        
+        if ($photosFilter === 'my' && $user && $user->personalSpan) {
+            // Show only photos created by current user
+            $query->whereHas('connectionsAsObject', function ($q) use ($user) {
+                $q->where('type_id', 'created')
+                  ->where('parent_id', $user->personalSpan->id);
+            });
+        } elseif ($photosFilter === 'public' && $user && $user->personalSpan) {
+            // Show photos NOT created by current user (but still accessible)
+            $query->whereDoesntHave('connectionsAsObject', function ($q) use ($user) {
+                $q->where('type_id', 'created')
+                  ->where('parent_id', $user->personalSpan->id);
+            });
+        }
+        // If 'all', use the access control filters already applied above
+
         // Apply search filter
         if ($request->filled('search')) {
             $search = $request->search;
@@ -73,10 +92,16 @@ class PhotoController extends Controller
                     $t->where('type', 'features');
                 })->with('child');
             }])
+            ->with(['connectionsAsObject' => function ($q) {
+                $q->where('type_id', 'created')->with('parent');
+            }])
             ->orderBy('name')
             ->paginate(24);
 
-        return view('photos.index', compact('photos'));
+        // Determine if user can see my photos tab
+        $showMyPhotosTab = $user && $user->personalSpan;
+
+        return view('photos.index', compact('photos', 'showMyPhotosTab', 'photosFilter'));
     }
 
     /**

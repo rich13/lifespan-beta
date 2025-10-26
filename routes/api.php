@@ -19,6 +19,17 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
 
+// Get user's groups
+Route::middleware('auth:sanctum')->get('/user/groups', function (Request $request) {
+    $user = $request->user();
+    $groups = $user->groups()->get(['id', 'name']);
+    
+    return response()->json([
+        'success' => true,
+        'groups' => $groups
+    ]);
+});
+
 // Note: Span search endpoint moved to web routes (/spans/search) for better session auth support
 
 Route::middleware('auth:sanctum')->group(function () {

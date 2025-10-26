@@ -634,20 +634,12 @@ window.updateAccessLevel = function(newLevel) {
         } else {
             button.classList.add('btn-secondary');
         }
-        // Force icon update if present
-        if (icon) {
-            icon.style.display = 'none';
-            setTimeout(() => {
-                icon.style.display = '';
-            }, 10);
-        }
+        // Update text
+        button.innerHTML = `<i class="bi bi-${newLevel === 'public' ? 'globe' : (newLevel === 'private' ? 'lock' : 'people')} me-1"></i>${newLevel.charAt(0).toUpperCase() + newLevel.slice(1)}`;
     }
     
-    // Update tooltip
-    button.setAttribute('title', `Access: ${newLevel.charAt(0).toUpperCase() + newLevel.slice(1)}`);
-    
-    // Show visual feedback
-    button.style.transform = 'scale(1.1)';
+    // Add click feedback animation
+    button.style.transform = 'scale(0.95)';
     setTimeout(() => {
         button.style.transform = 'scale(1)';
     }, 150);
@@ -667,25 +659,17 @@ window.updateAccessLevel = function(newLevel) {
     .then(data => {
         if (data.success) {
             console.log('Access level updated successfully:', newLevel);
-            // Show success feedback
-            button.style.backgroundColor = '#28a745';
-            setTimeout(() => {
-                button.style.backgroundColor = '';
-            }, 500);
             
-            // Update the button's data attributes for future clicks
-            button.setAttribute('data-current-level', newLevel);
-            
-            // Refresh Bootstrap tooltip to reflect new title
-            const tooltip = bootstrap.Tooltip.getInstance(button);
-            if (tooltip) {
-                tooltip.dispose();
-            }
-            new bootstrap.Tooltip(button);
-            
-            // Close modal (no alert)
+            // Close modal first
             const modal = bootstrap.Modal.getInstance(document.getElementById('accessLevelModal'));
-            modal.hide();
+            if (modal) {
+                modal.hide();
+            }
+            
+            // Refresh the page to show all updated status
+            setTimeout(() => {
+                location.reload();
+            }, 300);
         } else {
             console.error('Failed to update access level:', data.message);
             // Revert changes on failure
@@ -728,25 +712,10 @@ window.updateAccessLevel = function(newLevel) {
             else button.classList.add('bg-secondary');
             button.textContent = currentLevel.charAt(0).toUpperCase() + currentLevel.slice(1);
         } else {
-            if (currentLevel === 'public') {
-                button.classList.remove('btn-success', 'btn-danger', 'btn-warning', 'btn-info', 'btn-secondary');
-                button.classList.add('btn-success');
-                if (icon) icon.className = 'bi bi-globe';
-            } else if (currentLevel === 'private') {
-                button.classList.remove('btn-success', 'btn-danger', 'btn-warning', 'btn-info', 'btn-secondary');
-                button.classList.add('btn-danger');
-                if (icon) icon.className = 'bi bi-lock';
-            } else if (currentLevel === 'shared') {
-                button.classList.remove('btn-success', 'btn-danger', 'btn-warning', 'btn-info', 'btn-secondary');
-                button.classList.add('btn-info');
-                if (icon) icon.className = 'bi bi-people';
-            } else {
-                button.classList.remove('btn-success', 'btn-danger', 'btn-warning', 'btn-info');
-                button.classList.add('btn-secondary');
-            }
+            button.classList.remove('btn-primary', 'btn-info', 'btn-danger', 'btn-success', 'btn-secondary');
+            button.classList.add(btnClasses);
         }
-        button.setAttribute('title', `Access: ${currentLevel.charAt(0).toUpperCase() + currentLevel.slice(1)}`);
-        alert('Error updating access level. Please try again.');
+        alert('Error updating access level');
     });
 }
 
@@ -821,6 +790,142 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
                 alert('Please select an access level');
             }
+        });
+    }
+});
+
+// Open group permissions modal
+window.openGroupPermissionsModal = function(button) {
+    const spanId = button.getAttribute('data-span-id');
+    
+    console.log('Opening group permissions modal for span:', spanId);
+    
+    // Store button reference for later use
+    window.currentGroupPermissionsButton = button;
+    
+    // Fetch groups and their permissions
+    fetch(`/admin/spans/${spanId}/group-permissions`, {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            renderGroupPermissionsCheckboxes(data.groups);
+            const modal = new bootstrap.Modal(document.getElementById('groupPermissionsModal'));
+            modal.show();
+        } else {
+            alert('Failed to load groups: ' + (data.message || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error fetching group permissions:', error);
+        alert('Error loading groups. Please try again.');
+    });
+};
+
+// Render group permission checkboxes
+function renderGroupPermissionsCheckboxes(groups) {
+    const container = document.getElementById('groupPermissionsCheckboxes');
+    
+    if (!groups || groups.length === 0) {
+        container.innerHTML = '<p class="text-muted">You are not a member of any groups yet.</p>';
+        return;
+    }
+    
+    let html = '';
+    groups.forEach(group => {
+        html += `
+            <div class="form-check mb-3">
+                <input class="form-check-input group-permission-checkbox" 
+                       type="checkbox" 
+                       id="group_${group.id}" 
+                       value="${group.id}"
+                       data-group-name="${group.name}"
+                       ${group.has_permission ? 'checked' : ''}>
+                <label class="form-check-label d-flex align-items-center" for="group_${group.id}">
+                    <div>
+                        <strong>${group.name}</strong>
+                        <div class="text-muted small">${group.user_count} member${group.user_count !== 1 ? 's' : ''}</div>
+                    </div>
+                </label>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+// Update group permissions
+window.updateGroupPermissions = function() {
+    const button = window.currentGroupPermissionsButton;
+    if (!button) {
+        console.error('No button reference found');
+        return;
+    }
+    
+    const spanId = button.getAttribute('data-span-id');
+    const checkboxes = document.querySelectorAll('.group-permission-checkbox');
+    const selectedGroups = Array.from(checkboxes)
+        .filter(cb => cb.checked)
+        .map(cb => cb.value);
+    
+    console.log('Updating group permissions:', { spanId, selectedGroups });
+    
+    fetch(`/admin/spans/${spanId}/group-permissions`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        },
+        body: JSON.stringify({
+            groups: selectedGroups
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            console.log('Group permissions updated successfully');
+            
+            // Update button text and tooltip
+            const groupCount = selectedGroups.length;
+            button.textContent = `👥 ${groupCount} ${groupCount === 1 ? 'group' : 'groups'}`;
+            
+            // Update tooltip with group names
+            const groupNames = Array.from(checkboxes)
+                .filter(cb => cb.checked)
+                .map(cb => cb.getAttribute('data-group-name'))
+                .join(', ');
+            
+            const tooltip = bootstrap.Tooltip.getInstance(button);
+            if (tooltip) {
+                tooltip.dispose();
+            }
+            button.setAttribute('data-bs-title', `Shared with: ${groupNames}`);
+            new bootstrap.Tooltip(button);
+            
+            // Close modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('groupPermissionsModal'));
+            modal.hide();
+        } else {
+            alert('Failed to update group permissions: ' + (data.message || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error updating group permissions:', error);
+        alert('Error updating permissions. Please try again.');
+    });
+};
+
+// Initialize group permissions modal
+document.addEventListener('DOMContentLoaded', function() {
+    const confirmButton = document.getElementById('confirmGroupPermissions');
+    if (confirmButton) {
+        confirmButton.addEventListener('click', function() {
+            updateGroupPermissions();
         });
     }
 }); 

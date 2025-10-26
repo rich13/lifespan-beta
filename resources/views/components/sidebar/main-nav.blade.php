@@ -36,6 +36,12 @@
     </li>
         
     <li class="nav-item">
+        <a class="nav-link {{ request()->routeIs('notes.*') ? 'active' : '' }}" href="{{ route('notes.index') }}">
+            <i class="bi bi-sticky me-1"></i> <span>Notes</span>
+        </a>
+    </li>
+
+    <li class="nav-item">
         <a class="nav-link {{ request()->routeIs('sets.*') ? 'active' : '' }}" href="{{ route('sets.index') }}">
             <i class="bi bi-archive me-1"></i> <span>Sets</span>
         </a>

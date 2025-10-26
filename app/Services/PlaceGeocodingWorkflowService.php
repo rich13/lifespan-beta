@@ -61,7 +61,17 @@ class PlaceGeocodingWorkflowService
                 }
                 
                 // Generate hierarchical slug using the span's method
-                $span->slug = $span->generateHierarchicalSlug();
+                $newSlug = $span->generateHierarchicalSlug();
+                
+                // Check if the new slug would violate uniqueness
+                $slugExists = Span::where('slug', $newSlug)
+                    ->where('id', '!=', $span->id)
+                    ->exists();
+                
+                // Only update slug if it won't violate the unique constraint
+                if (!$slugExists) {
+                    $span->slug = $newSlug;
+                }
                 
                 $span->save();
                 
@@ -131,7 +141,17 @@ class PlaceGeocodingWorkflowService
             }
             
             // Generate hierarchical slug using the span's method
-            $span->slug = $span->generateHierarchicalSlug();
+            $newSlug = $span->generateHierarchicalSlug();
+            
+            // Check if the new slug would violate uniqueness
+            $slugExists = Span::where('slug', $newSlug)
+                ->where('id', '!=', $span->id)
+                ->exists();
+            
+            // Only update slug if it won't violate the unique constraint
+            if (!$slugExists) {
+                $span->slug = $newSlug;
+            }
             
             $span->save();
             
@@ -355,7 +375,17 @@ class PlaceGeocodingWorkflowService
                     }
                     
                     // Generate hierarchical slug using the span's method
-                    $span->slug = $span->generateHierarchicalSlug();
+                    $newSlug = $span->generateHierarchicalSlug();
+                    
+                    // Check if the new slug would violate uniqueness
+                    $slugExists = Span::where('slug', $newSlug)
+                        ->where('id', '!=', $span->id)
+                        ->exists();
+                    
+                    // Only update slug if it won't violate the unique constraint
+                    if (!$slugExists) {
+                        $span->slug = $newSlug;
+                    }
                     
                     $span->save();
                     

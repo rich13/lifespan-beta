@@ -82,6 +82,20 @@
                                     </div>
                                 </div>
                             </div>
+                            
+                            <div class="col-md-4 mb-3">
+                                <div class="card h-100">
+                                    <div class="card-body">
+                                        <h6 class="card-title">
+                                            <i class="bi bi-twitter me-2"></i>Twitter Archive Import
+                                        </h6>
+                                        <p class="card-text text-muted">Import your Twitter archive as private notes with engagement metrics and hashtags.</p>
+                                        <a href="{{ route('settings.import.twitter.index') }}" class="btn btn-outline-primary btn-sm">
+                                            <i class="bi bi-arrow-right me-1"></i>Import Twitter Archive
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         
 

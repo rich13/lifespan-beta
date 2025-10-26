@@ -422,6 +422,15 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
         <!-- Global Access Level Modal -->
         <x-modals.access-level-modal />
         
+        <!-- Group Permissions Modal -->
+        <x-modals.group-permissions-modal />
+        
+        <!-- Create Note Modal -->
+        <x-modals.create-note-modal />
+        
+        <!-- Connect Note Modal -->
+        <x-modals.connect-note-modal />
+        
         <!-- Consent Banner -->
         <x-consent-banner />
         

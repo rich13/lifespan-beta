@@ -102,6 +102,19 @@ $(document).ready(function() {
             const connectionType = connectionTypes.find(t => t.type === selectedType);
             console.log('Selected connection type:', connectionType);
             
+            // Update date field helper text based on whether connection is timeless
+            const startDateHelp = $('#startDateHelp');
+            if (connectionType && connectionType.constraint_type === 'timeless') {
+                startDateHelp.text('Optional - not required for this connection type');
+            } else {
+                const selectedState = $('input[name="state"]:checked').val();
+                if (selectedState === 'placeholder') {
+                    startDateHelp.text('Optional for placeholder connections');
+                } else {
+                    startDateHelp.text('Required for draft and complete connections');
+                }
+            }
+            
             if (connectionType && connectionType.allowed_span_types) {
                 // In reverse mode, we need parent types; in forward mode, we need child types
                 const allowedTypesKey = isReverseMode ? 'parent' : 'child';
@@ -152,7 +165,15 @@ $(document).ready(function() {
         const startDateRequired = $('#startDateRequired');
         const startDateHelp = $('#startDateHelp');
         
-        if (selectedState === 'placeholder') {
+        // Check if the selected connection type is timeless
+        const selectedType = $('#connectionPredicate').val();
+        const connectionType = connectionTypes.find(t => t.type === selectedType);
+        const isTimeless = connectionType && connectionType.constraint_type === 'timeless';
+        
+        if (isTimeless) {
+            // For timeless connections, dates are always optional
+            startDateHelp.text('Optional - not required for this connection type');
+        } else if (selectedState === 'placeholder') {
             startDateRequired.hide();
             startDateHelp.text('Optional for placeholder connections');
         } else {
@@ -419,10 +440,15 @@ $(document).ready(function() {
             return;
         }
         
-        // Date validation depends on connection state
+        // Get the selected connection type to check if it's timeless
+        const selectedConnectionType = connectionTypes.find(t => t.type === formData.type);
+        const isTimeless = selectedConnectionType && selectedConnectionType.constraint_type === 'timeless';
+        
+        // Date validation depends on connection state and whether it's timeless
         const isPlaceholder = formData.state === 'placeholder';
         
-        if (!isPlaceholder && !formData.connection_year) {
+        // For non-placeholder, non-timeless connections, require a start year
+        if (!isPlaceholder && !isTimeless && !formData.connection_year) {
             showStatus('Please enter a start year', 'danger');
             return;
         }

@@ -179,6 +179,12 @@
                 </div>-->
             @endif
 
+            <!-- EXIF Data Card -->
+            <x-photos.exif-data-card :photo="$photo" />
+
+            <!-- Annotations/Notes Card -->
+            <x-spans.cards.note-spans-card :span="$photo" />
+
             <!-- Photo Status -->
             <div class="card">
                 <div class="card-header">

@@ -48,6 +48,39 @@
                 </div>
             </div>
 
+            <!-- My Photos / Public Photos / All Photos Toggle -->
+            @if($showMyPhotosTab)
+                @php
+                    $currentPhotosFilter = $photosFilter ?? 'my';
+                    $baseParams = request()->except(['page','photos_filter']);
+                @endphp
+                <div class="mb-3">
+                    <small class="text-muted d-block mb-2">Filter:</small>
+                    <ul class="nav nav-pills mb-4">
+                        @php
+                            $photoFilterTabs = [
+                                ['label' => 'My Photos', 'value' => 'my'],
+                                ['label' => 'Public', 'value' => 'public'],
+                                ['label' => 'All Photos', 'value' => 'all'],
+                            ];
+                        @endphp
+                        @foreach($photoFilterTabs as $tab)
+                            @php
+                                $params = $baseParams;
+                                $params['photos_filter'] = $tab['value'];
+                                $url = route('photos.index', $params);
+                                $isActive = $currentPhotosFilter === $tab['value'];
+                            @endphp
+                            <li class="nav-item me-2 mb-2">
+                                <a class="nav-link {{ $isActive ? 'active' : '' }}" href="{{ $url }}">
+                                    {{ $tab['label'] }}
+                                </a>
+                            </li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
+
             <!-- Access Level Tabs -->
             @php
                 $activeLevel = strtolower((string) request('access_level'));

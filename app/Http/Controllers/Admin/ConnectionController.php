@@ -115,8 +115,14 @@ class ConnectionController extends Controller
                 'type_id' => 'connection',
                 'owner_id' => auth()->id(),
                 'updater_id' => auth()->id(),
-                'name' => "{$parent->name} {$connectionType->getPredicate($validated['direction'] === 'inverse')} {$child->name}"
+                'name' => "{$parent->name} {$connectionType->getPredicate($validated['direction'] === 'inverse')} {$child->name}",
+                'metadata' => []
             ];
+            
+            // Mark connection span as timeless if the connection type is timeless
+            if ($connectionType->constraint_type === 'timeless') {
+                $spanData['metadata']['timeless'] = true;
+            }
 
             // For family connections, use child's birth date as start and earliest death date as end
             if ($connectionType->type === 'family') {
