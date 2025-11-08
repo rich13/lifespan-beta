@@ -433,6 +433,8 @@ class ConfigurableStoryGeneratorService
                     $sentenceDebug['selected_template'] = $selectedTemplate;
                     
                     $sentence = $this->replacePlaceholders($selectedTemplate, $data);
+                    // Capitalize the first letter of the sentence while preserving HTML tags
+                    $sentence = $this->capitalizeFirstLetter($sentence);
                     $sentenceDebug['final_sentence'] = $sentence;
                     
                     if ($sentence) {
@@ -571,6 +573,8 @@ class ConfigurableStoryGeneratorService
                     $sentenceDebug['selected_template'] = $selectedTemplate;
                     
                     $sentence = $this->replacePlaceholders($selectedTemplate, $data);
+                    // Capitalize the first letter of the sentence while preserving HTML tags
+                    $sentence = $this->capitalizeFirstLetter($sentence);
                     $sentenceDebug['final_sentence'] = $sentence;
                     
                     if ($sentence) {
@@ -587,6 +591,8 @@ class ConfigurableStoryGeneratorService
                         $sentenceDebug['selected_template'] = $selectedTemplate;
                         
                         $sentence = $this->replacePlaceholders($selectedTemplate, $data);
+                        // Capitalize the first letter of the sentence while preserving HTML tags
+                        $sentence = $this->capitalizeFirstLetter($sentence);
                         $sentenceDebug['final_sentence'] = $sentence;
                         
                         if ($sentence) {
@@ -662,7 +668,10 @@ class ConfigurableStoryGeneratorService
 
         $template = $this->selectTemplate($sentenceConfig, $data, $span);
         
-        return $this->replacePlaceholders($template, $data);
+        $sentence = $this->replacePlaceholders($template, $data);
+        
+        // Capitalize the first letter of the sentence while preserving HTML tags
+        return $this->capitalizeFirstLetter($sentence);
     }
 
     /**
@@ -787,6 +796,45 @@ class ConfigurableStoryGeneratorService
             return 'href="' . $cleanUrl . '"';
         }, $text);
         return $text;
+    }
+
+    /**
+     * Capitalize the first letter of a sentence while preserving HTML tags
+     * This safely capitalizes the first actual text character, not HTML tags
+     */
+    protected function capitalizeFirstLetter(string $sentence): string
+    {
+        // If the sentence is empty, return as is
+        if (empty($sentence)) {
+            return $sentence;
+        }
+
+        // Find the first actual text character (not inside an HTML tag)
+        // We'll look for the first character that's not part of an HTML tag
+        $position = -1;
+        $inTag = false;
+        
+        for ($i = 0; $i < strlen($sentence); $i++) {
+            if ($sentence[$i] === '<') {
+                $inTag = true;
+            } elseif ($sentence[$i] === '>') {
+                $inTag = false;
+            } elseif (!$inTag && ctype_alpha($sentence[$i])) {
+                // Found the first letter outside of HTML tags
+                $position = $i;
+                break;
+            }
+        }
+
+        // If we found a position and it's lowercase, capitalize it
+        if ($position >= 0 && ctype_lower($sentence[$position])) {
+            return substr($sentence, 0, $position) . 
+                   strtoupper($sentence[$position]) . 
+                   substr($sentence, $position + 1);
+        }
+
+        // If no lowercase letter found or already capitalized, return as is
+        return $sentence;
     }
 
     /**
