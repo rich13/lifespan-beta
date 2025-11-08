@@ -24,8 +24,8 @@
     @endif
 
     <li class="nav-item">
-        <a class="nav-link {{ request()->routeIs('spans.shared-with-me') ? 'active' : '' }}" href="{{ route('spans.shared-with-me') }}">
-            <i class="bi bi-share me-1"></i> <span>Shared</span>
+        <a class="nav-link {{ request()->routeIs('groups.*') ? 'active' : '' }}" href="{{ route('groups.index') }}">
+            <i class="bi bi-people-fill me-1"></i> <span>Groups</span>
         </a>
     </li>
 

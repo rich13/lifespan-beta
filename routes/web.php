@@ -151,6 +151,9 @@ Route::middleware('web')->group(function () {
         return view('home');
     })->name('home');
 
+        Route::get('/places/{span}/boundary', [\App\Http\Controllers\PlaceBoundaryController::class, 'show'])
+            ->name('places.boundary');
+
     // Explore routes
     Route::prefix('explore')->group(function () {
         Route::get('/', [SpanController::class, 'explore'])->name('explore.index');
@@ -790,6 +793,10 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
         Route::post('/ai-yaml-generator/generate', [\App\Http\Controllers\AiYamlController::class, 'generateYaml'])->name('ai-yaml-generator.generate');
         Route::post('/ai-yaml-generator/improve', [\App\Http\Controllers\AiYamlController::class, 'improveYaml'])->name('ai-yaml-generator.improve');
 
+        // Groups timeline routes (public-facing, not in settings)
+        Route::get('/groups', [\App\Http\Controllers\GroupsController::class, 'index'])->name('groups.index');
+        Route::get('/groups/{group}', [\App\Http\Controllers\GroupsController::class, 'show'])->name('groups.show');
+        
         // Settings routes
         Route::prefix('settings')->name('settings.')->group(function () {
             Route::get('/', [\App\Http\Controllers\SettingsController::class, 'index'])->name('index');

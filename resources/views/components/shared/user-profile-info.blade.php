@@ -22,6 +22,10 @@ use Illuminate\Support\Facades\Auth;
     <a href="{{ route('settings.index') }}" class="btn btn-outline-secondary" data-bs-dismiss="offcanvas">
         <i class="bi bi-gear me-2"></i>Settings
     </a>
+    
+    <a href="{{ route('spans.shared-with-me') }}" class="btn btn-outline-secondary mt-2" data-bs-dismiss="offcanvas">
+        <i class="bi bi-share me-2"></i>Shared with you
+    </a>
 @else
     <div class="px-2 py-1 mb-2 border-bottom">
         @if(Auth::user()->personalSpan)
@@ -33,6 +37,10 @@ use Illuminate\Support\Facades\Auth;
     
     <a href="{{ route('settings.index') }}" class="d-block p-2 text-decoration-none text-dark rounded hover-bg-light">
         <i class="bi bi-gear me-2"></i>Settings
+    </a>
+    
+    <a href="{{ route('spans.shared-with-me') }}" class="d-block p-2 text-decoration-none text-dark rounded hover-bg-light">
+        <i class="bi bi-share me-2"></i>Shared with you
     </a>
 
     <!-- Admin Mode Toggle - only show for admin users -->
