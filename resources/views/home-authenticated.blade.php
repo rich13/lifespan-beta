@@ -763,15 +763,6 @@
                 />
             </div>
 
-            <!-- Bands Card -->
-            <div class="mb-4">
-                <x-home.spans-of-type-card 
-                    :type="'band'"
-                    :title="'Bands'"
-                    :icon="'cassette'"
-                />
-            </div>
-
             <!-- Museums Card -->
             <div class="mb-4">
                 <x-home.spans-of-type-card 
