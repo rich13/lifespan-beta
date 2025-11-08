@@ -83,11 +83,14 @@ trait HasGeospatialCapabilities
         $latDelta = $radiusKm / 111.32; // rough degrees per km
         $lngDelta = $radiusKm / (111.32 * cos(deg2rad($latitude)));
 
+        // Use PostgreSQL JSON operators directly for better compatibility
         return $query->where('type_id', 'place')
-            ->whereJsonPath('metadata->coordinates->latitude', '>=', $latitude - $latDelta)
-            ->whereJsonPath('metadata->coordinates->latitude', '<=', $latitude + $latDelta)
-            ->whereJsonPath('metadata->coordinates->longitude', '>=', $longitude - $lngDelta)
-            ->whereJsonPath('metadata->coordinates->longitude', '<=', $longitude + $lngDelta);
+            ->whereRaw("metadata->'coordinates'->>'latitude' IS NOT NULL")
+            ->whereRaw("metadata->'coordinates'->>'longitude' IS NOT NULL")
+            ->whereRaw("(metadata->'coordinates'->>'latitude')::float >= ?", [$latitude - $latDelta])
+            ->whereRaw("(metadata->'coordinates'->>'latitude')::float <= ?", [$latitude + $latDelta])
+            ->whereRaw("(metadata->'coordinates'->>'longitude')::float >= ?", [$longitude - $lngDelta])
+            ->whereRaw("(metadata->'coordinates'->>'longitude')::float <= ?", [$longitude + $lngDelta]);
     }
 
     /**
@@ -116,6 +119,18 @@ trait HasGeospatialCapabilities
     public function getOsmData(): ?array
     {
         return $this->geospatial()->getOsmData();
+    }
+
+    /**
+     * Find nearby places within a radius, with distances calculated
+     * 
+     * @param float $radiusKm Radius in kilometers (default 50km)
+     * @param int $limit Maximum number of places to return (default 20)
+     * @return array Array of ['span' => Span, 'distance' => float] entries, sorted by distance
+     */
+    public function findNearbyPlaces(float $radiusKm = 50.0, int $limit = 20): array
+    {
+        return $this->geospatial()->findNearbyPlaces($radiusKm, $limit);
     }
 
     /**

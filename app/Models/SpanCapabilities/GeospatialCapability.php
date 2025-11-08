@@ -109,11 +109,14 @@ class GeospatialCapability implements SpanCapability
         $latDelta = $radiusKm / 111.32; // rough degrees per km
         $lngDelta = $radiusKm / (111.32 * cos(deg2rad($latitude)));
 
+        // Use PostgreSQL JSON operators directly for better compatibility
         return Span::where('type_id', 'place')
-            ->whereJsonPath('metadata->coordinates->latitude', '>=', $latitude - $latDelta)
-            ->whereJsonPath('metadata->coordinates->latitude', '<=', $latitude + $latDelta)
-            ->whereJsonPath('metadata->coordinates->longitude', '>=', $longitude - $lngDelta)
-            ->whereJsonPath('metadata->coordinates->longitude', '<=', $longitude + $lngDelta);
+            ->whereRaw("metadata->'coordinates'->>'latitude' IS NOT NULL")
+            ->whereRaw("metadata->'coordinates'->>'longitude' IS NOT NULL")
+            ->whereRaw("(metadata->'coordinates'->>'latitude')::float >= ?", [$latitude - $latDelta])
+            ->whereRaw("(metadata->'coordinates'->>'latitude')::float <= ?", [$latitude + $latDelta])
+            ->whereRaw("(metadata->'coordinates'->>'longitude')::float >= ?", [$longitude - $lngDelta])
+            ->whereRaw("(metadata->'coordinates'->>'longitude')::float <= ?", [$longitude + $lngDelta]);
     }
 
     /**
@@ -142,6 +145,142 @@ class GeospatialCapability implements SpanCapability
             $coords2['latitude'],
             $coords2['longitude']
         );
+    }
+
+    /**
+     * Find nearby places within a radius, with distances calculated
+     * Only returns places at the same administrative level or higher (e.g., cities find cities, not suburbs)
+     * 
+     * @param float $radiusKm Radius in kilometers (default 50km)
+     * @param int $limit Maximum number of places to return (default 20)
+     * @return array Array of ['span' => Span, 'distance' => float] entries, sorted by distance
+     */
+    public function findNearbyPlaces(float $radiusKm = 50.0, int $limit = 20): array
+    {
+        $coords = $this->getCoordinates();
+        if (!$coords) {
+            return [];
+        }
+
+        // Get the current place's admin level to filter by hierarchy
+        $currentPlaceLevel = $this->getPlaceAdminLevel($this->span);
+        
+        // Use chunking to process in smaller batches and avoid memory exhaustion
+        // Process candidates in chunks of 50 to keep memory usage low
+        $nearbyPlaces = [];
+        $maxCandidates = 200; // Maximum candidates to check
+        $chunkSize = 50; // Process 50 at a time
+        $processed = 0;
+        
+        $query = Span::withinRadius(
+            $coords['latitude'],
+            $coords['longitude'],
+            $radiusKm
+        )
+        ->where('id', '!=', $this->span->id) // Exclude the current place
+        ->select('id', 'name', 'slug', 'metadata'); // Only select what we need
+        
+        $query->chunk($chunkSize, function ($places) use (&$nearbyPlaces, &$processed, $coords, $radiusKm, $maxCandidates, $limit, $currentPlaceLevel) {
+            foreach ($places as $place) {
+                if ($processed >= $maxCandidates) {
+                    return false; // Stop processing
+                }
+                
+                // Extract coordinates directly from metadata to avoid method overhead
+                $metadata = $place->metadata ?? [];
+                $placeCoords = $metadata['coordinates'] ?? null;
+                
+                if (!$placeCoords || !isset($placeCoords['latitude']) || !isset($placeCoords['longitude'])) {
+                    $processed++;
+                    continue;
+                }
+
+                // Filter by administrative level - only include places at same level or higher
+                if ($currentPlaceLevel !== null) {
+                    $placeLevel = $this->getPlaceAdminLevel($place);
+                    // If we couldn't determine the place's level, skip it
+                    // If the place's level is lower (higher number), skip it (e.g., skip suburbs when looking from a city)
+                    if ($placeLevel === null || $placeLevel > $currentPlaceLevel) {
+                        $processed++;
+                        continue;
+                    }
+                }
+
+                $placeLat = (float) $placeCoords['latitude'];
+                $placeLon = (float) $placeCoords['longitude'];
+
+                $distance = $this->calculateDistance(
+                    $coords['latitude'],
+                    $coords['longitude'],
+                    $placeLat,
+                    $placeLon
+                );
+
+                // Only include if within the actual radius (scopeWithinRadius is approximate)
+                if ($distance <= $radiusKm) {
+                    $nearbyPlaces[] = [
+                        'span' => $place,
+                        'distance' => $distance
+                    ];
+                }
+                
+                $processed++;
+            }
+            
+            // If we have enough results (2x the limit), we can stop early
+            if (count($nearbyPlaces) >= $limit * 2) {
+                return false; // Stop processing
+            }
+            
+            return true; // Continue processing
+        });
+
+        // Sort by distance
+        usort($nearbyPlaces, function($a, $b) {
+            return $a['distance'] <=> $b['distance'];
+        });
+
+        // Limit results and return
+        return array_slice($nearbyPlaces, 0, $limit);
+    }
+
+    /**
+     * Get the administrative level of a place from its OSM data
+     * Returns the admin level (2=country, 4=state, 6=county, 8=city, 10=town/suburb, 12=neighbourhood, 16=building)
+     * Lower numbers = higher administrative level
+     * 
+     * @param Span $place
+     * @return int|null Admin level, or null if cannot be determined
+     */
+    protected function getPlaceAdminLevel(Span $place): ?int
+    {
+        $osmData = $place->getOsmData();
+        if (!$osmData) {
+            return null;
+        }
+
+        $placeType = $osmData['place_type'] ?? null;
+        $placeName = $place->name;
+        
+        if (!$placeType) {
+            return null;
+        }
+
+        // Use the existing method to get admin level
+        $level = $this->getAdminLevelFromPlaceType($placeType, $placeName);
+        
+        // If we have hierarchy data and couldn't determine from place type, try hierarchy
+        if ($level === null && isset($osmData['hierarchy'])) {
+            foreach ($osmData['hierarchy'] as $hierarchyLevel) {
+                if (isset($hierarchyLevel['admin_level']) && 
+                    strtolower($hierarchyLevel['name'] ?? '') === strtolower($placeName)) {
+                    $level = $hierarchyLevel['admin_level'];
+                    break;
+                }
+            }
+        }
+
+        return $level;
     }
 
     /**
