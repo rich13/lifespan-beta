@@ -2791,16 +2791,6 @@ class SpanController extends Controller
                 $q->whereJsonContains('metadata->subtype', 'desertislanddiscs')
                   ->orWhere('metadata->subtype', 'desertislanddiscs');
             })
-            // Only include sets that have at least one track
-            ->whereExists(function ($subquery) {
-                $subquery->select('connections.id')
-                    ->from('connections')
-                    ->join('spans as child_spans', 'connections.child_id', '=', 'child_spans.id')
-                    ->whereColumn('connections.parent_id', 'spans.id')
-                    ->where('connections.type_id', 'contains')
-                    ->where('child_spans.type_id', 'thing')
-                    ->whereJsonContains('child_spans.metadata->subtype', 'track');
-            })
             ->orderBy('name');
 
         // Apply access filtering

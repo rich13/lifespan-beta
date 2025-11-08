@@ -250,8 +250,16 @@ class User extends Authenticatable
         ]);
 
         // Create Starred set
+        $personalSpanSlug = \Illuminate\Support\Str::slug($personalSpan->name);
+        $starredSlug = $personalSpanSlug . '-starred';
+        $counter = 1;
+        while (Span::where('slug', $starredSlug)->exists()) {
+            $starredSlug = $personalSpanSlug . '-starred-' . ++$counter;
+        }
+        
         $starredSet = Span::create([
             'name' => 'Starred',
+            'slug' => $starredSlug, // Explicitly set slug based on personal span name
             'type_id' => 'set',
             'description' => 'Your starred items',
             'metadata' => [
@@ -266,8 +274,16 @@ class User extends Authenticatable
         ]);
 
         // Create Desert Island Discs set
+        $desertIslandDiscsSetName = $personalSpan->name . "'s Desert Island Discs";
+        $desertIslandSlug = $personalSpanSlug . '-desert-island-discs';
+        $counter = 1;
+        while (Span::where('slug', $desertIslandSlug)->exists()) {
+            $desertIslandSlug = $personalSpanSlug . '-desert-island-discs-' . ++$counter;
+        }
+        
         $desertIslandDiscsSet = Span::create([
-            'name' => 'Desert Island Discs',
+            'name' => $desertIslandDiscsSetName,
+            'slug' => $desertIslandSlug, // Explicitly set slug based on personal span name
             'type_id' => 'set',
             'description' => 'Your desert island discs',
             'metadata' => [
@@ -319,13 +335,22 @@ class User extends Authenticatable
             ->first();
 
         // Create missing sets individually to avoid duplicates
+        $personalSpanSlug = \Illuminate\Support\Str::slug($personalSpan->name);
+        
         if (!$starredSet) {
             Log::info('Creating missing Starred set for existing user', [
                 'user_id' => $this->id
             ]);
             
+            $starredSlug = $personalSpanSlug . '-starred';
+            $counter = 1;
+            while (Span::where('slug', $starredSlug)->exists()) {
+                $starredSlug = $personalSpanSlug . '-starred-' . ++$counter;
+            }
+            
             $starredSet = Span::create([
                 'name' => 'Starred',
+                'slug' => $starredSlug, // Explicitly set slug based on personal span name
                 'type_id' => 'set',
                 'description' => 'Your starred items',
                 'metadata' => [
@@ -347,8 +372,16 @@ class User extends Authenticatable
                 'user_id' => $this->id
             ]);
             
+            $desertIslandDiscsSetName = $personalSpan->name . "'s Desert Island Discs";
+            $desertIslandSlug = $personalSpanSlug . '-desert-island-discs';
+            $counter = 1;
+            while (Span::where('slug', $desertIslandSlug)->exists()) {
+                $desertIslandSlug = $personalSpanSlug . '-desert-island-discs-' . ++$counter;
+            }
+            
             $desertIslandDiscsSet = Span::create([
-                'name' => 'Desert Island Discs',
+                'name' => $desertIslandDiscsSetName,
+                'slug' => $desertIslandSlug, // Explicitly set slug based on personal span name
                 'type_id' => 'set',
                 'description' => 'Your desert island discs',
                 'metadata' => [

@@ -1798,7 +1798,11 @@ class Span extends Model
      */
     public static function getOrCreateDesertIslandDiscsSet(User $user): Span
     {
-        return static::getOrCreateDefaultSet($user, 'Desert Island Discs', 'desert-island-discs', 'Your desert island discs', 'bi-music-note-beamed');
+        // Get the personalized name from the user's personal span
+        $personalSpan = $user->personalSpan;
+        $setName = $personalSpan ? ($personalSpan->name . "'s Desert Island Discs") : 'Desert Island Discs';
+        
+        return static::getOrCreateDefaultSet($user, $setName, 'desert-island-discs', 'Your desert island discs', 'bi-music-note-beamed');
     }
 
     /**
@@ -1922,10 +1926,15 @@ class Span extends Model
      */
     public static function getOrCreateDefaultSet(User $user, string $name, string $baseSlug, string $description, string $icon): Span
     {
+        // Get personal span name for slug generation
+        $personalSpan = $user->personalSpan;
+        $personalSpanName = $personalSpan ? $personalSpan->name : ($user->name ?? 'user');
+        $expectedSlug = Str::slug($personalSpanName) . '-' . $baseSlug;
+        
         // First try to find by slug
         $set = static::where('owner_id', $user->id)
             ->where('type_id', 'set')
-            ->where('slug', $user->name . '-' . $baseSlug)
+            ->where('slug', $expectedSlug)
             ->first();
 
         if ($set) {
@@ -1942,18 +1951,18 @@ class Span extends Model
             return $set;
         }
 
-        // If still not found, create a new one with a unique slug
-        $ownerSlug = Str::slug($user->name ?? 'user');
-        $slug = $ownerSlug . '-' . $baseSlug;
+        // If still not found, create a new one with a unique slug based on personal span name
+        $slug = $expectedSlug;
         $counter = 1;
 
         while (static::where('slug', $slug)->exists()) {
-            $slug = $ownerSlug . '-' . $baseSlug . '-' . ++$counter;
+            $slug = $expectedSlug . '-' . ++$counter;
         }
 
         try {
             $set = static::create([
                 'name' => $name,
+                'slug' => $slug, // Explicitly set slug to prevent auto-generation
                 'type_id' => 'set',
                 'is_personal_span' => true,
                 'state' => 'complete',

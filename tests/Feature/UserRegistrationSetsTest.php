@@ -47,9 +47,10 @@ class UserRegistrationSetsTest extends TestCase
         // The slug is based on the personal span name
         $this->assertEquals(Str::slug($user->personalSpan->name) . '-starred', $starredSet->slug);
 
-        $desertIslandDiscsSet = $defaultSets->where('name', 'Desert Island Discs')->first();
+        $expectedDesertIslandDiscsName = $user->personalSpan->name . "'s Desert Island Discs";
+        $desertIslandDiscsSet = $defaultSets->where('name', $expectedDesertIslandDiscsName)->first();
         $this->assertNotNull($desertIslandDiscsSet, 'Desert Island Discs set should exist');
-        $this->assertEquals('Desert Island Discs', $desertIslandDiscsSet->name);
+        $this->assertEquals($expectedDesertIslandDiscsName, $desertIslandDiscsSet->name);
         $this->assertEquals('Your desert island discs', $desertIslandDiscsSet->description);
         $this->assertEquals('bi-music-note-beamed', $desertIslandDiscsSet->metadata['icon']);
         $this->assertEquals(Str::slug($user->personalSpan->name) . '-desert-island-discs', $desertIslandDiscsSet->slug);
@@ -80,7 +81,8 @@ class UserRegistrationSetsTest extends TestCase
         // Check that we have both default sets
         $setNames = $sets->pluck('name')->toArray();
         $this->assertContains('Starred', $setNames);
-        $this->assertContains('Desert Island Discs', $setNames);
+        $expectedDesertIslandDiscsName = $user->personalSpan->name . "'s Desert Island Discs";
+        $this->assertContains($expectedDesertIslandDiscsName, $setNames);
     }
 
     /** @test */
@@ -95,7 +97,8 @@ class UserRegistrationSetsTest extends TestCase
 
         $response->assertStatus(200);
         $response->assertSee('Starred');
-        $response->assertSee('Desert Island Discs');
+        $expectedDesertIslandDiscsName = $user->personalSpan->name . "'s Desert Island Discs";
+        $response->assertSee($expectedDesertIslandDiscsName);
     }
 
     /** @test */
@@ -113,6 +116,7 @@ class UserRegistrationSetsTest extends TestCase
         
         $setNames = $defaultSets->pluck('name')->toArray();
         $this->assertContains('Starred', $setNames);
-        $this->assertContains('Desert Island Discs', $setNames);
+        $expectedDesertIslandDiscsName = $user->personalSpan->name . "'s Desert Island Discs";
+        $this->assertContains($expectedDesertIslandDiscsName, $setNames);
     }
 } 

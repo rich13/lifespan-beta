@@ -77,7 +77,8 @@ class SpanTest extends TestCase
         $this->assertEquals('Your starred items', $starredSet->description);
 
         // Check Desert Island Discs set
-        $desertIslandSet = $defaultSets->where('name', 'Desert Island Discs')->first();
+        $expectedDesertIslandDiscsName = $personalSpan->name . "'s Desert Island Discs";
+        $desertIslandSet = $defaultSets->where('name', $expectedDesertIslandDiscsName)->first();
         $this->assertNotNull($desertIslandSet);
         $this->assertEquals('bi-music-note-beamed', $desertIslandSet->metadata['icon']);
         $this->assertTrue($desertIslandSet->metadata['is_default']);
@@ -101,7 +102,8 @@ class SpanTest extends TestCase
         $this->assertEquals($expectedStarredSlug, $starredSet->slug);
 
         // Check Desert Island Discs set slug - should include the user's name (from personal span)
-        $desertIslandSet = $defaultSets->where('name', 'Desert Island Discs')->first();
+        $expectedDesertIslandDiscsName = $actualName . "'s Desert Island Discs";
+        $desertIslandSet = $defaultSets->where('name', $expectedDesertIslandDiscsName)->first();
         $this->assertNotNull($desertIslandSet, 'Desert Island Discs set should exist');
         $expectedDesertIslandSlug = Str::slug($actualName) . '-desert-island-discs';
         $this->assertEquals($expectedDesertIslandSlug, $desertIslandSet->slug);

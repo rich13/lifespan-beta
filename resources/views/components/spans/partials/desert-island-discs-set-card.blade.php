@@ -1,4 +1,4 @@
-<div class="col-md-6 col-lg-4 mb-4">
+<div class="col-md-6 col-lg-3 mb-4">
     <div class="card h-100 desert-island-discs-tracks-card">
         <div class="card-body">
             <h5 class="card-title">

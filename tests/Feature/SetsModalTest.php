@@ -70,7 +70,8 @@ class SetsModalTest extends TestCase
         // Verify default sets are present
         $setNames = collect($data['sets'])->pluck('name')->toArray();
         $this->assertContains('Starred', $setNames);
-        $this->assertContains('Desert Island Discs', $setNames);
+        $expectedDesertIslandDiscsName = $this->user->personalSpan->name . "'s Desert Island Discs";
+        $this->assertContains($expectedDesertIslandDiscsName, $setNames);
     }
 
     /** @test */

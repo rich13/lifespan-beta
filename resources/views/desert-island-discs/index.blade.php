@@ -41,7 +41,8 @@
         <div class="row">
             @foreach($sets as $set)
                 @php
-                    $cacheKey = 'desert_island_discs_set_card_' . $set->id . '_' . ($set->updated_at ?? '0');
+                    // Include layout version in cache key to force refresh when layout changes
+                    $cacheKey = 'desert_island_discs_set_card_v2_' . $set->id . '_' . ($set->updated_at ?? '0');
                 @endphp
                 {!! \Cache::remember($cacheKey, 604800, function() use ($set) {
                     return view('components.spans.partials.desert-island-discs-set-card', ['set' => $set])->render();

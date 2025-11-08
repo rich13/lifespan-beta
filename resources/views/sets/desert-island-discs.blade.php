@@ -110,6 +110,8 @@
                 @php
                     // Get track details
                     $album = $track->getContainingAlbum();
+                    
+                    // Try to get artist from track's created connection first
                     $artist = $track->connectionsAsObject()
                         ->whereHas('type', function($q) {
                             $q->where('type', 'created');
@@ -119,6 +121,20 @@
                         })
                         ->with('parent')
                         ->first()?->parent;
+                    
+                    // If no direct artist on track, get artist from album's created connection
+                    if (!$artist && $album) {
+                        $artist = $album->connectionsAsObject()
+                            ->whereHas('type', function($q) {
+                                $q->where('type', 'created');
+                            })
+                            ->whereHas('parent', function($q) {
+                                $q->whereIn('type_id', ['person', 'band']);
+                            })
+                            ->with('parent')
+                            ->first()?->parent;
+                    }
+                    
                     // Fallback: fetch contains-connection description if not preloaded
                     $connectionDesc = $track->set_connection_description ?? \App\Models\Connection::where('parent_id', $set->id)
                         ->where('child_id', $track->id)
@@ -172,6 +188,11 @@
                                                     <a href="{{ route('spans.show', $album) }}" class="text-decoration-none">
                                                         {{ $album->name }}
                                                     </a>
+                                                    @if($album->start_year)
+                                                        <span class="text-muted" style="font-size: 0.7rem;">
+                                                            <i class="bi bi-calendar3 me-1"></i>{{ $album->human_readable_start_date ?? $album->formatted_start_date }}
+                                                        </span>
+                                                    @endif
                                                 </p>
                                             @endif
                                         </div>
