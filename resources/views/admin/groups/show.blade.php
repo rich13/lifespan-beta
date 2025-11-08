@@ -102,25 +102,13 @@
                                                 // Create a unified list of all items in the group
                                                 $groupItems = [];
                                                 $processedUserIds = [];
-                                                
-                                                // Debug: Let's see what we're working with
                                                 $memberIds = $group->users->pluck('id')->toArray();
                                                 
                                                 // Process all spans first
                                                 foreach($group->spanPermissions as $permission) {
-                                                    // Debug: Check span ownership
+                                                    // Check if this span belongs to a group member (using owner_id)
                                                     $spanOwnerId = $permission->span->owner_id;
                                                     $isGroupMember = in_array($spanOwnerId, $memberIds);
-                                                    
-                                                    // Debug: Log this span
-                                                    $groupItems[] = [
-                                                        'type' => 'debug',
-                                                        'span_name' => $permission->span->name,
-                                                        'span_owner_id' => $spanOwnerId,
-                                                        'is_member' => $isGroupMember ? 'yes' : 'no'
-                                                    ];
-                                                    
-                                                    // Check if this span belongs to a group member (using owner_id)
                                                     
                                                     if ($isGroupMember) {
                                                         // This is a member's span - add to unified member entry
@@ -164,16 +152,7 @@
                                                 }
                                             @endphp
                                             
-                                            <!-- Debug: Group has {{ count($groupItems) }} items -->
-                                            <!-- Debug: Member IDs: {{ implode(', ', $memberIds) }} -->
                                             @foreach($groupItems as $item)
-                                                @if($item['type'] === 'debug')
-                                                    <tr>
-                                                        <td colspan="2" class="text-muted small">
-                                                            Debug: {{ $item['span_name'] }} (owner: {{ $item['span_owner_id'] }}, is member: {{ $item['is_member'] }})
-                                                        </td>
-                                                    </tr>
-                                                @else
                                                 <tr>
                                                     <td>
                                                         <div class="d-flex align-items-center">
@@ -242,7 +221,6 @@
                                                         @endif
                                                     </td>
                                                 </tr>
-                                                @endif
                                             @endforeach
                                         </tbody>
                                     </table>
