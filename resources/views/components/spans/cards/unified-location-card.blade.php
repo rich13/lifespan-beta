@@ -20,10 +20,15 @@
     $primaryLocation = null;
     $mapHeight = 200; // Default height
     
+    // Find nearby places if this is a place span with coordinates
+    $nearbyPlaces = [];
     if ($isPlaceSpan && $hasCoordinates) {
         // If this span is a place with coordinates, use it as the primary location
         $primaryLocation = $span;
-        $mapHeight = 300; // Larger map for place spans
+        $mapHeight = 400; // Larger map for place spans to show nearby places
+        
+        // Find nearby places within 50km radius, limit to 20 places
+        $nearbyPlaces = $span->findNearbyPlaces(50.0, 20);
     } elseif ($hasLocatedConnections) {
         // Otherwise, use the first connected location with coordinates
         foreach($locatedConnections as $connection) {
@@ -197,6 +202,36 @@
                 </div>
             @endif
             
+            @if(!empty($nearbyPlaces))
+                <!-- Nearby Places Section -->
+                <div class="mt-3">
+                    <h6 class="mb-2">
+                        <i class="bi bi-geo-alt-fill me-2"></i>
+                        Nearby Places
+                    </h6>
+                    <div class="list-group">
+                        @foreach($nearbyPlaces as $placeData)
+                            @php
+                                $nearbyPlace = $placeData['span'];
+                                $distance = $placeData['distance'];
+                                $distanceText = $distance < 1 
+                                    ? round($distance * 1000) . 'm away' 
+                                    : number_format($distance, 1) . 'km away';
+                            @endphp
+                            <a href="{{ route('spans.show', $nearbyPlace) }}" 
+                               class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong>{{ $nearbyPlace->name }}</strong>
+                                    <br>
+                                    <small class="text-muted">{{ $distanceText }}</small>
+                                </div>
+                                <i class="bi bi-arrow-right"></i>
+                            </a>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+            
             @if($hasLocatedConnections)
                 <!-- Connected Location Details -->
                 @foreach($locatedConnections as $connection)
@@ -267,61 +302,115 @@
                     attribution: '© OpenStreetMap contributors'
                 }).addTo(map);
 
-                // Add marker for the location
-                const marker = L.marker([
+                // Add marker for the primary location (current place)
+                const primaryMarker = L.marker([
                     {{ $primaryLocation->getCoordinates()['latitude'] }}, 
                     {{ $primaryLocation->getCoordinates()['longitude'] }}
-                ]).addTo(map)
-                  .bindPopup('{{ $primaryLocation->name }}');
+                ], {
+                    icon: L.icon({
+                        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+                        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                        iconSize: [25, 41],
+                        iconAnchor: [12, 41],
+                        popupAnchor: [1, -34],
+                        shadowSize: [41, 41]
+                    })
+                }).addTo(map)
+                  .bindPopup('<strong>{{ $primaryLocation->name }}</strong>');
 
-                @if($primaryLocation->getOsmData() && in_array($primaryLocation->getOsmData()['place_type'], ['country', 'state', 'region', 'province', 'administrative']))
-                    // For administrative areas, try to fetch and display the boundary
-                    const osmId = {{ $primaryLocation->getOsmData()['osm_id'] }};
-                    const osmType = '{{ $primaryLocation->getOsmData()['osm_type'] }}';
+                // Add markers for nearby places
+                const nearbyPlaces = @json($nearbyPlaces);
+                const nearbyMarkers = [];
+                
+                nearbyPlaces.forEach(function(placeData) {
+                    const place = placeData.span;
+                    const distance = placeData.distance;
                     
-                    // Fetch boundary data from OSM Overpass API
-                    console.log('Fetching boundary for:', osmType, osmId);
-                    fetch(`https://overpass-api.de/api/interpreter?data=[out:json];${osmType}(${osmId});out geom;`)
-                        .then(response => response.json())
-                        .then(data => {
-                            console.log('Overpass response:', data);
-                            if (data.elements && data.elements.length > 0) {
-                                const element = data.elements[0];
-                                
-                                if (element.geometry && element.geometry.length > 0) {
-                                    // Create a polygon from the geometry
-                                    const coordinates = element.geometry.map(point => [point.lat, point.lon]);
-                                    console.log('Boundary coordinates:', coordinates.length, 'points');
-                                    
-                                    const polygon = L.polygon(coordinates, {
+                    // Get coordinates from the place's metadata
+                    const coords = place.metadata && place.metadata.coordinates 
+                        ? place.metadata.coordinates 
+                        : null;
+                    
+                    if (coords && coords.latitude && coords.longitude) {
+                        const marker = L.marker([
+                            parseFloat(coords.latitude),
+                            parseFloat(coords.longitude)
+                        ]).addTo(map);
+                        
+                        // Format distance
+                        let distanceText = '';
+                        if (distance < 1) {
+                            distanceText = Math.round(distance * 1000) + 'm away';
+                        } else {
+                            distanceText = parseFloat(distance).toFixed(1) + 'km away';
+                        }
+                        
+                        // Create popup with link to the place
+                        const popupContent = `
+                            <div>
+                                <strong><a href="/spans/${place.slug}" class="text-decoration-none">${place.name}</a></strong><br>
+                                <small class="text-muted">${distanceText}</small>
+                            </div>
+                        `;
+                        
+                        marker.bindPopup(popupContent);
+                        nearbyMarkers.push(marker);
+                    }
+                });
+                
+                // Fit map to show all markers if we have nearby places
+                if (nearbyMarkers.length > 0) {
+                    const group = new L.featureGroup([primaryMarker, ...nearbyMarkers]);
+                    map.fitBounds(group.getBounds().pad(0.1));
+                } else {
+                    // Just show the primary location
+                    primaryMarker.openPopup();
+                }
+
+                // Handle boundary display for larger administrative areas
+                @php
+                    $boundaryPlaceTypes = ['country', 'state', 'region', 'province', 'administrative', 'city'];
+                @endphp
+                @if($primaryLocation->getOsmData() && in_array($primaryLocation->getOsmData()['place_type'], $boundaryPlaceTypes))
+                    $.ajax({
+                        url: '{{ route('places.boundary', $primaryLocation) }}',
+                        method: 'GET',
+                        dataType: 'json'
+                    }).done(function(response) {
+                        if (response.success && response.geojson) {
+                            try {
+                                const boundaryLayer = L.geoJSON(response.geojson, {
+                                    style: {
                                         color: '#007bff',
                                         weight: 2,
                                         fillColor: '#007bff',
                                         fillOpacity: 0.1
-                                    }).addTo(map);
-                                    
-                                    // Fit map to show the entire boundary
-                                    map.fitBounds(polygon.getBounds());
-                                    
-                                    // Add popup to the polygon
-                                    polygon.bindPopup('{{ $primaryLocation->name }} boundary');
-                                } else {
-                                    console.log('No geometry found in element');
-                                    marker.openPopup();
+                                    }
+                                }).addTo(map);
+
+                                map.fitBounds(boundaryLayer.getBounds());
+                                if (boundaryLayer.getLayers().length > 0) {
+                                    boundaryLayer.getLayers()[0].bindPopup('{{ $primaryLocation->name }} boundary');
                                 }
-                            } else {
-                                console.log('No elements found in response');
-                                marker.openPopup();
+                            } catch (e) {
+                                console.log('Error rendering boundary geojson:', e);
+                                if (nearbyMarkers.length === 0) {
+                                    primaryMarker.openPopup();
+                                }
                             }
-                        })
-                        .catch(error => {
-                            console.log('Could not fetch boundary data:', error);
-                            // Fallback: just show the marker and open its popup
-                            marker.openPopup();
-                        });
+                        } else if (nearbyMarkers.length === 0) {
+                            primaryMarker.openPopup();
+                        }
+                    }).fail(function(error) {
+                        console.log('Boundary request failed:', error);
+                        if (nearbyMarkers.length === 0) {
+                            primaryMarker.openPopup();
+                        }
+                    });
                 @else
-                    // For smaller places, just show the marker
-                    marker.openPopup();
+                    if (nearbyMarkers.length === 0) {
+                        primaryMarker.openPopup();
+                    }
                 @endif
             });
         </script>
