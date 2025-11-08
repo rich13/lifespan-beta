@@ -8,12 +8,16 @@ $user = Auth::user();
 $journey = null;
 
 // Only show this card if user is authenticated and has a personal span
-if ($user && $user->personalSpan) {
+// Skip path finding for place spans - it's expensive and not very useful for places
+// Places are better shown via geolocation (nearby places feature)
+if ($user && $user->personalSpan && $span->type_id !== 'place') {
     // Don't show if it's the user's own span
     if ($user->personalSpan->id !== $span->id) {
         try {
             $journeyService = app(JourneyService::class);
-            $journey = $journeyService->findPathToSpan($user->personalSpan, $span, 6);
+            // Reduce max degrees for non-person spans to make it faster
+            $maxDegrees = $span->type_id === 'person' ? 6 : 4;
+            $journey = $journeyService->findPathToSpan($user->personalSpan, $span, $maxDegrees);
         } catch (\Exception $e) {
             // Silently fail - don't show the card if there's an error
             $journey = null;

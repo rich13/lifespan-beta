@@ -271,6 +271,11 @@ class JourneyService
      */
     public function findPathToSpan(Span $sourcePerson, Span $targetSpan, int $maxDegrees = 6, bool $randomize = true): ?array
     {
+        // Early exit: Don't find paths to place spans - use geolocation instead
+        if ($targetSpan->type_id === 'place') {
+            return null;
+        }
+
         \Log::info('Finding path to span', [
             'source_person_id' => $sourcePerson->id,
             'source_person_name' => $sourcePerson->name,
