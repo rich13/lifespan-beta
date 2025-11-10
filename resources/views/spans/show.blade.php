@@ -137,6 +137,13 @@
             <i class="bi bi-clock-history me-1"></i> History
         </a>
 
+        @if($span->type_id === 'role')
+            <a href="{{ route('new.person-role-org', ['role_id' => $span->id, 'role_name' => $span->name]) }}"
+               class="btn btn-sm btn-outline-success">
+                <i class="bi bi-person-plus-fill me-1"></i> Add to Role
+            </a>
+        @endif
+
     @endauth
 @endsection
 
