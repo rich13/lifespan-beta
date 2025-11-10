@@ -41,7 +41,7 @@ class PhotoUploadController extends Controller
 
         try {
             $request->validate([
-                'photos.*' => 'required|file|mimes:jpeg,jpg,png,gif,heic,heif|max:5120', // 5MB max, includes HEIC
+                'photos.*' => 'required|file|mimes:jpeg,jpg,png,gif,heic,heif|max:20480', // 20MB max, includes HEIC
                 'title' => 'nullable|string|max:255',
                 'description' => 'nullable|string|max:1000',
                 'date_taken' => 'nullable|date',
@@ -85,12 +85,27 @@ class PhotoUploadController extends Controller
 
                 // Determine the date to use
                 $dateTaken = null;
+                $dateTakenSource = 'fallback';
                 if ($request->filled('date_taken')) {
                     $dateTaken = Carbon::parse($request->date_taken);
-                } elseif (isset($exifData['date_taken'])) {
+                    $dateTakenSource = 'form';
+                } elseif (!empty($exifData['date_taken'])) {
                     $dateTaken = Carbon::parse($exifData['date_taken']);
+                    $dateTakenSource = 'exif';
+                } elseif (!empty($exifData['year']) && !empty($exifData['month']) && !empty($exifData['day'])) {
+                    $dateTaken = Carbon::create(
+                        (int)$exifData['year'],
+                        (int)$exifData['month'],
+                        (int)$exifData['day'],
+                        12,
+                        0,
+                        0
+                    );
+                    $dateTakenSource = 'exif_partial';
                 } else {
-                    $dateTaken = Carbon::now();
+                    $timestamp = $file->getCTime() ?: $file->getMTime() ?: time();
+                    $dateTaken = Carbon::createFromTimestamp($timestamp);
+                    $dateTakenSource = 'file';
                 }
 
                 // Build metadata
@@ -102,6 +117,19 @@ class PhotoUploadController extends Controller
                     'mime_type' => $imageData['mime_type'],
                     'filename' => $imageData['filename'],
                 ];
+
+                $metadata['date_taken'] = $dateTaken->toISOString();
+                $metadata['date_taken_source'] = $dateTakenSource;
+                \Log::info('Resolved photo date', [
+                    'filename' => $file->getClientOriginalName(),
+                    'resolved' => $dateTaken->toISOString(),
+                    'source' => $dateTakenSource,
+                    'exif_data_present' => array_key_exists('date_taken', $exifData),
+                ]);
+
+                $metadata['year'] = $dateTaken->year;
+                $metadata['month'] = $dateTaken->month;
+                $metadata['day'] = $dateTaken->day;
                 
                 // Set creator to the user's personal span (required for 'thing' spans)
                 if ($user->personalSpan) {

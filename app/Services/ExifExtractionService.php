@@ -95,6 +95,16 @@ class ExifExtractionService
             }
         }
 
+        if (!isset($data['date_taken'])) {
+            $bestDate = $this->extractBestDateTaken($exiftoolData, $exif);
+            if ($bestDate) {
+                $data['date_taken'] = $bestDate->toISOString();
+                $data['year'] = $bestDate->year;
+                $data['month'] = $bestDate->month;
+                $data['day'] = $bestDate->day;
+            }
+        }
+
         // Extract camera information
         if ($exif) {
             if (isset($exif['Make'])) {
@@ -115,6 +125,128 @@ class ExifExtractionService
 
         return $data;
     }
+    protected function extractBestDateTaken(array $exiftoolData, ?array $exif): ?Carbon
+    {
+        $candidates = [];
+
+        $combineIptc = static fn($data) => !empty($data['IPTC:DateCreated']) && !empty($data['IPTC:TimeCreated'])
+            ? ($data['IPTC:DateCreated'] . ' ' . $data['IPTC:TimeCreated'])
+            : null;
+
+        $candidateFields = [
+            'Composite:SubSecDateTimeOriginal',
+            'Composite:DateTimeCreated',
+            'Composite:CreatedDate',
+            'Composite:CreateDate',
+            'Composite:SubSecCreateDate',
+            'Composite:SubSecModifyDate',
+            'Composite:SubSecDateTimeCreated',
+            'Composite:DateTimeOriginal',
+            'EXIF:DateTimeOriginal',
+            'EXIF:CreateDate',
+            'MakerNotes:DateTimeOriginal',
+            'QuickTime:CreateDate',
+            'QuickTime:CreationDate',
+            'QuickTime:MediaCreateDate',
+            'QuickTime:TrackCreateDate',
+            'QuickTime:ContentCreateDate',
+            'QuickTime:ModifyDate',
+            'XMP:CreateDate',
+            'XMP:DateCreated',
+            'XMP:MetadataDate',
+            'PNG:CreationTime',
+            'H264:DateTimeOriginal',
+            'File:FileModifyDate',
+        ];
+
+        foreach ($candidateFields as $field) {
+            if (!empty($exiftoolData[$field])) {
+                $candidates[] = $exiftoolData[$field];
+            }
+        }
+
+        if ($combine = $combineIptc($exiftoolData)) {
+            $candidates[] = $combine;
+        }
+
+        if ($exif) {
+            foreach (['DateTimeOriginal', 'DateTimeDigitized', 'CreateDate', 'DateTime'] as $phpField) {
+                if (!empty($exif[$phpField])) {
+                    $candidates[] = $exif[$phpField];
+                }
+            }
+        }
+
+        foreach ($candidates as $value) {
+            $parsed = $this->parseExifDate($value);
+            if ($parsed) {
+                return $parsed;
+            }
+        }
+
+        return null;
+    }
+
+    protected function parseExifDate(string $value): ?Carbon
+    {
+        $original = trim($value);
+        if ($original === '') {
+            return null;
+        }
+
+        $normalized = $original;
+
+        if (substr($normalized, -1) === 'Z') {
+            $normalized = substr($normalized, 0, -1) . '+00:00';
+        }
+
+        $normalized = preg_replace('/(\.\d+)([+-]\d{2}:\d{2})$/', '$1$2', $normalized);
+        $normalized = str_replace('/', '-', $normalized);
+
+        $normalized = str_replace(['.000000'], '', $normalized);
+
+        $formats = [
+            'Y:m:d H:i:s',
+            'Y:m:d H:i:sO',
+            'Y:m:d H:i:sP',
+            'Y:m:d\TH:i:s',
+            'Y:m:d\TH:i:sP',
+            'Y-m-d H:i:s',
+            'Y-m-d H:i:sP',
+            'Y-m-d\TH:i:s',
+            'Y-m-d\TH:i:sP',
+            'Ymd\THisP',
+            'Ymd\THis\Z',
+            'Ymd H:i:s',
+            'YmdHis',
+        ];
+
+        foreach ($formats as $format) {
+            try {
+                return Carbon::createFromFormat($format, $normalized);
+            } catch (\Exception $e) {
+                // continue trying other formats
+            }
+        }
+
+        try {
+            return Carbon::parse($normalized);
+        } catch (\Exception $e) {
+            if (preg_match('/^\d{8}$/', $normalized)) {
+                return Carbon::createFromFormat('Ymd', $normalized);
+            }
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $normalized)) {
+                return Carbon::createFromFormat('Y-m-d', $normalized);
+            }
+            \Log::debug('Failed to parse EXIF date', [
+                'value' => $original,
+                'normalized' => $normalized,
+                'error' => $e->getMessage()
+            ]);
+            return null;
+        }
+    }
+
 
     /**
      * Extract GPS coordinates from EXIF data

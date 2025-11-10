@@ -21,7 +21,7 @@
                                     <i class="bi bi-cloud-upload display-1 text-muted"></i>
                                     <h5 class="mt-3">Drag and drop photos here</h5>
                                     <p class="text-muted">or click to select files</p>
-                                    <small class="text-muted">Maximum file size: 5MB per image • Stored in Cloudflare R2</small>
+                                    <small class="text-muted">Maximum file size: 20MB per image • Stored in Cloudflare R2</small>
                                     <input type="file" id="photoFiles" name="photos[]" multiple accept="image/*,.heic,.heif" class="d-none">
                                     <button type="button" class="btn btn-primary" onclick="document.getElementById('photoFiles').click()">
                                         <i class="bi bi-folder2-open me-2"></i>Select Photos
