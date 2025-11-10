@@ -22,6 +22,7 @@ use App\Http\Controllers\Admin\VisualizerController;
 use App\Http\Controllers\Admin\MusicBrainzImportController;
 use App\Http\Controllers\AdminModeController;
 use App\Http\Controllers\FriendsController;
+use App\Http\Controllers\NewSpanController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
