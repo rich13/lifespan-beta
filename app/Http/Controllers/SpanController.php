@@ -893,10 +893,14 @@ class SpanController extends Controller
             $storyGenerator = app(\App\Services\ConfigurableStoryGeneratorService::class);
             $story = $storyGenerator->generateStoryAtDate($span, $date);
 
+            // Get leadership roles at this date
+            $leadershipService = app(\App\Services\LeadershipRoleService::class);
+            $leadership = $leadershipService->getLeadershipAtDate($year, $month, $day);
+
             // Don't set global time travel cookie - only set it when explicitly using the time travel modal
             // This allows viewing a span at a specific date without affecting the rest of the site
 
-            return response()->view('spans.at-date', compact('span', 'date', 'displayDate', 'ongoingConnections', 'ageInfo', 'story'));
+            return response()->view('spans.at-date', compact('span', 'date', 'displayDate', 'ongoingConnections', 'ageInfo', 'story', 'leadership'));
         } catch (AuthorizationException $e) {
             return response()->view('errors.403');
         } catch (\Exception $e) {
