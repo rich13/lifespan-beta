@@ -21,6 +21,11 @@
                 break;
             }
         }
+        
+        // Fallback to the main connection span's dates if nested dates are missing
+        if ($connection->connectionSpan && (!$nestedDates || !$nestedDates->start_year)) {
+            $nestedDates = $connection->connectionSpan;
+        }
     }
     
     // Get connection state for tooltip

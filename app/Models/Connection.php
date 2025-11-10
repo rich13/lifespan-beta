@@ -308,11 +308,13 @@ class Connection extends Model
             foreach ($this->connectionSpan->connectionsAsSubject as $nestedConnection) {
                 if ($nestedConnection->type_id === 'at_organisation' && $nestedConnection->connectionSpan) {
                     $nestedSpan = $nestedConnection->connectionSpan;
-                    return [
-                        $nestedSpan->start_year ?? PHP_INT_MAX,
-                        $nestedSpan->start_month ?? PHP_INT_MAX,
-                        $nestedSpan->start_day ?? PHP_INT_MAX
-                    ];
+                    if ($nestedSpan->start_year) {
+                        return [
+                            $nestedSpan->start_year,
+                            $nestedSpan->start_month ?? 0,
+                            $nestedSpan->start_day ?? 0
+                        ];
+                    }
                 }
             }
         }
@@ -320,9 +322,9 @@ class Connection extends Model
         // Default to connection span dates
         $span = $this->connectionSpan;
         return [
-            $span->start_year ?? PHP_INT_MAX,
-            $span->start_month ?? PHP_INT_MAX,
-            $span->start_day ?? PHP_INT_MAX
+            $span?->start_year ?? PHP_INT_MAX,
+            $span?->start_month ?? PHP_INT_MAX,
+            $span?->start_day ?? PHP_INT_MAX
         ];
     }
 } 
