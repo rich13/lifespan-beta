@@ -131,6 +131,7 @@ Route::get('/spans/search', [SpanSearchController::class, 'search']);
 Route::get('/spans/{span}', [SpanSearchController::class, 'timeline'])->middleware('timeout.prevention');
 Route::get('/spans/{span}/object-connections', [SpanSearchController::class, 'timelineObjectConnections'])->middleware('timeout.prevention');
 Route::get('/spans/{span}/during-connections', [SpanSearchController::class, 'timelineDuringConnections'])->middleware('timeout.prevention');
+Route::post('/spans/batch-timeline', [SpanSearchController::class, 'batchTimeline'])->middleware('timeout.prevention');
 
 // Temporal relationship API
 Route::get('/spans/{span}/temporal', [SpanSearchController::class, 'temporal']);

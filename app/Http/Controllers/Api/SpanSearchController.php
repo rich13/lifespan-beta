@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Connection;
 use App\Models\Span;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -136,7 +137,9 @@ class SpanSearchController extends Controller
                     'type_id' => $span->type_id,
                     'type_name' => $span->type->name,
                     'state' => $span->state,
-                    'is_placeholder' => $span->state === 'placeholder'
+                    'is_placeholder' => $span->state === 'placeholder',
+                    'subtype' => $span->subtype,
+                    'metadata' => is_array($span->metadata) ? $span->metadata : ($span->metadata ? (array) $span->metadata : [])
                 ];
             });
 
@@ -159,13 +162,10 @@ class SpanSearchController extends Controller
                         'type_id' => $placeholderType,
                         'type_name' => ucfirst($placeholderType),
                         'state' => 'placeholder',
-                        'is_placeholder' => true
+                        'is_placeholder' => true,
+                        'subtype' => $subtype ?? null,
+                        'metadata' => $subtype ? ['subtype' => $subtype] : []
                     ];
-                    
-                    // Add subtype metadata if specified
-                    if ($subtype) {
-                        $placeholderData['metadata'] = ['subtype' => $subtype];
-                    }
                     
                     $results->push($placeholderData);
                 }
@@ -530,5 +530,163 @@ class SpanSearchController extends Controller
                 'connections' => $connections
             ];
         });
+    }
+
+    /**
+     * Get timeline data for multiple spans in a single request (batch endpoint)
+     * This reduces the number of API calls when loading timelines for many spans
+     */
+    public function batchTimeline(Request $request)
+    {
+        $request->validate([
+            'span_ids' => ['required', 'array', 'max:100'], // Limit to 100 spans per request
+            'span_ids.*' => ['required', 'uuid', 'exists:spans,id'],
+        ]);
+
+        $spanIds = $request->input('span_ids');
+        $user = Auth::user();
+        
+        // Fetch all spans and check permissions
+        $spans = Span::whereIn('id', $spanIds)->get()->keyBy('id');
+        $accessibleSpanIds = [];
+        
+        foreach ($spanIds as $spanId) {
+            if (!isset($spans[$spanId])) {
+                continue;
+            }
+            $span = $spans[$spanId];
+            if ($span->isPublic() || ($user && $span->hasPermission($user, 'view'))) {
+                $accessibleSpanIds[] = $spanId;
+            }
+        }
+
+        if (empty($accessibleSpanIds)) {
+            return response()->json(['results' => []]);
+        }
+
+        // Load all connections for accessible spans in batch
+        $subjectConnections = Connection::whereIn('parent_id', $accessibleSpanIds)
+            ->whereHas('connectionSpan', function ($q) {
+                $q->whereNotNull('start_year');
+            })
+            ->with([
+                'child:id,name,type_id,start_year,end_year,metadata,access_level,owner_id',
+                'connectionSpan:id,start_year,start_month,start_day,end_year,end_month,end_day',
+                'type:type,forward_predicate'
+            ])
+            ->get()
+            ->groupBy('parent_id');
+
+        $objectConnections = Connection::whereIn('child_id', $accessibleSpanIds)
+            ->where('type_id', 'during')
+            ->whereHas('connectionSpan', function ($q) {
+                $q->whereNotNull('start_year');
+            })
+            ->with([
+                'parent:id,name,type_id,start_year,end_year,metadata',
+                'connectionSpan:id,start_year,start_month,start_day,end_year,end_month,end_day',
+                'type:type,inverse_predicate'
+            ])
+            ->get()
+            ->groupBy('child_id');
+
+        $results = [];
+
+        foreach ($accessibleSpanIds as $spanId) {
+            $span = $spans[$spanId];
+
+            // Process subject connections (timeline data)
+            $connections = ($subjectConnections[$spanId] ?? collect())
+                ->map(function ($connection) use ($user) {
+                    $connectionSpan = $connection->connectionSpan;
+                    
+                    // Check if user can access the target span
+                    $targetAccessible = $connection->child->isAccessibleBy($user);
+                    
+                    $connectionData = [
+                        'id' => $connection->id,
+                        'type_id' => $connection->type_id,
+                        'type_name' => $connection->type->forward_predicate ?? $connection->type_id,
+                        'target_name' => $targetAccessible ? $connection->child->name : 'Private Person',
+                        'target_id' => $targetAccessible ? $connection->child->id : null,
+                        'target_type' => $connection->child->type_id,
+                        'target_metadata' => $targetAccessible ? ($connection->child->metadata ?? []) : [],
+                        'target_accessible' => $targetAccessible,
+                        'start_year' => $connectionSpan ? $connectionSpan->start_year : null,
+                        'start_month' => $connectionSpan ? $connectionSpan->start_month : null,
+                        'start_day' => $connectionSpan ? $connectionSpan->start_day : null,
+                        'end_year' => $connectionSpan ? $connectionSpan->end_year : null,
+                        'end_month' => $connectionSpan ? $connectionSpan->end_month : null,
+                        'end_day' => $connectionSpan ? $connectionSpan->end_day : null,
+                        'metadata' => $connection->metadata ?? []
+                    ];
+                    
+                    // Only load nested connections if this connection has a span
+                    if ($connectionSpan) {
+                        $connectionData['nested_connections'] = $this->getNestedConnections($connectionSpan);
+                    }
+                    
+                    return $connectionData;
+                })
+                ->filter(function ($connection) {
+                    if (
+                        $connection['type_id'] === 'created' && (
+                            $connection['target_type'] === 'set' ||
+                            (
+                                $connection['target_type'] === 'thing' &&
+                                isset($connection['target_metadata']['subtype']) &&
+                                ($connection['target_metadata']['subtype'] === 'photo' || $connection['target_metadata']['subtype'] === 'set')
+                            )
+                        )
+                    ) {
+                        return false;
+                    }
+                    return $connection['start_year'] !== null;
+                })
+                ->sortBy('start_year')
+                ->values();
+
+            // Process object connections (during connections)
+            $duringConnections = ($objectConnections[$spanId] ?? collect())
+                ->map(function ($connection) {
+                    $connectionSpan = $connection->connectionSpan;
+                    return [
+                        'id' => $connection->id,
+                        'type_id' => $connection->type_id,
+                        'type_name' => $connection->type->inverse_predicate ?? $connection->type_id,
+                        'target_name' => $connection->parent->name,
+                        'target_id' => $connection->parent->id,
+                        'target_type' => $connection->parent->type_id,
+                        'target_metadata' => $connection->parent->metadata ?? [],
+                        'start_year' => $connectionSpan ? $connectionSpan->start_year : null,
+                        'start_month' => $connectionSpan ? $connectionSpan->start_month : null,
+                        'start_day' => $connectionSpan ? $connectionSpan->start_day : null,
+                        'end_year' => $connectionSpan ? $connectionSpan->end_year : null,
+                        'end_month' => $connectionSpan ? $connectionSpan->end_month : null,
+                        'end_day' => $connectionSpan ? $connectionSpan->end_day : null,
+                        'metadata' => $connection->metadata ?? []
+                    ];
+                })
+                ->filter(function ($connection) {
+                    return $connection['start_year'] !== null;
+                })
+                ->sortBy('start_year')
+                ->values();
+
+            $results[$spanId] = [
+                'span' => [
+                    'id' => $span->id,
+                    'name' => $span->name,
+                    'start_year' => $span->start_year,
+                    'end_year' => $span->end_year
+                ],
+                'connections' => $connections,
+                'during_connections' => $duringConnections
+            ];
+        }
+
+        return response()->json([
+            'results' => $results
+        ]);
     }
 } 
