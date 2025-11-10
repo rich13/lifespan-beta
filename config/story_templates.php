@@ -381,4 +381,35 @@ return [
             ],
         ],
     ],
+    'role' => [
+        'story_template' => '{role_type}{total_holders}{current_holders}',
+        'sentences' => [
+            'role_type' => [
+                'template' => '{name} is a role.',
+                'data_methods' => [
+                    'name' => 'getName',
+                ],
+                'condition' => 'isRole',
+            ],
+            'total_holders' => [
+                'template' => 'It\'s been held by a total of {total_count} people that we know of.',
+                'single_template' => 'It\'s been held by one person that we know of.',
+                'empty_template' => 'It hasn\'t been held by anyone that we know of.',
+                'data_methods' => [
+                    'total_count' => 'getTotalRoleHoldersCount',
+                ],
+                'condition' => 'hasTotalRoleHolders',
+            ],
+            'current_holders' => [
+                'template' => 'It\'s currently held by {current_holders}.',
+                'single_template' => 'It\'s currently held by {current_holder}.',
+                'empty_template' => 'It\'s currently vacant.',
+                'data_methods' => [
+                    'current_holders' => 'getCurrentRoleHolders',
+                    'current_holder' => 'getFirstCurrentRoleHolder',
+                ],
+                'condition' => 'hasCurrentRoleHolders',
+            ],
+        ],
+    ],
 ]; 

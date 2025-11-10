@@ -693,12 +693,27 @@ class ConfigurableStoryGeneratorService
      */
     protected function hasRequiredData(array $data, array $sentenceConfig): bool
     {
+        // If empty_template exists and data is empty (e.g., current_holders is empty), allow it
+        if (isset($sentenceConfig['empty_template'])) {
+            // Check if we should use the empty template (no current holders or total count is 0)
+            if ((isset($data['current_holders']) && empty($data['current_holders'])) ||
+                (isset($data['current_holder']) && empty($data['current_holder'])) ||
+                (isset($data['total_count']) && $data['total_count'] === 0)) {
+                // Empty template has no placeholders, so this is valid
+                return true;
+            }
+        }
+        
         // Get the template to understand what placeholders are expected
         $template = $sentenceConfig['template'] ?? '';
         
+        if (empty($template)) {
+            return false;
+        }
+        
         // Extract placeholders from the template
         preg_match_all('/\{([^}]+)\}/', $template, $matches);
-        $requiredPlaceholders = $matches[1] ?? [];
+        $requiredPlaceholders = isset($matches[1]) && is_array($matches[1]) ? $matches[1] : [];
         
         // Check if we have the essential data for this sentence
         $hasEssentialData = true;
@@ -712,7 +727,7 @@ class ConfigurableStoryGeneratorService
             }
             
             // Some placeholders are optional (like birth_location, formation_location)
-            $optionalPlaceholders = ['birth_location', 'formation_location', 'duration', 'count'];
+            $optionalPlaceholders = ['birth_location', 'formation_location', 'duration', 'count', 'total_count'];
             
             if (!in_array($placeholder, $optionalPlaceholders) && ($value === null || $value === '')) {
                 $hasEssentialData = false;
@@ -729,12 +744,30 @@ class ConfigurableStoryGeneratorService
     protected function selectTemplate(array $sentenceConfig, array $data, Span $span): string
     {
         // Check for single/empty templates first
-        if (isset($sentenceConfig['empty_template']) && $this->isEmptyData($data)) {
-            return $sentenceConfig['empty_template'];
+        // Check for empty_template - can be triggered by isEmptyData or empty current_holders
+        if (isset($sentenceConfig['empty_template'])) {
+            if ($this->isEmptyData($data) || 
+                (isset($data['current_holders']) && empty($data['current_holders'])) ||
+                (isset($data['current_holder']) && empty($data['current_holder']))) {
+                return $sentenceConfig['empty_template'];
+            }
         }
         
-        if (isset($sentenceConfig['single_template']) && $this->isSingleData($data)) {
-            return $sentenceConfig['single_template'];
+        // Check for single template
+        if (isset($sentenceConfig['single_template'])) {
+            if ($this->isSingleData($data)) {
+                return $sentenceConfig['single_template'];
+            }
+            // For roles: count the number of <a> tags to determine single vs multiple
+            // formatList creates one <a> tag per person
+            if (isset($data['current_holders']) && !empty($data['current_holders']) && $span->type_id === 'role') {
+                $holders = $data['current_holders'];
+                // Count the number of <a> tags (each represents one person)
+                $linkCount = substr_count($holders, '<a ');
+                if ($linkCount === 1) {
+                    return $sentenceConfig['single_template'];
+                }
+            }
         }
         
         // Check for deceased template (for age sentences when person is dead)
@@ -915,6 +948,9 @@ class ConfigurableStoryGeneratorService
             'hasEducationAtDate' => $this->hasEducationAtDate($span),
             'hasEducationPhaseAtDate' => $this->hasEducationPhaseAtDate($span),
             'hasRelationshipAtDate' => $this->hasRelationshipAtDate($span),
+            'hasCurrentRoleHolders' => $span->type_id === 'role', // Always true for roles so we can show vacant message
+            'isRole' => $span->type_id === 'role',
+            'hasTotalRoleHolders' => $span->type_id === 'role', // Always true for roles so we can show "hasn't been held" message
             default => false,
         };
     }
@@ -1004,6 +1040,9 @@ class ConfigurableStoryGeneratorService
             'getEducationAtDate' => $this->getEducationAtDate($span),
             'getEducationPhaseAtDate' => $this->getEducationPhaseAtDate($span),
             'getRelationshipAtDate' => $this->getRelationshipAtDate($span),
+            'getCurrentRoleHolders' => $span->type_id === 'role' ? $this->getCurrentRoleHolders($span) : null,
+            'getFirstCurrentRoleHolder' => $span->type_id === 'role' ? $this->getFirstCurrentRoleHolder($span) : null,
+            'getTotalRoleHoldersCount' => $span->type_id === 'role' ? $this->getTotalRoleHoldersCount($span) : null,
             default => null,
         };
 
@@ -1829,12 +1868,28 @@ class ConfigurableStoryGeneratorService
      */
     protected function isEmptyData(array $data): bool
     {
-        return isset($data['album_count']) && $data['album_count'] === 0;
+        // Check for empty album count
+        if (isset($data['album_count']) && $data['album_count'] === 0) {
+            return true;
+        }
+        // Check for empty total role holders count
+        if (isset($data['total_count']) && $data['total_count'] === 0) {
+            return true;
+        }
+        return false;
     }
 
     protected function isSingleData(array $data): bool
     {
-        return isset($data['count']) && $data['count'] === 1;
+        // Check for single count
+        if (isset($data['count']) && $data['count'] === 1) {
+            return true;
+        }
+        // Check for single total role holders count
+        if (isset($data['total_count']) && $data['total_count'] === 1) {
+            return true;
+        }
+        return false;
     }
 
     protected function getMissingData(array $data): array
@@ -1898,6 +1953,15 @@ class ConfigurableStoryGeneratorService
      */
     protected function formatList(array $items): string
     {
+        // Remove any null or empty values and re-index the array
+        $items = array_values(array_filter($items, function ($item) {
+            return $item !== null && $item !== '';
+        }));
+        
+        if (empty($items)) {
+            return '';
+        }
+        
         if (count($items) === 1) {
             return $items[0];
         } elseif (count($items) === 2) {
@@ -2150,6 +2214,243 @@ class ConfigurableStoryGeneratorService
         }
         
         return $roleName;
+    }
+
+    /**
+     * Check if a span is currently ongoing (hasn't ended yet)
+     */
+    protected function isCurrentlyOngoing(Span $span): bool
+    {
+        if (!$span->end_year) {
+            return true; // No end year means it's ongoing
+        }
+        
+        $currentYear = (int) date('Y');
+        $currentMonth = (int) date('n');
+        $currentDay = (int) date('j');
+        
+        // End year is in the past
+        if ($span->end_year < $currentYear) {
+            return false;
+        }
+        
+        // End year is in the future
+        if ($span->end_year > $currentYear) {
+            return true;
+        }
+        
+        // Same year - check month
+        if (!$span->end_month) {
+            return true; // No end month means it ends at end of year
+        }
+        
+        if ($span->end_month > $currentMonth) {
+            return true; // End month is in the future
+        }
+        
+        if ($span->end_month < $currentMonth) {
+            return false; // End month is in the past
+        }
+        
+        // Same month - check day
+        if (!$span->end_day) {
+            return true; // No end day means it ends at end of month
+        }
+        
+        return $span->end_day >= $currentDay; // End day is today or in the future
+    }
+
+    /**
+     * Get collection of current role holders (internal helper)
+     */
+    protected function getCurrentRoleHoldersCollection(Span $role): Collection
+    {
+        // Only process if this is actually a role span
+        if ($role->type_id !== 'role') {
+            return collect([]);
+        }
+        
+        // Find all has_role connections where this role is the child (object)
+        $connections = Connection::where('type_id', 'has_role')
+            ->where('child_id', $role->id)
+            ->whereHas('parent', function ($query) {
+                $query->where('type_id', 'person');
+            })
+            ->whereHas('connectionSpan', function ($query) {
+                // Must have a connection span with a start_year
+                $query->whereNotNull('start_year');
+            })
+            ->with(['parent', 'connectionSpan'])
+            ->get();
+        
+        // Filter to only include connections that are currently ongoing
+        $ongoingConnections = $connections->filter(function ($connection) {
+            if (!$connection->connectionSpan) {
+                return false;
+            }
+            
+            $connectionSpan = $connection->connectionSpan;
+            
+            // Check if the connection has started (start_year is in the past or current)
+            $currentYear = (int) date('Y');
+            $currentMonth = (int) date('n');
+            $currentDay = (int) date('j');
+            
+            if ($connectionSpan->start_year > $currentYear) {
+                return false; // Hasn't started yet
+            }
+            
+            if ($connectionSpan->start_year < $currentYear) {
+                // Started in the past - check if it's still ongoing
+                return $this->isCurrentlyOngoing($connectionSpan);
+            }
+            
+            // Started this year - check if start date has passed
+            if ($connectionSpan->start_month) {
+                if ($connectionSpan->start_month > $currentMonth) {
+                    return false; // Starts in the future
+                }
+                if ($connectionSpan->start_month < $currentMonth) {
+                    // Started in a past month - check if it's still ongoing
+                    return $this->isCurrentlyOngoing($connectionSpan);
+                }
+                // Same month - check day
+                if ($connectionSpan->start_day) {
+                    if ($connectionSpan->start_day > $currentDay) {
+                        return false; // Starts in the future
+                    }
+                }
+                // Started this month (today or earlier) - check if it's still ongoing
+                return $this->isCurrentlyOngoing($connectionSpan);
+            }
+            
+            // Started this year, no start month - it's started, check if still ongoing
+            return $this->isCurrentlyOngoing($connectionSpan);
+        });
+        
+        return $ongoingConnections->map(function ($connection) {
+            if (!$connection->parent) {
+                return null;
+            }
+            return [
+                'person' => $connection->parent->name,
+                'person_span' => $connection->parent,
+            ];
+        })->filter(function ($holder) {
+            return $holder !== null && $holder['person_span'] && $holder['person_span']->isAccessibleBy($this->currentUser);
+        });
+    }
+
+    /**
+     * Check if this is a role span
+     */
+    protected function isRole(Span $span): bool
+    {
+        return $span->type_id === 'role';
+    }
+
+    /**
+     * Get total count of all people who have held this role (past and present)
+     */
+    protected function getTotalRoleHoldersCount(Span $role): int
+    {
+        if ($role->type_id !== 'role') {
+            return 0;
+        }
+        
+        // Find all has_role connections where this role is the child (object)
+        $connections = Connection::where('type_id', 'has_role')
+            ->where('child_id', $role->id)
+            ->whereHas('parent', function ($query) {
+                $query->where('type_id', 'person');
+            })
+            ->whereHas('connectionSpan', function ($query) {
+                // Must have a connection span with a start_year
+                $query->whereNotNull('start_year');
+            })
+            ->with(['parent', 'connectionSpan'])
+            ->get();
+        
+        // Get unique people (a person can hold the role multiple times)
+        $uniquePeople = $connections->map(function ($connection) {
+            return $connection->parent_id;
+        })->unique()->filter(function ($personId) use ($connections) {
+            // Check if the person is accessible
+            $connection = $connections->firstWhere('parent_id', $personId);
+            if (!$connection || !$connection->parent) {
+                return false;
+            }
+            return $connection->parent->isAccessibleBy($this->currentUser);
+        });
+        
+        return $uniquePeople->count();
+    }
+
+    /**
+     * Check if this role has any total holders (past or present)
+     */
+    protected function hasTotalRoleHolders(Span $role): bool
+    {
+        return $this->getTotalRoleHoldersCount($role) > 0;
+    }
+
+    /**
+     * Check if this role has any current holders
+     */
+    protected function hasCurrentRoleHolders(Span $role): bool
+    {
+        return $this->getCurrentRoleHoldersCollection($role)->isNotEmpty();
+    }
+
+    /**
+     * Get formatted list of current role holders (for template)
+     */
+    protected function getCurrentRoleHolders(Span $role): string
+    {
+        // Only process if this is actually a role span
+        if ($role->type_id !== 'role') {
+            return '';
+        }
+        
+        $holders = $this->getCurrentRoleHoldersCollection($role);
+        
+        if ($holders->isEmpty()) {
+            return '';
+        }
+        
+        $holderNames = $holders->map(function ($holder) {
+            if (!isset($holder['person']) || !isset($holder['person_span'])) {
+                return null;
+            }
+            return $this->makeSpanLink($holder['person'], $holder['person_span']);
+        })->filter(function ($link) {
+            return $link !== null;
+        })->values(); // Re-index the collection to ensure sequential keys
+        
+        if ($holderNames->isEmpty()) {
+            return '';
+        }
+        
+        return $this->formatList($holderNames->toArray());
+    }
+
+    /**
+     * Get the first current role holder (for template)
+     */
+    protected function getFirstCurrentRoleHolder(Span $role): ?string
+    {
+        // Only process if this is actually a role span
+        if ($role->type_id !== 'role') {
+            return null;
+        }
+        
+        $holder = $this->getCurrentRoleHoldersCollection($role)->first();
+        
+        if (!$holder || !isset($holder['person']) || !isset($holder['person_span'])) {
+            return null;
+        }
+        
+        return $this->makeSpanLink($holder['person'], $holder['person_span']);
     }
 
     /**
