@@ -89,6 +89,12 @@ function initializeGroupTimeline_{{ str_replace('-', '_', $containerId) }}() {
             fetch(`/api/spans/${spanId}/during-connections`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }).then(response => response.json())
         ])
         .then(([currentSpanData, objectConnectionsData, duringConnectionsData]) => {
+            console.log('Fetched data for span:', spanId, {
+                objectConnectionsData: objectConnectionsData,
+                objectConnectionsCount: objectConnectionsData.connections?.length || 0,
+                hasRoleConnections: objectConnectionsData.connections?.filter(conn => conn.type_id === 'has_role').length || 0
+            });
+            
             // Extract unique subjects from the object connections
             const subjects = [...new Set(
                 objectConnectionsData.connections
@@ -119,73 +125,118 @@ function initializeGroupTimeline_{{ str_replace('-', '_', $containerId) }}() {
                 });
             }
             
+            const roleOccupancies = objectConnectionsData.connections
+                ? objectConnectionsData.connections.filter(conn => conn.type_id === 'has_role')
+                : [];
+            
+            console.log('Role occupancies extracted:', roleOccupancies.length, roleOccupancies);
+
             timelineData.push({
                 id: spanId,
                 name: currentSpanData.span.name,
                 timeline: currentSpanData,
                 duringConnections: duringConnectionsData.connections || [],
+                roleOccupancies: roleOccupancies,
                 isCurrentSpan: true,
                 isCurrentUser: false
             });
+            
+            console.log('Current span timeline data:', timelineData.find(t => t.isCurrentSpan));
             
             if (allSubjectIds.size > 0) {
                 const subjectIdsToFetch = Array.from(allSubjectIds).filter(subjectId => 
                     subjectId !== currentUserSpanId && subjectId !== spanId
                 );
                 
-                const subjectPromises = subjectIdsToFetch.map(subjectId => 
-                    Promise.all([
-                        fetch(`/api/spans/${subjectId}`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }).then(response => response.json()),
-                        fetch(`/api/spans/${subjectId}/during-connections`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }).then(response => response.json())
-                    ])
-                    .then(([subjectData, duringData]) => ({
-                        id: subjectId,
-                        name: objectConnectionsData.connections.find(conn => conn.target_id === subjectId)?.target_name || 'Unknown',
-                        timeline: subjectData,
-                        duringConnections: duringData.connections || [],
-                        isCurrentSpan: false,
-                        isCurrentUser: false
-                    }))
-                    .catch(error => {
-                        console.error(`Error loading timeline for subject ${subjectId}:`, error);
-                        return null;
-                    })
-                );
+                // Use batch endpoint for better performance (reduces 100+ requests to 1)
+                const allIdsToFetch = shouldIncludeUserSpan 
+                    ? [currentUserSpanId, ...subjectIdsToFetch]
+                    : subjectIdsToFetch;
                 
-                if (shouldIncludeUserSpan) {
-                    subjectPromises.unshift(
-                        Promise.all([
-                            fetch(`/api/spans/${currentUserSpanId}`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }).then(response => response.json()),
-                            fetch(`/api/spans/${currentUserSpanId}/during-connections`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }).then(response => response.json())
-                        ])
-                        .then(([subjectData, duringData]) => ({
-                            id: currentUserSpanId,
-                            name: 'You',
-                            timeline: subjectData,
-                            duringConnections: duringData.connections || [],
-                            isCurrentSpan: false,
-                            isCurrentUser: true
-                        }))
-                        .catch(error => {
-                            console.error(`Error loading timeline for user ${currentUserSpanId}:`, error);
-                            return null;
-                        })
-                    );
+                // Batch endpoint supports up to 100 spans - split if needed
+                const BATCH_SIZE = 100;
+                const batches = [];
+                for (let i = 0; i < allIdsToFetch.length; i += BATCH_SIZE) {
+                    batches.push(allIdsToFetch.slice(i, i + BATCH_SIZE));
                 }
                 
-                Promise.all(subjectPromises)
-                    .then(subjectData => {
-                        const validSubjects = subjectData.filter(subject => subject !== null);
+                // Get CSRF token once
+                const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+                
+                // Fetch all batches in parallel (each batch is one request)
+                const batchPromises = batches.map(async (batch) => {
+                    try {
+                        const headers = {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        };
                         
+                        // Add CSRF token if available (needed for Sanctum stateful API)
+                        if (csrfToken) {
+                            headers['X-CSRF-TOKEN'] = csrfToken;
+                        }
+                        
+                        const response = await fetch('/api/spans/batch-timeline', {
+                            method: 'POST',
+                            credentials: 'same-origin',
+                            headers: headers,
+                            body: JSON.stringify({ span_ids: batch })
+                        });
+                        
+                        if (!response.ok) {
+                            const errorText = await response.text();
+                            console.error(`Batch timeline request failed (${response.status}):`, errorText);
+                            throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 100)}`);
+                        }
+                        
+                        const data = await response.json();
+                        return data.results || {};
+                    } catch (error) {
+                        console.error('Error loading batch timeline for batch:', batch, error);
+                        // Return empty object so we don't break the entire timeline
+                        return {};
+                    }
+                });
+                
+                // Wait for all batches and combine results
+                Promise.all(batchPromises)
+                    .then(batchResults => {
+                        const allResults = Object.assign({}, ...batchResults);
+                        
+                        // Convert results to the format expected by the timeline
+                        const subjectData = allIdsToFetch
+                            .map(spanId => {
+                                const result = allResults[spanId];
+                                if (!result) {
+                                    return null;
+                                }
+                                
+                                const isUser = spanId === currentUserSpanId;
+                                return {
+                                    id: spanId,
+                                    name: isUser ? 'You' : (objectConnectionsData.connections.find(conn => conn.target_id === spanId)?.target_name || result.span?.name || 'Unknown'),
+                                    timeline: {
+                                        span: result.span,
+                                        connections: result.connections || []
+                                    },
+                                    duringConnections: result.during_connections || [],
+                                    roleOccupancies: [],
+                                    isCurrentSpan: false,
+                                    isCurrentUser: isUser
+                                };
+                            })
+                            .filter(subject => subject !== null);
+                        
+                        // Update the timeline data with fetched data
                         if (shouldIncludeUserSpan) {
-                            const userData = validSubjects.find(subject => subject.id === currentUserSpanId);
+                            const userData = subjectData.find(subject => subject && subject.id === currentUserSpanId);
                             if (userData) {
                                 timelineData[0] = userData;
                             }
                         }
                         
-                        const otherSubjects = validSubjects.filter(subject => 
-                            subject.id !== currentUserSpanId && subject.id !== spanId
+                        const otherSubjects = subjectData.filter(subject => 
+                            subject && subject.id !== currentUserSpanId && subject.id !== spanId
                         );
                         timelineData.push(...otherSubjects);
                         
@@ -295,10 +346,12 @@ function renderGroupTimeline_{{ str_replace('-', '_', $containerId) }}(timelineD
     const connectionColors = { 'life': '#000000' };
 
     // Create swimlanes for each timeline
+    console.log('Rendering timeline data:', timelineData.length, 'timelines', timelineData.map(t => ({ name: t.name, isCurrentSpan: t.isCurrentSpan, hasRoleOccupancies: !!t.roleOccupancies, roleOccupanciesCount: t.roleOccupancies?.length || 0 })));
     timelineData.forEach((timeline, index) => {
         const swimlaneY = margin.top + index * (swimlaneHeight + swimlaneSpacing);
         const isCurrentSpan = timeline.isCurrentSpan;
         const isCurrentUser = currentUserSpanId && timeline.id === currentUserSpanId;
+        console.log(`Timeline ${index}: ${timeline.name}, isCurrentSpan: ${isCurrentSpan}, roleOccupancies:`, timeline.roleOccupancies);
         
         // Draw swimlane background
         svg.append('rect')
@@ -321,13 +374,13 @@ function renderGroupTimeline_{{ str_replace('-', '_', $containerId) }}(timelineD
         };
 
         // Add life span bar for this timeline
-        const timelineSpan = timeline.timeline.span;
+        const timelineSpan = timeline.timeline && timeline.timeline.span ? timeline.timeline.span : null;
         if (timelineSpan && timelineSpan.start_year) {
             const lifeStartYear = mode === 'absolute' ? timelineSpan.start_year : 0;
             const lifeEndYear = mode === 'absolute' 
                 ? (timelineSpan.end_year || new Date().getFullYear())
                 : (timelineSpan.end_year ? timelineSpan.end_year - timelineSpan.start_year : new Date().getFullYear() - timelineSpan.start_year);
-            const hasConnections = timeline.timeline.connections && timeline.timeline.connections.length > 0;
+            const hasConnections = timeline.timeline && timeline.timeline.connections && timeline.timeline.connections.length > 0;
             
             svg.append('rect')
                 .attr('class', 'life-span')
@@ -356,7 +409,7 @@ function renderGroupTimeline_{{ str_replace('-', '_', $containerId) }}(timelineD
         }
 
         // Add connections for this timeline
-        if (timeline.timeline.connections) {
+        if (timeline.timeline && timeline.timeline.connections) {
             timeline.timeline.connections
                 .filter(connection => {
                     if (connection.target_type === 'connection') return false;
@@ -447,6 +500,82 @@ function renderGroupTimeline_{{ str_replace('-', '_', $containerId) }}(timelineD
                         });
                 }
             });
+        }
+
+        // Render aggregated role occupancy bars for the current span if available
+        if (isCurrentSpan) {
+            console.log('Checking role occupancies for current span:', {
+                hasRoleOccupancies: !!timeline.roleOccupancies,
+                roleOccupanciesLength: timeline.roleOccupancies?.length || 0,
+                roleOccupancies: timeline.roleOccupancies,
+                timelineName: timeline.name,
+                timelineId: timeline.id
+            });
+        }
+        if (isCurrentSpan && timeline.roleOccupancies && timeline.roleOccupancies.length > 0) {
+            const occupancyColor = getConnectionColor('has_role');
+            const occupancies = timeline.roleOccupancies.filter(conn => conn.start_year);
+            console.log('Filtered occupancies with start_year:', occupancies.length, occupancies);
+            
+            if (occupancies.length > 0) {
+                const maxVisibleBars = Math.max(1, Math.min(occupancies.length, 6));
+                const occupancyHeight = Math.max(4, (swimlaneHeight - 6) / maxVisibleBars);
+                
+                // For roles (which may be timeless), use the earliest occupancy year as base for relative mode
+                const earliestYear = Math.min(...occupancies.map(occ => occ.start_year));
+
+                occupancies.forEach((connection, occIndex) => {
+                    // Use timeline span's start_year if available, otherwise use earliest occupancy year
+                    const baseYear = (timelineSpan && timelineSpan.start_year) ? timelineSpan.start_year : earliestYear;
+
+                    const startYear = mode === 'absolute'
+                        ? connection.start_year
+                        : (connection.start_year - baseYear);
+
+                    let endYear = connection.end_year;
+                    if (!endYear) {
+                        endYear = mode === 'absolute'
+                            ? new Date().getFullYear()
+                            : (new Date().getFullYear() - baseYear);
+                    } else if (mode !== 'absolute') {
+                        endYear = endYear - baseYear;
+                    }
+
+                    const xStart = xScale(startYear);
+                    let xEnd = xScale(endYear);
+
+                    if (xEnd <= xStart) {
+                        xEnd = xStart + 3; // ensure visible width
+                    }
+
+                    const effectiveIndex = occIndex % maxVisibleBars;
+                    const offsetMultiplier = Math.floor(occIndex / maxVisibleBars);
+                    const occupancyY = swimlaneY + 3 + effectiveIndex * (occupancyHeight + 2);
+
+                    svg.append('rect')
+                        .attr('class', 'role-occupancy')
+                        .attr('x', xStart)
+                        .attr('y', occupancyY + offsetMultiplier)
+                        .attr('width', xEnd - xStart)
+                        .attr('height', occupancyHeight)
+                        .attr('fill', occupancyColor)
+                        .attr('stroke', '#ffffff')
+                        .attr('stroke-width', 1)
+                        .style('opacity', 0.7)
+                        .style('pointer-events', 'auto')
+                        .on('mouseover', function(event) {
+                            d3.select(this).style('opacity', 0.95);
+                            updateConnectionTooltip_{{ str_replace('-', '_', $containerId) }}(event, [connection], timeline.name, isCurrentSpan, mode);
+                        })
+                        .on('mousemove', function(event) {
+                            updateConnectionTooltip_{{ str_replace('-', '_', $containerId) }}(event, [connection], timeline.name, isCurrentSpan, mode);
+                        })
+                        .on('mouseout', function() {
+                            d3.select(this).style('opacity', 0.7);
+                            hideCombinedTooltip_{{ str_replace('-', '_', $containerId) }}();
+                        });
+                });
+            }
         }
 
         // Add "during" connections for this timeline
@@ -813,17 +942,31 @@ function calculateCombinedTimeRange_{{ str_replace('-', '_', $containerId) }}(ti
     let end = currentYear;
 
     timelineData.forEach(timeline => {
-        const timelineSpan = timeline.timeline.span;
-        if (timelineSpan && timelineSpan.start_year) {
-            if (timelineSpan.start_year < start) start = timelineSpan.start_year;
-            if (timelineSpan.end_year && timelineSpan.end_year > end) end = timelineSpan.end_year;
+        // Check role occupancies first (for timeless roles, this is the only source of dates)
+        if (timeline.roleOccupancies && timeline.roleOccupancies.length > 0) {
+            timeline.roleOccupancies.forEach(connection => {
+                if (connection.start_year && connection.start_year < start) start = connection.start_year;
+                if (connection.end_year && connection.end_year > end) {
+                    end = connection.end_year;
+                } else if (!connection.end_year && currentYear > end) {
+                    end = currentYear;
+                }
+            });
         }
 
-        if (timeline.timeline.connections) {
-            timeline.timeline.connections.forEach(connection => {
-                if (connection.start_year && connection.start_year < start) start = connection.start_year;
-                if (connection.end_year && connection.end_year > end) end = connection.end_year;
-            });
+        if (timeline.timeline && timeline.timeline.span) {
+            const timelineSpan = timeline.timeline.span;
+            if (timelineSpan.start_year) {
+                if (timelineSpan.start_year < start) start = timelineSpan.start_year;
+                if (timelineSpan.end_year && timelineSpan.end_year > end) end = timelineSpan.end_year;
+            }
+
+            if (timeline.timeline.connections) {
+                timeline.timeline.connections.forEach(connection => {
+                    if (connection.start_year && connection.start_year < start) start = connection.start_year;
+                    if (connection.end_year && connection.end_year > end) end = connection.end_year;
+                });
+            }
         }
         
         if (timeline.duringConnections) {
@@ -876,6 +1019,22 @@ function calculateRelativeTimeRange_{{ str_replace('-', '_', $containerId) }}(ti
                         if (connection.end_year) {
                             const endAge = connection.end_year - timelineSpan.start_year;
                             allAges.push(endAge);
+                        }
+                    }
+                });
+            }
+
+            if (timeline.roleOccupancies) {
+                timeline.roleOccupancies.forEach(connection => {
+                    if (connection.start_year) {
+                        const startAge = connection.start_year - timelineSpan.start_year;
+                        allAges.push(startAge);
+
+                        if (connection.end_year) {
+                            const endAge = connection.end_year - timelineSpan.start_year;
+                            allAges.push(endAge);
+                        } else {
+                            allAges.push(currentYear - timelineSpan.start_year);
                         }
                     }
                 });

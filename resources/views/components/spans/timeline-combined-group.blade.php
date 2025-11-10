@@ -74,26 +74,48 @@ function initializeCombinedTimeline_{{ str_replace('-', '_', $span->id) }}() {
         fetch(`/api/spans/${spanId}/during-connections`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }).then(response => response.json())
     ])
     .then(([currentSpanData, objectConnectionsData, duringConnectionsData]) => {
-        // Extract unique subjects from the object connections, excluding connection spans, photos, and family connections
+        console.log('All object connections:', objectConnectionsData.connections);
+        console.log('Connection details:', objectConnectionsData.connections.map(conn => ({
+            type_id: conn.type_id,
+            target_type: conn.target_type,
+            target_name: conn.target_name,
+            target_id: conn.target_id,
+            target_metadata: conn.target_metadata,
+            start_year: conn.start_year
+        })));
+        
+        // Extract unique subjects from the object connections, excluding connection spans, notes, and photos/sets
         const subjects = [...new Set(
             objectConnectionsData.connections
                 .filter(conn => {
                     // Exclude connections to connection spans
-                    if (conn.target_type === 'connection') return false;
+                    if (conn.target_type === 'connection') {
+                        console.log('Filtered out connection span:', conn.target_name);
+                        return false;
+                    }
                     // Exclude connections to note spans
-                    if (conn.target_type === 'note') return false;
-                    // Exclude "created" connections to photos or sets
-                    if (
-                        conn.type_id === 'created' &&
-                        conn.target_type === 'thing' &&
-                        (conn.target_metadata?.subtype === 'photo' || conn.target_metadata?.subtype === 'set')
-                    ) return false;
-                    // Exclude family connections (children/parents shouldn't appear as swimlanes)
-                    if (conn.type_id === 'family') return false;
+                    if (conn.target_type === 'note') {
+                        console.log('Filtered out note:', conn.target_name);
+                        return false;
+                    }
+                    // Exclude photos and sets (regardless of connection type)
+                    if (conn.target_type === 'thing' && (conn.target_metadata?.subtype === 'photo' || conn.target_metadata?.subtype === 'set')) {
+                        console.log('Filtered out photo/set:', conn.target_name, conn.target_metadata?.subtype);
+                        return false;
+                    }
+                    // Only include connections with start_year (temporal connections)
+                    // Note: This check is redundant since the API already filters for start_year, but keeping for safety
+                    if (!conn.start_year) {
+                        console.log('Filtered out connection without start_year:', conn.target_name, conn.type_id);
+                        return false;
+                    }
+                    console.log('Including connection:', conn.target_name, conn.type_id, conn.target_type);
                     return true;
                 })
                 .map(conn => conn.target_id)
         )];
+        
+        console.log('Final subjects for swimlanes:', subjects);
         
         // ALWAYS include the current user's span at the top if it exists and is different from current span
         // This ensures the user's span is always visible, regardless of connections
@@ -118,12 +140,20 @@ function initializeCombinedTimeline_{{ str_replace('-', '_', $span->id) }}() {
             });
         }
         
+        // Extract role occupancies (has_role connections where this role is the object/child)
+        const roleOccupancies = objectConnectionsData.connections
+            ? objectConnectionsData.connections.filter(conn => conn.type_id === 'has_role')
+            : [];
+        
+        console.log('Role occupancies extracted for span:', spanId, roleOccupancies.length, roleOccupancies);
+        
         // Add current span
         timelineData.push({
             id: spanId,
             name: currentSpanData.span.name,
             timeline: currentSpanData,
             duringConnections: duringConnectionsData.connections || [],
+            roleOccupancies: roleOccupancies,
             isCurrentSpan: true,
             isCurrentUser: false
         });
@@ -134,68 +164,101 @@ function initializeCombinedTimeline_{{ str_replace('-', '_', $span->id) }}() {
                 subjectId !== currentUserSpanId && subjectId !== spanId
             );
             
-            const subjectPromises = subjectIdsToFetch.map(subjectId => 
-                Promise.all([
-                    fetch(`/api/spans/${subjectId}`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }).then(response => response.json()),
-                    fetch(`/api/spans/${subjectId}/during-connections`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }).then(response => response.json())
-                ])
-                .then(([subjectData, duringData]) => ({
-                    id: subjectId,
-                    name: objectConnectionsData.connections.find(conn => conn.target_id === subjectId)?.target_name || 'Unknown',
-                    timeline: subjectData,
-                    duringConnections: duringData.connections || [],
-                    isCurrentSpan: false,
-                    isCurrentUser: false
-                }))
-                .catch(error => {
-                    console.error(`Error loading timeline for subject ${subjectId}:`, error);
-                    return null;
-                })
-            );
+            // Use batch endpoint for better performance (reduces 100+ requests to 1)
+            const allIdsToFetch = shouldIncludeUserSpan 
+                ? [currentUserSpanId, ...subjectIdsToFetch]
+                : subjectIdsToFetch;
             
-            // ALWAYS fetch user's timeline data if we're including it
-            if (shouldIncludeUserSpan) {
-                subjectPromises.unshift(
-                    Promise.all([
-                        fetch(`/api/spans/${currentUserSpanId}`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }).then(response => response.json()),
-                        fetch(`/api/spans/${currentUserSpanId}/during-connections`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }).then(response => response.json())
-                    ])
-                    .then(([subjectData, duringData]) => ({
-                        id: currentUserSpanId,
-                        name: 'You',
-                        timeline: subjectData,
-                        duringConnections: duringData.connections || [],
-                        isCurrentSpan: false,
-                        isCurrentUser: true
-                    }))
-                    .catch(error => {
-                        console.error(`Error loading timeline for user ${currentUserSpanId}:`, error);
-                        return null;
-                    })
-                );
+            // Batch endpoint supports up to 100 spans - split if needed
+            const BATCH_SIZE = 100;
+            const batches = [];
+            for (let i = 0; i < allIdsToFetch.length; i += BATCH_SIZE) {
+                batches.push(allIdsToFetch.slice(i, i + BATCH_SIZE));
             }
             
-            Promise.all(subjectPromises)
-                .then(subjectData => {
-                    const validSubjects = subjectData.filter(subject => subject !== null);
+            // Get CSRF token once
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+            
+            // Fetch all batches in parallel (each batch is one request)
+            const batchPromises = batches.map(async (batch) => {
+                try {
+                    const headers = {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    };
+                    
+                    // Add CSRF token if available (needed for Sanctum stateful API)
+                    if (csrfToken) {
+                        headers['X-CSRF-TOKEN'] = csrfToken;
+                    }
+                    
+                    const response = await fetch('/api/spans/batch-timeline', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: headers,
+                        body: JSON.stringify({ span_ids: batch })
+                    });
+                    
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        console.error(`Batch timeline request failed (${response.status}):`, errorText);
+                        throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 100)}`);
+                    }
+                    
+                    const data = await response.json();
+                    return data.results || {};
+                } catch (error) {
+                    console.error('Error loading batch timeline for batch:', batch, error);
+                    // Return empty object so we don't break the entire timeline
+                    return {};
+                }
+            });
+            
+            // Wait for all batches and combine results
+            Promise.all(batchPromises)
+                .then(batchResults => {
+                    const allResults = Object.assign({}, ...batchResults);
+                    
+                    // Convert results to the format expected by the timeline
+                    const subjectData = allIdsToFetch
+                        .map(spanId => {
+                            const result = allResults[spanId];
+                            if (!result) {
+                                return null;
+                            }
+                            
+                            const isUser = spanId === currentUserSpanId;
+                            return {
+                                id: spanId,
+                                name: isUser ? 'You' : (objectConnectionsData.connections.find(conn => conn.target_id === spanId)?.target_name || result.span?.name || 'Unknown'),
+                                timeline: {
+                                    span: result.span,
+                                    connections: result.connections || []
+                                },
+                                duringConnections: result.during_connections || [],
+                                isCurrentSpan: false,
+                                isCurrentUser: isUser
+                            };
+                        })
+                        .filter(subject => subject !== null);
                     
                     // Update the timeline data with fetched data
                     if (shouldIncludeUserSpan) {
-                        const userData = validSubjects.find(subject => subject.id === currentUserSpanId);
+                        const userData = subjectData.find(subject => subject && subject.id === currentUserSpanId);
                         if (userData) {
                             timelineData[0] = userData; // Update the user's entry with fetched data
                         }
                     }
                     
                     // Add other subjects after current span
-                    const otherSubjects = validSubjects.filter(subject => 
-                        subject.id !== currentUserSpanId && subject.id !== spanId
+                    const otherSubjects = subjectData.filter(subject => 
+                        subject && subject.id !== currentUserSpanId && subject.id !== spanId
                     );
                     timelineData.push(...otherSubjects);
                     
                     // Collect nested connections from each timeline and add them to that timeline's duringConnections
                     timelineData.forEach(timeline => {
-                        if (timeline.timeline.connections) {
+                        if (timeline.timeline && timeline.timeline.connections) {
                             timeline.timeline.connections.forEach(connection => {
                                 if (connection.nested_connections) {
                                     // Add nested connections to this timeline's duringConnections
@@ -393,7 +456,7 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
         };
 
         // Add life span bar for this timeline
-        const timelineSpan = timeline.timeline.span;
+        const timelineSpan = timeline.timeline && timeline.timeline.span ? timeline.timeline.span : null;
         if (timelineSpan && timelineSpan.start_year) {
             const lifeStartYear = mode === 'absolute' ? timelineSpan.start_year : 0;
             const lifeEndYear = mode === 'absolute' 
@@ -429,12 +492,13 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
         }
 
         // Add connections for this timeline
-        if (timeline.timeline.connections) {
+        if (timeline.timeline && timeline.timeline.connections) {
             filterConnectionsDeep(timeline.timeline.connections)
                 .forEach(connection => {
                     const connectionType = connection.type_id;
                     // Only render 'created' moments if not filtered (filterTimelineConnections already excludes sets/photos)
                     if (connectionType === 'created') {
+                        if (!timelineSpan || !timelineSpan.start_year) return; // Skip if no timeline span or no start year
                         const connectionStartYear = mode === 'absolute' ? connection.start_year : connection.start_year - timelineSpan.start_year;
                         const x = xScale(connectionStartYear);
                         const y1 = swimlaneY;
@@ -484,6 +548,7 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
                                 persistentTooltipClick(event, updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}, [connection], timeline.name, isCurrentSpan, mode);
                             });
                     } else {
+                        if (!timelineSpan || !timelineSpan.start_year) return; // Skip if no timeline span or no start year
                         const connectionStartYear = mode === 'absolute' ? connection.start_year : connection.start_year - timelineSpan.start_year;
                         const connectionEndYear = mode === 'absolute' 
                             ? (connection.end_year || new Date().getFullYear())
@@ -517,8 +582,61 @@ function renderCombinedTimeline_{{ str_replace('-', '_', $span->id) }}(timelineD
                 });
         }
 
+        // Render aggregated role occupancy bars for the current span if available
+        if (isCurrentSpan && timeline.roleOccupancies && timeline.roleOccupancies.length > 0) {
+            const occupancyColor = getConnectionColor('has_role');
+            const occupancies = timeline.roleOccupancies.filter(conn => conn.start_year);
+            
+            console.log('Rendering role occupancies for current span:', occupancies.length, occupancies);
+            
+            if (occupancies.length > 0) {
+                // For roles (which may be timeless), use the earliest occupancy year as base for relative mode
+                const earliestYear = Math.min(...occupancies.map(occ => occ.start_year));
+
+                occupancies.forEach((connection) => {
+                    // Use timeline span's start_year if available, otherwise use earliest occupancy year
+                    const baseYear = (timelineSpan && timelineSpan.start_year) ? timelineSpan.start_year : earliestYear;
+
+                    const connectionStartYear = mode === 'absolute'
+                        ? connection.start_year
+                        : (connection.start_year - baseYear);
+
+                    const connectionEndYear = mode === 'absolute' 
+                        ? (connection.end_year || new Date().getFullYear())
+                        : (connection.end_year ? connection.end_year - baseYear : new Date().getFullYear() - baseYear);
+
+                    const connectionWidth = xScale(connectionEndYear) - xScale(connectionStartYear);
+                    
+                    svg.append('rect')
+                        .attr('class', 'timeline-bar')
+                        .attr('x', xScale(connectionStartYear))
+                        .attr('y', swimlaneY + 2)
+                        .attr('width', Math.max(1, connectionWidth))
+                        .attr('height', swimlaneHeight - 4)
+                        .attr('fill', occupancyColor)
+                        .attr('stroke', 'white')
+                        .attr('stroke-width', 1)
+                        .attr('rx', 2)
+                        .attr('ry', 2)
+                        .style('opacity', 0.6)
+                        .on('mouseover', function(event) {
+                            persistentTooltipHandler(event, updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}, [connection], timeline.name, isCurrentSpan, mode);
+                        })
+                        .on('mousemove', function(event) {
+                            persistentTooltipHandler(event, updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}, [connection], timeline.name, isCurrentSpan, mode);
+                        })
+                        .on('mouseout', function() {
+                            persistentTooltipHide();
+                        })
+                        .on('click', function(event) {
+                            persistentTooltipClick(event, updateConnectionTooltip_{{ str_replace('-', '_', $span->id) }}, [connection], timeline.name, isCurrentSpan, mode);
+                        });
+                });
+            }
+        }
+
         // Add "during" connections for this timeline (nested within the span)
-        if (timeline.duringConnections && timeline.duringConnections.length > 0) {
+        if (timeline.duringConnections && timeline.duringConnections.length > 0 && timelineSpan && timelineSpan.start_year) {
             // Show during connections for any timeline that has them (phases for person spans)
             timeline.duringConnections.forEach(connection => {
                 const connectionStartYear = mode === 'absolute' ? connection.start_year : connection.start_year - timelineSpan.start_year;
@@ -1125,19 +1243,35 @@ function calculateCombinedTimeRange_{{ str_replace('-', '_', $span->id) }}(timel
 
         // Extend range to include all timelines and their connections
         timelineData.forEach(timeline => {
-            const timelineSpan = timeline.timeline.span;
-            if (timelineSpan && timelineSpan.start_year && timelineSpan.start_year < start) {
-                start = timelineSpan.start_year;
-            }
-            // Note: We don't check timelineSpan.end_year here since we always want to go to current year
-
-            if (timeline.timeline.connections) {
-                timeline.timeline.connections.forEach(connection => {
+            // Check role occupancies first (for timeless roles, this is the only source of dates)
+            if (timeline.roleOccupancies && timeline.roleOccupancies.length > 0) {
+                timeline.roleOccupancies.forEach(connection => {
                     if (connection.start_year && connection.start_year < start) {
                         start = connection.start_year;
                     }
-                    // Note: We don't check connection.end_year here since we always want to go to current year
+                    if (connection.end_year && connection.end_year > end) {
+                        end = connection.end_year;
+                    } else if (!connection.end_year && currentYear > end) {
+                        end = currentYear;
+                    }
                 });
+            }
+            
+            if (timeline.timeline && timeline.timeline.span) {
+                const timelineSpan = timeline.timeline.span;
+                if (timelineSpan.start_year && timelineSpan.start_year < start) {
+                    start = timelineSpan.start_year;
+                }
+                // Note: We don't check timelineSpan.end_year here since we always want to go to current year
+
+                if (timeline.timeline.connections) {
+                    timeline.timeline.connections.forEach(connection => {
+                        if (connection.start_year && connection.start_year < start) {
+                            start = connection.start_year;
+                        }
+                        // Note: We don't check connection.end_year here since we always want to go to current year
+                    });
+                }
             }
             
             // Include during connections in time range calculation
@@ -1162,46 +1296,76 @@ function calculateCombinedTimeRange_{{ str_replace('-', '_', $span->id) }}(timel
         
         // Add ages for each timeline
         timelineData.forEach(timeline => {
-            const timelineSpan = timeline.timeline.span;
-            if (timelineSpan && timelineSpan.start_year) {
-                // Add life span ages - always extend to current year for living people
-                const lifeEndAge = timelineSpan.end_year 
-                    ? timelineSpan.end_year - timelineSpan.start_year 
-                    : currentYear - timelineSpan.start_year;
-                allAges.push(0, lifeEndAge);
-                
-                // Add connection ages
-                if (timeline.timeline.connections) {
-                    timeline.timeline.connections.forEach(connection => {
+            // Check role occupancies first (for timeless roles)
+            if (timeline.roleOccupancies && timeline.roleOccupancies.length > 0) {
+                const occupancies = timeline.roleOccupancies.filter(conn => conn.start_year);
+                if (occupancies.length > 0) {
+                    // For timeless roles, use earliest occupancy as base year
+                    const earliestYear = Math.min(...occupancies.map(occ => occ.start_year));
+                    occupancies.forEach(connection => {
                         if (connection.start_year) {
-                            const startAge = connection.start_year - timelineSpan.start_year;
+                            const startAge = connection.start_year - earliestYear;
                             allAges.push(startAge);
                             
                             if (connection.end_year) {
-                                const endAge = connection.end_year - timelineSpan.start_year;
+                                const endAge = connection.end_year - earliestYear;
                                 allAges.push(endAge);
-                            }
-                        }
-                    });
-                }
-                
-                // Add during connection ages
-                if (timeline.duringConnections) {
-                    timeline.duringConnections.forEach(connection => {
-                        if (connection.start_year) {
-                            const startAge = connection.start_year - timelineSpan.start_year;
-                            allAges.push(startAge);
-                            
-                            if (connection.end_year) {
-                                const endAge = connection.end_year - timelineSpan.start_year;
-                                allAges.push(endAge);
+                            } else {
+                                // Ongoing role - use current year
+                                allAges.push(currentYear - earliestYear);
                             }
                         }
                     });
                 }
             }
+            
+            if (timeline.timeline && timeline.timeline.span) {
+                const timelineSpan = timeline.timeline.span;
+                if (timelineSpan.start_year) {
+                    // Add life span ages - always extend to current year for living people
+                    const lifeEndAge = timelineSpan.end_year 
+                        ? timelineSpan.end_year - timelineSpan.start_year 
+                        : currentYear - timelineSpan.start_year;
+                    allAges.push(0, lifeEndAge);
+                    
+                    // Add connection ages
+                    if (timeline.timeline.connections) {
+                        timeline.timeline.connections.forEach(connection => {
+                            if (connection.start_year) {
+                                const startAge = connection.start_year - timelineSpan.start_year;
+                                allAges.push(startAge);
+                                
+                                if (connection.end_year) {
+                                    const endAge = connection.end_year - timelineSpan.start_year;
+                                    allAges.push(endAge);
+                                }
+                            }
+                        });
+                    }
+                    
+                    // Add during connection ages
+                    if (timeline.duringConnections) {
+                        timeline.duringConnections.forEach(connection => {
+                            if (connection.start_year) {
+                                const startAge = connection.start_year - timelineSpan.start_year;
+                                allAges.push(startAge);
+                                
+                                if (connection.end_year) {
+                                    const endAge = connection.end_year - timelineSpan.start_year;
+                                    allAges.push(endAge);
+                                }
+                            }
+                        });
+                    }
+                }
+            }
         });
 
+        if (allAges.length === 0) {
+            // Fallback if no ages found
+            return { start: 0, end: 100 };
+        }
+        
         const minAge = Math.min(...allAges);
         const maxAge = Math.max(...allAges);
 
@@ -1243,18 +1407,19 @@ function setupModeToggle_{{ str_replace('-', '_', $span->id) }}(timelineData, cu
     });
 }
 
-// Helper function to filter out unwanted connections (created/photos/sets/family) recursively
+// Helper function to filter out unwanted connections recursively
+// Note: This filters connections WITHIN a timeline (bars), not swimlanes. Family connections
+// can appear as swimlanes but are filtered from showing as bars within timelines to reduce clutter.
 function filterConnectionsDeep(connections) {
     return connections
         .filter(conn => {
+            // Exclude connection spans
             if (conn.target_type === 'connection') return false;
+            // Exclude notes
             if (conn.target_type === 'note') return false;
-            if (
-                conn.type_id === 'created' &&
-                conn.target_type === 'thing' &&
-                (conn.target_metadata?.subtype === 'photo' || conn.target_metadata?.subtype === 'set')
-            ) return false;
-            // Exclude family connections from timeline visualization
+            // Exclude photos and sets (regardless of connection type)
+            if (conn.target_type === 'thing' && (conn.target_metadata?.subtype === 'photo' || conn.target_metadata?.subtype === 'set')) return false;
+            // Exclude family connections from rendering as bars within timelines (they can still appear as swimlanes)
             if (conn.type_id === 'family') return false;
             return true;
         })
