@@ -43,6 +43,15 @@
             </div>
         </div>
         
+        <!-- Leadership at Date -->
+        @if(isset($leadership))
+            <div class="row mb-4">
+                <div class="col-12">
+                    <x-spans.partials.leadership-at-date :leadership="$leadership" :displayDate="$displayDate" />
+                </div>
+            </div>
+        @endif
+        
         <!-- Timeline Card -->
         <div class="row mb-4">
             <div class="col-12">
