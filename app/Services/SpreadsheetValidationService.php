@@ -49,6 +49,13 @@ class SpreadsheetValidationService
                 $errors = array_merge($errors, $connectionErrors);
             }
         }
+
+        if (($data['type'] ?? null) === 'connection') {
+            $connectionSpanErrors = $this->validateConnectionSpanDetails($data['connection_details'] ?? null);
+            if (!empty($connectionSpanErrors)) {
+                $errors = array_merge($errors, $connectionSpanErrors);
+            }
+        }
         
         return $errors;
     }
@@ -227,6 +234,71 @@ class SpreadsheetValidationService
             }
         }
         
+        return $errors;
+    }
+
+    /**
+     * Validate connection span specific details (parent/object/type).
+     */
+    private function validateConnectionSpanDetails(?array $details): array
+    {
+        $errors = [];
+
+        if (!$details) {
+            return ['Connection spans require a connection type, subject, and object.'];
+        }
+
+        $typeId = $details['type_id'] ?? null;
+        $subjectId = $details['subject_id'] ?? null;
+        $objectId = $details['object_id'] ?? null;
+
+        if (!$typeId) {
+            $errors[] = 'Please choose a connection type.';
+        }
+        if (!$subjectId) {
+            $errors[] = 'Please choose a subject span for this connection.';
+        }
+        if (!$objectId) {
+            $errors[] = 'Please choose an object span for this connection.';
+        }
+        if ($subjectId && $objectId && $subjectId === $objectId) {
+            $errors[] = 'Subject and object must be different spans.';
+        }
+
+        if (!empty($errors)) {
+            return $errors;
+        }
+
+        $connectionType = ConnectionType::where('type', $typeId)->first();
+        if (!$connectionType) {
+            return ["Connection type '{$typeId}' was not recognised."];
+        }
+
+        $subject = Span::find($subjectId);
+        $object = Span::find($objectId);
+
+        if (!$subject) {
+            $errors[] = 'The selected subject span could not be found.';
+        }
+        if (!$object) {
+            $errors[] = 'The selected object span could not be found.';
+        }
+
+        if (!empty($errors)) {
+            return $errors;
+        }
+
+        $allowedSubjectTypes = $connectionType->getAllowedSubjectTypes();
+        $allowedObjectTypes = $connectionType->getAllowedObjectTypes();
+
+        if (!empty($allowedSubjectTypes) && !in_array($subject->type_id, $allowedSubjectTypes, true)) {
+            $errors[] = "Subject span type '{$subject->type_id}' is not permitted for {$typeId} connections.";
+        }
+
+        if (!empty($allowedObjectTypes) && !in_array($object->type_id, $allowedObjectTypes, true)) {
+            $errors[] = "Object span type '{$object->type_id}' is not permitted for {$typeId} connections.";
+        }
+
         return $errors;
     }
     

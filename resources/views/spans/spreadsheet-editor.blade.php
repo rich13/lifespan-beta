@@ -55,6 +55,27 @@
         border-bottom-color: #fff !important;
         font-weight: 500 !important;
     }
+
+    #connection-details-card .connection-suggestions {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        z-index: 1055;
+        max-height: 240px;
+        overflow-y: auto;
+        display: none;
+    }
+
+    #connection-details-card .connection-suggestions .list-group-item {
+        cursor: pointer;
+        font-size: 0.9rem;
+    }
+
+    #connection-details-card .connection-suggestions .list-group-item:hover,
+    #connection-details-card .connection-suggestions .list-group-item.active {
+        background-color: #e9ecef;
+    }
 </style>
 
 <div class="container-fluid">
@@ -123,6 +144,49 @@
         
         <!-- Middle column: Connections (1/2 width) -->
         <div class="col-lg-6">
+            <div id="connection-details-card" class="card mb-3 d-none">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="card-title mb-0">
+                        <i class="bi bi-link-45deg me-2"></i>Connection Span Details
+                    </h6>
+                    <span class="badge bg-light text-muted border" id="connection-details-type-badge" style="display: none;"></span>
+                </div>
+                <div class="card-body">
+            <div class="row g-3 align-items-start">
+                        <div class="col-lg-4">
+                            <label class="form-label fw-medium">Subject</label>
+                            <input type="text" class="form-control form-control-sm bg-light" id="connection-subject-input" readonly>
+                            <input type="hidden" id="connection-subject-id">
+                            <small class="text-muted d-block mt-2" id="connection-subject-summary"></small>
+                            <small class="text-muted d-block" id="connection-subject-type"></small>
+                        </div>
+                        <div class="col-lg-4">
+                            <label for="connection-type-select" class="form-label fw-medium">Predicate</label>
+                            <select class="form-select form-select-sm" id="connection-type-select">
+                                <option value="">Select connection type</option>
+                                @foreach($connectionTypes as $type)
+                                    <option value="{{ $type->type }}">
+                                        {{ $type->type }} &mdash; {{ $type->forward_predicate }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            <small class="text-muted d-block mt-2" id="connection-type-description"></small>
+                            <div class="mt-2 d-none" id="connection-type-allowed">
+                                <span class="badge bg-primary-subtle text-primary-emphasis border me-1" id="allowed-subject-types-badge"></span>
+                                <span class="badge bg-secondary-subtle text-secondary-emphasis border" id="allowed-object-types-badge"></span>
+                            </div>
+                        </div>
+                        <div class="col-lg-4 position-relative">
+                            <label for="connection-object-input" class="form-label fw-medium">Object</label>
+                            <input type="text" class="form-control form-control-sm" id="connection-object-input" placeholder="Search..." autocomplete="off" disabled>
+                            <input type="hidden" id="connection-object-id">
+                            <div class="connection-suggestions list-group shadow-sm" id="connection-object-suggestions"></div>
+                            <small class="text-muted d-block mt-2" id="connection-object-summary"></small>
+                            <small class="text-muted d-block" id="connection-object-type"></small>
+                        </div>
+                    </div>
+                </div>
+            </div>
             <div class="card mb-3">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <h6 class="card-title mb-0">
@@ -301,11 +365,15 @@ let spanData = {};
 let hasChanges = false;
 let validationResults = {};
 let originalValues = {}; // Track original values for highlighting changes
+let connectionDetailsInitialised = false;
+let objectSearchTimeout = null;
 
 // Connection types for dropdown
 const connectionTypes = @json($connectionTypes->pluck('type'));
 const spanTypes = @json($spanTypes->pluck('type_id'));
 const spanTypeMetadata = @json($spanTypeMetadata);
+const connectionTypeDetails = @json($connectionTypeMetadata);
+const spanSearchUrl = '{{ route('spans.api.search') }}';
 
 $(document).ready(function() {
     console.log('=== DOCUMENT READY - SPREADSHEET EDITOR INITIALIZATION ===');
@@ -325,7 +393,8 @@ $(document).ready(function() {
             notes: '',
             access_level: 'private',
             metadata: {},
-            connections: []
+            connections: [],
+            connection_details: null
         };
     @endif
     
@@ -343,7 +412,7 @@ $(document).ready(function() {
     // Load data into spreadsheets
     loadSpreadsheetData();
     
-
+    initializeConnectionDetails();
 });
 
 function formatDateForDisplay(year, month, day) {
@@ -420,6 +489,10 @@ function storeOriginalValues() {
             });
         });
     }
+
+    originalValues.connection_details = spanData.connection_details
+        ? { ...spanData.connection_details }
+        : null;
     
     console.log('Original values stored:', originalValues);
 }
@@ -715,6 +788,8 @@ function setupEventHandlers() {
 
 function loadSpreadsheetData() {
 
+    connectionDetailsInitialised = false;
+
     
     // Load core fields
     const coreFields = [
@@ -801,6 +876,7 @@ function loadSpreadsheetData() {
     
     // Load connections into tabs
     loadConnectionData();
+    syncConnectionDetailsVisibility();
     
     updateRowCount();
     
@@ -958,6 +1034,27 @@ function updateSpanData() {
             }
         });
     });
+    
+    if (spanData.type === 'connection') {
+        const details = spanData.connection_details || {};
+        const typeSelect = $('#connection-type-select');
+        const subjectInput = $('#connection-subject-input');
+        const objectInput = $('#connection-object-input');
+
+        details.type_id = typeSelect.val() || null;
+        details.subject_id = $('#connection-subject-id').val() || null;
+        details.subject_name = subjectInput.val() || '';
+        details.subject_type = subjectInput.data('span-type') || null;
+        details.subject_subtype = subjectInput.data('span-subtype') || spanData.connection_details?.subject_subtype || null;
+        details.object_id = $('#connection-object-id').val() || null;
+        details.object_name = objectInput.val() || '';
+        details.object_type = objectInput.data('span-type') || null;
+        details.object_subtype = objectInput.data('span-subtype') || spanData.connection_details?.object_subtype || null;
+
+        spanData.connection_details = details;
+    } else {
+        spanData.connection_details = null;
+    }
     
     hasChanges = true;
     updateRowCount();
@@ -1140,6 +1237,19 @@ function displayPreviewResults(response) {
             const currentValue = formatValueForDisplay(change.current);
             const newValue = formatValueForDisplay(change.new);
             html += `<li class="text-${actionColor}"><i class="bi bi-${actionIcon} me-1"></i>${change.key}: ${currentValue} → ${newValue}</li>`;
+        });
+        html += '</ul></div>';
+    }
+
+    if (diff.connection_details && diff.connection_details.length > 0) {
+        hasChanges = true;
+        html += '<div class="mb-3"><strong>Connection Details:</strong><ul class="list-unstyled ms-3">';
+        diff.connection_details.forEach(change => {
+            const actionIcon = change.action === 'add' ? 'plus' : (change.action === 'remove' ? 'minus' : 'arrow-right');
+            const actionColor = change.action === 'add' ? 'success' : (change.action === 'remove' ? 'danger' : 'primary');
+            const currentValue = formatValueForDisplay(change.current);
+            const newValue = formatValueForDisplay(change.new);
+            html += `<li class="text-${actionColor}"><i class="bi bi-${actionIcon} me-1"></i>${change.field}: ${currentValue} → ${newValue}</li>`;
         });
         html += '</ul></div>';
     }
@@ -1627,6 +1737,334 @@ function initializeConnectionTabs() {
             }
         });
     });
+}
+
+function initializeConnectionDetails() {
+    const card = $('#connection-details-card');
+    if (!card.length) {
+        return;
+    }
+
+    $('#connection-type-select').on('change', function() {
+        const selectedType = $(this).val() || null;
+        clearConnectionObjectSelection();
+        updateConnectionTypeInfo(selectedType);
+        spanData.connection_details = spanData.connection_details || {};
+        spanData.connection_details.type_id = selectedType;
+        updateSpanData();
+    });
+
+    setupConnectionLookup('object');
+
+    $('#connection-object-clear').on('click', function() {
+        clearConnectionObjectSelection();
+        updateSpanData();
+        if (!$('#connection-object-input').prop('disabled')) {
+            $('#connection-object-input').focus();
+        }
+    });
+
+    $(document).on('mousedown', function(event) {
+        $('.connection-suggestions').each(function() {
+            const container = $(this);
+            if (!container.is(event.target) && container.has(event.target).length === 0 &&
+                !container.prev().is(event.target) && container.prev().has(event.target).length === 0) {
+                container.hide();
+            }
+        });
+    });
+
+    syncConnectionDetailsVisibility();
+}
+
+function syncConnectionDetailsVisibility() {
+    const card = $('#connection-details-card');
+    if (!card.length) {
+        return;
+    }
+
+    if (spanData.type === 'connection') {
+        card.removeClass('d-none');
+        if (!connectionDetailsInitialised) {
+            populateConnectionDetailsFields();
+            connectionDetailsInitialised = true;
+        } else {
+            refreshConnectionDetailsSummary();
+        }
+        updateConnectionTypeInfo($('#connection-type-select').val() || spanData.connection_details?.type_id || null);
+    } else {
+        card.addClass('d-none');
+    }
+}
+
+function populateConnectionDetailsFields() {
+    const details = spanData.connection_details || {};
+
+    if (details.type_id) {
+        $('#connection-type-select').val(details.type_id);
+    } else {
+        $('#connection-type-select').val('');
+    }
+
+    details.subject_subtype = details.subject_subtype || spanData.connection_details?.subject_subtype || spanData.subtype || null;
+
+    if (details.subject_name) {
+        $('#connection-subject-input')
+            .val(details.subject_name)
+            .data('span-type', details.subject_type || null)
+            .data('span-subtype', details.subject_subtype || null);
+        $('#connection-subject-id').val(details.subject_id || '');
+    } else {
+        $('#connection-subject-input').val('').data('span-type', null).removeData('span-subtype');
+        $('#connection-subject-id').val('');
+    }
+
+    if (details.object_name) {
+        $('#connection-object-input')
+            .val(details.object_name)
+            .data('span-type', details.object_type || null)
+            .data('span-subtype', details.object_subtype || null);
+        $('#connection-object-id').val(details.object_id || '');
+    } else {
+        $('#connection-object-input').val('').removeData('span-type').removeData('span-subtype');
+        $('#connection-object-id').val('');
+    }
+
+    refreshConnectionDetailsSummary();
+    applyAllowedTypeHints(details.type_id || $('#connection-type-select').val() || null);
+}
+
+function refreshConnectionDetailsSummary() {
+    const details = spanData.connection_details || {};
+    $('#connection-subject-summary').text(connectionSummary(details.subject_name, details.subject_type, details.subject_subtype));
+    $('#connection-object-summary').text(connectionSummary(details.object_name, details.object_type, details.object_subtype));
+}
+
+function connectionSummary(name, type, subtype) {
+    if (!name) {
+        return '';
+    }
+    const parts = [];
+    if (type) {
+        parts.push(type);
+    }
+    if (subtype) {
+        parts.push(subtype);
+    }
+    return parts.length ? `${name} (${parts.join(' • ')})` : name;
+}
+
+
+function setupConnectionLookup(role) {
+    const input = $(`#connection-${role}-input`);
+    const hiddenId = $(`#connection-${role}-id`);
+    const suggestions = $(`#connection-${role}-suggestions`);
+
+    input.on('keyup', function(event) {
+        const key = event.which || event.keyCode;
+        if ([13, 27, 38, 40].includes(key)) {
+            handleSuggestionNavigation(event, suggestions, input, hiddenId, role);
+            return;
+        }
+
+        const query = $(this).val();
+        if (!query) {
+            suggestions.hide();
+            if (role === 'object') {
+                clearConnectionObjectSelection();
+                updateSpanData();
+            }
+            return;
+        }
+
+        const selectedType = $('#connection-type-select').val() || spanData.connection_details?.type_id || null;
+        const allowedTypes = getAllowedTypesForRole(selectedType, role);
+
+        if (role === 'object' && objectSearchTimeout) {
+            clearTimeout(objectSearchTimeout);
+        }
+
+        const timeoutId = setTimeout(() => {
+            fetchSpanSuggestions(query, allowedTypes, function(results) {
+                renderSuggestions(results, suggestions, input, hiddenId, role);
+            });
+        }, 250);
+
+        objectSearchTimeout = timeoutId;
+    });
+}
+
+function handleSuggestionNavigation(event, suggestions, input, hiddenId, role) {
+    const items = suggestions.find('.list-group-item');
+    if (!items.length) {
+        return;
+    }
+
+    const key = event.which || event.keyCode;
+    let currentIndex = items.index(suggestions.find('.list-group-item.active'));
+
+    if (key === 40) {
+        event.preventDefault();
+        currentIndex = (currentIndex + 1) % items.length;
+        items.removeClass('active').eq(currentIndex).addClass('active');
+    } else if (key === 38) {
+        event.preventDefault();
+        currentIndex = (currentIndex - 1 + items.length) % items.length;
+        items.removeClass('active').eq(currentIndex).addClass('active');
+    } else if (key === 13) {
+        event.preventDefault();
+        if (currentIndex >= 0) {
+            items.eq(currentIndex).trigger('mousedown');
+        }
+    } else if (key === 27) {
+        suggestions.hide();
+    }
+}
+
+function fetchSpanSuggestions(query, allowedTypes, callback) {
+    const params = { q: query };
+    const subjectId = spanData.connection_details?.subject_id;
+    if (subjectId) {
+        params.exclude = subjectId;
+    }
+    if (allowedTypes && allowedTypes.length) {
+        params.types = allowedTypes.join(',');
+    }
+
+    $.ajax({
+        url: spanSearchUrl,
+        method: 'GET',
+        data: params,
+        success: function(response) {
+            if (response && response.spans) {
+                const filtered = response.spans.filter(span => span.id);
+                callback(filtered);
+            } else {
+                callback([]);
+            }
+        },
+        error: function() {
+            callback([]);
+        }
+    });
+}
+
+function renderSuggestions(spans, container, input, hiddenId, role) {
+    container.empty();
+
+    if (!spans.length) {
+        container.hide();
+        return;
+    }
+
+    spans.forEach(span => {
+        const item = $('<button type="button" class="list-group-item list-group-item-action"></button>');
+        const subtypeValue = span.subtype || (span.metadata ? span.metadata.subtype : null);
+        const subtypeLabel = subtypeValue ? ` • ${subtypeValue}` : '';
+        item.text(`${span.name} (${span.type_id}${subtypeLabel})${span.is_placeholder ? ' [placeholder]' : ''}`);
+        item.data('span-id', span.id);
+        item.data('span-name', span.name);
+        item.data('span-type', span.type_id);
+        if (subtypeValue) {
+            item.data('span-subtype', subtypeValue);
+        }
+
+        item.on('mousedown', function() {
+            const selectedId = $(this).data('span-id');
+            const selectedName = $(this).data('span-name');
+            const selectedType = $(this).data('span-type');
+            const selectedSubtype = $(this).data('span-subtype');
+
+            hiddenId.val(selectedId);
+            input.val(selectedName).data('span-type', selectedType);
+            input.data('span-subtype', selectedSubtype || null);
+            container.hide();
+
+            if (role === 'object') {
+                spanData.connection_details = spanData.connection_details || {};
+                spanData.connection_details.object_id = selectedId;
+                spanData.connection_details.object_name = selectedName;
+                spanData.connection_details.object_type = selectedType;
+                spanData.connection_details.object_subtype = selectedSubtype || null;
+                updateSpanData();
+                refreshConnectionDetailsSummary();
+            }
+        });
+
+        container.append(item);
+    });
+
+    container.show();
+}
+
+function getAllowedTypesForRole(connectionType, role) {
+    if (!connectionType || !connectionTypeDetails || !connectionTypeDetails[connectionType]) {
+        return [];
+    }
+    const key = role === 'subject' ? 'parent' : 'child';
+    return connectionTypeDetails[connectionType].allowed_span_types?.[key] || [];
+}
+
+function updateConnectionTypeInfo(connectionType) {
+    const description = $('#connection-type-description');
+    const typeBadge = $('#connection-details-type-badge');
+    const objectInput = $('#connection-object-input');
+
+    if (!connectionType || !connectionTypeDetails[connectionType]) {
+        description.text('Select a connection type to see predicate details and allowed span types.');
+        typeBadge.hide();
+        objectInput.prop('disabled', true);
+        clearConnectionObjectSelection();
+        return;
+    }
+
+    const details = connectionTypeDetails[connectionType];
+    description.html(
+        `<strong>Forward:</strong> ${details.forward_predicate || '—'} &middot; ` +
+        `<strong>Inverse:</strong> ${details.inverse_predicate || '—'}`
+    );
+    typeBadge.text(connectionType).show();
+    applyAllowedTypeHints(connectionType);
+    objectInput.prop('disabled', false);
+}
+
+function applyAllowedTypeHints(connectionType) {
+    const container = $('#connection-type-allowed');
+    const subjectBadge = $('#allowed-subject-types-badge');
+    const objectBadge = $('#allowed-object-types-badge');
+    const objectInput = $('#connection-object-input');
+
+    if (!connectionType || !connectionTypeDetails[connectionType]) {
+        container.addClass('d-none');
+        subjectBadge.text('');
+        objectBadge.text('');
+        objectInput.prop('disabled', true);
+        clearConnectionObjectSelection();
+        return;
+    }
+
+    const details = connectionTypeDetails[connectionType];
+    const subjectTypes = details.allowed_span_types?.parent || [];
+    const objectTypes = details.allowed_span_types?.child || [];
+
+    subjectBadge.text(subjectTypes.length ? `Subject: ${subjectTypes.join(', ')}` : 'Subject: Any type');
+    objectBadge.text(objectTypes.length ? `Object: ${objectTypes.join(', ')}` : 'Object: Any type');
+    container.removeClass('d-none');
+    objectInput.prop('disabled', false);
+}
+
+function clearConnectionObjectSelection() {
+    $('#connection-object-input').val('').removeData('span-type').removeData('span-subtype');
+    $('#connection-object-id').val('');
+    $('#connection-object-summary').text('');
+    $('#connection-object-suggestions').hide();
+    spanData.connection_details = spanData.connection_details || {};
+    spanData.connection_details.object_id = null;
+    spanData.connection_details.object_name = '';
+    spanData.connection_details.object_type = null;
+    spanData.connection_details.object_subtype = null;
+    refreshConnectionDetailsSummary();
+    updateSpanData();
 }
 
 function loadConnectionData() {
