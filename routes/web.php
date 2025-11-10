@@ -172,21 +172,33 @@ Route::middleware('web')->group(function () {
         ->where('date', '[0-9]{4}(-[0-9]{2}(-[0-9]{2})?)?')
         ->name('date.explore');
 
+    Route::middleware('auth')->group(function () {
+        Route::prefix('new')->group(function () {
+            Route::get('/span', [NewSpanController::class, 'showSpan'])->name('new.span');
+            Route::get('/person-role-org', [NewSpanController::class, 'showPersonRoleOrganisation'])->name('new.person-role-org');
+            Route::post('/person-role-org', [NewSpanController::class, 'storePersonRoleOrganisation'])->name('new.person-role-org.store');
+            Route::post('/person-role-org/preview', [NewSpanController::class, 'previewBulkPersonRoleOrganisation'])->name('new.person-role-org.preview');
+            Route::post('/person-role-org/bulk-row', [NewSpanController::class, 'storeBulkPersonRoleOrganisationRow'])->name('new.person-role-org.bulk-row');
+            Route::post('/person-role-org/bulk', [NewSpanController::class, 'storeBulkPersonRoleOrganisation'])->name('new.person-role-org.bulk');
+        });
+    });
+
     // Span routes
     Route::prefix('spans')->group(function () {
-        // Search route (works with session auth)
-        Route::get('/search', [SpanController::class, 'search'])->name('spans.search');
-        
-        // Timeline routes moved to /api/spans/{span} for better separation of HTML and JSON endpoints
-        
-        // Types route (public)
+            // Search route (works with session auth)
+            Route::get('/search', [SpanController::class, 'search'])->name('spans.search');
+            
+            // Timeline routes moved to /api/spans/{span} for better separation of HTML and JSON endpoints
+            
+            // Types route (public)
             Route::get('/types', [SpanController::class, 'types'])->name('spans.types');
-    Route::get('/types/{type}', [SpanController::class, 'showType'])->name('spans.types.show');
-    Route::get('/types/{type}/subtypes', [SpanController::class, 'showSubtypes'])->name('spans.types.subtypes');
-    Route::get('/types/{type}/subtypes/{subtype}', [SpanController::class, 'showTypeSubtype'])->name('spans.types.subtypes.show');
-        
-        // Protected routes
-        Route::middleware('auth')->group(function () {
+            Route::get('/types/{type}', [SpanController::class, 'showType'])->name('spans.types.show');
+            Route::get('/types/{type}/subtypes', [SpanController::class, 'showSubtypes'])->name('spans.types.subtypes');
+            Route::get('/types/{type}/subtypes/{subtype}', [SpanController::class, 'showTypeSubtype'])->name('spans.types.subtypes.show');
+            
+            // Protected routes
+            Route::middleware('auth')->group(function () {
+
             Route::get('/shared-with-me', [SpanController::class, 'sharedWithMe'])->name('spans.shared-with-me');
             Route::get('/create', [SpanController::class, 'create'])->name('spans.create');
             Route::post('/', [SpanController::class, 'store'])->name('spans.store');
