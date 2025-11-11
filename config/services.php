@@ -58,4 +58,8 @@ return [
         'callback_url' => env('FLICKR_CALLBACK_URL', 'http://localhost:8000/settings/import/flickr/callback'),
     ],
 
+    'guardian' => [
+        'api_key' => env('GUARDIAN_API_KEY', '09621a6e-033b-43be-87b2-4b5f0b27055e'),
+    ],
+
 ];

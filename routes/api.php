@@ -38,6 +38,65 @@ Route::middleware('auth:sanctum')->group(function () {
 
 // Admin-only API endpoints
 Route::middleware(['auth', 'admin'])->group(function () {
+    // Guardian API endpoints (admin only)
+    Route::get('/guardian/articles/date/{date}', function (Request $request, string $date) {
+        try {
+            $dateParts = explode('-', $date);
+            if (count($dateParts) !== 3) {
+                return response()->json(['success' => false, 'message' => 'Invalid date format. Use YYYY-MM-DD'], 400);
+            }
+            
+            $year = (int) $dateParts[0];
+            $month = (int) $dateParts[1];
+            $day = (int) $dateParts[2];
+            
+            if (!checkdate($month, $day, $year)) {
+                return response()->json(['success' => false, 'message' => 'Invalid date'], 400);
+            }
+            
+            $guardianService = app(\App\Services\GuardianService::class);
+            $articles = $guardianService->getArticlesForDate($year, $month, $day, 10);
+            
+            return response()->json([
+                'success' => true,
+                'articles' => $articles,
+                'date' => $date
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Guardian API endpoint error', [
+                'date' => $date,
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch articles'
+            ], 500);
+        }
+    })->where('date', '[0-9]{4}-[0-9]{2}-[0-9]{2}')->name('api.guardian.date');
+
+    Route::get('/guardian/articles/person/{personName}', function (Request $request, string $personName) {
+        try {
+            $guardianService = app(\App\Services\GuardianService::class);
+            $articles = $guardianService->getArticlesAbout(urldecode($personName), 10);
+            
+            return response()->json([
+                'success' => true,
+                'articles' => $articles,
+                'person_name' => urldecode($personName)
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Guardian API endpoint error', [
+                'person_name' => $personName,
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch articles'
+            ], 500);
+        }
+    })->name('api.guardian.person');
     // Fetch OSM data for a place
     Route::post('/places/{span}/fetch-osm-data', function (Request $request, \App\Models\Span $span) {
         if ($span->type_id !== 'place') {
