@@ -10,7 +10,7 @@
     $employmentConnections = \App\Models\Connection::where('type_id', 'employment')
         ->where('child_id', $span->id) // Organisation is the child in employment connections
         ->whereHas('parent', function($q) { $q->where('type_id', 'person'); })
-        ->with(['parent'])
+        ->with(['parent', 'connectionSpan'])
         ->get();
 
     // Get all people who have has_role connections with at_organisation connections to this organisation
@@ -25,7 +25,7 @@
             $q->where('type_id', 'has_role')
               ->whereHas('parent', function($q2) { $q2->where('type_id', 'person'); });
         })
-        ->with(['parent.connectionsAsSubject.parent'])
+        ->with(['parent.connectionsAsSubject.parent', 'parent.connectionsAsSubject.connectionSpan'])
         ->get();
 
     // Also get people who have has_role connections where the connection span has at_organisation connections to this organisation
@@ -38,10 +38,10 @@
             });
         })
         ->whereHas('parent', function($q) { $q->where('type_id', 'person'); })
-        ->with(['parent', 'connectionSpan.connectionsAsSubject'])
+        ->with(['parent', 'connectionSpan', 'connectionSpan.connectionsAsSubject'])
         ->get();
 
-    // Collect all unique people
+    // Collect all unique people first
     $allEmployees = collect();
     
     // Add people from employment connections
@@ -81,10 +81,81 @@
         }
     }
 
+    // Get all person IDs for photo lookup
+    $personIds = $allEmployees->pluck('person.id')->filter()->unique()->toArray();
+    
+    // Get first photo for each person in one query (optimize to avoid N+1)
+    $photoConnections = \App\Models\Connection::where('type_id', 'features')
+        ->whereIn('child_id', $personIds)
+        ->whereHas('parent', function($q) {
+            $q->where('type_id', 'thing')
+              ->whereJsonContains('metadata->subtype', 'photo');
+        })
+        ->with(['parent'])
+        ->get()
+        ->groupBy('child_id')
+        ->map(function($connections) {
+            // Get first photo for each person
+            return $connections->first();
+        });
+    
+    // Add photos and dates to each employee
+    $allEmployees = $allEmployees->map(function($employee) use ($photoConnections) {
+        $person = $employee['person'];
+        $connection = $employee['connection'];
+        
+        // Get photo from pre-loaded collection
+        $photoConnection = $photoConnections->get($person->id);
+        $photoUrl = null;
+        if ($photoConnection && $photoConnection->parent) {
+            $metadata = $photoConnection->parent->metadata ?? [];
+            $photoUrl = $metadata['thumbnail_url'] 
+                ?? $metadata['medium_url'] 
+                ?? $metadata['large_url'] 
+                ?? null;
+            
+            // If we have a filename but no URL, use proxy route
+            if (!$photoUrl && isset($metadata['filename']) && $metadata['filename']) {
+                $photoUrl = route('images.proxy', ['spanId' => $photoConnection->parent->id, 'size' => 'thumbnail']);
+            }
+        }
+        
+        // Get dates from connection span (varies by connection type)
+        $dates = null;
+        if ($employee['connection_type'] === 'employment') {
+            $dates = $connection->connectionSpan;
+        } elseif ($employee['connection_type'] === 'has_role') {
+            $dates = $connection->connectionSpan;
+        } elseif ($employee['connection_type'] === 'has_role_via_role') {
+            $dates = $connection->connectionSpan;
+        }
+        
+        $hasDates = $dates && ($dates->start_year || $dates->end_year);
+        $dateText = null;
+        if ($hasDates) {
+            if ($dates->start_year && $dates->end_year) {
+                $dateText = ($dates->formatted_start_date ?? $dates->start_year) . ' – ' . ($dates->formatted_end_date ?? $dates->end_year);
+            } elseif ($dates->start_year) {
+                $dateText = 'from ' . ($dates->formatted_start_date ?? $dates->start_year);
+            } elseif ($dates->end_year) {
+                $dateText = 'until ' . ($dates->formatted_end_date ?? $dates->end_year);
+            }
+        }
+        
+        $employee['photo_url'] = $photoUrl;
+        $employee['date_text'] = $dateText;
+        return $employee;
+    });
+
     // Sort employees by name
     $allEmployees = $allEmployees->sortBy(function($item) {
         return $item['person']->name;
     })->values();
+    
+    // Don't show the card if there are no employees
+    if ($allEmployees->isEmpty()) {
+        return;
+    }
 @endphp
 
 <div class="card mb-4">
@@ -92,25 +163,49 @@
         <h6 class="card-title mb-0">
             <i class="bi bi-people me-2"></i>
             <a href="{{ url('/spans/' . $span->id . '/worked-at') }}" class="text-decoration-none">
-                Employees
+                Worked at {{ $span->name }}
             </a>
         </h6>
     </div>
     <div class="card-body p-2">
-        @if($allEmployees->isEmpty())
-            <div class="text-center text-muted py-3">
-                <i class="bi bi-people me-2"></i>No employees recorded
-            </div>
-        @else
-            <div class="d-flex flex-wrap gap-1">
-                @foreach($allEmployees as $employee)
-                    <a href="{{ route('spans.show', $employee['person']) }}" 
-                       class="badge bg-primary text-decoration-none" 
-                       title="{{ $employee['person']->name }}">
-                        {{ $employee['person']->name }}
-                    </a>
+        <div class="list-group list-group-flush">
+            @foreach($allEmployees as $employee)
+                <div class="list-group-item px-0 py-2 border-0 border-bottom">
+                    <div class="d-flex align-items-center">
+                        <!-- Photo on the left -->
+                        <div class="me-3 flex-shrink-0">
+                            @if($employee['photo_url'])
+                                    <a href="{{ route('spans.show', $employee['person']) }}">
+                                        <img src="{{ $employee['photo_url'] }}" 
+                                             alt="{{ $employee['person']->name }}"
+                                             class="rounded"
+                                             style="width: 50px; height: 50px; object-fit: cover;"
+                                             loading="lazy">
+                                    </a>
+                                @else
+                                    <a href="{{ route('spans.show', $employee['person']) }}" 
+                                       class="d-flex align-items-center justify-content-center bg-light rounded text-muted text-decoration-none"
+                                       style="width: 50px; height: 50px;">
+                                        <i class="bi bi-person"></i>
+                                    </a>
+                                @endif
+                        </div>
+                        
+                        <!-- Name and dates on the right -->
+                        <div class="flex-grow-1">
+                            <a href="{{ route('spans.show', $employee['person']) }}" 
+                               class="text-decoration-none fw-semibold">
+                                {{ $employee['person']->name }}
+                            </a>
+                            @if($employee['date_text'])
+                                    <div class="text-muted small">
+                                        <i class="bi bi-calendar me-1"></i>{{ $employee['date_text'] }}
+                                    </div>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
                 @endforeach
-            </div>
-        @endif
+        </div>
     </div>
 </div>
