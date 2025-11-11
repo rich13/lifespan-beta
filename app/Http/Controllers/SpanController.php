@@ -1732,26 +1732,37 @@ class SpanController extends Controller
         // Wikipedia data is now loaded asynchronously via AJAX
         $wikipediaData = [];
 
+        // Get leadership roles at this date (only for day precision)
+        $leadership = null;
+        $displayDate = null;
+        if ($precision === 'day' && $month !== null && $day !== null) {
+            $leadershipService = app(\App\Services\LeadershipRoleService::class);
+            $leadership = $leadershipService->getLeadershipAtDate($year, $month, $day);
+            $displayDate = $this->formatDateForDisplay($year, $month, $day);
+        }
+
         return view('spans.date-explore', compact(
-            'spansStartingOnDate',
-            'spansEndingOnDate',
-            'spansStartingInMonth',
-            'spansEndingInMonth',
-            'spansStartingInYear',
-            'spansEndingInYear',
-            'connectionsStartingOnDate',
-            'connectionsEndingOnDate',
-            'connectionsStartingInMonth',
-            'connectionsEndingInMonth',
-            'connectionsStartingInYear',
-            'connectionsEndingInYear',
-            'wikipediaData',
-            'date',
-            'precision',
-            'year',
-            'month',
-            'day'
-        ));
+                'spansStartingOnDate',
+                'spansEndingOnDate',
+                'spansStartingInMonth',
+                'spansEndingInMonth',
+                'spansStartingInYear',
+                'spansEndingInYear',
+                'connectionsStartingOnDate',
+                'connectionsEndingOnDate',
+                'connectionsStartingInMonth',
+                'connectionsEndingInMonth',
+                'connectionsStartingInYear',
+                'connectionsEndingInYear',
+                'wikipediaData',
+                'date',
+                'precision',
+                'year',
+                'month',
+                'day',
+                'leadership',
+                'displayDate'
+            ));
     }
 
     /**
@@ -1767,17 +1778,30 @@ class SpanController extends Controller
         $spans = Span::query()->whereNot('type_id', 'connection');
         
         if ($user) {
-            // Authenticated user - can see public, owned, and shared spans
-            $spans->where(function ($q) use ($user) {
-                $q->where('access_level', 'public')
-                    ->orWhere('owner_id', $user->id)
-                    ->orWhere(function ($q) use ($user) {
-                        $q->where('access_level', 'shared')
-                            ->whereHas('spanPermissions', function ($q) use ($user) {
-                                $q->where('user_id', $user->id);
-                            });
-                    });
-            });
+            // Admins can see all spans
+            if (!$user->is_admin) {
+                // Authenticated user - can see public, owned, and shared spans (including group permissions)
+                $spans->where(function ($q) use ($user) {
+                    $q->where('access_level', 'public')
+                        ->orWhere('owner_id', $user->id)
+                        ->orWhere(function ($q) use ($user) {
+                            $q->where('access_level', 'shared')
+                                ->whereHas('spanPermissions', function ($q) use ($user) {
+                                    $q->where(function($subQ) use ($user) {
+                                        // Direct user permissions
+                                        $subQ->where('user_id', $user->id)
+                                             // Group permissions
+                                             ->orWhereHas('group', function($groupQ) use ($user) {
+                                                 $groupQ->whereHas('users', function($userQ) use ($user) {
+                                                     $userQ->where('users.id', $user->id);
+                                                 });
+                                             });
+                                    });
+                                });
+                        });
+                });
+            }
+            // If admin, no restrictions - can see all spans
         } else {
             // Unauthenticated user - can only see public spans
             $spans->where('access_level', 'public');
@@ -1957,7 +1981,17 @@ class SpanController extends Controller
             ];
         }
         
-        return view('spans.spreadsheet-editor', compact('span', 'spanData', 'connectionTypes', 'spanTypes', 'spanTypeMetadata'));
+        // Get complete connection type metadata for connection details
+        $connectionTypeMetadata = [];
+        foreach ($connectionTypes as $connectionType) {
+            $connectionTypeMetadata[$connectionType->type] = [
+                'forward_predicate' => $connectionType->forward_predicate,
+                'inverse_predicate' => $connectionType->inverse_predicate,
+                'allowed_span_types' => $connectionType->metadata['allowed_span_types'] ?? null,
+            ];
+        }
+        
+        return view('spans.spreadsheet-editor', compact('span', 'spanData', 'connectionTypes', 'spanTypes', 'spanTypeMetadata', 'connectionTypeMetadata'));
     }
 
     /**
