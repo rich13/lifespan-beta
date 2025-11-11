@@ -37,6 +37,7 @@ class YamlMergeTest extends TestCase
             'owner_id' => $user->id,
             'updater_id' => $user->id,
             'access_level' => 'private',
+            'metadata' => ['subtype' => 'private_individual'],
         ]);
 
         // Ensure the span is actually owned by the current user
@@ -54,6 +55,7 @@ description: 'New description from AI'
 start: 1990-01-01
 end: 2020-12-31
 metadata:
+  subtype: 'private_individual'
   occupation: 'Software Developer'
 sources:
   - 'AI Generated'";
@@ -73,7 +75,22 @@ sources:
         // Debug: Check if the user has permission to update the span
         $this->assertTrue($user->can('update', $span), 'User should have update permission for the span. Span owner: ' . $span->owner_id . ', Current user: ' . $user->id);
         
+        // Ensure we're still authenticated as the user
+        $this->assertTrue(auth()->check(), 'User should be authenticated');
+        $this->assertEquals($user->id, auth()->id(), 'Authenticated user should match test user');
+        
         // Debug: Test findExistingSpan directly
+        // First, verify the span can be found by direct query
+        $directQuerySpan = Span::where('name', 'John Doe')
+            ->where('type_id', 'person')
+            ->first();
+        $this->assertNotNull($directQuerySpan, 'Direct query should find the span');
+        $this->assertEquals($existingSpan->id, $directQuerySpan->id, 'Direct query should find the same span');
+        
+        // Check permissions on the directly queried span
+        $this->assertTrue(auth()->check(), 'User should be authenticated');
+        $this->assertTrue(auth()->user()->can('update', $directQuerySpan), 'User should be able to update the span found by direct query');
+        
         $yamlService = app(\App\Services\YamlSpanService::class);
         $foundSpan = $yamlService->findExistingSpan('John Doe', 'person');
         $this->assertNotNull($foundSpan, 'findExistingSpan should find the span');
@@ -118,6 +135,7 @@ sources:
             'owner_id' => $user->id,
             'updater_id' => $user->id,
             'access_level' => 'private',
+            'metadata' => ['subtype' => 'private_individual'],
         ]);
 
         // Create YAML content with new data
@@ -128,6 +146,7 @@ description: 'New description from AI'
 start: 1990-01-01
 end: 2020-12-31
 metadata:
+  subtype: 'private_individual'
   occupation: 'Software Developer'
 sources:
   - 'AI Generated'";
