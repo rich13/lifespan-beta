@@ -52,6 +52,15 @@
         :user="auth()->user()"
         :precision="$precision" />
 
+    <!-- Leadership at Date (only for day precision) -->
+    @if($precision === 'day' && $displayDate)
+        <div class="row mb-4">
+            <div class="col-12">
+                <x-spans.partials.leadership-at-date :leadership="$leadership ?? ['prime_minister' => null, 'president' => null]" :displayDate="$displayDate" />
+            </div>
+        </div>
+    @endif
+
     <!-- 3-Column Layout (5/5/2) -->
     <div class="row">
         <!-- Left Column: Spans Started -->
@@ -169,6 +178,10 @@
                     @endif
                 </div>
             </div>
+            <!-- Guardian On This Day (only for day precision and admin users) -->
+            @if($precision === 'day' && $displayDate && auth()->check() && auth()->user()->getEffectiveAdminStatus())
+                <x-guardian-on-this-day :displayDate="$displayDate" :date="$date" />
+            @endif
         </div>
 
         <!-- Middle Column: Spans Ended + Connections Ended -->

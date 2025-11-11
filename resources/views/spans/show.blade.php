@@ -284,6 +284,11 @@
                 @if($span->type_id === 'person')
                     <x-spans.partials.family-relationships :span="$span" />
                     <x-spans.partials.desert-island-discs-tracks-card :span="$span" :desertIslandDiscsSet="$desertIslandDiscsSet" />
+                    
+                    <!-- Guardian Articles about this person (only for public persons and admin users) -->
+                    @if($span->access_level === 'public' && $span->getMeta('subtype') !== 'private_individual' && auth()->check() && auth()->user()->getEffectiveAdminStatus())
+                        <x-guardian-about-person :personName="$span->name" />
+                    @endif
                 @endif
                 <x-spans.partials.sources :span="$span" />
                 <x-spans.partials.status :span="$span" />
