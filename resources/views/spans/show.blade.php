@@ -215,9 +215,24 @@
                     <x-spans.cards.employment-card :span="$span" />
                 @endif
                 
+                <!-- Places Lived Card (for people) - placed under employment card -->
+                @if($span->type_id === 'person')
+                    <x-spans.cards.places-lived-card :span="$span" />
+                @endif
+                
                 <!-- Employee Card (for organisations) - placed under employment card -->
                 @if($span->type_id === 'organisation')
                     <x-spans.cards.employee-card :span="$span" />
+                @endif
+                
+                <!-- Student Card (for organisations) - placed under employee card -->
+                @if($span->type_id === 'organisation')
+                    <x-spans.cards.student-card :span="$span" />
+                @endif
+                
+                <!-- Lived Here Card (for places) - placed after student card -->
+                @if($span->type_id === 'place')
+                    <x-spans.cards.lived-here-card :span="$span" />
                 @endif
                 
                 <!-- Legacy Album Cover (only for albums) -->
