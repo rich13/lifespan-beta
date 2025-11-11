@@ -341,6 +341,22 @@
                     <div class="card h-100">
                         <div class="card-body">
                             <div class="d-flex align-items-center mb-3">
+                                <i class="bi bi-film fs-2 text-danger me-3"></i>
+                                <div>
+                                    <h5 class="card-title mb-1">Film Import</h5>
+                                    <p class="card-text text-muted">Import film data from Wikidata</p>
+                                </div>
+                            </div>
+                            <a href="{{ route('admin.import.film.index') }}" class="btn btn-outline-danger btn-sm w-100">
+                                <i class="bi bi-arrow-right"></i> Import
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-3">
                                 <i class="bi bi-file-earmark-text fs-2 text-warning me-3"></i>
                                 <div>
                                     <h5 class="card-title mb-1">YAML Import</h5>

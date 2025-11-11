@@ -220,6 +220,11 @@
                     <x-spans.cards.places-lived-card :span="$span" />
                 @endif
                 
+                <!-- Film Card (for people) - placed under places lived card -->
+                @if($span->type_id === 'person')
+                    <x-spans.cards.film-card :span="$span" />
+                @endif
+                
                 <!-- Employee Card (for organisations) - placed under employment card -->
                 @if($span->type_id === 'organisation')
                     <x-spans.cards.employee-card :span="$span" />
@@ -255,6 +260,43 @@
                             </div>
                         </div>
                     </div>
+                @endif
+                
+                <!-- Film Poster (only for films) -->
+                @if($span->type_id === 'thing' && isset($span->metadata['subtype']) && $span->metadata['subtype'] === 'film')
+                    @php
+                        $metadata = $span->metadata ?? [];
+                        $posterUrl = $metadata['thumbnail_url'] ?? $metadata['image_url'] ?? null;
+                    @endphp
+                    @if($posterUrl)
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="card-title mb-0">
+                                    <i class="bi bi-film me-2"></i>Film Poster
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="text-center">
+                                    <a href="{{ $posterUrl }}" target="_blank" rel="noopener noreferrer" class="text-decoration-none">
+                                        <img src="{{ $posterUrl }}" 
+                                             alt="{{ $span->name }} poster" 
+                                             class="img-fluid rounded shadow-sm" 
+                                             style="max-width: 100%; height: auto;"
+                                             loading="lazy">
+                                    </a>
+                                    @if($metadata['image_url'] && $metadata['image_url'] !== $posterUrl)
+                                        <div class="mt-2">
+                                            <small class="text-muted">
+                                                <a href="{{ $metadata['image_url'] }}" target="_blank" rel="noopener noreferrer" class="text-decoration-none">
+                                                    <i class="bi bi-box-arrow-up-right me-1"></i>View on Wikimedia Commons
+                                                </a>
+                                            </small>
+                                        </div>
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+                    @endif
                 @endif
             </div>
 

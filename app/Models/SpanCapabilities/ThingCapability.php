@@ -34,7 +34,7 @@ class ThingCapability implements SpanCapability
                 'type' => 'text',
                 'label' => 'Type of Thing',
                 'component' => 'select',
-                'options' => ['book', 'album', 'painting', 'sculpture', 'recording', 'photo', 'other'],
+                'options' => ['book', 'album', 'painting', 'sculpture', 'recording', 'photo', 'film', 'other'],
                 'required' => true
             ]
         ];
@@ -45,7 +45,7 @@ class ThingCapability implements SpanCapability
         $metadata = $this->span->metadata ?? [];
         
         // Validate subtype
-        if (!isset($metadata['subtype']) || !in_array($metadata['subtype'], ['book', 'album', 'painting', 'sculpture', 'recording', 'photo', 'other'])) {
+        if (!isset($metadata['subtype']) || !in_array($metadata['subtype'], ['book', 'album', 'painting', 'sculpture', 'recording', 'photo', 'film', 'other'])) {
             throw new \InvalidArgumentException('Invalid thing subtype');
         }
     }
@@ -68,7 +68,7 @@ class ThingCapability implements SpanCapability
      */
     public function setSubtype(string $subtype): void
     {
-        if (!in_array($subtype, ['book', 'album', 'painting', 'sculpture', 'recording', 'photo', 'other'])) {
+        if (!in_array($subtype, ['book', 'album', 'painting', 'sculpture', 'recording', 'photo', 'film', 'other'])) {
             throw new \InvalidArgumentException('Invalid thing subtype');
         }
 

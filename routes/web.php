@@ -20,6 +20,7 @@ use App\Http\Controllers\Admin\ConnectionController;
 use App\Http\Controllers\Admin\ImportController;
 use App\Http\Controllers\Admin\VisualizerController;
 use App\Http\Controllers\Admin\MusicBrainzImportController;
+use App\Http\Controllers\Admin\FilmImportController;
 use App\Http\Controllers\AdminModeController;
 use App\Http\Controllers\FriendsController;
 use App\Http\Controllers\NewSpanController;
@@ -917,6 +918,14 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
                     Route::post('/import-all', [MusicBrainzImportController::class, 'importAll'])->name('import-all');
                     Route::post('/import-by-url', [MusicBrainzImportController::class, 'importByUrl'])->name('import-by-url');
                     Route::post('/preview-by-url', [MusicBrainzImportController::class, 'previewByUrl'])->name('preview-by-url');
+                });
+
+                // Film Import
+                Route::prefix('film')->name('film.')->group(function () {
+                    Route::get('/', [FilmImportController::class, 'index'])->name('index');
+                    Route::post('/search', [FilmImportController::class, 'search'])->name('search');
+                    Route::post('/details', [FilmImportController::class, 'getDetails'])->name('details');
+                    Route::post('/import', [FilmImportController::class, 'import'])->name('import');
                 });
 
                 // Desert Island Discs Import (must come before legacy routes to avoid conflicts)

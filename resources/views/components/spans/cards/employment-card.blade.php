@@ -73,9 +73,6 @@
     </div>
     <div class="card-body p-2">
         @if($uniqueOrganisations->isEmpty())
-            <div class="text-center text-muted py-3">
-                <i class="bi bi-briefcase me-2"></i>No employment history recorded
-            </div>
         @else
             <div class="d-flex flex-wrap gap-1">
                 @foreach($uniqueOrganisations as $item)
