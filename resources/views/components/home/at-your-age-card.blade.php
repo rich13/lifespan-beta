@@ -56,13 +56,57 @@
         $query->where('start_year', '<', $personalSpan->start_year);
     }
     
-    $randomSpans = $query->inRandomOrder()
-        ->limit(50) // Increased to ensure we find 3 people with sufficient connections
+    // Get a larger pool of candidates from different time periods to ensure variety
+    // Instead of pure random, we'll sample from different historical periods
+    $candidatesByPeriod = [];
+    
+    // Define time period buckets (birth year ranges)
+    $timePeriods = [
+        'ancient' => ['min' => 0, 'max' => 500], // Ancient (0-500 CE)
+        'medieval' => ['min' => 500, 'max' => 1500], // Medieval (500-1500)
+        'early_modern' => ['min' => 1500, 'max' => 1800], // Early Modern (1500-1800)
+        'modern' => ['min' => 1800, 'max' => 1950], // Modern (1800-1950)
+        'contemporary' => ['min' => 1950, 'max' => 2100], // Contemporary (1950+)
+    ];
+    
+    // Sample from each time period
+    $candidatesPerPeriod = 30; // Get 30 candidates from each period
+    foreach ($timePeriods as $periodName => $range) {
+        $periodQuery = (clone $query)
+            ->where('start_year', '>=', $range['min'])
+            ->where('start_year', '<', $range['max'])
+            ->inRandomOrder()
+            ->limit($candidatesPerPeriod)
+            ->get();
+        
+        if ($periodQuery->isNotEmpty()) {
+            $candidatesByPeriod[$periodName] = $periodQuery;
+        }
+    }
+    
+    // Combine all candidates from different periods
+    $randomSpans = collect();
+    foreach ($candidatesByPeriod as $periodCandidates) {
+        $randomSpans = $randomSpans->concat($periodCandidates);
+    }
+    
+    // If we still don't have enough, fill with pure random
+    if ($randomSpans->count() < 100) {
+        $additionalNeeded = 100 - $randomSpans->count();
+        $additionalSpans = $query->inRandomOrder()
+            ->limit($additionalNeeded)
         ->get();
+        $randomSpans = $randomSpans->concat($additionalSpans);
+    }
+    
+    // Shuffle to mix periods
+    $randomSpans = $randomSpans->shuffle();
     
     $randomComparisons = [];
     $connectionThreshold = 5; // Start with requiring 5+ connections
     
+    // First pass: collect all valid candidates
+    $validCandidates = [];
     foreach ($randomSpans as $randomSpan) {
         $randomBirthDate = \Carbon\Carbon::createFromDate(
             $randomSpan->start_year,
@@ -120,24 +164,21 @@
             continue; // Skip people with insufficient connections at the target date
         }
         
-        // Add this person to our comparisons since they passed all checks
-        $randomComparisons[] = [
+        // Add this person to valid candidates
+        $validCandidates[] = [
             'span' => $randomSpan,
-            'date' => $randomAgeDate
+            'date' => $randomAgeDate,
+            'birth_year' => $randomSpan->start_year,
+            'age_date_year' => $randomAgeDate->year,
+            'connection_count' => $connectionsAtDate
         ];
-        
-        // Stop once we have 3 valid comparisons
-        if (count($randomComparisons) >= 3) {
-            break;
-        }
     }
     
     // If we didn't find enough people with 5+ connections, try with 3+ connections
-    if (count($randomComparisons) < 2 && $connectionThreshold == 5) {
+    if (count($validCandidates) < 5 && $connectionThreshold == 5) {
         $connectionThreshold = 3;
+        $validCandidates = [];
         
-        // Reset and try again with lower threshold
-        $randomComparisons = [];
         foreach ($randomSpans as $randomSpan) {
             $randomBirthDate = \Carbon\Carbon::createFromDate(
                 $randomSpan->start_year,
@@ -188,26 +229,215 @@
                 continue; // Skip people with insufficient connections at the target date
             }
             
-            // Add this person to our comparisons since they passed all checks
-            $randomComparisons[] = [
+            // Add this person to valid candidates
+            $validCandidates[] = [
                 'span' => $randomSpan,
-                'date' => $randomAgeDate
+                'date' => $randomAgeDate,
+                'birth_year' => $randomSpan->start_year,
+                'age_date_year' => $randomAgeDate->year,
+                'connection_count' => $connectionsAtDate
             ];
-            
-            if (count($randomComparisons) >= 3) {
-                break;
-            }
         }
     }
     
-    // Generate stories for each comparison
+    // Now select diverse candidates: try to get people from different time periods
+    if (count($validCandidates) >= 1) {
+        // Sort by connection count (descending) to prioritize people with more data
+        usort($validCandidates, function($a, $b) {
+            return $b['connection_count'] <=> $a['connection_count'];
+        });
+        
+        // Select diverse candidates: divide into time period buckets and pick from each
+        $targetCount = 5;
+        $selectedComparisons = [];
+        $usedBirthYears = [];
+        $usedAgeDateYears = [];
+        
+        // Group candidates by time period for better diversity
+        $candidatesByPeriod = [];
+        foreach ($validCandidates as $candidate) {
+            $birthYear = $candidate['birth_year'];
+            if ($birthYear < 500) {
+                $period = 'ancient';
+            } elseif ($birthYear < 1500) {
+                $period = 'medieval';
+            } elseif ($birthYear < 1800) {
+                $period = 'early_modern';
+            } elseif ($birthYear < 1950) {
+                $period = 'modern';
+            } else {
+                $period = 'contemporary';
+            }
+            
+            if (!isset($candidatesByPeriod[$period])) {
+                $candidatesByPeriod[$period] = [];
+            }
+            $candidatesByPeriod[$period][] = $candidate;
+        }
+        
+        // Try to select one from each available period first
+        $periodsUsed = [];
+        foreach ($candidatesByPeriod as $period => $periodCandidates) {
+            if (count($selectedComparisons) >= $targetCount) {
+                break;
+            }
+            
+            // Sort period candidates by connection count
+            usort($periodCandidates, function($a, $b) {
+                return $b['connection_count'] <=> $a['connection_count'];
+            });
+            
+            // Take the best candidate from this period
+            foreach ($periodCandidates as $candidate) {
+                $selectedComparisons[] = [
+                    'span' => $candidate['span'],
+                    'date' => $candidate['date']
+                ];
+                $usedBirthYears[] = $candidate['birth_year'];
+                $usedAgeDateYears[] = $candidate['age_date_year'];
+                $periodsUsed[] = $period;
+                break; // Only take one from each period initially
+            }
+        }
+        
+        // If we still need more, select from remaining candidates with wider time gaps
+        if (count($selectedComparisons) < $targetCount) {
+            foreach ($validCandidates as $candidate) {
+                if (count($selectedComparisons) >= $targetCount) {
+                    break;
+                }
+                
+                // Check if we've already used this candidate
+                $alreadyUsed = false;
+                foreach ($selectedComparisons as $selected) {
+                    if ($selected['span']->id === $candidate['span']->id) {
+                        $alreadyUsed = true;
+                        break;
+                    }
+                }
+                
+                if ($alreadyUsed) {
+                    continue;
+                }
+                
+                $isDiverse = true;
+                // Check if this candidate's birth year is too close to already selected ones
+                // Use larger gap (100 years) to ensure wider temporal spread
+                foreach ($usedBirthYears as $usedYear) {
+                    if (abs($candidate['birth_year'] - $usedYear) < 100) {
+                        // Too close, but we'll check if we can still use it if we don't have enough
+                        if (count($selectedComparisons) < $targetCount - 1) {
+                            $isDiverse = false;
+                            break;
+                        }
+                    }
+                }
+                
+                // Also check if the age date year is too close to already selected ones
+                foreach ($usedAgeDateYears as $usedYear) {
+                    if (abs($candidate['age_date_year'] - $usedYear) < 30) {
+                        // Too close in time when they were the user's age
+                        if (count($selectedComparisons) < $targetCount - 1) {
+                            $isDiverse = false;
+                            break;
+                        }
+                    }
+                }
+                
+                // If diverse enough or we need more candidates, add it
+                if ($isDiverse || count($selectedComparisons) < $targetCount) {
+                    $selectedComparisons[] = [
+                        'span' => $candidate['span'],
+                        'date' => $candidate['date']
+                    ];
+                    $usedBirthYears[] = $candidate['birth_year'];
+                    $usedAgeDateYears[] = $candidate['age_date_year'];
+                }
+            }
+        }
+        
+        // If we still don't have enough, fill with remaining candidates
+        if (count($selectedComparisons) < $targetCount) {
+            foreach ($validCandidates as $candidate) {
+                if (count($selectedComparisons) >= $targetCount) {
+                    break;
+                }
+                
+                // Check if we've already used this candidate
+                $alreadyUsed = false;
+                foreach ($selectedComparisons as $selected) {
+                    if ($selected['span']->id === $candidate['span']->id) {
+                        $alreadyUsed = true;
+                        break;
+                    }
+                }
+                
+                if (!$alreadyUsed) {
+                    $selectedComparisons[] = [
+                        'span' => $candidate['span'],
+                        'date' => $candidate['date']
+                    ];
+                }
+            }
+        }
+        
+        $randomComparisons = $selectedComparisons;
+    } else {
+        // If we have fewer than 3 candidates, just use what we have
+        foreach ($validCandidates as $candidate) {
+            $randomComparisons[] = [
+                'span' => $candidate['span'],
+                'date' => $candidate['date']
+            ];
+        }
+    }
+    
+    // Get photos for all comparison people in one batch query (optimize to avoid N+1)
+    $personIds = collect($randomComparisons)->pluck('span.id')->filter()->unique()->toArray();
+    $photoConnections = collect();
+    
+    if (!empty($personIds)) {
+        $photoConnections = \App\Models\Connection::where('type_id', 'features')
+            ->whereIn('child_id', $personIds)
+            ->whereHas('parent', function($q) {
+                $q->where('type_id', 'thing')
+                  ->whereJsonContains('metadata->subtype', 'photo');
+            })
+            ->with(['parent'])
+            ->get()
+            ->groupBy('child_id')
+            ->map(function($connections) {
+                // Get first photo for each person
+                return $connections->first();
+            });
+    }
+    
+    // Generate stories for each comparison and add photo URLs
     $enhancedComparisons = [];
     foreach ($randomComparisons as $comparison) {
         $story = $storyGenerator->generateStoryAtDate($comparison['span'], $comparison['date']->format('Y-m-d'));
+        
+        // Get photo URL for this person
+        $photoUrl = null;
+        $photoConnection = $photoConnections->get($comparison['span']->id);
+        if ($photoConnection && $photoConnection->parent) {
+            $metadata = $photoConnection->parent->metadata ?? [];
+            $photoUrl = $metadata['thumbnail_url'] 
+                ?? $metadata['medium_url'] 
+                ?? $metadata['large_url'] 
+                ?? null;
+            
+            // If we have a filename but no URL, use proxy route
+            if (!$photoUrl && isset($metadata['filename']) && $metadata['filename']) {
+                $photoUrl = route('images.proxy', ['spanId' => $photoConnection->parent->id, 'size' => 'thumbnail']);
+            }
+        }
+        
         $enhancedComparisons[] = [
             'span' => $comparison['span'],
             'date' => $comparison['date'],
-            'story' => $story
+            'story' => $story,
+            'photo_url' => $photoUrl
         ];
     }
 @endphp
@@ -256,18 +486,44 @@
                                     </h6>
                                 </div>
                                 <div class="card-body py-2">
+                                    <div class="d-flex align-items-start gap-2 mb-2">
+                                        @if($comparison['photo_url'])
+                                            <a href="{{ route('spans.show', $comparison['span']) }}" class="text-decoration-none flex-shrink-0">
+                                                <img src="{{ $comparison['photo_url'] }}" 
+                                                     alt="{{ $comparison['span']->name }}" 
+                                                     class="rounded"
+                                                     style="width: 48px; height: 48px; object-fit: cover;"
+                                                     loading="lazy">
+                                            </a>
+                                        @endif
+                                        <div class="flex-grow-1">
                                     @foreach($comparison['story']['paragraphs'] as $paragraph)
                                         <p class="mb-2 small">{!! $paragraph !!}</p>
                                     @endforeach
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         @else
                             {{-- Fallback to statement card if no story --}}
+                            <div class="d-flex align-items-start gap-2 mb-2">
+                                @if($comparison['photo_url'])
+                                    <a href="{{ route('spans.show', $comparison['span']) }}" class="text-decoration-none flex-shrink-0">
+                                        <img src="{{ $comparison['photo_url'] }}" 
+                                             alt="{{ $comparison['span']->name }}" 
+                                             class="rounded"
+                                             style="width: 48px; height: 48px; object-fit: cover;"
+                                             loading="lazy">
+                                    </a>
+                                @endif
+                                <div class="flex-grow-1">
                             <x-spans.display.statement-card 
                                 :span="$comparison['span']" 
                                 eventType="custom"
                                 :eventDate="$comparison['date']->format('Y-m-d')"
                                 customEventText="was your age on" />
+                                </div>
+                            </div>
                         @endif
                     @endif
                 </div>
