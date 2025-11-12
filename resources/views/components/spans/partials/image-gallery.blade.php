@@ -170,6 +170,27 @@
         </div>
         <div class="card-body">
             @if($imageConnections->isNotEmpty())
+                @php
+                    $imageCount = $imageConnections->count();
+                    // Determine column classes based on number of images
+                    // Responsive: stack on mobile (xs), scale columns based on image count on larger screens
+                    // 1 image = full width always
+                    // 2 images = 2 columns on sm+ screens
+                    // 3 images = 3 columns on sm+ screens
+                    // 4+ images = up to 4 columns (responsive: 2 on sm, 3 on md, 4 on lg+)
+                    if ($imageCount === 1) {
+                        $colClass = 'col-12';
+                    } elseif ($imageCount === 2) {
+                        // 2 images: stack on mobile, 2 columns on small+ screens
+                        $colClass = 'col-12 col-sm-6';
+                    } elseif ($imageCount === 3) {
+                        // 3 images: stack on mobile, 3 columns on small+ screens
+                        $colClass = 'col-12 col-sm-4';
+                    } else {
+                        // 4+ images: stack on mobile, 2 columns on small, 3 columns on medium, 4 columns on large+ screens
+                        $colClass = 'col-12 col-sm-6 col-md-4 col-lg-3';
+                    }
+                @endphp
                 <div class="row g-3">
                     @foreach($imageConnections as $connection)
                         @php
@@ -178,7 +199,7 @@
                             $imageUrl = $metadata['medium_url'] ?? $metadata['large_url'] ?? $metadata['thumbnail_url'] ?? null;
                         @endphp
                         
-                        <div class="col-md-6 col-lg-4">
+                        <div class="{{ $colClass }}">
                             <div class="card h-100 image-gallery-card position-relative">
                                 @if($imageUrl)
                                     <a href="{{ \App\Helpers\RouteHelper::getSpanRoute($imageSpan) }}" 
