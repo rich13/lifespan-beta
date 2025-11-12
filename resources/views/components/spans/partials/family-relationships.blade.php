@@ -1,4 +1,4 @@
-@props(['span', 'interactive' => false, 'columns' => 2])
+@props(['span', 'interactive' => false, 'columns' => 3])
 
 @php
 // Get all family relationships using the span's capabilities
@@ -31,8 +31,8 @@ $hasFamily = $ancestors->isNotEmpty() || $descendants->isNotEmpty() ||
                 </h6>
             </div>
         </div>
-        <div class="card-body">
-            <div class="row g-3">
+        <div class="card-body" style="font-size: 0.875rem;">
+            <div class="row g-2">
                 {{-- Generation +3: Great-Grandparents --}}
                 @php $greatGrandparents = $ancestors->filter(function($item) { return $item['generation'] === 3; })->pluck('span'); @endphp
                 <x-spans.partials.family-relationship-section 
@@ -120,4 +120,99 @@ $hasFamily = $ancestors->isNotEmpty() || $descendants->isNotEmpty() ||
             </div>
         </div>
     </div>
-@endif 
+@endif
+
+@push('scripts')
+<script>
+$(document).ready(function() {
+    // Initialize Bootstrap tooltips for family members with parents
+    $('.family-member-link[data-parents]').each(function() {
+        const $link = $(this);
+        const linkElement = $link[0];
+        
+        // Get parents data from JSON attribute
+        const parentsData = $link.data('parents');
+        
+        if (parentsData && Array.isArray(parentsData) && parentsData.length > 0 && typeof bootstrap !== 'undefined' && bootstrap.Tooltip) {
+            try {
+                // Build HTML content from parent data
+                const parentLinks = parentsData.map(function(parent) {
+                    return '<a href="' + parent.url + '" class="text-white text-decoration-underline" style="font-weight: 500;">' + 
+                           $('<div>').text(parent.name).html() + // Escape HTML in name
+                           '</a>';
+                });
+                
+                const parentsHtml = '<span style="font-weight: 600;">Parents:</span> ' + parentLinks.join(' and ');
+                
+                // Dispose any existing tooltip first
+                const existingTooltip = bootstrap.Tooltip.getInstance(linkElement);
+                if (existingTooltip) {
+                    existingTooltip.dispose();
+                }
+                
+                // Create new Bootstrap tooltip with HTML content
+                const tooltip = new bootstrap.Tooltip(linkElement, {
+                    placement: 'top',
+                    trigger: 'manual', // Use manual trigger for more control
+                    html: true,
+                    sanitize: false, // Allow HTML content - critical for HTML rendering
+                    title: parentsHtml // Set HTML content directly
+                });
+                
+                let hideTimeout;
+                let isOverTooltip = false;
+                
+                // Show tooltip on mouseenter of link
+                $link.on('mouseenter', function() {
+                    clearTimeout(hideTimeout);
+                    if (!tooltip.tip || !$(tooltip.tip).is(':visible')) {
+                        tooltip.show();
+                    }
+                });
+                
+                // Hide tooltip on mouseleave of link (with delay)
+                $link.on('mouseleave', function() {
+                    hideTimeout = setTimeout(function() {
+                        if (!isOverTooltip) {
+                            tooltip.hide();
+                        }
+                    }, 150); // Delay to allow mouse to move to tooltip
+                });
+                
+                // When tooltip is shown, handle interactions
+                $link.on('shown.bs.tooltip', function() {
+                    const tooltipEl = tooltip.tip;
+                    if (tooltipEl) {
+                        // Mark as over tooltip when mouse enters
+                        $(tooltipEl).on('mouseenter', function() {
+                            isOverTooltip = true;
+                            clearTimeout(hideTimeout);
+                        });
+                        
+                        // Hide tooltip when mouse leaves tooltip
+                        $(tooltipEl).on('mouseleave', function() {
+                            isOverTooltip = false;
+                            tooltip.hide();
+                        });
+                        
+                        // Allow clicks on links inside tooltip - let them navigate normally
+                        $(tooltipEl).find('a').on('click', function(e) {
+                            e.stopPropagation();
+                            // Link will navigate - tooltip will be hidden automatically
+                        });
+                    }
+                });
+                
+                // Reset flag when tooltip is hidden
+                $link.on('hidden.bs.tooltip', function() {
+                    isOverTooltip = false;
+                    clearTimeout(hideTimeout);
+                });
+            } catch (e) {
+                console.debug('Bootstrap tooltip initialization failed', e);
+            }
+        }
+    });
+});
+</script>
+@endpush 
