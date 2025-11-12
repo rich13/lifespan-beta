@@ -24,6 +24,22 @@
         </div>
     </div>
     <div class="card-body">
+        <!-- Timeline Legend/Key -->
+        <div id="timeline-legend-{{ $containerId }}" class="timeline-legend mb-2" style="display: none;">
+            <div class="d-flex justify-content-end align-items-center mb-1">
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="timeline-legend-reset-{{ $containerId }}" style="display: none; font-size: 0.75rem;">
+                    Reset
+                </button>
+            </div>
+            <div class="d-flex flex-wrap gap-2" id="timeline-legend-items-{{ $containerId }}">
+                <!-- Legend items will be populated by JavaScript -->
+            </div>
+            <small class="text-muted d-block mt-1" style="font-size: 0.7rem;">
+                <span class="text-muted">Click to isolate</span> • 
+                <span class="text-muted">Double-click to hide</span>
+            </small>
+        </div>
+        
         <div id="{{ $containerId }}" style="height: 300px; width: 100%; cursor: crosshair;">
             <!-- D3 group timeline will be rendered here -->
         </div>
@@ -33,6 +49,12 @@
 @push('scripts')
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script>
+// Filter state for connection types: 'visible', 'isolated', or 'hidden'
+let connectionTypeFilters_{{ str_replace('-', '_', $containerId) }} = {};
+let currentTimelineData_{{ str_replace('-', '_', $containerId) }} = null;
+let currentUserSpanId_{{ str_replace('-', '_', $containerId) }} = null;
+let currentMode_{{ str_replace('-', '_', $containerId) }} = 'absolute';
+
 document.addEventListener('DOMContentLoaded', function() {
     setTimeout(() => {
         initializeGroupTimeline_{{ str_replace('-', '_', $containerId) }}();
@@ -71,8 +93,17 @@ function initializeGroupTimeline_{{ str_replace('-', '_', $containerId) }}() {
                     isCurrentUser: false
                 }))
         )).then(timelineData => {
+            // Reset filters when new data loads
+            connectionTypeFilters_{{ str_replace('-', '_', $containerId) }} = {};
             renderGroupTimeline_{{ str_replace('-', '_', $containerId) }}(timelineData, 'absolute', currentUserSpanId);
             setupModeToggle_{{ str_replace('-', '_', $containerId) }}(timelineData, currentUserSpanId);
+            // Add reset button handler
+            const resetButton = document.getElementById(`timeline-legend-reset-{{ $containerId }}`);
+            if (resetButton) {
+                resetButton.onclick = function() {
+                    resetConnectionTypeFilters_{{ str_replace('-', '_', $containerId) }}();
+                };
+            }
         });
     } else {
         // Legacy mode: fallback to original timeline-combined-group logic
@@ -258,17 +289,44 @@ function initializeGroupTimeline_{{ str_replace('-', '_', $containerId) }}() {
                             timelineData[0].duringConnections = allDuringConnections;
                         }
                         
+                        // Reset filters when new data loads
+                        connectionTypeFilters_{{ str_replace('-', '_', $containerId) }} = {};
                         renderGroupTimeline_{{ str_replace('-', '_', $containerId) }}(timelineData, 'absolute', currentUserSpanId);
                         setupModeToggle_{{ str_replace('-', '_', $containerId) }}(timelineData, currentUserSpanId);
+                        // Add reset button handler
+                        const resetButton = document.getElementById(`timeline-legend-reset-{{ $containerId }}`);
+                        if (resetButton) {
+                            resetButton.onclick = function() {
+                                resetConnectionTypeFilters_{{ str_replace('-', '_', $containerId) }}();
+                            };
+                        }
                     })
                     .catch(error => {
                         console.error('Error loading subject timelines:', error);
+                        // Reset filters when new data loads
+                        connectionTypeFilters_{{ str_replace('-', '_', $containerId) }} = {};
                         renderGroupTimeline_{{ str_replace('-', '_', $containerId) }}(timelineData, 'absolute', currentUserSpanId);
                         setupModeToggle_{{ str_replace('-', '_', $containerId) }}(timelineData, currentUserSpanId);
+                        // Add reset button handler
+                        const resetButton = document.getElementById(`timeline-legend-reset-{{ $containerId }}`);
+                        if (resetButton) {
+                            resetButton.onclick = function() {
+                                resetConnectionTypeFilters_{{ str_replace('-', '_', $containerId) }}();
+                            };
+                        }
                     });
             } else {
+                // Reset filters when new data loads
+                connectionTypeFilters_{{ str_replace('-', '_', $containerId) }} = {};
                 renderGroupTimeline_{{ str_replace('-', '_', $containerId) }}(timelineData, 'absolute', currentUserSpanId);
                 setupModeToggle_{{ str_replace('-', '_', $containerId) }}(timelineData, currentUserSpanId);
+                // Add reset button handler
+                const resetButton = document.getElementById(`timeline-legend-reset-{{ $containerId }}`);
+                if (resetButton) {
+                    resetButton.onclick = function() {
+                        resetConnectionTypeFilters_{{ str_replace('-', '_', $containerId) }}();
+                    };
+                }
             }
         })
         .catch(error => {
@@ -282,6 +340,12 @@ function initializeGroupTimeline_{{ str_replace('-', '_', $containerId) }}() {
 
 function renderGroupTimeline_{{ str_replace('-', '_', $containerId) }}(timelineData, mode = 'absolute', currentUserSpanId = null) {
     const containerId = '{{ $containerId }}';
+    
+    // Store current state for filtering
+    currentTimelineData_{{ str_replace('-', '_', $containerId) }} = timelineData;
+    currentUserSpanId_{{ str_replace('-', '_', $containerId) }} = currentUserSpanId;
+    currentMode_{{ str_replace('-', '_', $containerId) }} = mode;
+    
     const container = document.getElementById(containerId);
     
     if (!container) {
@@ -368,6 +432,7 @@ function renderGroupTimeline_{{ str_replace('-', '_', $containerId) }}(timelineD
         // Store label info for later rendering
         timeline.labelInfo = {
             name: timeline.name,
+            id: timeline.id,
             swimlaneY: swimlaneY,
             isCurrentSpan: isCurrentSpan,
             isCurrentUser: isCurrentUser
@@ -416,6 +481,7 @@ function renderGroupTimeline_{{ str_replace('-', '_', $containerId) }}(timelineD
                     if (connection.type_id === 'created' && connection.target_type === 'thing' && connection.target_metadata?.subtype === 'photo') return false;
                     return true;
                 })
+                .filter(connection => shouldShowConnection_{{ str_replace('-', '_', $containerId) }}(connection.type_id))
                 .forEach(connection => {
                 const connectionType = connection.type_id;
                 
@@ -512,7 +578,7 @@ function renderGroupTimeline_{{ str_replace('-', '_', $containerId) }}(timelineD
                 timelineId: timeline.id
             });
         }
-        if (isCurrentSpan && timeline.roleOccupancies && timeline.roleOccupancies.length > 0) {
+        if (isCurrentSpan && timeline.roleOccupancies && timeline.roleOccupancies.length > 0 && shouldShowConnection_{{ str_replace('-', '_', $containerId) }}('has_role')) {
             const occupancyColor = getConnectionColor('has_role');
             const occupancies = timeline.roleOccupancies.filter(conn => conn.start_year);
             console.log('Filtered occupancies with start_year:', occupancies.length, occupancies);
@@ -580,7 +646,9 @@ function renderGroupTimeline_{{ str_replace('-', '_', $containerId) }}(timelineD
 
         // Add "during" connections for this timeline
         if (timeline.duringConnections && timeline.duringConnections.length > 0 && index === 0) {
-            timeline.duringConnections.forEach(connection => {
+            timeline.duringConnections
+                .filter(connection => shouldShowConnection_{{ str_replace('-', '_', $containerId) }}(connection.type_id))
+                .forEach(connection => {
                 const connectionStartYear = mode === 'absolute' ? connection.start_year : connection.start_year - timelineSpan.start_year;
                 const connectionEndYear = mode === 'absolute' 
                     ? (connection.end_year || new Date().getFullYear())
@@ -645,9 +713,17 @@ function renderGroupTimeline_{{ str_replace('-', '_', $containerId) }}(timelineD
     // Add swimlane labels
     timelineData.forEach((timeline) => {
         if (timeline.labelInfo) {
-            const { name, swimlaneY, isCurrentSpan, isCurrentUser } = timeline.labelInfo;
+            const { name, id, swimlaneY, isCurrentSpan, isCurrentUser } = timeline.labelInfo;
             
-            svg.append('text')
+            // Create link element for the label
+            const link = svg.append('a')
+                .attr('href', id ? `/spans/${id}` : '#')
+                .attr('class', 'swimlane-label-link')
+                .style('cursor', id ? 'pointer' : 'default')
+                .style('text-decoration', 'none');
+            
+            // Add swimlane label floating on top
+            link.append('text')
                 .attr('class', 'swimlane-label')
                 .attr('x', margin.left + 8)
                 .attr('y', swimlaneY + swimlaneHeight / 2 + 4)
@@ -655,8 +731,19 @@ function renderGroupTimeline_{{ str_replace('-', '_', $containerId) }}(timelineD
                 .attr('font-size', '11px')
                 .attr('font-weight', (isCurrentSpan || isCurrentUser) ? 'bold' : 'normal')
                 .attr('fill', mode === 'relative' ? 'white' : (isCurrentSpan ? '#1976d2' : (isCurrentUser ? '#000000' : '#495057')))
-                .style('pointer-events', 'none')
+                .style('pointer-events', 'auto')
                 .style('z-index', '1001')
+                .on('mouseenter', function() {
+                    if (id) {
+                        d3.select(this).attr('fill', '#007bff').style('text-decoration', 'underline');
+                    }
+                })
+                .on('mouseleave', function() {
+                    if (id) {
+                        d3.select(this).attr('fill', mode === 'relative' ? 'white' : (isCurrentSpan ? '#1976d2' : (isCurrentUser ? '#000000' : '#495057')))
+                            .style('text-decoration', 'none');
+                    }
+                })
                 .text(name);
         }
     });
@@ -934,6 +1021,9 @@ function renderGroupTimeline_{{ str_replace('-', '_', $containerId) }}(timelineD
     function hideCombinedTooltip_{{ str_replace('-', '_', $containerId) }}() {
         tooltip.transition().duration(500).style('opacity', 0);
     }
+    
+    // Update legend with connection types found in the timeline
+    updateTimelineLegend_{{ str_replace('-', '_', $containerId) }}(timelineData);
 }
 
 function calculateCombinedTimeRange_{{ str_replace('-', '_', $containerId) }}(timelineData) {
@@ -1071,6 +1161,301 @@ function setupModeToggle_{{ str_replace('-', '_', $containerId) }}(timelineData,
         radio._modeToggleHandler = handler;
         radio.addEventListener('change', handler);
     });
+}
+
+// Function to check if a connection type should be shown based on filters
+function shouldShowConnection_{{ str_replace('-', '_', $containerId) }}(typeId) {
+    const filters = connectionTypeFilters_{{ str_replace('-', '_', $containerId) }};
+    const filterState = filters[typeId];
+    
+    // If no filter state, show by default
+    if (!filterState) return true;
+    
+    // If hidden, don't show
+    if (filterState === 'hidden') return false;
+    
+    // If isolated, check if this is the isolated type
+    if (filterState === 'isolated') {
+        // Check if there are any isolated types
+        const isolatedTypes = Object.keys(filters).filter(key => filters[key] === 'isolated');
+        if (isolatedTypes.length === 0) return true; // No isolation, show all
+        return isolatedTypes.includes(typeId); // Only show if this type is isolated
+    }
+    
+    // If visible (or any other state), show
+    return true;
+}
+
+function updateTimelineLegend_{{ str_replace('-', '_', $containerId) }}(timelineData) {
+    const containerId = '{{ $containerId }}';
+    const legendContainer = document.getElementById(`timeline-legend-${containerId}`);
+    const legendItems = document.getElementById(`timeline-legend-items-${containerId}`);
+    const resetButton = document.getElementById(`timeline-legend-reset-${containerId}`);
+    
+    if (!legendContainer || !legendItems) {
+        return;
+    }
+    
+    // Collect all unique connection types from the timeline data
+    const connectionTypes = new Set();
+    
+    timelineData.forEach(timeline => {
+        if (timeline.timeline && timeline.timeline.connections) {
+            timeline.timeline.connections.forEach(connection => {
+                if (connection.type_id && connection.type_id !== 'life') {
+                    connectionTypes.add(connection.type_id);
+                }
+            });
+        }
+        if (timeline.roleOccupancies && timeline.roleOccupancies.length > 0) {
+            connectionTypes.add('has_role');
+        }
+        if (timeline.duringConnections && timeline.duringConnections.length > 0) {
+            timeline.duringConnections.forEach(connection => {
+                if (connection.type_id) {
+                    connectionTypes.add(connection.type_id);
+                }
+            });
+        }
+    });
+    
+    // If no connection types found, hide the legend
+    if (connectionTypes.size === 0) {
+        legendContainer.style.display = 'none';
+        return;
+    }
+    
+    // Connection type labels (human-readable names)
+    const typeLabels = {
+        'residence': 'Residence',
+        'employment': 'Employment',
+        'education': 'Education',
+        'membership': 'Membership',
+        'family': 'Family',
+        'relationship': 'Relationship',
+        'travel': 'Travel',
+        'participation': 'Participation',
+        'ownership': 'Ownership',
+        'created': 'Created',
+        'contains': 'Contains',
+        'has_role': 'Role',
+        'at_organisation': 'At Organisation'
+    };
+    
+    // Function to get connection color (same logic as in renderGroupTimeline)
+    function getConnectionColor(typeId) {
+        const cssColor = getComputedStyle(document.documentElement)
+            .getPropertyValue(`--connection-${typeId}-color`);
+        if (cssColor && cssColor.trim() !== '') return cssColor.trim();
+        
+        const testElement = document.createElement('div');
+        testElement.className = `bg-${typeId}`;
+        testElement.style.display = 'none';
+        document.body.appendChild(testElement);
+        const computedStyle = getComputedStyle(testElement);
+        const backgroundColor = computedStyle.backgroundColor;
+        document.body.removeChild(testElement);
+        
+        if (backgroundColor && backgroundColor !== 'rgba(0, 0, 0, 0)' && backgroundColor !== 'transparent') {
+            return backgroundColor;
+        }
+        
+        const fallbackColors = {
+            'residence': '#007bff', 'employment': '#28a745', 'education': '#ffc107', 'membership': '#dc3545',
+            'family': '#6f42c1', 'relationship': '#fd7e14', 'travel': '#20c997', 'participation': '#e83e8c',
+            'ownership': '#6c757d', 'created': '#17a2b8', 'contains': '#6610f2', 'has_role': '#fd7e14',
+            'at_organisation': '#20c997', 'life': '#000000'
+        };
+        
+        return fallbackColors[typeId] || '#6c757d';
+    }
+    
+    // Clear existing legend items
+    legendItems.innerHTML = '';
+    
+    // Sort connection types for consistent display
+    const sortedTypes = Array.from(connectionTypes).sort();
+    
+    // Check if any filters are active
+    const hasActiveFilters = Object.keys(connectionTypeFilters_{{ str_replace('-', '_', $containerId) }}).length > 0;
+    if (resetButton) {
+        resetButton.style.display = hasActiveFilters ? 'block' : 'none';
+    }
+    
+    // Create legend items
+    sortedTypes.forEach(typeId => {
+        const color = getConnectionColor(typeId);
+        const label = typeLabels[typeId] || typeId.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+        const filterState = connectionTypeFilters_{{ str_replace('-', '_', $containerId) }}[typeId] || 'visible';
+        
+        const legendItem = document.createElement('div');
+        legendItem.className = 'd-flex align-items-center';
+        legendItem.style.cssText = 'font-size: 0.75rem; cursor: pointer; user-select: none; padding: 2px 6px; border-radius: 4px; transition: background-color 0.2s;';
+        legendItem.dataset.typeId = typeId;
+        
+        // Style based on filter state
+        if (filterState === 'hidden') {
+            legendItem.style.opacity = '0.3';
+            legendItem.style.textDecoration = 'line-through';
+        } else if (filterState === 'isolated') {
+            legendItem.style.backgroundColor = 'rgba(13, 110, 253, 0.1)';
+            legendItem.style.border = '1px solid rgba(13, 110, 253, 0.3)';
+        }
+        
+        // Hover effect
+        legendItem.addEventListener('mouseenter', function() {
+            if (filterState !== 'hidden') {
+                this.style.backgroundColor = 'rgba(0, 0, 0, 0.05)';
+            }
+        });
+        legendItem.addEventListener('mouseleave', function() {
+            if (filterState === 'hidden') {
+                this.style.backgroundColor = 'transparent';
+            } else if (filterState === 'isolated') {
+                this.style.backgroundColor = 'rgba(13, 110, 253, 0.1)';
+            } else {
+                this.style.backgroundColor = 'transparent';
+            }
+        });
+        
+        // Single click handler (isolate)
+        let clickTimeout;
+        legendItem.addEventListener('click', function(e) {
+            clearTimeout(clickTimeout);
+            clickTimeout = setTimeout(function() {
+                isolateConnectionType_{{ str_replace('-', '_', $containerId) }}(typeId);
+            }, 250); // Wait to see if it's a double click
+        });
+        
+        // Double click handler (hide)
+        legendItem.addEventListener('dblclick', function(e) {
+            e.preventDefault();
+            clearTimeout(clickTimeout);
+            toggleHideConnectionType_{{ str_replace('-', '_', $containerId) }}(typeId);
+        });
+        
+        const colorBox = document.createElement('span');
+        colorBox.style.cssText = `display: inline-block; width: 12px; height: 12px; background-color: ${color}; border: 1px solid ${filterState === 'hidden' ? '#ccc' : '#fff'}; border-radius: 2px; margin-right: 4px; flex-shrink: 0;`;
+        
+        const labelText = document.createElement('span');
+        labelText.textContent = label;
+        labelText.className = filterState === 'hidden' ? 'text-muted' : 'text-dark';
+        
+        // Add indicator for isolated state
+        if (filterState === 'isolated') {
+            const indicator = document.createElement('span');
+            indicator.textContent = '●';
+            indicator.style.cssText = 'color: #0d6efd; margin-left: 4px; font-size: 0.6rem;';
+            legendItem.appendChild(colorBox);
+            legendItem.appendChild(labelText);
+            legendItem.appendChild(indicator);
+        } else {
+            legendItem.appendChild(colorBox);
+            legendItem.appendChild(labelText);
+        }
+        
+        legendItems.appendChild(legendItem);
+    });
+    
+    // Show the legend
+    legendContainer.style.display = 'block';
+}
+
+// Function to isolate a connection type (single click)
+function isolateConnectionType_{{ str_replace('-', '_', $containerId) }}(typeId) {
+    const filters = connectionTypeFilters_{{ str_replace('-', '_', $containerId) }};
+    const currentState = filters[typeId];
+    
+    // If already isolated, toggle it off (reset all filters)
+    if (currentState === 'isolated') {
+        // Clear all filters to show everything
+        Object.keys(filters).forEach(key => {
+            delete filters[key];
+        });
+    } else {
+        // Isolate this type - hide all others that are visible
+        // First, collect all connection types from timeline data
+        const allTypes = new Set();
+        if (currentTimelineData_{{ str_replace('-', '_', $containerId) }}) {
+            currentTimelineData_{{ str_replace('-', '_', $containerId) }}.forEach(timeline => {
+                if (timeline.timeline && timeline.timeline.connections) {
+                    timeline.timeline.connections.forEach(connection => {
+                        if (connection.type_id && connection.type_id !== 'life') {
+                            allTypes.add(connection.type_id);
+                        }
+                    });
+                }
+                if (timeline.roleOccupancies && timeline.roleOccupancies.length > 0) {
+                    allTypes.add('has_role');
+                }
+                if (timeline.duringConnections && timeline.duringConnections.length > 0) {
+                    timeline.duringConnections.forEach(connection => {
+                        if (connection.type_id) {
+                            allTypes.add(connection.type_id);
+                        }
+                    });
+                }
+            });
+        }
+        
+        // Hide all types except the one being isolated
+        allTypes.forEach(otherTypeId => {
+            if (otherTypeId !== typeId) {
+                filters[otherTypeId] = 'hidden';
+            }
+        });
+        
+        // Isolate the selected type
+        filters[typeId] = 'isolated';
+    }
+    
+    // Re-render timeline and update legend
+    reRenderTimelineWithFilters_{{ str_replace('-', '_', $containerId) }}();
+}
+
+// Function to toggle hide a connection type (double click)
+function toggleHideConnectionType_{{ str_replace('-', '_', $containerId) }}(typeId) {
+    const filters = connectionTypeFilters_{{ str_replace('-', '_', $containerId) }};
+    const currentState = filters[typeId];
+    
+    // If hidden, make it visible (just remove the filter)
+    if (currentState === 'hidden') {
+        delete filters[typeId];
+    } else {
+        // Hide it - if it was isolated, clear isolation and just hide this one
+        if (currentState === 'isolated') {
+            // Clear isolation - show all other types, hide this one
+            Object.keys(filters).forEach(key => {
+                if (filters[key] === 'hidden') {
+                    delete filters[key];
+                }
+            });
+            // Remove the isolated state
+            delete filters[typeId];
+        }
+        // Now hide this type
+        filters[typeId] = 'hidden';
+    }
+    
+    // Re-render timeline and update legend
+    reRenderTimelineWithFilters_{{ str_replace('-', '_', $containerId) }}();
+}
+
+// Function to reset all filters
+function resetConnectionTypeFilters_{{ str_replace('-', '_', $containerId) }}() {
+    connectionTypeFilters_{{ str_replace('-', '_', $containerId) }} = {};
+    reRenderTimelineWithFilters_{{ str_replace('-', '_', $containerId) }}();
+}
+
+// Function to re-render timeline with current filters
+function reRenderTimelineWithFilters_{{ str_replace('-', '_', $containerId) }}() {
+    if (currentTimelineData_{{ str_replace('-', '_', $containerId) }}) {
+        renderGroupTimeline_{{ str_replace('-', '_', $containerId) }}(
+            currentTimelineData_{{ str_replace('-', '_', $containerId) }},
+            currentMode_{{ str_replace('-', '_', $containerId) }},
+            currentUserSpanId_{{ str_replace('-', '_', $containerId) }}
+        );
+    }
 }
 </script>
 @endpush 

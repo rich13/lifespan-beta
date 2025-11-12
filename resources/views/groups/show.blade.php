@@ -50,17 +50,7 @@
                     </div>
                 </div>
             @else
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="card-title mb-0">
-                            <i class="bi bi-people-fill me-2"></i>
-                            Combined Timeline
-                        </h5>
-                    </div>
-                    <div class="card-body">
-                        <x-spans.timeline-group :spans="$memberSpans" />
-                    </div>
-                </div>
+                <x-spans.timeline-group :spans="$memberSpans" />
             @endif
         </div>
     </div>
