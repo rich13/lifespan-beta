@@ -196,25 +196,48 @@
                         @php
                             $imageSpan = $connection->parent;
                             $metadata = $imageSpan->metadata ?? [];
-                            $imageUrl = $metadata['medium_url'] ?? $metadata['large_url'] ?? $metadata['thumbnail_url'] ?? null;
+                            // For single images, prefer larger sizes; for multiple images, use medium
+                            if ($imageCount === 1) {
+                                $imageUrl = $metadata['large_url'] ?? $metadata['original_url'] ?? $metadata['medium_url'] ?? $metadata['thumbnail_url'] ?? null;
+                            } else {
+                                $imageUrl = $metadata['medium_url'] ?? $metadata['large_url'] ?? $metadata['thumbnail_url'] ?? null;
+                            }
+                            $isSingleImage = $imageCount === 1;
                         @endphp
                         
                         <div class="{{ $colClass }}">
-                            <div class="card h-100 image-gallery-card position-relative">
+                            <div class="{{ $isSingleImage ? 'position-relative' : 'card h-100 image-gallery-card position-relative' }}">
                                 @if($imageUrl)
                                     <a href="{{ \App\Helpers\RouteHelper::getSpanRoute($imageSpan) }}" 
-                                       class="text-decoration-none">
-                                        <img src="{{ $imageUrl }}" 
-                                         alt="{{ $imageSpan->name }}" 
-                                         class="card-img-top" 
-                                         style="height: 200px; object-fit: cover; border-radius: 8px;"
-                                         loading="lazy">
+                                       class="text-decoration-none{{ $isSingleImage ? ' d-block' : '' }}">
+                                        @if($isSingleImage)
+                                            {{-- Single image: full size with natural aspect ratio --}}
+                                            <img src="{{ $imageUrl }}" 
+                                                 alt="{{ $imageSpan->name }}" 
+                                                 class="img-fluid rounded" 
+                                                 style="width: 100%; height: auto; max-height: 80vh; display: block;"
+                                                 loading="lazy">
+                                        @else
+                                            {{-- Multiple images: fixed height grid --}}
+                                            <img src="{{ $imageUrl }}" 
+                                                 alt="{{ $imageSpan->name }}" 
+                                                 class="card-img-top" 
+                                                 style="height: 200px; object-fit: cover; border-radius: 8px;"
+                                                 loading="lazy">
+                                        @endif
                                     </a>
                                 @else
-                                    <div class="card-img-top bg-light d-flex align-items-center justify-content-center" 
-                                         style="height: 200px;">
-                                        <i class="bi bi-image text-muted" style="font-size: 2rem;"></i>
-                                    </div>
+                                    @if($isSingleImage)
+                                        <div class="bg-light rounded d-flex align-items-center justify-content-center" 
+                                             style="min-height: 200px;">
+                                            <i class="bi bi-image text-muted" style="font-size: 3rem;"></i>
+                                        </div>
+                                    @else
+                                        <div class="card-img-top bg-light d-flex align-items-center justify-content-center" 
+                                             style="height: 200px;">
+                                            <i class="bi bi-image text-muted" style="font-size: 2rem;"></i>
+                                        </div>
+                                    @endif
                                 @endif
                                 
                                 {{-- Date badge --}}
@@ -241,7 +264,7 @@
                                     @endphp
                                     
                                     @if($dateText)
-                                        <div class="position-absolute bottom-0 start-50 translate-middle-x mb-2">
+                                        <div class="position-absolute {{ $isSingleImage ? 'bottom-0 start-0 m-3' : 'bottom-0 start-50 translate-middle-x mb-2' }}">
                                             <a href="{{ $dateUrl }}" class="badge bg-dark bg-opacity-75 text-white text-decoration-none" 
                                                style="font-size: 0.75rem; backdrop-filter: blur(4px);">
                                                 <i class="bi bi-calendar3 me-1"></i>{{ $dateText }}
