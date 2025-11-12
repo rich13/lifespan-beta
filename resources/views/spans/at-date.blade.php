@@ -36,21 +36,20 @@
 @section('content')
     <div class="container-fluid">
         
-        <!-- Story Card -->
+        <!-- Story Card and World Leaders in the same row -->
         <div class="row mb-4">
-            <div class="col-12">
+            <!-- Story Card - Left -->
+            <div class="col-md-8">
                 <x-spans.partials.story :span="$span" :story="$story" />
             </div>
-        </div>
-        
-        <!-- Leadership at Date -->
-        @if(isset($leadership))
-            <div class="row mb-4">
-                <div class="col-12">
+            
+            <!-- Leadership at Date - Right -->
+            @if(isset($leadership))
+                <div class="col-md-4">
                     <x-spans.partials.leadership-at-date :leadership="$leadership" :displayDate="$displayDate" />
                 </div>
-            </div>
-        @endif
+            @endif
+        </div>
         
         <!-- Timeline Card -->
         <div class="row mb-4">
