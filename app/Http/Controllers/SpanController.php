@@ -2819,6 +2819,145 @@ class SpanController extends Controller
     }
 
     /**
+     * Display films exploration page with force-directed graph
+     */
+    public function exploreFilms(Request $request): View
+    {
+        // Get all films (public or accessible to user)
+        $filmsQuery = Span::where('type_id', 'thing')
+            ->whereJsonContains('metadata->subtype', 'film');
+        
+        // Apply access filtering
+        if (!Auth::check()) {
+            $filmsQuery->where('access_level', 'public');
+        } else {
+            $user = Auth::user();
+            if (!$user->is_admin) {
+                $filmsQuery->where(function ($query) use ($user) {
+                    $query->where('access_level', 'public')
+                        ->orWhere('owner_id', $user->id)
+                        ->orWhere(function ($query) use ($user) {
+                            $query->where('access_level', 'shared')
+                                ->whereExists(function ($subquery) use ($user) {
+                                    $subquery->select('id')
+                                        ->from('span_permissions')
+                                        ->whereColumn('span_permissions.span_id', 'spans.id')
+                                        ->where('span_permissions.user_id', $user->id);
+                                });
+                        });
+                });
+            }
+        }
+        
+        $films = $filmsQuery->with([
+            'connectionsAsSubject' => function($q) {
+                $q->where('type_id', 'features')
+                  ->whereHas('child', function($q2) {
+                      $q2->where('type_id', 'person');
+                  })
+                  ->with(['child:id,name,type_id']);
+            },
+            'connectionsAsSubject.child',
+            'connectionsAsObject' => function($q) {
+                $q->where('type_id', 'created')
+                  ->whereHas('parent', function($q2) {
+                      $q2->where('type_id', 'person');
+                  })
+                  ->with(['parent:id,name,type_id']);
+            },
+            'connectionsAsObject.parent'
+        ])->get();
+        
+        // Build graph data
+        $nodes = [];
+        $links = [];
+        $nodeMap = []; // Map span IDs to node indices
+        
+        // Add film nodes
+        foreach ($films as $film) {
+            $nodeId = 'film_' . $film->id;
+            $nodeMap[$film->id] = count($nodes);
+            $nodes[] = [
+                'id' => $nodeId,
+                'span_id' => $film->id,
+                'name' => $film->name,
+                'type' => 'film',
+                'type_id' => 'thing',
+                'url' => route('spans.show', ['subject' => $film])
+            ];
+            
+            // Add "features" connections (film -> features -> person)
+            foreach ($film->connectionsAsSubject as $conn) {
+                if ($conn->type_id === 'features' && $conn->child && $conn->child->type_id === 'person') {
+                    $person = $conn->child;
+                    $personNodeId = 'person_' . $person->id;
+                    
+                    // Add person node if not already added
+                    if (!isset($nodeMap[$person->id])) {
+                        $nodeMap[$person->id] = count($nodes);
+                        $nodes[] = [
+                            'id' => $personNodeId,
+                            'span_id' => $person->id,
+                            'name' => $person->name,
+                            'type' => 'person',
+                            'type_id' => 'person',
+                            'url' => route('spans.show', ['subject' => $person])
+                        ];
+                    }
+                    
+                    // Add link (using node indices)
+                    $links[] = [
+                        'source' => $nodeMap[$film->id],
+                        'target' => $nodeMap[$person->id],
+                        'type' => 'features',
+                        'type_id' => 'features',
+                        'source_id' => $nodeId,
+                        'target_id' => $personNodeId
+                    ];
+                }
+            }
+            
+            // Add "created" connections (person -> created -> film)
+            foreach ($film->connectionsAsObject as $conn) {
+                if ($conn->type_id === 'created' && $conn->parent && $conn->parent->type_id === 'person') {
+                    $person = $conn->parent;
+                    $personNodeId = 'person_' . $person->id;
+                    
+                    // Add person node if not already added
+                    if (!isset($nodeMap[$person->id])) {
+                        $nodeMap[$person->id] = count($nodes);
+                        $nodes[] = [
+                            'id' => $personNodeId,
+                            'span_id' => $person->id,
+                            'name' => $person->name,
+                            'type' => 'person',
+                            'type_id' => 'person',
+                            'url' => route('spans.show', ['subject' => $person])
+                        ];
+                    }
+                    
+                    // Add link (using node indices)
+                    $links[] = [
+                        'source' => $nodeMap[$person->id],
+                        'target' => $nodeMap[$film->id],
+                        'type' => 'created',
+                        'type_id' => 'created',
+                        'source_id' => $personNodeId,
+                        'target_id' => $nodeId
+                    ];
+                }
+            }
+        }
+        
+        $graphData = [
+            'nodes' => $nodes,
+            'links' => $links
+        ];
+        
+        return view('explore.films', compact('graphData'));
+    }
+
+    /**
      * Display all Desert Island Discs sets.
      */
     public function desertIslandDiscs(Request $request): View
@@ -2934,21 +3073,26 @@ class SpanController extends Controller
                 // Check if location has coordinates
                 $coordinates = $metadata['coordinates'] ?? null;
                 if ($coordinates && isset($coordinates['latitude']) && isset($coordinates['longitude'])) {
-                    // Get connections to people/organisations
+                    // Get connections to people - plaque (parent) features person (child)
                     $personConnections = Connection::where('type_id', 'features')
-                        ->where('child_id', $plaque->id)
-                        ->with(['parent'])
+                        ->where('parent_id', $plaque->id) // Plaque is the parent
+                        ->whereHas('child', function($query) {
+                            $query->where('type_id', 'person'); // Only get person connections, not photos
+                        })
+                        ->with(['child'])
                         ->get();
                     
+                    // Get connections to organisations - plaque (parent) features organisation (child)
                     $organisationConnections = Connection::where('type_id', 'features')
-                        ->where('child_id', $plaque->id)
-                        ->with(['parent'])
-                        ->whereHas('parent', function($query) {
+                        ->where('parent_id', $plaque->id) // Plaque is the parent
+                        ->whereHas('child', function($query) {
                             $query->where('type_id', 'organisation');
                         })
+                        ->with(['child'])
                         ->get();
                     
                     $plaquesWithLocations[] = [
+                        'id' => $plaque->id, // Add ID at top level for easier access
                         'plaque' => $plaque,
                         'location' => $location,
                         'latitude' => (float) $coordinates['latitude'],
@@ -2958,18 +3102,18 @@ class SpanController extends Controller
                         'url' => route('spans.show', $plaque),
                         'person_connections' => $personConnections->map(function($conn) {
                             return [
-                                'id' => $conn->parent->id,
-                                'name' => $conn->parent->name,
-                                'type' => $conn->parent->type_id,
-                                'url' => route('spans.show', $conn->parent)
+                                'id' => $conn->child->id,
+                                'name' => $conn->child->name,
+                                'type' => $conn->child->type_id,
+                                'url' => route('spans.show', $conn->child)
                             ];
                         })->toArray(),
                         'organisation_connections' => $organisationConnections->map(function($conn) {
                             return [
-                                'id' => $conn->parent->id,
-                                'name' => $conn->parent->name,
-                                'type' => $conn->parent->type_id,
-                                'url' => route('spans.show', $conn->parent)
+                                'id' => $conn->child->id,
+                                'name' => $conn->child->name,
+                                'type' => $conn->child->type_id,
+                                'url' => route('spans.show', $conn->child)
                             ];
                         })->toArray()
                     ];
@@ -3696,7 +3840,46 @@ class SpanController extends Controller
             }
 
             // Merge the AI data with the existing span
-            $mergedData = $yamlService->mergeYamlWithExistingSpan($span, $validationResult['data']);
+            try {
+                $mergedData = $yamlService->mergeYamlWithExistingSpan($span, $validationResult['data']);
+            } catch (\Exception $e) {
+                Log::error('Failed to merge YAML with existing span in improveWithAi', [
+                    'span_id' => $span->id,
+                    'span_name' => $span->name,
+                    'error' => $e->getMessage(),
+                    'error_file' => $e->getFile(),
+                    'error_line' => $e->getLine(),
+                    'validation_data_keys' => array_keys($validationResult['data']),
+                    'validation_data_sample' => array_map(function($v) {
+                        if (is_array($v)) {
+                            return '[array with ' . count($v) . ' elements]';
+                        }
+                        if (is_string($v) && strlen($v) > 200) {
+                            return substr($v, 0, 200) . '...';
+                        }
+                        return $v;
+                    }, $validationResult['data'])
+                ]);
+                
+                $errorMessage = 'Failed to merge AI data with existing span: ' . $e->getMessage();
+                if (strpos($e->getMessage(), 'Array to string conversion') !== false || 
+                    strpos($e->getMessage(), 'data type conversion') !== false) {
+                    $errorMessage .= ' This appears to be a data type conversion error. The AI-generated YAML may contain fields with incorrect data types (e.g., arrays where strings are expected, or vice versa).';
+                }
+                $errorMessage .= ' (File: ' . basename($e->getFile()) . ', Line: ' . $e->getLine() . ')';
+                
+                return response()->json([
+                    'success' => false,
+                    'error' => $errorMessage,
+                    'error_details' => [
+                        'message' => $e->getMessage(),
+                        'file' => basename($e->getFile()),
+                        'line' => $e->getLine(),
+                        'exception_class' => get_class($e),
+                        'step' => 'merge'
+                    ]
+                ], 500);
+            }
             
             // Apply the merged data to the span
             $applyResult = $yamlService->applyMergedYamlToSpan($span, $mergedData);
@@ -3715,22 +3898,57 @@ class SpanController extends Controller
                     'message' => 'Span improved successfully with AI data.'
                 ]);
             } else {
-                return response()->json([
+                // Return detailed error information
+                $errorResponse = [
                     'success' => false,
                     'error' => $applyResult['message']
-                ], 500);
+                ];
+                
+                // Include field errors if available
+                if (isset($applyResult['field_errors'])) {
+                    $errorResponse['field_errors'] = $applyResult['field_errors'];
+                    $errorResponse['error'] .= ' Field errors: ' . json_encode($applyResult['field_errors']);
+                }
+                
+                // Include error details if available
+                if (isset($applyResult['error_details'])) {
+                    $errorResponse['error_details'] = $applyResult['error_details'];
+                }
+                
+                return response()->json($errorResponse, 500);
             }
 
         } catch (\Exception $e) {
             Log::error('AI span improvement error', [
                 'error' => $e->getMessage(),
+                'error_file' => $e->getFile(),
+                'error_line' => $e->getLine(),
+                'error_trace' => $e->getTraceAsString(),
                 'span_id' => $span->id,
-                'span_name' => $span->name
+                'span_name' => $span->name,
+                'exception_class' => get_class($e)
             ]);
+
+            // Build detailed error message
+            $errorMessage = 'Failed to improve span: ' . $e->getMessage();
+            
+            // Add file and line information for debugging
+            $errorMessage .= ' (File: ' . basename($e->getFile()) . ', Line: ' . $e->getLine() . ')';
+            
+            // Check if it's a type conversion error
+            if (strpos($e->getMessage(), 'Array to string conversion') !== false) {
+                $errorMessage .= '. This appears to be a data type conversion error. Please check the AI-generated YAML data for fields that should be strings but are arrays (or vice versa).';
+            }
 
             return response()->json([
                 'success' => false,
-                'error' => 'Failed to improve span: ' . $e->getMessage()
+                'error' => $errorMessage,
+                'error_details' => [
+                    'message' => $e->getMessage(),
+                    'file' => basename($e->getFile()),
+                    'line' => $e->getLine(),
+                    'exception_class' => get_class($e)
+                ]
             ], 500);
         }
     }

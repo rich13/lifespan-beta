@@ -166,6 +166,7 @@ Route::middleware('web')->group(function () {
         Route::post('/journeys/discover', [JourneyController::class, 'discover'])->name('explore.journeys.discover');
         Route::get('/journeys/random', [JourneyController::class, 'random'])->name('explore.journeys.random');
         Route::get('/at-your-age', [SpanController::class, 'atYourAge'])->name('explore.at-your-age');
+        Route::get('/films', [SpanController::class, 'exploreFilms'])->name('explore.films');
     });
 
     // Date exploration route - supports YYYY, YYYY-MM, and YYYY-MM-DD formats
