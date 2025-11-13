@@ -447,6 +447,13 @@
     <div class="row">
         <!-- Column 1: Personal Information -->
         <div class="col-md-3">
+
+            <!-- Lifespan Summary Card -->
+            <x-home.lifespan-summary-card />
+            
+            <!-- Column 1: Missing Connections Prompt -->
+            <x-home.missing-connections-prompt :personalSpan="$personalSpan" />
+            
             <!-- Life Activity Heatmap -->
             <x-home.life-heatmap-card />
             
@@ -545,9 +552,6 @@
             <!-- Random Blue Plaque -->
             <x-home.random-blue-plaque-card />
 
-            <!-- Missing Connections Prompt -->
-            <x-home.missing-connections-prompt :personalSpan="$personalSpan" />
-            
             <!-- Wikipedia On This Day -->
             <div class="mb-4">
                 <x-wikipedia-on-this-day />

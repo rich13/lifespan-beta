@@ -446,7 +446,7 @@
     <div class="card-header">
         <h3 class="h6 mb-0">
             <i class="bi bi-arrow-left-right text-primary me-2"></i>
-            You are {{ $ageText }}
+            At Your Age
         </h3>
     </div>
     <div class="card-body">
