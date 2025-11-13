@@ -252,6 +252,11 @@
                     <x-spans.cards.film-card :span="$span" />
                 @endif
                 
+                <!-- Book Card (for people) - placed under film card -->
+                @if($span->type_id === 'person')
+                    <x-spans.cards.book-card :span="$span" />
+                @endif
+                
                 <!-- Employee Card (for organisations) - placed under employment card -->
                 @if($span->type_id === 'organisation')
                     <x-spans.cards.employee-card :span="$span" />
