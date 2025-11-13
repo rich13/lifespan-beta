@@ -445,15 +445,22 @@
 @section('content')
 <div class="container-fluid">
     <div class="row">
-        <!-- Left Column: Personal Information -->
-        <div class="col-md-4">
-            <div class="mb-4">
-                    <x-home.at-your-age-card />
-            </div>
+        <!-- Column 1: Personal Information -->
+        <div class="col-md-3">
+            <!-- Life Activity Heatmap -->
+            <x-home.life-heatmap-card />
+            
+            <!-- Lifespan Stats -->
+            <x-home.lifespan-stats-card />
         </div>
 
-        <!-- Middle Column: Today's Events -->
-        <div class="col-md-4">
+        <!-- Column 2: Today's Events -->
+        <div class="col-md-3">
+            <!-- At Your Age Card -->
+            <div class="mb-4">
+                <x-home.at-your-age-card />
+            </div>
+            
             <div class="mb-4">
                 @php
                     $today = \App\Helpers\DateHelper::getCurrentDate();
@@ -527,16 +534,24 @@
                 --}}
 
                 <x-upcoming-anniversaries />
-
-                <x-wikipedia-on-this-day />
             </div>
         </div>
 
-        <!-- Right Column: Placeholder Connections -->
-        <div class="col-md-4">
+        <!-- Column 3: Missing Connections -->
+        <div class="col-md-3">
+            <!-- Featured Person -->
+            <x-home.random-person-card />
+
+            <!-- Random Blue Plaque -->
+            <x-home.random-blue-plaque-card />
 
             <!-- Missing Connections Prompt -->
             <x-home.missing-connections-prompt :personalSpan="$personalSpan" />
+            
+            <!-- Wikipedia On This Day -->
+            <div class="mb-4">
+                <x-wikipedia-on-this-day />
+            </div>
 
             <!-- Welcome Modal Logic -->
             @php
@@ -754,6 +769,10 @@
             </div> --}}
 
 
+        </div>
+
+        <!-- Column 4: Spans of Type Cards -->
+        <div class="col-md-3">
             <!-- Bands Card -->
             <div class="mb-4">
                 <x-home.spans-of-type-card 
@@ -780,6 +799,25 @@
                     :subtype="'book'"
                     :title="'Books'"
                     :icon="'book'"
+                />
+            </div>
+            
+            <!-- Films Card -->
+            <div class="mb-4">
+                <x-home.spans-of-type-card 
+                    :type="'thing'"
+                    :subtype="'film'"
+                    :title="'Films'"
+                    :icon="'film'"
+                />
+            </div>
+            
+            <!-- Events Card -->
+            <div class="mb-4">
+                <x-home.spans-of-type-card 
+                    :type="'event'"
+                    :title="'Events'"
+                    :icon="'calendar-event'"
                 />
             </div>
         </div>
