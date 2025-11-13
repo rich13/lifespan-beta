@@ -31,7 +31,7 @@
     <div class="card-header d-flex justify-content-between align-items-center">
         <h6 class="card-title mb-0">
             <i class="bi bi-house me-2"></i>
-            <a href="{{ url('/spans/' . $span->id . '/lived-at') }}" class="text-decoration-none">
+            <a href="{{ url('/spans/' . $span->id . '/lived-in') }}" class="text-decoration-none">
                 Places Lived
             </a>
         </h6>
