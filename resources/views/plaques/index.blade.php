@@ -21,8 +21,38 @@
 @section('content')
 <div class="container-fluid p-0">
     <div class="row g-0" style="height: calc(100vh - 56px);">
+        <!-- Plaques List Column -->
+        <div class="col-lg-3 col-md-4 d-none d-md-flex border-end" id="plaquesListColumn" style="height: calc(100vh - 56px);">
+            <div class="h-100 d-flex flex-column" style="min-height: 0;">
+                <!-- Header -->
+                <div class="card border-0 border-bottom rounded-0 flex-shrink-0">
+                    <div class="card-body">
+                        <h5 class="card-title mb-3">
+                            <i class="bi bi-list-ul me-2"></i>
+                            Plaques
+                        </h5>
+                        <!-- Search Box -->
+                        <div class="input-group input-group-sm mb-2">
+                            <span class="input-group-text"><i class="bi bi-search"></i></span>
+                            <input type="text" class="form-control" id="plaqueSearch" placeholder="Search plaques...">
+                        </div>
+                        <p class="text-muted small mb-0">
+                            <strong id="plaqueCount">{{ count($plaquesWithLocations) }}</strong> plaques found
+                        </p>
+                    </div>
+                </div>
+                
+                <!-- Plaques List - Scrollable Container -->
+                <div class="flex-grow-1 overflow-y-auto overflow-x-hidden" style="min-height: 0;">
+                    <div id="plaquesList" class="list-group list-group-flush">
+                        <!-- Plaques will be populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+        </div>
+        
         <!-- Map Column -->
-        <div class="col-lg-8 col-md-7">
+        <div class="col-lg-6 col-md-8">
             <div class="position-relative h-100">
                 <!-- Map Container -->
                 <div id="map" style="height: 100%; width: 100%;"></div>
@@ -41,23 +71,28 @@
                                 <strong>{{ count($plaquesWithLocations) }}</strong> plaques found
                             </p>
                             <p class="card-text small text-muted mb-0">
-                                Click on markers to view details
+                                Click on markers or list items to view details
                             </p>
                         </div>
                     </div>
                 </div>
                 
-                <!-- Mobile Toggle Button -->
+                <!-- Mobile Toggle Buttons -->
                 <div class="position-absolute top-0 end-0 m-3 d-md-none">
-                    <button class="btn btn-primary" onclick="toggleDetailsPanel()">
-                        <i class="bi bi-info-circle"></i>
-                    </button>
+                    <div class="btn-group">
+                        <button class="btn btn-primary btn-sm" onclick="toggleListPanel()">
+                            <i class="bi bi-list"></i>
+                        </button>
+                        <button class="btn btn-primary btn-sm" onclick="toggleDetailsPanel()">
+                            <i class="bi bi-info-circle"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
         
         <!-- Details Column -->
-        <div class="col-lg-4 col-md-5 d-none d-md-block" id="detailsColumn">
+        <div class="col-lg-3 d-none d-lg-block border-start" id="detailsColumn">
             <div class="h-100 d-flex flex-column">
                 <!-- Header -->
                 <div class="card border-0 border-bottom rounded-0">
@@ -77,8 +112,8 @@
                     <div id="plaqueDetails" class="p-3">
                         <div class="text-center text-muted py-5">
                             <i class="bi bi-geo-alt display-4 mb-3"></i>
-                            <h6>Select a plaque on the map</h6>
-                            <p class="small">Click on any marker to view detailed information about the plaque</p>
+                            <h6>Select a plaque</h6>
+                            <p class="small">Click on any marker or list item to view detailed information</p>
                         </div>
                     </div>
                 </div>
@@ -106,6 +141,13 @@ document.addEventListener('DOMContentLoaded', function() {
     // Plaque data from the server
     const plaques = @json($plaquesWithLocations);
     
+    // Store markers and list items for highlighting
+    const markers = new Map(); // Map of plaque ID to marker
+    const listItems = new Map(); // Map of plaque ID to list item element
+    let selectedPlaqueId = null;
+    let selectedMarker = null;
+    let selectedListItem = null;
+    
     // Function to format date
     function formatDate(year, month, day) {
         if (!year) return 'Unknown date';
@@ -117,6 +159,156 @@ document.addEventListener('DOMContentLoaded', function() {
         if (day) options.day = 'numeric';
         
         return date.toLocaleDateString('en-GB', options);
+    }
+    
+    // Function to highlight a plaque (marker and list item)
+    function highlightPlaque(plaqueId, plaque) {
+        // Remove previous highlight
+        if (selectedMarker) {
+            selectedMarker.setIcon(defaultIcon);
+        }
+        if (selectedListItem) {
+            selectedListItem.classList.remove('active');
+            selectedListItem.classList.remove('bg-primary');
+            selectedListItem.classList.remove('text-white');
+        }
+        
+        // Set new selection
+        selectedPlaqueId = plaqueId;
+        selectedMarker = markers.get(plaqueId);
+        selectedListItem = listItems.get(plaqueId);
+        
+        // Highlight marker with different icon
+        if (selectedMarker) {
+            // Create a highlighted icon
+            const highlightedIcon = L.icon({
+                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                iconSize: [25, 41],
+                iconAnchor: [12, 41],
+                popupAnchor: [1, -34],
+                shadowSize: [41, 41]
+            });
+            selectedMarker.setIcon(highlightedIcon);
+            
+            // Center map on marker and zoom in
+            map.setView([plaque.latitude, plaque.longitude], 16);
+            
+            // Open popup briefly
+            selectedMarker.openPopup();
+            setTimeout(() => {
+                if (selectedMarker) {
+                    selectedMarker.closePopup();
+                }
+            }, 2000);
+        }
+        
+        // Highlight list item
+        if (selectedListItem) {
+            selectedListItem.classList.add('active');
+            selectedListItem.classList.add('bg-primary');
+            selectedListItem.classList.add('text-white');
+            
+            // Scroll list item into view
+            selectedListItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+        
+        // Show details
+        showPlaqueDetails(plaque);
+    }
+    
+    // Default marker icon
+    const defaultIcon = L.icon({
+        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png',
+        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowSize: [41, 41]
+    });
+    L.Marker.prototype.options.icon = defaultIcon;
+    
+    // Function to populate plaques list
+    function populatePlaquesList(filteredPlaques = null) {
+        const plaquesList = document.getElementById('plaquesList');
+        const displayPlaques = filteredPlaques || plaques;
+        const plaqueCount = document.getElementById('plaqueCount');
+        
+        plaquesList.innerHTML = '';
+        plaqueCount.textContent = displayPlaques.length;
+        
+        if (displayPlaques.length === 0) {
+            plaquesList.innerHTML = '<div class="list-group-item text-muted text-center"><small>No plaques found</small></div>';
+            return;
+        }
+        
+        displayPlaques.forEach(function(plaque) {
+            // Extract plaque ID - use top-level id (now added in controller)
+            const plaqueId = plaque.id;
+            if (!plaqueId) return; // Skip if no ID
+            
+            const listItem = document.createElement('a');
+            listItem.href = '#';
+            listItem.className = 'list-group-item list-group-item-action';
+            listItem.dataset.plaqueId = plaqueId;
+            
+            // Get person name if available
+            const personName = plaque.person_connections && plaque.person_connections.length > 0 
+                ? plaque.person_connections[0].name 
+                : null;
+            
+            listItem.innerHTML = `
+                <div class="d-flex w-100 justify-content-between align-items-start">
+                    <div class="flex-grow-1">
+                        <h6 class="mb-1">${escapeHtml(plaque.name)}</h6>
+                        ${personName ? `<p class="mb-1 small text-muted"><i class="bi bi-person me-1"></i>${escapeHtml(personName)}</p>` : ''}
+                        ${plaque.location ? `<p class="mb-0 small text-muted"><i class="bi bi-geo-alt me-1"></i>${escapeHtml(plaque.location.name || 'Unknown location')}</p>` : ''}
+                    </div>
+                </div>
+            `;
+            
+            listItem.addEventListener('click', function(e) {
+                e.preventDefault();
+                highlightPlaque(plaqueId, plaque);
+            });
+            
+            plaquesList.appendChild(listItem);
+            listItems.set(plaqueId, listItem);
+        });
+    }
+    
+    // Function to escape HTML
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    // Search functionality
+    const plaqueSearch = document.getElementById('plaqueSearch');
+    if (plaqueSearch) {
+        plaqueSearch.addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase().trim();
+            
+            if (searchTerm === '') {
+                populatePlaquesList();
+                return;
+            }
+            
+            const filtered = plaques.filter(function(plaque) {
+                const nameMatch = plaque.name.toLowerCase().includes(searchTerm);
+                const descriptionMatch = (plaque.description || '').toLowerCase().includes(searchTerm);
+                const locationMatch = (plaque.location?.name || '').toLowerCase().includes(searchTerm);
+                const personMatch = (plaque.person_connections || []).some(function(person) {
+                    return person.name.toLowerCase().includes(searchTerm);
+                });
+                
+                return nameMatch || descriptionMatch || locationMatch || personMatch;
+            });
+            
+            populatePlaquesList(filtered);
+        });
     }
     
     // Function to show plaque details
@@ -290,14 +482,51 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     };
     
+    // Function to toggle list panel on mobile/tablet
+    window.toggleListPanel = function() {
+        const listColumn = document.getElementById('plaquesListColumn');
+        if (window.innerWidth < 992) { // Tablet and mobile
+            listColumn.classList.toggle('show');
+        }
+    };
+    
     // Create markers for each plaque
     plaques.forEach(function(plaque) {
-        const marker = L.marker([plaque.latitude, plaque.longitude])
+        // Extract plaque ID - use top-level id (now added in controller)
+        const plaqueId = plaque.id;
+        if (!plaqueId) return; // Skip if no ID
+        
+        // Create marker with popup
+        const marker = L.marker([plaque.latitude, plaque.longitude], { icon: defaultIcon })
             .addTo(map)
+            .bindPopup(`
+                <div>
+                    <h6>${escapeHtml(plaque.name)}</h6>
+                    ${plaque.location ? `<p class="mb-1 small">${escapeHtml(plaque.location.name || 'Unknown location')}</p>` : ''}
+                    <button class="btn btn-sm btn-primary mt-2" onclick="window.selectPlaqueById('${plaqueId}')">
+                        View Details
+                    </button>
+                </div>
+            `)
             .on('click', function() {
-                showPlaqueDetails(plaque);
+                highlightPlaque(plaqueId, plaque);
             });
+        
+        markers.set(plaqueId, marker);
     });
+    
+    // Make selectPlaqueById available globally
+    window.selectPlaqueById = function(plaqueId) {
+        const plaque = plaques.find(function(p) {
+            return p.id === plaqueId;
+        });
+        if (plaque) {
+            highlightPlaque(plaqueId, plaque);
+        }
+    };
+    
+    // Populate the plaques list
+    populatePlaquesList();
     
     // Fit map to show all markers if there are any
     if (plaques.length > 0) {
@@ -328,17 +557,97 @@ document.addEventListener('DOMContentLoaded', function() {
     margin-top: 8px;
 }
 
+/* Plaques list styles */
+#plaquesListColumn {
+    height: calc(100vh - 56px);
+    max-height: calc(100vh - 56px);
+    overflow: hidden;
+}
+
+/* Ensure inner flex container respects parent height and allows scrolling */
+#plaquesListColumn > div.h-100 {
+    min-height: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Scrollable list container - takes remaining space and scrolls */
+#plaquesListColumn .overflow-y-auto {
+    /* Smooth scrolling on mobile */
+    -webkit-overflow-scrolling: touch;
+    /* Ensure it can shrink and scroll */
+    min-height: 0;
+    flex: 1 1 auto;
+}
+
+#plaquesList .list-group-item {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-left: 3px solid transparent;
+}
+
+#plaquesList .list-group-item:hover {
+    background-color: #f8f9fa;
+    border-left-color: #0d6efd;
+}
+
+#plaquesList .list-group-item.active {
+    border-left-color: #0d6efd;
+    border-left-width: 4px;
+}
+
+#plaquesList .list-group-item h6 {
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+#plaquesList .list-group-item p {
+    font-size: 0.8rem;
+    margin-bottom: 0.25rem;
+}
+
 /* Mobile responsive styles */
-@media (max-width: 767.98px) {
+@media (max-width: 991.98px) {
+    #plaquesListColumn {
+        position: fixed;
+        top: 56px; /* Below navbar */
+        left: 0;
+        bottom: 0;
+        width: 300px;
+        z-index: 1040;
+        background: white;
+        box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+        display: none !important; /* Hidden by default on tablet */
+    }
+    
+    #plaquesListColumn.show {
+        display: flex !important;
+    }
+    
     #detailsColumn {
         position: fixed;
-        top: 0;
+        top: 56px; /* Below navbar */
         right: 0;
         bottom: 0;
         width: 100%;
-        z-index: 1050;
+        max-width: 400px;
+        z-index: 1040;
         background: white;
         box-shadow: -2px 0 10px rgba(0,0,0,0.1);
+    }
+}
+
+@media (max-width: 767.98px) {
+    #plaquesListColumn {
+        width: 100%;
+        max-width: 100%;
+    }
+    
+    #detailsColumn {
+        width: 100%;
+        max-width: 100%;
     }
 }
 </style>

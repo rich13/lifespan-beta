@@ -75,6 +75,27 @@
                         </div>
                     </div>
 
+                    <!-- Import Progress Status -->
+                    <div class="row mb-4" id="importStatusSection">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0">Import Status</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div id="importStatusContent">
+                                        <div class="text-center">
+                                            <div class="spinner-border text-primary" role="status">
+                                                <span class="visually-hidden">Loading...</span>
+                                            </div>
+                                            <p class="mt-2 text-muted">Loading import status...</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Import Controls -->
                     <div class="row mb-4">
                         <div class="col-12">
@@ -84,16 +105,22 @@
                                 </div>
                                 <div class="card-body">
                                     <div class="row">
-                                        <div class="col-md-6">
+                                        <div class="col-md-4">
                                             <button type="button" class="btn btn-info w-100 mb-2" id="previewBtn">
                                                 <i class="bi bi-eye me-2"></i>
                                                 Preview Data
                                             </button>
                                         </div>
-                                        <div class="col-md-6">
+                                        <div class="col-md-4">
                                             <button type="button" class="btn btn-success w-100 mb-2" id="importAllBtn">
                                                 <i class="bi bi-play-fill me-2"></i>
                                                 Import All Plaques
+                                            </button>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <button type="button" class="btn btn-primary w-100 mb-2" id="resumeImportBtn" style="display: none;">
+                                                <i class="bi bi-arrow-clockwise me-2"></i>
+                                                Resume Import
                                             </button>
                                         </div>
                                     </div>
@@ -104,7 +131,8 @@
 
                     <!-- Progress Section -->
                     <div class="row mb-4" id="progressSection" style="display: none;">
-                        <div class="col-12">
+                        <!-- Left Column: Progress -->
+                        <div class="col-md-8">
                             <div class="card">
                                 <div class="card-header">
                                     <h5 class="card-title mb-0">
@@ -129,31 +157,31 @@
                                     
                                     <!-- Progress Stats -->
                                     <div class="row mb-3">
-                                        <div class="col-md-3">
+                                        <div class="col-md-4">
                                             <div class="text-center">
                                                 <div class="h4 text-primary" id="processedCount">0</div>
                                                 <small class="text-muted">Processed</small>
                                             </div>
                                         </div>
-                                        <div class="col-md-3">
+                                        <div class="col-md-4">
                                             <div class="text-center">
                                                 <div class="h4 text-success" id="createdCount">0</div>
-                                                <small class="text-muted">Processed</small>
+                                                <small class="text-muted">Created</small>
                                             </div>
                                         </div>
-                                        <div class="col-md-3">
+                                        <div class="col-md-4">
                                             <div class="text-center">
                                                 <div class="h4 text-warning" id="skippedCount">0</div>
                                                 <small class="text-muted">Skipped</small>
                                             </div>
                                         </div>
-                                        <div class="col-md-3">
+                                        <div class="col-md-6">
                                             <div class="text-center">
                                                 <div class="h4 text-info" id="totalCount">0</div>
                                                 <small class="text-muted">Total</small>
                                             </div>
                                         </div>
-                                        <div class="col-md-3">
+                                        <div class="col-md-6">
                                             <div class="text-center">
                                                 <div class="h4 text-danger" id="errorCount">0</div>
                                                 <small class="text-muted">Errors</small>
@@ -166,6 +194,28 @@
                                         <button type="button" class="btn btn-danger" id="cancelImportBtn">
                                             <i class="bi bi-x-circle me-2"></i>Cancel Import
                                         </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Right Column: Created Spans Log -->
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <h5 class="card-title mb-0">
+                                        <i class="bi bi-list-ul me-2"></i>
+                                        Created Spans
+                                    </h5>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" id="clearLogBtn" title="Clear log">
+                                        <i class="bi bi-x-circle"></i>
+                                    </button>
+                                </div>
+                                <div class="card-body" style="height: 600px; overflow-y: auto; padding: 0;">
+                                    <div id="createdSpansLog" class="list-group list-group-flush" style="max-height: 600px;">
+                                        <div class="list-group-item text-muted text-center">
+                                            <small>No spans created yet</small>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -229,6 +279,48 @@
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
 }
+
+#createdSpansLog {
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+#createdSpansLog .list-group-item {
+    border-left: 3px solid transparent;
+    transition: all 0.2s ease;
+}
+
+#createdSpansLog .list-group-item:hover {
+    background-color: #f8f9fa;
+    border-left-color: #0d6efd;
+}
+
+#createdSpansLog .list-group-item a {
+    color: #212529;
+    transition: color 0.2s ease;
+}
+
+#createdSpansLog .list-group-item a:hover {
+    color: #0d6efd;
+}
+
+/* Type-specific border colors */
+#createdSpansLog .list-group-item[data-type="plaque"] {
+    border-left-color: #0d6efd;
+}
+
+#createdSpansLog .list-group-item[data-type="person"] {
+    border-left-color: #198754;
+}
+
+#createdSpansLog .list-group-item[data-type="location"] {
+    border-left-color: #0dcaf0;
+}
+
+#createdSpansLog .list-group-item[data-type="photo"],
+#createdSpansLog .list-group-item[data-type="person_photo"] {
+    border-left-color: #ffc107;
+}
 </style>
 <script>
 // Simple import system - just import all data and show progress
@@ -239,6 +331,7 @@ let cumulativeProcessed = 0;
 let cumulativeCreated = 0;
 let cumulativeSkipped = 0;
 let cumulativeErrors = 0;
+let createdSpansLog = [];
 
 $(document).ready(function() {
     // Set up CSRF token for all AJAX requests
@@ -246,6 +339,12 @@ $(document).ready(function() {
         headers: {
             'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
         }
+    });
+
+    // Load import status on page load and when plaque type changes
+    loadImportStatus();
+    $('input[name="plaqueType"]').change(function() {
+        loadImportStatus();
     });
 
     // Preview Data
@@ -280,11 +379,25 @@ $(document).ready(function() {
         
         const plaqueType = $('input[name="plaqueType"]:checked').val();
         
-        if (!confirm(`This will import all ${plaqueType === 'london_blue' ? '3,635' : 'plaques'} from the selected data source. Continue?`)) {
+        if (!confirm(`This will import all plaques from the selected data source starting from the beginning. Continue?`)) {
             return;
         }
         
-        startImport(plaqueType);
+        startImport(plaqueType, 0);
+    });
+
+    // Resume Import
+    $('#resumeImportBtn').click(function() {
+        if (isProcessing) return;
+        
+        const plaqueType = $('input[name="plaqueType"]:checked').val();
+        const resumeOffset = $(this).data('resume-offset');
+        
+        if (!confirm(`This will resume importing from plaque ${resumeOffset + 1}. Continue?`)) {
+            return;
+        }
+        
+        startImport(plaqueType, resumeOffset);
     });
 
     // Cancel Import
@@ -296,21 +409,28 @@ $(document).ready(function() {
         }
     });
 
+    // Clear Log
+    $('#clearLogBtn').click(function() {
+        createdSpansLog = [];
+        updateCreatedSpansLog();
+    });
+
     // Load initial statistics
     loadStats();
 });
 
-function startImport(plaqueType) {
-    console.log('Starting import for plaque type:', plaqueType);
+function startImport(plaqueType, startOffset = 0) {
+    console.log('Starting import for plaque type:', plaqueType, 'from offset:', startOffset);
     
     isProcessing = true;
-    currentOffset = 0;
+    currentOffset = startOffset;
     
     // Reset cumulative totals
     cumulativeProcessed = 0;
     cumulativeCreated = 0;
     cumulativeSkipped = 0;
     cumulativeErrors = 0;
+    createdSpansLog = []; // Clear the log when starting a new import
     
     console.log('Initial values:', {
         isProcessing: isProcessing,
@@ -322,6 +442,7 @@ function startImport(plaqueType) {
     });
     
     showProgress();
+    updateCreatedSpansLog(); // Clear the log display
     
     // Start the first batch
     processNextBatch(plaqueType);
@@ -376,6 +497,12 @@ function processNextBatch(plaqueType) {
             cumulativeCreated += response.data.created;
             cumulativeSkipped += response.data.skipped;
             cumulativeErrors += response.data.errors.length;
+            
+            // Add created spans to log
+            if (response.data.created_spans && response.data.created_spans.length > 0) {
+                createdSpansLog.push(...response.data.created_spans);
+                updateCreatedSpansLog();
+            }
             
             console.log('Updated cumulative totals:', {
                 cumulativeProcessed: cumulativeProcessed,
@@ -465,6 +592,103 @@ function updateProgress(data) {
 function showProgress() {
     $('#progressSection').show();
     $('#resultsSection').hide();
+    updateCreatedSpansLog(); // Initialize the log display
+}
+
+function updateCreatedSpansLog() {
+    const logContainer = $('#createdSpansLog');
+    const maxItems = 500; // Limit to last 500 items for performance
+    
+    if (createdSpansLog.length === 0) {
+        logContainer.html('<div class="list-group-item text-muted text-center"><small>No spans created yet</small></div>');
+        return;
+    }
+    
+    // Clear existing content
+    logContainer.empty();
+    
+    // Get the last N items (newest first) for performance
+    const displayLog = createdSpansLog.slice(-maxItems).reverse();
+    
+    displayLog.forEach(function(span) {
+        const typeIcon = getTypeIcon(span.type);
+        const typeClass = getTypeClass(span.type);
+        const typeLabel = getTypeLabel(span.type);
+        
+        const logItem = $(`
+            <div class="list-group-item list-group-item-action" data-type="${span.type}">
+                <div class="d-flex w-100 justify-content-between align-items-start">
+                    <div class="flex-grow-1">
+                        <div class="d-flex align-items-center mb-1">
+                            <i class="bi bi-${typeIcon} me-2 text-${typeClass}"></i>
+                            <small class="text-muted">${typeLabel}</small>
+                        </div>
+                        <h6 class="mb-1">
+                            <a href="${span.url}" target="_blank" class="text-decoration-none">
+                                ${escapeHtml(span.name)}
+                            </a>
+                        </h6>
+                        <small class="text-muted">ID: ${span.id.substring(0, 8)}...</small>
+                    </div>
+                </div>
+            </div>
+        `);
+        
+        logContainer.append(logItem);
+    });
+    
+    // Show count if there are more items
+    if (createdSpansLog.length > maxItems) {
+        const moreCount = createdSpansLog.length - maxItems;
+        logContainer.prepend(`
+            <div class="list-group-item text-muted text-center bg-light">
+                <small>Showing last ${maxItems} of ${createdSpansLog.length} created spans</small>
+            </div>
+        `);
+    }
+    
+    // Auto-scroll to top (newest items)
+    const logBody = logContainer.parent();
+    logBody.scrollTop(0);
+}
+
+function getTypeIcon(type) {
+    const icons = {
+        'plaque': 'geo-alt-fill',
+        'person': 'person-fill',
+        'location': 'geo-alt',
+        'photo': 'image',
+        'person_photo': 'image-fill'
+    };
+    return icons[type] || 'circle';
+}
+
+function getTypeClass(type) {
+    const classes = {
+        'plaque': 'primary',
+        'person': 'success',
+        'location': 'info',
+        'photo': 'warning',
+        'person_photo': 'warning'
+    };
+    return classes[type] || 'secondary';
+}
+
+function getTypeLabel(type) {
+    const labels = {
+        'plaque': 'Plaque',
+        'person': 'Person',
+        'location': 'Location',
+        'photo': 'Photo',
+        'person_photo': 'Person Photo'
+    };
+    return labels[type] || 'Span';
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 function completeImport() {
@@ -507,8 +731,9 @@ function completeImport() {
         </div>
     `);
     
-    // Refresh stats
+    // Refresh stats and import status
     loadStats();
+    loadImportStatus();
 }
 
 function showPreview(data) {
@@ -564,6 +789,72 @@ function showPreview(data) {
     $('#previewContent').html(html);
 }
 
+function loadImportStatus() {
+    const plaqueType = $('input[name="plaqueType"]:checked').val();
+    
+    $.get('{{ route("admin.import.blue-plaques.status") }}', {
+        plaque_type: plaqueType
+    })
+    .done(function(response) {
+        if (response.success) {
+            const status = response;
+            let statusHtml = '';
+            
+            if (status.total_imported_plaques > 0) {
+                // Show import progress
+                const progressPercent = status.import_progress_percentage || 0;
+                const remainingPlaques = status.remaining_plaques || 0;
+                const totalAvailable = status.total_available_plaques || 0;
+                const importedCount = status.total_imported_plaques || 0;
+                
+                statusHtml = `
+                    <div class="alert alert-info mb-3">
+                        <h5><i class="bi bi-info-circle me-2"></i>Import Progress</h5>
+                        <p class="mb-2">
+                            <strong>${importedCount}</strong> of <strong>${totalAvailable}</strong> plaques imported 
+                            (${progressPercent}% complete)
+                        </p>
+                        <p class="mb-0">
+                            <strong>${remainingPlaques}</strong> plaques remaining to import
+                        </p>
+                    </div>
+                    <div class="progress mb-3" style="height: 25px;">
+                        <div class="progress-bar progress-bar-striped" role="progressbar" style="width: ${progressPercent}%">
+                            ${progressPercent}%
+                        </div>
+                    </div>
+                `;
+                
+                // Show resume button if there are remaining plaques
+                if (remainingPlaques > 0 && status.first_unimported_index !== undefined) {
+                    $('#resumeImportBtn').data('resume-offset', status.first_unimported_index).show();
+                } else {
+                    $('#resumeImportBtn').hide();
+                }
+            } else {
+                // No imports yet
+                statusHtml = `
+                    <div class="alert alert-secondary mb-0">
+                        <i class="bi bi-info-circle me-2"></i>
+                        No plaques have been imported yet. Use "Import All Plaques" to start.
+                    </div>
+                `;
+                $('#resumeImportBtn').hide();
+            }
+            
+            $('#importStatusContent').html(statusHtml);
+        }
+    })
+    .fail(function(xhr) {
+        $('#importStatusContent').html(`
+            <div class="alert alert-warning mb-0">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                Could not load import status: ${xhr.responseJSON?.message || 'Unknown error'}
+            </div>
+        `);
+    });
+}
+
 function loadStats() {
     $.get('{{ route("admin.import.blue-plaques.stats") }}')
     .done(function(response) {
@@ -580,20 +871,20 @@ function loadStats() {
                     </div>
                     <div class="col-md-3">
                         <div class="text-center">
-                            <div class="h4 text-success">${stats.blue_plaques}</div>
-                            <small class="text-muted">Blue Plaques</small>
+                            <div class="h4 text-success">${stats.total_people}</div>
+                            <small class="text-muted">People</small>
                         </div>
                     </div>
                     <div class="col-md-3">
                         <div class="text-center">
-                            <div class="h4 text-info">${stats.green_plaques}</div>
-                            <small class="text-muted">Green Plaques</small>
+                            <div class="h4 text-info">${stats.total_locations}</div>
+                            <small class="text-muted">Locations</small>
                         </div>
                     </div>
                     <div class="col-md-3">
                         <div class="text-center">
-                            <div class="h4 text-warning">${stats.other_plaques}</div>
-                            <small class="text-muted">Other Plaques</small>
+                            <div class="h4 text-warning">${stats.total_connections}</div>
+                            <small class="text-muted">Connections</small>
                         </div>
                     </div>
                 </div>

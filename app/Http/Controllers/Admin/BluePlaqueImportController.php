@@ -334,6 +334,51 @@ class BluePlaqueImportController extends Controller
             
             $isLastBatch = ($offset + $batchSize) >= $totalPlaques;
             
+            // Format created spans for display
+            $createdSpans = [];
+            foreach ($results['details'] ?? [] as $detail) {
+                if (isset($detail['plaque_id'])) {
+                    $createdSpans[] = [
+                        'type' => 'plaque',
+                        'id' => $detail['plaque_id'],
+                        'name' => $detail['plaque_name'] ?? 'Unknown Plaque',
+                        'url' => route('spans.show', $detail['plaque_id'])
+                    ];
+                }
+                if (isset($detail['person_id']) && $detail['person_id']) {
+                    $createdSpans[] = [
+                        'type' => 'person',
+                        'id' => $detail['person_id'],
+                        'name' => $detail['person_name'] ?? 'Unknown Person',
+                        'url' => route('spans.show', $detail['person_id'])
+                    ];
+                }
+                if (isset($detail['location_id']) && $detail['location_id']) {
+                    $createdSpans[] = [
+                        'type' => 'location',
+                        'id' => $detail['location_id'],
+                        'name' => $detail['location_name'] ?? 'Unknown Location',
+                        'url' => route('spans.show', $detail['location_id'])
+                    ];
+                }
+                if (isset($detail['photo_id']) && $detail['photo_id']) {
+                    $createdSpans[] = [
+                        'type' => 'photo',
+                        'id' => $detail['photo_id'],
+                        'name' => $detail['photo_name'] ?? 'Unknown Photo',
+                        'url' => route('spans.show', $detail['photo_id'])
+                    ];
+                }
+                if (isset($detail['person_photo_id']) && $detail['person_photo_id']) {
+                    $createdSpans[] = [
+                        'type' => 'person_photo',
+                        'id' => $detail['person_photo_id'],
+                        'name' => $detail['person_photo_name'] ?? 'Unknown Photo',
+                        'url' => route('spans.show', $detail['person_photo_id'])
+                    ];
+                }
+            }
+            
             return response()->json([
                 'success' => true,
                 'data' => [
@@ -341,6 +386,8 @@ class BluePlaqueImportController extends Controller
                     'created' => $results['created'],
                     'skipped' => $results['skipped'] ?? 0,
                     'errors' => $results['errors'] ?? [],
+                    'created_spans' => $createdSpans,
+                    'activity_log' => $results['activity_log'] ?? [],
                     'total_plaques' => $totalPlaques,
                     'current_offset' => $offset,
                     'batch_size' => $batchSize,
@@ -410,6 +457,64 @@ class BluePlaqueImportController extends Controller
     }
     
     /**
+     * Find the first unimported plaque index in the CSV data
+     */
+    private function findFirstUnimportedIndex(array $plaques, string $dataSource, array $config = []): int
+    {
+        // Get all imported plaque external IDs for this data source
+        // Note: pluck() on JSON fields doesn't work reliably, so we get the full records
+        $importedSpans = \App\Models\Span::where('metadata->data_source', $dataSource)
+            ->where('type_id', 'thing') // Only plaque spans (not person or location spans)
+            ->where('metadata->subtype', $config['plaque_type'] ?? 'plaque')
+            ->get();
+        
+        // Extract external_id values from metadata
+        $importedIds = [];
+        foreach ($importedSpans as $span) {
+            $externalId = $span->metadata['external_id'] ?? null;
+            if ($externalId !== null && $externalId !== '') {
+                $importedIds[] = (string) $externalId;
+            }
+        }
+        
+        // Convert to set for faster lookup
+        $importedIdsSet = array_flip($importedIds);
+        
+        Log::info('Finding first unimported plaque', [
+            'data_source' => $dataSource,
+            'imported_count' => count($importedIds),
+            'total_plaques' => count($plaques),
+            'sample_imported_ids' => array_slice($importedIds, 0, 10)
+        ]);
+        
+        // The CSV is parsed with headers directly, so the plaque array uses CSV column names as keys
+        // The 'id' column in the CSV corresponds to the plaque ID
+        // Note: The field_mapping is used during processing, but the parsed array uses original CSV column names
+        
+        // Find the first plaque that hasn't been imported
+        foreach ($plaques as $index => $plaque) {
+            // The CSV has an 'id' column, so check for that directly
+            $plaqueId = (string) ($plaque['id'] ?? '');
+            
+            if (!empty($plaqueId) && !isset($importedIdsSet[$plaqueId])) {
+                Log::info('Found first unimported plaque', [
+                    'index' => $index,
+                    'plaque_id' => $plaqueId,
+                    'plaque_title' => $plaque['title'] ?? 'Unknown'
+                ]);
+                return $index;
+            }
+        }
+        
+        // If all plaques are imported, return the total count (one past the end)
+        Log::info('All plaques are imported', [
+            'total_plaques' => count($plaques),
+            'imported_count' => count($importedIds)
+        ]);
+        return count($plaques);
+    }
+    
+    /**
      * Get current import status
      */
     public function status(Request $request)
@@ -437,15 +542,21 @@ class BluePlaqueImportController extends Controller
             $isImporting = $recentImports > 0 || $recentConnections > 0;
             
             // Get total counts for progress calculation
-            $totalPlaques = \App\Models\Span::where('metadata->data_source', $config['data_source'])->count();
+            $totalImportedPlaques = \App\Models\Span::where('metadata->data_source', $config['data_source'])
+                ->where('metadata->subtype', $config['plaque_type'])
+                ->count();
+            
             $totalConnections = \App\Models\Connection::whereHas('parent', function($q) use ($config) {
                 $q->where('metadata->data_source', $config['data_source']);
             })->orWhereHas('child', function($q) use ($config) {
                 $q->where('metadata->data_source', $config['data_source']);
             })->count();
             
-            // Get total available plaques from the data source (not just imported ones)
+            // Get total available plaques from the data source and find first unimported
             $totalAvailablePlaques = 0;
+            $firstUnimportedIndex = 0;
+            $importProgress = 0;
+            
             try {
                 $service = new BluePlaqueService($config);
                 $csvData = $service->downloadData();
@@ -456,13 +567,23 @@ class BluePlaqueImportController extends Controller
                     $allPlaques = array_filter($allPlaques, function($plaque) {
                         return ($plaque['colour'] ?? 'blue') === 'green';
                     });
+                    $allPlaques = array_values($allPlaques); // Re-index array
                 }
                 
                 $totalAvailablePlaques = count($allPlaques);
+                
+                // Find the first unimported plaque index (pass config for field mapping)
+                $firstUnimportedIndex = $this->findFirstUnimportedIndex($allPlaques, $config['data_source'], $config);
+                
+                // Calculate import progress percentage
+                if ($totalAvailablePlaques > 0) {
+                    $importProgress = round(($firstUnimportedIndex / $totalAvailablePlaques) * 100, 1);
+                }
             } catch (\Exception $e) {
                 // If we can't get the total, use estimates
                 $totalAvailablePlaques = ($request->plaque_type === 'london_blue') ? 3635 : 
                                        (($request->plaque_type === 'london_green') ? 500 : 1000);
+                Log::warning('Could not calculate exact import progress: ' . $e->getMessage());
             }
             
             return response()->json([
@@ -470,9 +591,12 @@ class BluePlaqueImportController extends Controller
                 'is_importing' => $isImporting,
                 'recent_imports' => $recentImports,
                 'recent_connections' => $recentConnections,
-                'total_plaques' => $totalPlaques,
+                'total_imported_plaques' => $totalImportedPlaques,
                 'total_connections' => $totalConnections,
                 'total_available_plaques' => $totalAvailablePlaques,
+                'first_unimported_index' => $firstUnimportedIndex,
+                'import_progress_percentage' => $importProgress,
+                'remaining_plaques' => max(0, $totalAvailablePlaques - $firstUnimportedIndex),
                 'last_import_time' => $isImporting ? \App\Models\Span::where('metadata->data_source', $config['data_source'])
                     ->latest('created_at')
                     ->value('created_at') : null
