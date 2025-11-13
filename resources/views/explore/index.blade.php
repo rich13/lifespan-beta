@@ -141,6 +141,23 @@
             </div>
         </div>
 
+        <!-- Films -->
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body text-center">
+                    <div class="mb-3">
+                        <i class="bi bi-film display-4 text-danger"></i>
+                    </div>
+                    <h5 class="card-title">Films</h5>
+                    <p class="card-text">Explore the network of films and the people who created or featured in them.</p>
+                    <a href="{{ route('explore.films') }}" class="btn btn-danger">
+                        <i class="bi bi-arrow-right me-2"></i>
+                        Explore Films
+                    </a>
+                </div>
+            </div>
+        </div>
+
         <!-- Coming Soon -->
         <div class="col-md-6 col-lg-4">
             <div class="card h-100 shadow-sm border-dashed">

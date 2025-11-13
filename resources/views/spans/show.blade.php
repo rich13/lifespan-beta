@@ -202,8 +202,35 @@
             </div>
 
             <div class="col-md-3">
+                <!-- Legacy Album Cover (only for albums) -->
+                @if($span->subtype === 'album' && $span->has_cover_art && $span->cover_art_url)
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h6 class="card-title mb-0">
+                                <i class="bi bi-music-note me-2"></i>Album Cover
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="text-center">
+                                <div class="ratio ratio-1x1">
+                                    <img src="{{ $span->cover_art_url }}" 
+                                         alt="{{ $span->name }} album cover" 
+                                         class="img-fluid rounded" 
+                                         style="object-fit: cover;"
+                                         loading="lazy">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                @endif
+                
                 <!-- Image Gallery -->
                 <x-spans.partials.image-gallery :span="$span" />
+                
+                <!-- Blue Plaque Card (for people with plaques) - placed under image gallery -->
+                @if($span->type_id === 'person')
+                    <x-spans.cards.blue-plaque-card :span="$span" />
+                @endif
                 
                 <!-- Education Card (for people) - placed under photo gallery -->
                 @if($span->type_id === 'person')
@@ -238,28 +265,6 @@
                 <!-- Lived Here Card (for places) - placed after student card -->
                 @if($span->type_id === 'place')
                     <x-spans.cards.lived-here-card :span="$span" />
-                @endif
-                
-                <!-- Legacy Album Cover (only for albums) -->
-                @if($span->subtype === 'album' && $span->has_cover_art && $span->cover_art_url)
-                    <div class="card mb-4">
-                        <div class="card-header">
-                            <h6 class="card-title mb-0">
-                                <i class="bi bi-music-note me-2"></i>Album Cover
-                            </h6>
-                        </div>
-                        <div class="card-body">
-                            <div class="text-center">
-                                <div class="ratio ratio-1x1">
-                                    <img src="{{ $span->cover_art_url }}" 
-                                         alt="{{ $span->name }} album cover" 
-                                         class="img-fluid rounded" 
-                                         style="object-fit: cover;"
-                                         loading="lazy">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
                 @endif
                 
                 <!-- Film Poster (only for films) -->
@@ -303,6 +308,11 @@
             <div class="col-md-4">
                 <!-- Sidebar Content -->
                 
+                <!-- Album Tracks Card (only for albums) -->
+                @if($span->subtype === 'album')
+                    <x-spans.cards.album-tracks-card :span="$span" />
+                @endif
+                
                 <!-- User Connection Card -->
                 <x-spans.cards.user-connection-card :span="$span" />
                 
@@ -330,7 +340,12 @@
                 @if($span->type_id === 'thing' && isset($span->metadata['subtype']) && $span->metadata['subtype'] === 'photo')
                     <x-spans.display.photo-card :span="$span" />
                 @endif
-                
+
+                <!-- Related Films Card (only for films) -->
+                @if($span->type_id === 'thing' && isset($span->metadata['subtype']) && $span->metadata['subtype'] === 'film')
+                    <x-spans.cards.related-films-card :span="$span" />
+                @endif
+
                 @auth
                     @if($span->type_id === 'person')
                         <x-spans.display.compare-card :span="$span" />

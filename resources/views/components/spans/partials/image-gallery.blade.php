@@ -168,8 +168,8 @@
                 </div>
             @endauth
         </div>
-        <div class="card-body">
-            @if($imageConnections->isNotEmpty())
+        @if($imageConnections->isNotEmpty())
+            <div class="card-body">
                 @php
                     $imageCount = $imageConnections->count();
                     // Determine column classes based on number of images
@@ -286,23 +286,8 @@
                         </a>
                     </div>
                 @endif
-            @else
-                <!-- Placeholder when no images -->
-                <div class="text-center py-4">
-                    <div class="bg-light rounded d-flex align-items-center justify-content-center mx-auto" 
-                         style="height: 200px; width: 200px;">
-                        <i class="bi bi-image text-muted" style="font-size: 3rem;"></i>
-                    </div>
-                    <p class="text-muted mt-3 mb-0">
-                        @if($isPhotoSpan)
-                            No related photos found.
-                        @else
-                            No photos featuring this {{ $span->type->name ?? 'span' }} yet.
-                        @endif
-                    </p>
-                </div>
-            @endif
-        </div>
+            </div>
+        @endif
     </div>
 @auth
     <div class="modal fade photo-upload-modal" id="{{ $uploadModalId }}" tabindex="-1" aria-labelledby="{{ $uploadModalId }}Label" aria-hidden="true">

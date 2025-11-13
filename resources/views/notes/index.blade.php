@@ -25,10 +25,10 @@
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link {{ $currentTab === 'all' ? 'active' : '' }}" 
-                               href="{{ route('notes.index', array_merge($baseParams, ['tab' => 'all'])) }}">
-                                <i class="bi bi-collection me-1"></i>All Notes
-                                <span class="badge bg-secondary ms-2">{{ $allNotes->count() }}</span>
+                            <a class="nav-link {{ $currentTab === 'annotating' ? 'active' : '' }}" 
+                               href="{{ route('notes.index', array_merge($baseParams, ['tab' => 'annotating'])) }}">
+                                <i class="bi bi-arrow-right-circle me-1"></i>Annotating
+                                <span class="badge bg-secondary ms-2">{{ $annotatingNotes->count() }}</span>
                             </a>
                         </li>
                     </ul>
@@ -41,11 +41,9 @@
                             <div class="row">
                                 @foreach($myNotes as $note)
                                     @php
-                                        // Get spans that this note annotates
-                                        $annotatedSpans = \App\Models\Connection::where('type_id', 'annotates')
-                                            ->where('parent_id', $note->id)
-                                            ->with(['child'])
-                                            ->get()
+                                        // Get spans that this note annotates (already loaded via eager loading)
+                                        $annotatedSpans = $note->connectionsAsSubject
+                                            ->where('type_id', 'annotates')
                                             ->pluck('child')
                                             ->filter();
                                     @endphp
@@ -55,11 +53,14 @@
                                                 <div class="d-flex justify-content-between align-items-start mb-2">
                                                     <div>
                                                         <small class="text-muted">
-                                                            <a href="{{ route('spans.show', $note->slug) }}" 
+                                                            <a href="{{ route('spans.show', ['subject' => $note]) }}" 
                                                                class="text-decoration-none text-muted me-2"
                                                                title="View note">
                                                                 <i class="bi bi-chat-square-text"></i>
                                                             </a>
+                                                            @if($note->getMeta('import_source') === 'twitter_archive')
+                                                                <i class="bi bi-twitter text-primary me-1" title="Imported from Twitter archive"></i>
+                                                            @endif
                                                             <i class="bi bi-calendar me-1"></i>
                                                             {{ $note->getFormattedDateRange() }}
                                                         </small>
@@ -97,10 +98,15 @@
                                                         </small>
                                                         <div class="d-flex flex-wrap gap-2">
                                                             @foreach($annotatedSpans as $span)
-                                                                <a href="{{ route('spans.show', $span->slug) }}" 
-                                                                   class="badge bg-light text-dark text-decoration-none"
+                                                                <a href="{{ route('spans.show', ['subject' => $span]) }}" 
+                                                                   class="badge bg-light text-dark text-decoration-none d-inline-flex align-items-center gap-1"
                                                                    title="{{ $span->name }}">
-                                                                    {{ Str::limit($span->name, 200) }}
+                                                                    <span>{{ Str::limit($span->name, 200) }}</span>
+                                                                    @if($span->start_year || $span->end_year)
+                                                                        <span class="text-muted small">
+                                                                            ({{ $span->getFormattedDateRange() }})
+                                                                        </span>
+                                                                    @endif
                                                                 </a>
                                                             @endforeach
                                                         </div>
@@ -119,17 +125,15 @@
                             </div>
                         @endif
                     </div>
-                @elseif($currentTab === 'all')
+                @elseif($currentTab === 'annotating')
                     <div class="tab-content">
-                        @if($allNotes->count() > 0)
+                        @if($annotatingNotes->count() > 0)
                             <div class="row">
-                                @foreach($allNotes as $note)
+                                @foreach($annotatingNotes as $note)
                                     @php
-                                        // Get spans that this note annotates
-                                        $annotatedSpans = \App\Models\Connection::where('type_id', 'annotates')
-                                            ->where('parent_id', $note->id)
-                                            ->with(['child'])
-                                            ->get()
+                                        // Get spans that this note annotates (already loaded via eager loading)
+                                        $annotatedSpans = $note->connectionsAsSubject
+                                            ->where('type_id', 'annotates')
                                             ->pluck('child')
                                             ->filter();
                                     @endphp
@@ -139,11 +143,14 @@
                                                 <div class="d-flex justify-content-between align-items-start mb-2">
                                                     <div>
                                                         <small class="text-muted d-block mb-1">
-                                                            <a href="{{ route('spans.show', $note->slug) }}" 
+                                                            <a href="{{ route('spans.show', ['subject' => $note]) }}" 
                                                                class="text-decoration-none text-muted me-2"
                                                                title="View note">
                                                                 <i class="bi bi-chat-square-text"></i>
                                                             </a>
+                                                            @if($note->getMeta('import_source') === 'twitter_archive')
+                                                                <i class="bi bi-twitter text-primary me-1" title="Imported from Twitter archive"></i>
+                                                            @endif
                                                             <i class="bi bi-calendar me-1"></i>
                                                             {{ $note->getFormattedDateRange() }}
                                                         </small>
@@ -151,7 +158,7 @@
                                                             <small class="text-muted">
                                                                 <i class="bi bi-person me-1"></i>
                                                                 by 
-                                                                <a href="{{ route('spans.show', $note->owner->personalSpan->slug) }}" 
+                                                                <a href="{{ route('spans.show', ['subject' => $note->owner->personalSpan]) }}" 
                                                                    class="text-decoration-none text-muted">
                                                                     {{ $note->owner->personalSpan->name ?? 'Unknown' }}
                                                                 </a>
@@ -186,10 +193,15 @@
                                                         </small>
                                                         <div class="d-flex flex-wrap gap-2">
                                                             @foreach($annotatedSpans as $span)
-                                                                <a href="{{ route('spans.show', $span->slug) }}" 
-                                                                   class="badge bg-light text-dark text-decoration-none"
+                                                                <a href="{{ route('spans.show', ['subject' => $span]) }}" 
+                                                                   class="badge bg-light text-dark text-decoration-none d-inline-flex align-items-center gap-1"
                                                                    title="{{ $span->name }}">
-                                                                    {{ Str::limit($span->name, 25) }}
+                                                                    <span>{{ Str::limit($span->name, 25) }}</span>
+                                                                    @if($span->start_year || $span->end_year)
+                                                                        <span class="text-muted small">
+                                                                            ({{ $span->getFormattedDateRange() }})
+                                                                        </span>
+                                                                    @endif
                                                                 </a>
                                                             @endforeach
                                                         </div>
@@ -203,7 +215,7 @@
                         @else
                             <div class="alert alert-info" role="alert">
                                 <i class="bi bi-info-circle me-2"></i>
-                                No public notes available yet.
+                                No notes that annotate other spans yet.
                             </div>
                         @endif
                     </div>
@@ -214,57 +226,6 @@
                     <i class="bi bi-info-circle me-2"></i>
                     <a href="{{ route('login') }}" class="alert-link">Sign in</a> to view and create notes.
                 </div>
-                
-                @if($allNotes->count() > 0)
-                    <h5 class="mt-4 mb-3">Public Notes</h5>
-                    <div class="row">
-                        @foreach($allNotes as $note)
-                            <div class="col-12 mb-3">
-                                <div class="card border-left-4" style="border-left: 4px solid #fff3cd;">
-                                    <div class="card-body">
-                                        <div class="d-flex justify-content-between align-items-start mb-2">
-                                            <div>
-                                                <small class="text-muted d-block mb-1">
-                                                    <a href="{{ route('spans.show', $note->slug) }}" 
-                                                       class="text-decoration-none text-muted me-2"
-                                                       title="View note">
-                                                        <i class="bi bi-chat-square-text"></i>
-                                                    </a>
-                                                    <i class="bi bi-calendar me-1"></i>
-                                                    {{ $note->getFormattedDateRange() }}
-                                                </small>
-                                                @if($note->owner)
-                                                    <small class="text-muted">
-                                                        <i class="bi bi-person me-1"></i>
-                                                        by 
-                                                        <a href="{{ route('spans.show', $note->owner->personalSpan->slug) }}" 
-                                                           class="text-decoration-none text-muted">
-                                                            {{ $note->owner->personalSpan->name ?? 'Unknown' }}
-                                                        </a>
-                                                    </small>
-                                                @endif
-                                            </div>
-                                            <div class="ms-3">
-                                                <span class="badge bg-success" title="Public">
-                                                    <i class="bi bi-globe"></i>
-                                                </span>
-                                            </div>
-                                        </div>
-                                        
-                                        <p class="card-text text-muted mb-0">
-                                            {{ Str::limit($note->description ?? '', 200) }}
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        @endforeach
-                    </div>
-                @else
-                    <div class="alert alert-warning" role="alert">
-                        <i class="bi bi-exclamation-triangle me-2"></i>
-                        No public notes available.
-                    </div>
-                @endif
             @endif
         </div>
     </div>
