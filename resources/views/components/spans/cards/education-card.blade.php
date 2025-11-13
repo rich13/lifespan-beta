@@ -39,9 +39,6 @@
     </div>
     <div class="card-body p-2">
         @if($educationConnections->isEmpty())
-            <div class="text-center text-muted py-3">
-                
-            </div>
         @else
         <div class="d-grid gap-2">
             @foreach($educationConnections as $connection)

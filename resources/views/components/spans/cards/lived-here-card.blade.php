@@ -79,9 +79,20 @@
         }
     }
 
-    // Sort residents by name
+    // Sort residents by residence start date (earliest first), then by name for same dates
     $allResidents = $allResidents->sortBy(function($item) {
-        return $item['person']->name;
+        $dates = $item['connection']->connectionSpan;
+        if (!$dates) {
+            // Put items without dates at the end (use a very large year)
+            return [9999, 12, 31, $item['person']->name];
+        }
+        // Sort by start_year, start_month, start_day, then name
+        return [
+            $dates->start_year ?? 9999,
+            $dates->start_month ?? 12,
+            $dates->start_day ?? 31,
+            $item['person']->name
+        ];
     })->values();
     
     // Don't show the card if there are no residents
