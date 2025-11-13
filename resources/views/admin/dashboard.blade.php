@@ -357,6 +357,22 @@
                     <div class="card h-100">
                         <div class="card-body">
                             <div class="d-flex align-items-center mb-3">
+                                <i class="bi bi-book fs-2 text-primary me-3"></i>
+                                <div>
+                                    <h5 class="card-title mb-1">Book Import</h5>
+                                    <p class="card-text text-muted">Import book data from Wikidata</p>
+                                </div>
+                            </div>
+                            <a href="{{ route('admin.import.book.index') }}" class="btn btn-outline-primary btn-sm w-100">
+                                <i class="bi bi-arrow-right"></i> Import
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-3">
                                 <i class="bi bi-file-earmark-text fs-2 text-warning me-3"></i>
                                 <div>
                                     <h5 class="card-title mb-1">YAML Import</h5>

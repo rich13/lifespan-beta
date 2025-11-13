@@ -21,6 +21,7 @@ use App\Http\Controllers\Admin\ImportController;
 use App\Http\Controllers\Admin\VisualizerController;
 use App\Http\Controllers\Admin\MusicBrainzImportController;
 use App\Http\Controllers\Admin\FilmImportController;
+use App\Http\Controllers\Admin\BookImportController;
 use App\Http\Controllers\AdminModeController;
 use App\Http\Controllers\FriendsController;
 use App\Http\Controllers\NewSpanController;
@@ -927,6 +928,14 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
                     Route::post('/search', [FilmImportController::class, 'search'])->name('search');
                     Route::post('/details', [FilmImportController::class, 'getDetails'])->name('details');
                     Route::post('/import', [FilmImportController::class, 'import'])->name('import');
+                });
+
+                // Book Import
+                Route::prefix('book')->name('book.')->group(function () {
+                    Route::get('/', [BookImportController::class, 'index'])->name('index');
+                    Route::post('/search', [BookImportController::class, 'search'])->name('search');
+                    Route::post('/details', [BookImportController::class, 'getDetails'])->name('details');
+                    Route::post('/import', [BookImportController::class, 'import'])->name('import');
                 });
 
                 // Desert Island Discs Import (must come before legacy routes to avoid conflicts)
