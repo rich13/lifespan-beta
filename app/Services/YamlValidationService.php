@@ -269,9 +269,13 @@ class YamlValidationService
                 continue;
             }
             
-            // Validate connection type
+            // Skip unsupported connection types (filtered out silently to prevent errors from AI-generated data)
             if (!in_array($connectionType, $validConnectionTypes)) {
-                $errors[] = "Unknown connection type '{$connectionType}'. Valid types are: " . implode(', ', $validConnectionTypes);
+                // Log but don't add error - unsupported types are filtered out before validation
+                \Illuminate\Support\Facades\Log::info('Skipping unsupported connection type in validation', [
+                    'connection_type' => $connectionType,
+                    'valid_types' => $validConnectionTypes
+                ]);
                 continue;
             }
             

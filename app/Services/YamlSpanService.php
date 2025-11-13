@@ -545,7 +545,8 @@ class YamlSpanService
                 ];
             }
             
-
+            // Filter out unsupported connection types before validation
+            $this->filterUnsupportedConnections($data);
             
             // Use the new validation service for schema validation
             $validationService = new YamlValidationService();
@@ -1233,6 +1234,102 @@ class YamlSpanService
         return ['year' => $year, 'month' => $month, 'day' => $day];
     }
 
+    /**
+     * Filter out unsupported connection types from the data
+     * This prevents errors when AI generates connection types that aren't supported
+     */
+    private function filterUnsupportedConnections(array &$data): void
+    {
+        if (!isset($data['connections']) || !is_array($data['connections'])) {
+            return;
+        }
+        
+        // Get all valid connection types from database, plus special family handling
+        $connectionTypes = ConnectionType::pluck('type')->toArray();
+        $validConnectionTypes = array_merge($connectionTypes, ['parents', 'children']);
+        
+        // Remove 'family' from valid types since we handle it specially as parents/children
+        $validConnectionTypes = array_filter($validConnectionTypes, function($type) {
+            return $type !== 'family';
+        });
+        
+        $filteredConnections = [];
+        $removedTypes = [];
+        
+        foreach ($data['connections'] as $connectionType => $connections) {
+            // Handle incoming connections - these are now editable
+            $isIncoming = str_ends_with($connectionType, '_incoming');
+            $baseConnectionType = $isIncoming ? str_replace('_incoming', '', $connectionType) : $connectionType;
+            
+            // Skip unsupported connection types
+            if (!in_array($baseConnectionType, $validConnectionTypes)) {
+                $removedTypes[] = $baseConnectionType;
+                Log::info('Filtering out unsupported connection type from AI improvement', [
+                    'connection_type' => $baseConnectionType,
+                    'full_key' => $connectionType,
+                    'connections_count' => is_array($connections) ? count($connections) : 0
+                ]);
+                continue;
+            }
+            
+            // Filter nested connections within each connection
+            if (is_array($connections)) {
+                $filteredConnectionsList = [];
+                foreach ($connections as $connection) {
+                    if (is_array($connection) && isset($connection['nested_connections'])) {
+                        $filteredNested = $this->filterNestedConnections($connection['nested_connections'], $connectionTypes);
+                        if (!empty($filteredNested)) {
+                            $connection['nested_connections'] = $filteredNested;
+                        } else {
+                            unset($connection['nested_connections']);
+                        }
+                    }
+                    $filteredConnectionsList[] = $connection;
+                }
+                $filteredConnections[$connectionType] = $filteredConnectionsList;
+            } else {
+                $filteredConnections[$connectionType] = $connections;
+            }
+        }
+        
+        // Update the data with filtered connections
+        $data['connections'] = $filteredConnections;
+        
+        // Log if any types were removed
+        if (!empty($removedTypes)) {
+            Log::info('Removed unsupported connection types from AI improvement data', [
+                'removed_types' => array_unique($removedTypes),
+                'valid_types' => $validConnectionTypes
+            ]);
+        }
+    }
+    
+    /**
+     * Filter out unsupported nested connection types
+     */
+    private function filterNestedConnections(array $nestedConnections, array $validConnectionTypes): array
+    {
+        $filtered = [];
+        
+        foreach ($nestedConnections as $nestedConnection) {
+            if (!is_array($nestedConnection) || !isset($nestedConnection['type'])) {
+                continue;
+            }
+            
+            // Only include if the nested connection type is valid
+            if (in_array($nestedConnection['type'], $validConnectionTypes)) {
+                $filtered[] = $nestedConnection;
+            } else {
+                Log::info('Filtering out unsupported nested connection type', [
+                    'type' => $nestedConnection['type'],
+                    'valid_types' => $validConnectionTypes
+                ]);
+            }
+        }
+        
+        return $filtered;
+    }
+    
     /**
      * Validate connections structure
      */
@@ -3016,73 +3113,222 @@ class YamlSpanService
      */
     public function mergeYamlWithExistingSpan(Span $existingSpan, array $newData): array
     {
-        $mergedData = [];
-        
-        // Keep existing basic fields (don't overwrite name/type)
-        $mergedData['name'] = $existingSpan->name;
-        $mergedData['type_id'] = $existingSpan->type_id;
-        $mergedData['slug'] = $existingSpan->slug;
-        
-        // Overwrite dates with new data if present
-        $mergedData['start_year'] = $newData['start_year'] ?? $existingSpan->start_year;
-        $mergedData['start_month'] = $newData['start_month'] ?? $existingSpan->start_month;
-        $mergedData['start_day'] = $newData['start_day'] ?? $existingSpan->start_day;
-        $mergedData['end_year'] = $newData['end_year'] ?? $existingSpan->end_year;
-        $mergedData['end_month'] = $newData['end_month'] ?? $existingSpan->end_month;
-        $mergedData['end_day'] = $newData['end_day'] ?? $existingSpan->end_day;
-        
-        // Reconstruct start and end strings if date parts are present
-        if ($mergedData['start_year']) {
-            $start = (string) $mergedData['start_year'];
-            if ($mergedData['start_month']) {
-                $start .= '-' . str_pad($mergedData['start_month'], 2, '0', STR_PAD_LEFT);
-                if ($mergedData['start_day']) {
-                    $start .= '-' . str_pad($mergedData['start_day'], 2, '0', STR_PAD_LEFT);
+        try {
+            $mergedData = [];
+            
+            // Keep existing basic fields (don't overwrite name/type)
+            $mergedData['name'] = $existingSpan->name;
+            $mergedData['type_id'] = $existingSpan->type_id;
+            $mergedData['slug'] = $existingSpan->slug;
+            
+            // Normalize and validate date fields before merging
+            $dateFields = ['start_year', 'start_month', 'start_day', 'end_year', 'end_month', 'end_day'];
+            foreach ($dateFields as $field) {
+                $newValue = $newData[$field] ?? null;
+                $existingValue = $existingSpan->$field ?? null;
+                
+                // Normalize the new value if present
+                if ($newValue !== null) {
+                    $normalizedValue = $this->normalizeFieldValue($field, $newValue);
+                    // For date fields, ensure it's an integer or null
+                    if ($normalizedValue !== null && !is_int($normalizedValue)) {
+                        if (is_numeric($normalizedValue)) {
+                            $normalizedValue = (int) $normalizedValue;
+                        } else {
+                            Log::warning("Invalid date field '{$field}' value, using existing value", [
+                                'field' => $field,
+                                'new_value' => $newValue,
+                                'new_value_type' => gettype($newValue),
+                                'normalized_value' => $normalizedValue,
+                                'span_id' => $existingSpan->id
+                            ]);
+                            $normalizedValue = $existingValue;
+                        }
+                    }
+                    $mergedData[$field] = $normalizedValue;
+                } else {
+                    $mergedData[$field] = $existingValue;
                 }
             }
-            $mergedData['start'] = $start;
-        }
-        
-        if ($mergedData['end_year']) {
-            $end = (string) $mergedData['end_year'];
-            if ($mergedData['end_month']) {
-                $end .= '-' . str_pad($mergedData['end_month'], 2, '0', STR_PAD_LEFT);
-                if ($mergedData['end_day']) {
-                    $end .= '-' . str_pad($mergedData['end_day'], 2, '0', STR_PAD_LEFT);
+            
+            // Reconstruct start and end strings if date parts are present
+            if (!empty($mergedData['start_year'])) {
+                try {
+                    $startYear = (int) $mergedData['start_year'];
+                    $start = (string) $startYear;
+                    if (!empty($mergedData['start_month'])) {
+                        $startMonth = (int) $mergedData['start_month'];
+                        $start .= '-' . str_pad($startMonth, 2, '0', STR_PAD_LEFT);
+                        if (!empty($mergedData['start_day'])) {
+                            $startDay = (int) $mergedData['start_day'];
+                            $start .= '-' . str_pad($startDay, 2, '0', STR_PAD_LEFT);
+                        }
+                    }
+                    $mergedData['start'] = $start;
+                } catch (\Exception $e) {
+                    Log::error('Failed to construct start date string', [
+                        'start_year' => $mergedData['start_year'],
+                        'start_month' => $mergedData['start_month'],
+                        'start_day' => $mergedData['start_day'],
+                        'error' => $e->getMessage(),
+                        'span_id' => $existingSpan->id
+                    ]);
                 }
             }
-            $mergedData['end'] = $end;
+            
+            if (!empty($mergedData['end_year'])) {
+                try {
+                    $endYear = (int) $mergedData['end_year'];
+                    $end = (string) $endYear;
+                    if (!empty($mergedData['end_month'])) {
+                        $endMonth = (int) $mergedData['end_month'];
+                        $end .= '-' . str_pad($endMonth, 2, '0', STR_PAD_LEFT);
+                        if (!empty($mergedData['end_day'])) {
+                            $endDay = (int) $mergedData['end_day'];
+                            $end .= '-' . str_pad($endDay, 2, '0', STR_PAD_LEFT);
+                        }
+                    }
+                    $mergedData['end'] = $end;
+                } catch (\Exception $e) {
+                    Log::error('Failed to construct end date string', [
+                        'end_year' => $mergedData['end_year'],
+                        'end_month' => $mergedData['end_month'],
+                        'end_day' => $mergedData['end_day'],
+                        'error' => $e->getMessage(),
+                        'span_id' => $existingSpan->id
+                    ]);
+                }
+            }
+            
+            // Normalize and merge description and notes
+            $mergedData['description'] = $this->normalizeFieldValue('description', $newData['description'] ?? $existingSpan->description);
+            $mergedData['notes'] = $this->normalizeFieldValue('notes', $newData['notes'] ?? $existingSpan->notes);
+            
+            // Merge metadata (combine both, new data takes precedence for overlapping keys)
+            $existingMetadata = $existingSpan->metadata ?? [];
+            $newMetadata = $newData['metadata'] ?? [];
+            
+            // Ensure both are arrays
+            if (!is_array($existingMetadata)) {
+                Log::warning("Existing metadata is not an array", [
+                    'span_id' => $existingSpan->id,
+                    'metadata_type' => gettype($existingMetadata),
+                    'metadata_value' => $existingMetadata
+                ]);
+                $existingMetadata = [];
+            }
+            if (!is_array($newMetadata)) {
+                Log::warning("New metadata is not an array, normalizing", [
+                    'span_id' => $existingSpan->id,
+                    'metadata_type' => gettype($newMetadata),
+                    'metadata_value' => $newMetadata
+                ]);
+                $newMetadata = $this->normalizeFieldValue('metadata', $newMetadata);
+                if (!is_array($newMetadata)) {
+                    $newMetadata = [];
+                }
+            }
+            $mergedData['metadata'] = array_merge($existingMetadata, $newMetadata);
+            
+            // Merge sources (combine and deduplicate)
+            $existingSources = $existingSpan->sources ?? [];
+            $newSources = $newData['sources'] ?? [];
+            
+            // Ensure both are arrays
+            if (!is_array($existingSources)) {
+                Log::warning("Existing sources is not an array", [
+                    'span_id' => $existingSpan->id,
+                    'sources_type' => gettype($existingSources),
+                    'sources_value' => $existingSources
+                ]);
+                $existingSources = [];
+            }
+            if (!is_array($newSources)) {
+                Log::warning("New sources is not an array, normalizing", [
+                    'span_id' => $existingSpan->id,
+                    'sources_type' => gettype($newSources),
+                    'sources_value' => $newSources
+                ]);
+                $newSources = $this->normalizeFieldValue('sources', $newSources);
+                if (!is_array($newSources)) {
+                    $newSources = [];
+                }
+            }
+            
+            // Merge and deduplicate sources
+            try {
+                $mergedSources = array_merge($existingSources, $newSources);
+                $mergedData['sources'] = array_values(array_unique($mergedSources, SORT_REGULAR));
+            } catch (\Exception $e) {
+                Log::error('Failed to merge sources', [
+                    'span_id' => $existingSpan->id,
+                    'existing_sources' => $existingSources,
+                    'existing_sources_type' => gettype($existingSources),
+                    'new_sources' => $newSources,
+                    'new_sources_type' => gettype($newSources),
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString()
+                ]);
+                // Use existing sources as fallback
+                $mergedData['sources'] = is_array($existingSources) ? $existingSources : [];
+            }
+            
+            // Keep existing access level
+            $mergedData['access_level'] = $existingSpan->access_level;
+            
+            // Determine state (upgrade to complete if we now have dates)
+            $hasDates = (!empty($mergedData['start_year']) || !empty($mergedData['end_year']));
+            if ($hasDates && $existingSpan->state === 'placeholder') {
+                $mergedData['state'] = 'complete';
+            } else {
+                $mergedData['state'] = $existingSpan->state ?? 'complete';
+            }
+            
+            // Merge connections (add new ones, preserve existing ones)
+            try {
+                $mergedData['connections'] = $this->mergeConnections($existingSpan, $newData['connections'] ?? []);
+            } catch (\Exception $e) {
+                Log::error('Failed to merge connections', [
+                    'span_id' => $existingSpan->id,
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString()
+                ]);
+                // Use empty connections as fallback
+                $mergedData['connections'] = [];
+            }
+            
+            return $mergedData;
+            
+        } catch (\Exception $e) {
+            // Log detailed error information
+            Log::error('Failed to merge YAML with existing span', [
+                'span_id' => $existingSpan->id,
+                'span_name' => $existingSpan->name,
+                'error' => $e->getMessage(),
+                'error_file' => $e->getFile(),
+                'error_line' => $e->getLine(),
+                'error_trace' => $e->getTraceAsString(),
+                'new_data_keys' => array_keys($newData),
+                'new_data_sample' => array_map(function($v) {
+                    if (is_array($v)) {
+                        return '[array with ' . count($v) . ' elements]';
+                    }
+                    if (is_string($v) && strlen($v) > 200) {
+                        return substr($v, 0, 200) . '...';
+                    }
+                    return $v;
+                }, $newData)
+            ]);
+            
+            // Re-throw with more context
+            throw new \InvalidArgumentException(
+                "Failed to merge YAML data with existing span: {$e->getMessage()}. " .
+                "This is likely a data type conversion error. Check that all fields have the correct data types. " .
+                "Error at: " . basename($e->getFile()) . ":" . $e->getLine(),
+                0,
+                $e
+            );
         }
-        
-        // Overwrite description and notes with new data if present
-        $mergedData['description'] = $newData['description'] ?? $existingSpan->description;
-        $mergedData['notes'] = $newData['notes'] ?? $existingSpan->notes;
-        
-        // Merge metadata (combine both, new data takes precedence for overlapping keys)
-        $existingMetadata = $existingSpan->metadata ?? [];
-        $newMetadata = $newData['metadata'] ?? [];
-        $mergedData['metadata'] = array_merge($existingMetadata, $newMetadata);
-        
-        // Merge sources (combine and deduplicate)
-        $existingSources = $existingSpan->sources ?? [];
-        $newSources = $newData['sources'] ?? [];
-        $mergedData['sources'] = array_unique(array_merge($existingSources, $newSources));
-        
-        // Keep existing access level
-        $mergedData['access_level'] = $existingSpan->access_level;
-        
-        // Determine state (upgrade to complete if we now have dates)
-        $hasDates = ($mergedData['start_year'] || $mergedData['end_year']);
-        if ($hasDates && $existingSpan->state === 'placeholder') {
-            $mergedData['state'] = 'complete';
-        } else {
-            $mergedData['state'] = $existingSpan->state;
-        }
-        
-        // Merge connections (add new ones, preserve existing ones)
-        $mergedData['connections'] = $this->mergeConnections($existingSpan, $newData['connections'] ?? []);
-        
-        return $mergedData;
     }
 
     /**
@@ -3247,6 +3493,123 @@ class YamlSpanService
     }
 
     /**
+     * Normalize field value to expected type for Span model
+     */
+    private function normalizeFieldValue(string $fieldName, $value)
+    {
+        // Handle null values
+        if ($value === null) {
+            return null;
+        }
+
+        // Field type mappings based on Span model casts and fillable
+        $fieldTypes = [
+            'name' => 'string',
+            'slug' => 'string',
+            'type_id' => 'string',
+            'state' => 'string',
+            'description' => 'string',
+            'notes' => 'string',
+            'access_level' => 'string',
+            'start_year' => 'integer',
+            'start_month' => 'integer',
+            'start_day' => 'integer',
+            'end_year' => 'integer',
+            'end_month' => 'integer',
+            'end_day' => 'integer',
+            'metadata' => 'array',
+            'sources' => 'array',
+        ];
+
+        $expectedType = $fieldTypes[$fieldName] ?? null;
+        
+        if ($expectedType === null) {
+            return $value; // Unknown field, return as-is
+        }
+
+        // Get actual type
+        $actualType = is_array($value) ? 'array' : gettype($value);
+
+        // If types match, return as-is
+        if ($actualType === $expectedType) {
+            return $value;
+        }
+
+        // Normalize based on expected type
+        try {
+            switch ($expectedType) {
+                case 'string':
+                    if (is_array($value)) {
+                        // If it's an array, try to convert to JSON string or take first element
+                        if (empty($value)) {
+                            return '';
+                        }
+                        // If array has string keys, it's likely metadata that should be kept as array
+                        if ($fieldName === 'metadata' || $fieldName === 'sources') {
+                            return $value; // These should be arrays, not strings
+                        }
+                        // For other fields, try to serialize or take first value
+                        Log::warning("Array to string conversion for field '{$fieldName}'", [
+                            'field' => $fieldName,
+                            'value' => $value,
+                            'value_type' => gettype($value)
+                        ]);
+                        return is_array($value) && !empty($value) ? (string) reset($value) : '';
+                    }
+                    return (string) $value;
+                
+                case 'integer':
+                    if (is_array($value)) {
+                        Log::warning("Array to integer conversion for field '{$fieldName}'", [
+                            'field' => $fieldName,
+                            'value' => $value,
+                            'value_type' => gettype($value)
+                        ]);
+                        return null; // Can't convert array to integer
+                    }
+                    if (is_string($value) && is_numeric($value)) {
+                        return (int) $value;
+                    }
+                    if (is_numeric($value)) {
+                        return (int) $value;
+                    }
+                    return null;
+                
+                case 'array':
+                    if (is_string($value)) {
+                        // Try to decode JSON string
+                        $decoded = json_decode($value, true);
+                        if (json_last_error() === JSON_ERROR_NONE) {
+                            return $decoded;
+                        }
+                        // If not JSON, return as single-element array
+                        return [$value];
+                    }
+                    if (is_object($value)) {
+                        return (array) $value;
+                    }
+                    return is_array($value) ? $value : [$value];
+                
+                default:
+                    return $value;
+            }
+        } catch (\Exception $e) {
+            Log::error("Failed to normalize field '{$fieldName}'", [
+                'field' => $fieldName,
+                'expected_type' => $expectedType,
+                'actual_type' => $actualType,
+                'value' => $value,
+                'error' => $e->getMessage()
+            ]);
+            throw new \InvalidArgumentException(
+                "Cannot normalize field '{$fieldName}': expected {$expectedType}, got {$actualType}. " .
+                "Value: " . (is_array($value) ? json_encode($value) : (string) $value) . ". " .
+                "Error: " . $e->getMessage()
+            );
+        }
+    }
+
+    /**
      * Apply merged YAML data to an existing span
      */
     public function applyMergedYamlToSpan(Span $span, array $mergedData): array
@@ -3254,24 +3617,87 @@ class YamlSpanService
         try {
             DB::beginTransaction();
             
+            // Normalize and validate all fields before update
+            $updateData = [];
+            $fieldErrors = [];
+            
+            $fieldsToUpdate = [
+                'name', 'slug', 'type_id', 'state', 'description', 'notes',
+                'metadata', 'sources', 'start_year', 'start_month', 'start_day',
+                'end_year', 'end_month', 'end_day', 'access_level'
+            ];
+            
+            foreach ($fieldsToUpdate as $field) {
+                try {
+                    $value = $mergedData[$field] ?? null;
+                    
+                    // Apply defaults for certain fields
+                    if ($field === 'state' && $value === null) {
+                        $value = 'complete';
+                    }
+                    if ($field === 'access_level' && $value === null) {
+                        $value = $span->access_level;
+                    }
+                    if ($field === 'metadata' && $value === null) {
+                        $value = [];
+                    }
+                    
+                    // Normalize the value
+                    $normalizedValue = $this->normalizeFieldValue($field, $value);
+                    
+                    // Additional validation for required fields
+                    if ($field === 'name' && (empty($normalizedValue) || !is_string($normalizedValue))) {
+                        throw new \InvalidArgumentException("Field 'name' must be a non-empty string, got: " . gettype($normalizedValue));
+                    }
+                    if ($field === 'type_id' && (empty($normalizedValue) || !is_string($normalizedValue))) {
+                        throw new \InvalidArgumentException("Field 'type_id' must be a non-empty string, got: " . gettype($normalizedValue));
+                    }
+                    
+                    $updateData[$field] = $normalizedValue;
+                    
+                } catch (\Exception $e) {
+                    $fieldErrors[$field] = [
+                        'error' => $e->getMessage(),
+                        'value' => $mergedData[$field] ?? null,
+                        'value_type' => gettype($mergedData[$field] ?? null)
+                    ];
+                    Log::error("Failed to normalize field '{$field}' in applyMergedYamlToSpan", [
+                        'field' => $field,
+                        'error' => $e->getMessage(),
+                        'value' => $mergedData[$field] ?? null,
+                        'value_type' => gettype($mergedData[$field] ?? null),
+                        'span_id' => $span->id
+                    ]);
+                }
+            }
+            
+            // If we have field errors, return detailed error message
+            if (!empty($fieldErrors)) {
+                $errorDetails = [];
+                foreach ($fieldErrors as $field => $errorInfo) {
+                    $errorDetails[] = "Field '{$field}': {$errorInfo['error']} (value type: {$errorInfo['value_type']})";
+                }
+                $errorMessage = "Failed to normalize fields: " . implode('; ', $errorDetails);
+                
+                Log::error('Field normalization errors in applyMergedYamlToSpan', [
+                    'span_id' => $span->id,
+                    'field_errors' => $fieldErrors,
+                    'merged_data_keys' => array_keys($mergedData),
+                    'merged_data_sample' => array_map(function($v) {
+                        return is_array($v) ? '[array]' : (is_string($v) && strlen($v) > 100 ? substr($v, 0, 100) . '...' : $v);
+                    }, $mergedData)
+                ]);
+                
+                DB::rollBack();
+                return [
+                    'success' => false,
+                    'message' => $errorMessage,
+                    'field_errors' => $fieldErrors
+                ];
+            }
+            
             // Update basic span fields
-            $span->update([
-                'name' => $mergedData['name'],
-                'slug' => $mergedData['slug'] ?? null,
-                'type_id' => $mergedData['type_id'],
-                'state' => $mergedData['state'] ?? 'complete',
-                'description' => $mergedData['description'] ?? null,
-                'notes' => $mergedData['notes'] ?? null,
-                'metadata' => $mergedData['metadata'] ?? [],
-                'sources' => $mergedData['sources'] ?? null,
-                'start_year' => $mergedData['start_year'] ?? null,
-                'start_month' => $mergedData['start_month'] ?? null,
-                'start_day' => $mergedData['start_day'] ?? null,
-                'end_year' => $mergedData['end_year'] ?? null,
-                'end_month' => $mergedData['end_month'] ?? null,
-                'end_day' => $mergedData['end_day'] ?? null,
-                'access_level' => $mergedData['access_level'] ?? $span->access_level,
-            ]);
+            $span->update($updateData);
 
             // Handle connections if present
             if (isset($mergedData['connections'])) {
@@ -3287,14 +3713,50 @@ class YamlSpanService
             
         } catch (\Exception $e) {
             DB::rollBack();
+            
+            // Get detailed error information
+            $errorDetails = [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString()
+            ];
+            
+            // If it's a type error, extract more details
+            if (strpos($e->getMessage(), 'Array to string conversion') !== false || 
+                strpos($e->getMessage(), 'must be of the type') !== false) {
+                $errorDetails['type_error'] = true;
+                $errorDetails['merged_data_types'] = array_map('gettype', $mergedData);
+            }
+            
             Log::error('Failed to apply merged YAML to span', [
                 'span_id' => $span->id,
-                'error' => $e->getMessage()
+                'span_name' => $span->name,
+                'error' => $e->getMessage(),
+                'error_details' => $errorDetails,
+                'merged_data_keys' => array_keys($mergedData),
+                'merged_data_sample' => array_map(function($v) {
+                    if (is_array($v)) {
+                        return '[array with ' . count($v) . ' elements]';
+                    }
+                    if (is_string($v) && strlen($v) > 200) {
+                        return substr($v, 0, 200) . '...';
+                    }
+                    return $v;
+                }, $mergedData)
             ]);
+            
+            // Build detailed error message
+            $errorMessage = 'Failed to update span: ' . $e->getMessage();
+            if (isset($errorDetails['type_error'])) {
+                $errorMessage .= '. This is likely a type conversion error. Check that all fields have the correct data types.';
+            }
+            $errorMessage .= ' (File: ' . basename($e->getFile()) . ', Line: ' . $e->getLine() . ')';
             
             return [
                 'success' => false,
-                'message' => 'Failed to update span: ' . $e->getMessage()
+                'message' => $errorMessage,
+                'error_details' => $errorDetails
             ];
         }
     }
@@ -3321,6 +3783,9 @@ class YamlSpanService
                     'errors' => ['YAML must parse to an array']
                 ];
             }
+            
+            // Filter out unsupported connection types before validation
+            $this->filterUnsupportedConnections($data);
             
             // Use the preview validation service for schema validation (skips slug validation)
             $validationService = new YamlValidationService();

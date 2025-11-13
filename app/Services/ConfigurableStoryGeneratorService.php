@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Span;
 use App\Models\Connection;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
 class ConfigurableStoryGeneratorService
@@ -909,6 +910,7 @@ class ConfigurableStoryGeneratorService
     {
         return match ($condition) {
             'hasStartYear' => $span->start_year !== null,
+            'hasEndYear' => $span->type_id === 'person' && $span->end_year !== null && !$span->is_ongoing,
             'hasResidences' => $this->getResidences($span)->isNotEmpty(),
             'hasEducation' => $this->getEducation($span)->isNotEmpty(),
             'hasWork' => $this->getWork($span)->isNotEmpty(),
@@ -966,6 +968,7 @@ class ConfigurableStoryGeneratorService
             'getFormattedEndDate' => $span->formatted_end_date,
             'getHumanReadableBirthDate' => $this->getHumanReadableBirthDate($span),
             'getBirthPreposition' => $this->getBirthPreposition($span),
+            'getHumanReadableDeathDate' => $this->getHumanReadableDeathDate($span),
             'getHumanReadableFormationDate' => $this->getHumanReadableFormationDate($span),
             'getPronoun' => $this->getPronoun($span, 'subject'),
             'getPronounCapitalized' => ucfirst($this->getPronoun($span, 'subject')),
@@ -1090,6 +1093,14 @@ class ConfigurableStoryGeneratorService
     protected function getHumanReadableBirthDate(Span $span): string
     {
         return $this->formatHumanReadableDate($span->start_year, $span->start_month, $span->start_day);
+    }
+
+    /**
+     * Get human-readable death date
+     */
+    protected function getHumanReadableDeathDate(Span $span): string
+    {
+        return $this->formatHumanReadableDate($span->end_year, $span->end_month, $span->end_day);
     }
 
     /**
@@ -1392,11 +1403,23 @@ class ConfigurableStoryGeneratorService
             ->with(['child', 'connectionSpan'])
             ->get()
             ->map(function ($connection) {
+                $connectionSpan = $connection->connectionSpan;
                 return [
                     'place' => $connection->child->name,
                     'place_span' => $connection->child,
-                    'start_date' => $connection->connectionSpan?->formatted_start_date,
-                    'end_date' => $connection->connectionSpan?->formatted_end_date,
+                    'connection' => $connection,
+                    'connection_span' => $connectionSpan,
+                    'start_year' => $connectionSpan?->start_year,
+                    'start_month' => $connectionSpan?->start_month,
+                    'start_day' => $connectionSpan?->start_day,
+                    'start_precision' => $connectionSpan?->start_precision ?? 'year',
+                    'end_year' => $connectionSpan?->end_year,
+                    'end_month' => $connectionSpan?->end_month,
+                    'end_day' => $connectionSpan?->end_day,
+                    'end_precision' => $connectionSpan?->end_precision ?? 'year',
+                    // Keep formatted dates for backwards compatibility
+                    'start_date' => $connectionSpan?->formatted_start_date,
+                    'end_date' => $connectionSpan?->formatted_end_date,
                 ];
             });
     }
@@ -1421,16 +1444,77 @@ class ConfigurableStoryGeneratorService
     {
         $residences = $this->getResidences($person);
         $longest = null;
-        $maxYears = 0;
+        $maxYears = 0.0;
         
         foreach ($residences as $res) {
-            if ($res['start_date'] && $res['end_date']) {
-                $start = Carbon::parse($res['start_date']);
-                $end = Carbon::parse($res['end_date']);
-                $years = $start->diffInYears($end);
-                if ($years > $maxYears) {
-                    $maxYears = $years;
-                    $longest = $res;
+            // Only consider residences with both start and end dates from the connection span
+            // Do NOT use fallback dates (person's death date or today's date)
+            if ($res['start_year'] && $res['end_year']) {
+                // Validate that the end_year is reasonable and not a fallback
+                // If end_year is in the future or more than 150 years after start_year, skip it
+                $currentYear = (int)date('Y');
+                $yearsDifference = $res['end_year'] - $res['start_year'];
+                
+                // Skip if end_year is unreasonably far in the future (likely a fallback to today)
+                // Allow end_year up to current year (for ongoing residences), but skip if it's clearly wrong
+                // Check if end_year is after the person's death date (if they're deceased)
+                $personDeathYear = $person->end_year;
+                if ($personDeathYear && $res['end_year'] > $personDeathYear) {
+                    // End year is after person's death - this is definitely wrong
+                    Log::warning('Skipping residence with end_year after person death (invalid data)', [
+                        'person_id' => $person->id,
+                        'person_name' => $person->name,
+                        'person_death_year' => $personDeathYear,
+                        'place' => $res['place'],
+                        'start_year' => $res['start_year'],
+                        'end_year' => $res['end_year'],
+                    ]);
+                    continue;
+                }
+                
+                // Skip if the duration is unreasonably long (more than 150 years)
+                // This catches cases where end_year might be set to today's date incorrectly
+                if ($yearsDifference > 150) {
+                    Log::warning('Skipping residence with unreasonably long duration (likely data error)', [
+                        'person_id' => $person->id,
+                        'person_name' => $person->name,
+                        'place' => $res['place'],
+                        'start_year' => $res['start_year'],
+                        'end_year' => $res['end_year'],
+                        'years_difference' => $yearsDifference,
+                        'connection_span_id' => $res['connection_span']?->id
+                    ]);
+                    continue;
+                }
+                
+                // Use the actual connection span dates with proper precision handling
+                $duration = $this->calculateDurationInYears(
+                    $res['start_year'],
+                    $res['start_month'],
+                    $res['start_day'],
+                    $res['start_precision'],
+                    $res['end_year'],
+                    $res['end_month'],
+                    $res['end_day'],
+                    $res['end_precision']
+                );
+                
+                // Validate the calculated duration is reasonable
+                if ($duration > 0 && $duration <= 150) {
+                    if ($duration > $maxYears) {
+                        $maxYears = $duration;
+                        $longest = $res;
+                    }
+                } else {
+                    Log::warning('Skipping residence with invalid calculated duration', [
+                        'person_id' => $person->id,
+                        'person_name' => $person->name,
+                        'place' => $res['place'],
+                        'start_year' => $res['start_year'],
+                        'end_year' => $res['end_year'],
+                        'calculated_duration' => $duration,
+                        'connection_span_id' => $res['connection_span']?->id
+                    ]);
                 }
             }
         }
@@ -1441,7 +1525,7 @@ class ConfigurableStoryGeneratorService
         
         return match ($field) {
             'place' => $this->makeSpanLink($longest['place'], $longest['place_span']),
-            'duration' => $maxYears . ' years',
+            'duration' => $this->formatDuration($maxYears),
             default => null,
         };
     }
@@ -1666,9 +1750,20 @@ class ConfigurableStoryGeneratorService
         int $startYear, ?int $startMonth, ?int $startDay, string $startPrecision,
         int $endYear, ?int $endMonth, ?int $endDay, string $endPrecision
     ): float {
+        // Validate that end year is not less than start year
+        if ($endYear < $startYear) {
+            Log::warning('Invalid date range in calculateDurationInYears', [
+                'start_year' => $startYear,
+                'end_year' => $endYear,
+                'start_precision' => $startPrecision,
+                'end_precision' => $endPrecision
+            ]);
+            return 0.0;
+        }
+        
         // For year precision, use the year difference
         if ($startPrecision === 'year' && $endPrecision === 'year') {
-            return $endYear - $startYear;
+            return (float)($endYear - $startYear);
         }
         
         // For month precision, calculate based on months
@@ -1683,7 +1778,9 @@ class ConfigurableStoryGeneratorService
         if ($startPrecision === 'day' && $endPrecision === 'day') {
             $startDate = Carbon::createFromDate($startYear, $startMonth ?? 1, $startDay ?? 1);
             $endDate = Carbon::createFromDate($endYear, $endMonth ?? 1, $endDay ?? 1);
-            return $startDate->floatDiffInYears($endDate);
+            // Use diffInDays then convert to years for more accurate calculation
+            $days = $startDate->diffInDays($endDate);
+            return $days / 365.25; // Account for leap years
         }
         
         // Mixed precision: use the least precise method
