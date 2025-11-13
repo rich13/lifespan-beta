@@ -36,6 +36,29 @@
                                 <option value="complete" {{ request('state') === 'complete' ? 'selected' : '' }}>Complete</option>
                             </select>
                         </div>
+                        
+                        @if(request('features'))
+                            <div class="col-md-12">
+                                <div class="alert alert-info alert-sm py-2 mb-0">
+                                    <small>
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        Showing photos featuring: 
+                                        @php
+                                            $featuresSpan = \App\Models\Span::find(request('features'));
+                                        @endphp
+                                        @if($featuresSpan)
+                                            <strong>{{ $featuresSpan->name }}</strong>
+                                            <a href="{{ route('photos.index', request()->except('features')) }}" class="ms-2 text-decoration-none">
+                                                <i class="bi bi-x-circle"></i> Clear filter
+                                            </a>
+                                        @else
+                                            <strong>Unknown</strong>
+                                        @endif
+                                    </small>
+                                </div>
+                            </div>
+                        @endif
+                        
                         <div class="col-md-12 col-lg-4">
                             <label class="form-label">&nbsp;</label>
                             <div class="d-grid">

@@ -86,6 +86,15 @@ class PhotoController extends Controller
             $query->where('state', $request->state);
         }
 
+        // Apply features filter (photos featuring a specific person/span)
+        if ($request->filled('features')) {
+            $featuresSpanId = $request->features;
+            $query->whereHas('connectionsAsSubject', function ($q) use ($featuresSpanId) {
+                $q->where('type_id', 'features')
+                  ->where('child_id', $featuresSpanId);
+            });
+        }
+
         $photos = $query
             ->with(['connectionsAsSubject' => function ($q) {
                 $q->whereHas('type', function ($t) {
