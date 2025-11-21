@@ -140,14 +140,7 @@ class SetFilterService
     public static function getPredefinedSets(): array
     {
         return [
-            'friends' => [
-                'name' => 'Friends',
-                'description' => 'All your friends',
-                'icon' => 'bi-person-heart',
-                'filter_type' => 'friends',
-                'criteria' => [],
-                'is_predefined' => true,
-            ],
+            // No predefined sets currently active
         ];
     }
 } 

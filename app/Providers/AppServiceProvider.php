@@ -74,7 +74,10 @@ class AppServiceProvider extends ServiceProvider
         
         // Make span types available globally for the new span modal
         View::composer('*', function ($view) {
-            $spanTypes = DB::table('span_types')->get();
+            // Exclude connection, note, and set types - these are created through special mechanisms
+            $spanTypes = \App\Models\SpanType::whereNotIn('type_id', ['connection', 'note', 'set'])
+                ->orderBy('name')
+                ->get();
             $view->with('spanTypes', $spanTypes);
         });
     }

@@ -385,4 +385,30 @@ class SpanType extends Model
             ->pluck('type_id')
             ->toArray();
     }
+
+    /**
+     * Get the available subtype options for this span type
+     * 
+     * @return array<string>
+     */
+    public function getSubtypeOptions(): array
+    {
+        // Check if subtypes are defined in the metadata schema
+        $schema = $this->getMetadataSchema();
+        
+        if (isset($schema['subtype']['options'])) {
+            $options = $schema['subtype']['options'];
+            
+            // Handle both simple string arrays and object arrays with 'value' property
+            if (is_array($options) && !empty($options)) {
+                if (is_string($options[0])) {
+                    return $options;
+                } else {
+                    return array_column($options, 'value');
+                }
+            }
+        }
+        
+        return [];
+    }
 } 

@@ -383,16 +383,8 @@ body {
 }
 
 // Profile section
-.btn-group {
-    .btn {
-        font-size: 0.875rem;
-        padding: 0.25rem 0.5rem;
-        
-        &:hover {
-            background-color: bootstrap.$gray-200;
-        }
-    }
-}
+// Note: Removed global .btn-group hover override to allow Bootstrap's default 
+// button variant hover states to work properly (e.g. btn-primary darkens on hover)
 
 // Micro-card in sidebar
 .col-md-3, .col-lg-2 {
