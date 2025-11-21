@@ -689,4 +689,307 @@ class SpanSearchController extends Controller
             'results' => $results
         ]);
     }
+
+    /**
+     * Get family graph data for a person span
+     */
+    public function familyGraph(Span $span)
+    {
+        $user = Auth::user();
+
+        // Check if the user can access this span
+        if (!$span->isAccessibleBy($user)) {
+            return response()->json([
+                'error' => 'You do not have permission to view this span.'
+            ], 403);
+        }
+
+        // Check if the span is a person
+        if ($span->type_id !== 'person') {
+            return response()->json([
+                'error' => 'Only person spans have family graphs.'
+            ], 400);
+        }
+
+        // Cache the family graph for 1 hour
+        $cacheKey = "family_graph_{$span->id}_" . ($user ? $user->id : 'guest');
+        return Cache::remember($cacheKey, 3600, function() use ($span, $user) {
+            return $this->generateFamilyGraphData($span, $user);
+        });
+    }
+
+    /**
+     * Generate family graph data
+     */
+    private function generateFamilyGraphData(Span $span, $user)
+    {
+        // Get all family relationships
+        $ancestors = $span->ancestors(3);
+        $descendants = $span->descendants(2);
+        $siblings = $span->siblings();
+        $unclesAndAunts = $span->unclesAndAunts();
+        $cousins = $span->cousins();
+        $nephewsAndNieces = $span->nephewsAndNieces();
+        $extraNephewsAndNieces = $span->extraNephewsAndNieces();
+
+        // Collect all unique family members
+        $nodes = collect();
+        $links = collect();
+        $nodeIds = collect();
+
+        // Add the current person as a node
+        // Use "You" only if this is the user's personal span, otherwise use their name
+        $isPersonalSpan = $user && $user->personalSpan && $user->personalSpan->id === $span->id;
+        $centerLabel = $isPersonalSpan ? 'You' : $span->name;
+        
+        $nodes->push([
+            'id' => $span->id,
+            'name' => $span->name,
+            'isCurrent' => true,
+            'generation' => 0,
+            'dates' => $this->formatDates($span),
+            'relationshipLabel' => $centerLabel
+        ]);
+        $nodeIds->push($span->id);
+
+        // Helper function to add a node
+        $addNode = function($member, $generation, $relationshipLabel = null) use (&$nodes, &$nodeIds, $user) {
+            if (!$nodeIds->contains($member->id)) {
+                // Check if user can access this member
+                $accessible = $member->isAccessibleBy($user);
+                
+                $nodes->push([
+                    'id' => $member->id,
+                    'name' => $accessible ? $member->name : 'Private Person',
+                    'isCurrent' => false,
+                    'generation' => $generation,
+                    'dates' => $accessible ? $this->formatDates($member) : null,
+                    'relationshipLabel' => $relationshipLabel
+                ]);
+                $nodeIds->push($member->id);
+            }
+        };
+
+        // Helper function to add a link
+        $addLink = function($sourceId, $targetId, $type) use (&$links) {
+            // Avoid duplicate links
+            $exists = $links->contains(function($link) use ($sourceId, $targetId, $type) {
+                return ($link['source'] == $sourceId && $link['target'] == $targetId && $link['type'] == $type) ||
+                       ($link['source'] == $targetId && $link['target'] == $sourceId && $link['type'] == $type);
+            });
+            
+            if (!$exists) {
+                $links->push([
+                    'source' => $sourceId,
+                    'target' => $targetId,
+                    'type' => $type
+                ]);
+            }
+        };
+
+        // Add ancestors and build a map for connecting generations
+        $ancestorMap = [];
+        foreach ($ancestors as $ancestor) {
+            $member = $ancestor['span'];
+            $generation = $ancestor['generation'];
+            $label = $generation === 1 ? 'Parent' : ($generation === 2 ? 'Grandparent' : 'Great-Grandparent');
+            $addNode($member, $generation, $label);
+            
+            $ancestorMap[$member->id] = [
+                'span' => $member,
+                'generation' => $generation
+            ];
+        }
+
+        // Get parents directly and connect them to current person
+        $parents = $span->parents()->get();
+        foreach ($parents as $parent) {
+            if ($nodeIds->contains($parent->id)) {
+                $addLink($parent->id, $span->id, 'parent');
+                
+                // Connect parents to their parents (grandparents)
+                $grandparents = $parent->parents()->get();
+                foreach ($grandparents as $grandparent) {
+                    if ($nodeIds->contains($grandparent->id)) {
+                        $addLink($grandparent->id, $parent->id, 'parent');
+                        
+                        // Connect grandparents to their parents (great-grandparents)
+                        $greatGrandparents = $grandparent->parents()->get();
+                        foreach ($greatGrandparents as $greatGrandparent) {
+                            if ($nodeIds->contains($greatGrandparent->id)) {
+                                $addLink($greatGrandparent->id, $grandparent->id, 'parent');
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Add siblings
+        foreach ($siblings as $sibling) {
+            $addNode($sibling, 0, 'Sibling');
+            // Note: No sibling-to-sibling link - relationship is shown through shared parents
+            
+            // Connect siblings to their actual parents (not assuming they share all parents)
+            $siblingParents = $sibling->parents()->get();
+            foreach ($siblingParents as $siblingParent) {
+                // Add the parent if not already in the graph (e.g., step-parent)
+                if (!$nodeIds->contains($siblingParent->id)) {
+                    $addNode($siblingParent, 1, 'Parent (of sibling)');
+                }
+                $addLink($siblingParent->id, $sibling->id, 'parent');
+            }
+        }
+
+        // Add uncles and aunts (and connect them to grandparents)
+        foreach ($unclesAndAunts as $member) {
+            $addNode($member, 1, 'Uncle/Aunt');
+            
+            // Connect to grandparents (their parents)
+            $uncleAuntParents = $member->parents()->get();
+            foreach ($uncleAuntParents as $grandparent) {
+                // Add grandparent if not in graph
+                if (!$nodeIds->contains($grandparent->id)) {
+                    $addNode($grandparent, 2, 'Grandparent');
+                }
+                $addLink($grandparent->id, $member->id, 'parent');
+            }
+        }
+
+        // Add cousins (and connect them to uncles/aunts)
+        foreach ($cousins as $cousin) {
+            $addNode($cousin, 0, 'Cousin');
+            
+            // Connect to their parents (uncles/aunts and their spouses)
+            $cousinParents = $cousin->parents()->get();
+            foreach ($cousinParents as $cousinParent) {
+                // Add parent if not in graph (uncle/aunt or their spouse)
+                if (!$nodeIds->contains($cousinParent->id)) {
+                    $isUncleAunt = $unclesAndAunts->contains('id', $cousinParent->id);
+                    $label = $isUncleAunt ? 'Uncle/Aunt' : 'Spouse of uncle/aunt';
+                    $addNode($cousinParent, 1, $label);
+                }
+                $addLink($cousinParent->id, $cousin->id, 'parent');
+            }
+        }
+
+        // Add children
+        $children = $descendants->filter(function($item) { return $item['generation'] === 1; })->pluck('span');
+        foreach ($children as $child) {
+            $addNode($child, -1, 'Child');
+            $addLink($span->id, $child->id, 'parent');
+            
+            // Add the child's other parent (spouse/ex-spouse) if not already in graph
+            $childParents = $child->parents()->get();
+            foreach ($childParents as $childParent) {
+                if ($childParent->id !== $span->id) {
+                    // This is the other parent
+                    if (!$nodeIds->contains($childParent->id)) {
+                        $addNode($childParent, 0, 'Parent of child');
+                    }
+                    $addLink($childParent->id, $child->id, 'parent');
+                    
+                    // Create spouse link if not already present
+                    $addLink($span->id, $childParent->id, 'spouse');
+                }
+            }
+        }
+
+        // Add nephews and nieces (and connect them to siblings)
+        foreach ($nephewsAndNieces as $member) {
+            $addNode($member, -1, 'Nephew/Niece');
+            
+            // Connect to their parents (siblings and siblings' spouses)
+            $nephewNieceParents = $member->parents()->get();
+            foreach ($nephewNieceParents as $parent) {
+                // Add parent if not in graph (e.g., sibling's spouse)
+                if (!$nodeIds->contains($parent->id)) {
+                    // Determine if this parent is a sibling or spouse of sibling
+                    $isSibling = $siblings->contains('id', $parent->id);
+                    $label = $isSibling ? 'Sibling' : 'Spouse of sibling';
+                    $generation = $isSibling ? 0 : 0;
+                    $addNode($parent, $generation, $label);
+                }
+                $addLink($parent->id, $member->id, 'parent');
+            }
+        }
+
+        // Add extra nephews and nieces
+        foreach ($extraNephewsAndNieces as $member) {
+            $addNode($member, -1, 'Nephew/Niece');
+            
+            // Connect to their parents
+            $nephewNieceParents = $member->parents()->get();
+            foreach ($nephewNieceParents as $parent) {
+                // Add parent if not in graph
+                if (!$nodeIds->contains($parent->id)) {
+                    $addNode($parent, 0, 'Parent of nephew/niece');
+                }
+                $addLink($parent->id, $member->id, 'parent');
+            }
+        }
+
+        // Add grandchildren
+        $grandchildren = $descendants->filter(function($item) { return $item['generation'] === 2; })->pluck('span');
+        foreach ($grandchildren as $grandchild) {
+            $addNode($grandchild, -2, 'Grandchild');
+            
+            // Connect to their parents (children and their spouses)
+            $grandchildParents = $grandchild->parents()->get();
+            foreach ($grandchildParents as $parent) {
+                // Add parent if not in graph (child's spouse)
+                if (!$nodeIds->contains($parent->id)) {
+                    $isChild = $children->contains('id', $parent->id);
+                    $label = $isChild ? 'Child' : 'Spouse of child';
+                    $generation = $isChild ? -1 : -1;
+                    $addNode($parent, $generation, $label);
+                }
+                $addLink($parent->id, $grandchild->id, 'parent');
+            }
+        }
+
+        // Get spouse connections from the database
+        $spouseConnections = Connection::where(function($query) use ($span) {
+            $query->where('parent_id', $span->id)
+                  ->where('type_id', 'married');
+        })->orWhere(function($query) use ($span) {
+            $query->where('child_id', $span->id)
+                  ->where('type_id', 'married');
+        })->with(['parent', 'child'])->get();
+
+        foreach ($spouseConnections as $connection) {
+            $spouse = $connection->parent_id === $span->id ? $connection->child : $connection->parent;
+            if ($spouse && $spouse->isAccessibleBy($user)) {
+                $addNode($spouse, 0, 'Spouse');
+                $addLink($span->id, $spouse->id, 'spouse');
+            }
+        }
+
+        return response()->json([
+            'nodes' => $nodes->values(),
+            'links' => $links->values()
+        ]);
+    }
+
+    /**
+     * Format dates for display
+     */
+    private function formatDates(Span $span)
+    {
+        if (!$span->start_year && !$span->end_year) {
+            return null;
+        }
+
+        $parts = [];
+        
+        if ($span->start_year) {
+            $parts[] = $span->start_year;
+        }
+        
+        if ($span->end_year) {
+            $parts[] = $span->end_year;
+        }
+
+        return implode(' – ', $parts);
+    }
 } 
