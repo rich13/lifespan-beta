@@ -10,7 +10,6 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="csrf-token" content="{{ csrf_token() }}">
-        <base href="{{ url()->current() }}">
 
         <title>{{ config('app.name', 'Laravel') }}</title>
 
@@ -344,12 +343,12 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
 
                             <x-topnav.page-title />
                             
-                            <!-- Page Tools -->
+                            <!-- Page Filters -->
                             <x-topnav.page-filters class="d-none d-md-flex" />
-                            <!-- Page Tools -->
-                            <x-topnav.page-tools class="d-none d-md-flex" />
                             <!-- Top Navigation Actions (Search, New, Improve) -->
                             <x-topnav.topnav-actions :span="$span ?? null" class="d-none d-md-flex" />
+                            <!-- Page Tools (Edit, Delete, History) -->
+                            <x-topnav.page-tools class="d-none d-md-flex" />
                             <!-- User Profile -->
                             <x-topnav.user-profile :span="$span ?? null" class="d-none d-md-flex" />
                             
