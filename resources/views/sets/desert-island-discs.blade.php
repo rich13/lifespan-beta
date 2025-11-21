@@ -31,9 +31,6 @@
                 </button>
             @endif
         @endauth
-        <a href="{{ route('explore.desert-island-discs') }}" class="btn btn-sm btn-secondary">
-            <i class="bi bi-arrow-left me-1"></i>Back to Desert Island Discs
-        </a>
     </div>
 @endsection
 
@@ -108,39 +105,36 @@
         <div class="row g-3 mb-5">
             @foreach($tracks->take(8) as $track)
                 @php
-                    // Get track details
-                    $album = $track->getContainingAlbum();
+                    // Get track details from eager-loaded relationships
+                    // Find album from preloaded connections (where type is 'contains' and parent is album)
+                    $album = $track->connectionsAsObject
+                        ->first(function($conn) {
+                            return $conn->type->type === 'contains' 
+                                && $conn->parent 
+                                && $conn->parent->type_id === 'thing' 
+                                && ($conn->parent->metadata['subtype'] ?? null) === 'album';
+                        })?->parent;
                     
-                    // Try to get artist from track's created connection first
-                    $artist = $track->connectionsAsObject()
-                        ->whereHas('type', function($q) {
-                            $q->where('type', 'created');
-                        })
-                        ->whereHas('parent', function($q) {
-                            $q->whereIn('type_id', ['person', 'band']);
-                        })
-                        ->with('parent')
-                        ->first()?->parent;
+                    // Get artist from preloaded connections (where type is 'created' and parent is person/band)
+                    $artist = $track->connectionsAsObject
+                        ->first(function($conn) {
+                            return $conn->type->type === 'created' 
+                                && $conn->parent 
+                                && in_array($conn->parent->type_id, ['person', 'band']);
+                        })?->parent;
                     
-                    // If no direct artist on track, get artist from album's created connection
-                    if (!$artist && $album) {
-                        $artist = $album->connectionsAsObject()
-                            ->whereHas('type', function($q) {
-                                $q->where('type', 'created');
-                            })
-                            ->whereHas('parent', function($q) {
-                                $q->whereIn('type_id', ['person', 'band']);
-                            })
-                            ->with('parent')
-                            ->first()?->parent;
+                    // If no direct artist on track, get artist from album's preloaded connections
+                    if (!$artist && $album && isset($album->connectionsAsObject)) {
+                        $artist = $album->connectionsAsObject
+                            ->first(function($conn) {
+                                return $conn->type->type === 'created' 
+                                    && $conn->parent 
+                                    && in_array($conn->parent->type_id, ['person', 'band']);
+                            })?->parent;
                     }
                     
-                    // Fallback: fetch contains-connection description if not preloaded
-                    $connectionDesc = $track->set_connection_description ?? \App\Models\Connection::where('parent_id', $set->id)
-                        ->where('child_id', $track->id)
-                        ->where('type_id', 'contains')
-                        ->with('connectionSpan:id,description')
-                        ->first()?->connectionSpan?->description;
+                    // Use preloaded connection description
+                    $connectionDesc = $track->set_connection_description;
                 @endphp
                 
                 <div class="col-12 col-md-6">
@@ -243,16 +237,13 @@
         <div class="row mb-5">
             @foreach($books as $book)
                 @php
-                    // Get book creator (author)
-                    $creator = $book->connectionsAsObject()
-                        ->whereHas('type', function($q) {
-                            $q->where('type', 'created');
-                        })
-                        ->whereHas('parent', function($q) {
-                            $q->whereIn('type_id', ['person', 'band']);
-                        })
-                        ->with('parent')
-                        ->first()?->parent;
+                    // Get book creator (author) from preloaded connections
+                    $creator = $book->connectionsAsObject
+                        ->first(function($conn) {
+                            return $conn->type->type === 'created' 
+                                && $conn->parent 
+                                && in_array($conn->parent->type_id, ['person', 'band']);
+                        })?->parent;
                 @endphp
                 
                 <div class="col-md-6 col-lg-4">

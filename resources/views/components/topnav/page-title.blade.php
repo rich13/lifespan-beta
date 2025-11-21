@@ -1,7 +1,7 @@
 @props(['showBreadcrumb' => true, 'title' => null])
 
 <!-- Page Title Section -->
-<div class="d-flex align-items-center">
+<div class="d-flex align-items-center me-3">
     <div class="d-flex flex-column">
         @if($showBreadcrumb && request()->is('admin*'))
             <div class="mb-1">

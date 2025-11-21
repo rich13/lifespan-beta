@@ -26,22 +26,20 @@ if ($user) {
     @endphp
     
     <!-- Time Travel Button/Indicator -->
-    <div class="me-2">
+    <div class="me-3">
         @if($timeTravelDate)
             <!-- Time Travel Active -->
             <div class="btn-group" role="group">
-                <button class="btn btn-sm {{ $isTimeTravel ? 'btn-dark' : 'btn-warning' }} d-flex align-items-center" 
+                <button class="btn btn-sm btn-dark text-warning d-flex align-items-center" 
                         type="button" 
                         data-bs-toggle="modal" 
                         data-bs-target="#timeTravelModal"
-                        data-bs-toggle="tooltip" data-bs-placement="bottom" 
                         title="Time Travel Active: {{ date('j F Y', strtotime($timeTravelDate)) }} - Click to change date">
                     <i class="bi bi-clock-history me-1"></i>
                     <span class="d-none d-sm-inline">{{ date('M j Y', strtotime($timeTravelDate)) }}</span>
                 </button>
                 <a href="{{ route('time-travel.toggle') }}" 
-                   class="btn btn-sm {{ $isTimeTravel ? 'btn-outline-dark' : 'btn-outline-warning' }}"
-                   data-bs-toggle="tooltip" data-bs-placement="bottom" 
+                   class="btn btn-sm btn-outline-dark"
                    title="Exit Time Travel">
                     <i class="bi bi-x"></i>
                 </a>
@@ -49,10 +47,9 @@ if ($user) {
         @else
             <!-- Time Travel Inactive - Show button to start -->
             <button type="button" 
-                    class="btn btn-sm btn-outline-secondary d-flex align-items-center"
+                    class="btn btn-sm btn-warning d-flex align-items-center"
                     data-bs-toggle="modal" 
                     data-bs-target="#timeTravelModal"
-                    data-bs-toggle="tooltip" data-bs-placement="bottom" 
                     title="Start Time Travel">
                 <i class="bi bi-clock me-1"></i>
                 <span class="d-none d-sm-inline">Time Travel</span>

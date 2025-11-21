@@ -29,27 +29,27 @@ use App\Services\AiYamlCreatorService;
             @endif
         </div>
     @else
-        <div class="d-flex align-items-center me-3">
-            <div class="me-3" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Create a new span (⌘K)">
+        <div class="d-flex align-items-center">
+            <div class="btn-group" role="group">
                 <button type="button" class="btn btn-sm btn-primary" 
                         data-bs-toggle="modal" data-bs-target="#newSpanModal" 
-                        id="new-span-btn">
+                        id="new-span-btn"
+                        title="Create a new span (⌘K)">
                     <i class="bi bi-plus-circle me-1"></i>New
                 </button>
-            </div>
-            
-            @if(request()->routeIs('spans.show') && $span && AiYamlCreatorService::supportsAiImprovement($span->type_id))
-                <div class="me-3" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Improve this span with AI data (⌘I)">
+                
+                @if(request()->routeIs('spans.show') && $span && AiYamlCreatorService::supportsAiImprovement($span->type_id))
                     <button type="button" class="btn btn-sm btn-success" 
                         data-bs-toggle="modal" data-bs-target="#newSpanModal" 
                         id="improve-span-btn"
                         data-span-name="{{ $span->name }}"
                         data-span-type="{{ $span->type_id }}"
-                        data-span-id="{{ $span->id }}">
+                        data-span-id="{{ $span->id }}"
+                        title="Improve this span with AI data (⌘I)">
                         <i class="bi bi-magic me-1"></i>Improve
                     </button>
-                </div>
-            @endif
+                @endif
+            </div>
         </div>
     @endif
 @endauth 

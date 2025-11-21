@@ -137,12 +137,8 @@
     /* Ensure dropdown items are properly styled */
     #mobileRightNav #mobile-global-search-dropdown .dropdown-item {
         padding: 0.75rem 1rem;
-        border-bottom: 1px solid rgba(0, 0, 0, 0.05);
         cursor: pointer;
         transition: all 0.15s ease;
-    }
-    
-    #mobileRightNav #mobile-global-search-dropdown .dropdown-item:last-child {
         border-bottom: none;
     }
     
@@ -167,6 +163,19 @@
     
     #mobileRightNav #mobile-global-search-dropdown .dropdown-item.active i {
         color: rgba(255, 255, 255, 0.9) !important;
+    }
+    
+    /* Type group headers */
+    #mobileRightNav #mobile-global-search-dropdown .dropdown-header {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        border-top: 1px solid rgba(0, 0, 0, 0.1);
+        margin-top: 0;
+    }
+    
+    #mobileRightNav #mobile-global-search-dropdown .dropdown-header:first-child {
+        border-top: none;
     }
     
     /* Mobile-specific styling for filters and tools */
@@ -328,27 +337,81 @@ $(document).ready(function() {
         if (results.length === 0) {
             dropdown.append('<div class="dropdown-item text-muted">No results found</div>');
         } else {
-            results.forEach((result, index) => {
-                const item = $(`
-                    <div class="dropdown-item d-flex align-items-center gap-2" data-index="${index}">
-                        <i class="bi bi-${getTypeIcon(result.type_id)} text-muted"></i>
-                        <div class="flex-grow-1">
-                            <div class="fw-medium">${result.name}</div>
-                            <small class="text-muted">${result.type_name}</small>
-                        </div>
+            // Group results by type
+            const groupedResults = {};
+            results.forEach(result => {
+                if (!groupedResults[result.type_id]) {
+                    groupedResults[result.type_id] = {
+                        type_name: result.type_name,
+                        results: []
+                    };
+                }
+                groupedResults[result.type_id].results.push(result);
+            });
+
+            let globalIndex = 0;
+            
+            // Sort type keys to prioritize 'person' first, then alphabetically
+            const sortedTypeKeys = Object.keys(groupedResults).sort((a, b) => {
+                if (a === 'person') return -1;
+                if (b === 'person') return 1;
+                return a.localeCompare(b);
+            });
+            
+            // Display each type group
+            sortedTypeKeys.forEach(typeId => {
+                const group = groupedResults[typeId];
+                
+                // Sort results by subtype within this type group
+                // Put results with subtypes first (sorted alphabetically), then results without subtypes
+                group.results.sort((a, b) => {
+                    if (a.subtype && !b.subtype) return -1;
+                    if (!a.subtype && b.subtype) return 1;
+                    if (a.subtype && b.subtype) {
+                        return a.subtype.localeCompare(b.subtype);
+                    }
+                    return a.name.localeCompare(b.name);
+                });
+                
+                // Add type header
+                const header = $(`
+                    <div class="dropdown-header d-flex align-items-center gap-2 py-1 px-3 text-uppercase fw-bold" style="font-size: 0.75rem; background-color: #f8f9fa;">
+                        <i class="bi bi-${getTypeIcon(typeId)} text-muted"></i>
+                        ${group.type_name}
                     </div>
                 `);
+                dropdown.append(header);
                 
-                item.on('click', function() {
-                    selectResult(result);
+                // Add results for this type
+                group.results.forEach(result => {
+                    const index = globalIndex++;
+                    
+                    // Format subtype display if present (without repeating the type)
+                    let subtypeDisplay = '';
+                    if (result.subtype) {
+                        const subtypeCapitalized = result.subtype.charAt(0).toUpperCase() + result.subtype.slice(1);
+                        subtypeDisplay = `<small class="text-muted">${subtypeCapitalized}</small>`;
+                    }
+                    
+                    const item = $(`
+                        <div class="dropdown-item d-flex align-items-center gap-2 ps-4" data-index="${index}">
+                            <div class="flex-grow-1">
+                                <div class="fw-medium">${result.name} ${subtypeDisplay}</div>
+                            </div>
+                        </div>
+                    `);
+                    
+                    item.on('click', function() {
+                        selectResult(result);
+                    });
+                    
+                    item.on('mouseenter', function() {
+                        selectedIndex = index;
+                        updateSelection();
+                    });
+                    
+                    dropdown.append(item);
                 });
-                
-                item.on('mouseenter', function() {
-                    selectedIndex = index;
-                    updateSelection();
-                });
-                
-                dropdown.append(item);
             });
         }
 
