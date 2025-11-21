@@ -508,6 +508,7 @@
                     formData.append('description', $descriptionField.val() || '');
                     formData.append('date_taken', $dateField.val() || '');
                     formData.append('access_level', $accessField.val() || 'public');
+                    formData.append('target_span_id', '{{ $span->id }}');
 
                     $uploadBtn.prop('disabled', true);
                     $uploadProgress.show();
@@ -545,6 +546,9 @@
                                 <div class="alert alert-success">
                                     <h6><i class="bi bi-check-circle me-2"></i>${response.message || 'Upload complete'}</h6>
                                     ${photosHtml ? `<div class="mt-2">${photosHtml}</div>` : ''}
+                                    <div class="mt-2">
+                                        <small class="text-muted">Reload the page to see the new photos in the gallery.</small>
+                                    </div>
                                 </div>
                             `);
 
@@ -553,6 +557,11 @@
                             $uploadBtn.prop('disabled', true);
                             $form.trigger('reset');
                             $progressBar.css('width', '0%');
+                            
+                            // Reload the page after a short delay to show the new photos
+                            setTimeout(function() {
+                                window.location.reload();
+                            }, 2000);
                         },
                         error: function (xhr) {
                             $uploadProgress.hide();

@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\Span;
+use App\Models\Connection;
+use App\Models\ConnectionType;
 use App\Services\ImageStorageService;
 use App\Services\ExifExtractionService;
 use Illuminate\Http\Request;
@@ -46,6 +48,7 @@ class PhotoUploadController extends Controller
                 'description' => 'nullable|string|max:1000',
                 'date_taken' => 'nullable|date',
                 'access_level' => 'required|in:public,private,shared',
+                'target_span_id' => 'nullable|string|exists:spans,id',
             ]);
             
             \Log::info('Photo upload validation passed');
@@ -58,6 +61,16 @@ class PhotoUploadController extends Controller
 
         $user = Auth::user();
         $uploadedPhotos = [];
+        
+        // Get target span if provided
+        $targetSpan = null;
+        if ($request->filled('target_span_id')) {
+            $targetSpan = Span::find($request->target_span_id);
+            \Log::info('Target span for photo upload', [
+                'target_span_id' => $request->target_span_id,
+                'target_span_name' => $targetSpan?->name
+            ]);
+        }
 
         foreach ($request->file('photos') as $file) {
             try {
@@ -187,6 +200,11 @@ class PhotoUploadController extends Controller
 
                 // Create "created" connection between user and photo
                 $this->createCreatedConnection($span, $user, $dateTaken);
+                
+                // Create "features" connection to target span if provided
+                if ($targetSpan) {
+                    $this->createFeaturesConnection($span, $targetSpan, $user);
+                }
 
                 $uploadedPhotos[] = $span;
 
@@ -279,6 +297,64 @@ class PhotoUploadController extends Controller
             'personal_span_id' => $personalSpan->id,
             'photo_span_id' => $photoSpan->id,
             'connection_id' => $connection->id
+        ]);
+    }
+    
+    /**
+     * Create a "features" connection between photo and target span
+     */
+    protected function createFeaturesConnection(Span $photoSpan, Span $targetSpan, $user): void
+    {
+        // Check if connection already exists
+        $existingConnection = Connection::where('parent_id', $photoSpan->id)
+            ->where('child_id', $targetSpan->id)
+            ->where('type_id', 'features')
+            ->first();
+
+        if ($existingConnection) {
+            \Log::info('Features connection already exists', [
+                'photo_span_id' => $photoSpan->id,
+                'target_span_id' => $targetSpan->id
+            ]);
+            return;
+        }
+
+        // Get features connection type
+        $connectionType = ConnectionType::where('type', 'features')->first();
+        
+        if (!$connectionType) {
+            \Log::error('Features connection type not found in database');
+            return;
+        }
+
+        // Create connection span
+        $connectionSpan = Span::create([
+            'name' => "{$photoSpan->name} features {$targetSpan->name}",
+            'type_id' => 'connection',
+            'access_level' => $photoSpan->access_level,
+            'state' => 'complete',
+            'metadata' => [
+                'connection_type' => 'features',
+                'timeless' => true
+            ],
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+        ]);
+
+        // Create the connection
+        Connection::create([
+            'parent_id' => $photoSpan->id,
+            'child_id' => $targetSpan->id,
+            'type_id' => 'features',
+            'connection_span_id' => $connectionSpan->id,
+        ]);
+        
+        \Log::info('Created features connection', [
+            'photo_span_id' => $photoSpan->id,
+            'photo_name' => $photoSpan->name,
+            'target_span_id' => $targetSpan->id,
+            'target_span_name' => $targetSpan->name,
+            'connection_span_id' => $connectionSpan->id
         ]);
     }
 }
