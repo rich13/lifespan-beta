@@ -195,6 +195,9 @@ Route::post('/spans/batch-timeline', [SpanSearchController::class, 'batchTimelin
 // Temporal relationship API
 Route::get('/spans/{span}/temporal', [SpanSearchController::class, 'temporal']);
 
+// Family graph API - higher rate limit for authenticated users
+Route::get('/spans/{span}/family-graph', [SpanSearchController::class, 'familyGraph'])->middleware('throttle:120,1');
+
 // Residence timeline API
 
 
@@ -251,6 +254,9 @@ Route::post('/connections/create', [\App\Http\Controllers\ConnectionController::
 
 // Create placeholder span API
 Route::middleware('auth')->post('/spans/create', [\App\Http\Controllers\Api\SpanSearchController::class, 'store']);
+
+// Update span description
+Route::middleware('auth')->put('/spans/{span}/description', [\App\Http\Controllers\SpanController::class, 'updateDescription']);
 
 // Wikidata description API (admin only)
 Route::middleware('auth')->post('/spans/{span}/fetch-wikimedia-description', function (Request $request, \App\Models\Span $span) {

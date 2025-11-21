@@ -456,6 +456,82 @@ class SpanController extends Controller
     }
 
     /**
+     * Quick add a residence connection
+     */
+    public function quickAddResidence(Request $request)
+    {
+        $validated = $request->validate([
+            'person_id' => 'required|uuid|exists:spans,id',
+            'place_name' => 'required|string|max:255',
+            'place_id' => 'nullable|uuid|exists:spans,id',
+            'start_year' => 'nullable|integer|min:1800|max:2100',
+            'end_year' => 'nullable|integer|min:1800|max:2100',
+        ]);
+
+        $person = Span::findOrFail($validated['person_id']);
+        $this->authorize('update', $person);
+
+        if ($person->type_id !== 'person') {
+            return response()->json(['success' => false, 'message' => 'Only person spans can have residences added'], 422);
+        }
+
+        DB::beginTransaction();
+        try {
+            // Use selected place if provided, otherwise find or create by name
+            if (!empty($validated['place_id'])) {
+                $place = Span::findOrFail($validated['place_id']);
+            } else {
+                $place = Span::firstOrCreate(
+                    ['name' => $validated['place_name'], 'type_id' => 'place'],
+                    [
+                        'owner_id' => Auth::id(),
+                        'updater_id' => Auth::id(),
+                        'state' => 'draft',
+                        'access_level' => 'private'
+                    ]
+                );
+            }
+
+            // Create connection span for residence dates if provided
+            $connectionSpanData = [
+                'name' => $person->name . ' lived in ' . $place->name,
+                'type_id' => 'connection',
+                'owner_id' => Auth::id(),
+                'updater_id' => Auth::id(),
+                'state' => 'draft',
+                'access_level' => 'private',
+            ];
+
+            // Add dates if provided
+            if (!empty($validated['start_year'])) {
+                $connectionSpanData['start_year'] = $validated['start_year'];
+                $connectionSpanData['start_precision'] = 'year';
+            }
+            if (!empty($validated['end_year'])) {
+                $connectionSpanData['end_year'] = $validated['end_year'];
+                $connectionSpanData['end_precision'] = 'year';
+            }
+
+            $connectionSpan = Span::create($connectionSpanData);
+
+            // Link person to place with residence connection
+            $residenceConnection = Connection::create([
+                'type_id' => 'residence',
+                'parent_id' => $person->id,
+                'child_id' => $place->id,
+                'connection_span_id' => $connectionSpan->id,
+            ]);
+
+            DB::commit();
+            return response()->json(['success' => true]);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('quickAddResidence failed', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
      * Add phases to an existing education connection
      */
     private function addPhasesToExistingEducation(Request $request)
@@ -1834,13 +1910,55 @@ class SpanController extends Controller
                     'name' => $span->name,
                     'type_id' => $span->type_id,
                     'type_name' => $span->type->name,
-                    'state' => $span->state
+                    'state' => $span->state,
+                    'subtype' => $span->subtype
                 ];
             });
 
         return response()->json([
             'spans' => $results
         ]);
+    }
+
+    /**
+     * Update only the description of a span
+     */
+    public function updateDescription(Request $request, Span $span)
+    {
+        $this->authorize('update', $span);
+        
+        $validated = $request->validate([
+            'description' => 'nullable|string|max:10000'
+        ]);
+        
+        try {
+            $span->description = $validated['description'];
+            $span->updater_id = Auth::id();
+            $span->save();
+            
+            Log::info('Span description updated', [
+                'span_id' => $span->id,
+                'span_name' => $span->name,
+                'updated_by' => Auth::id(),
+                'description_length' => strlen($validated['description'] ?? '')
+            ]);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Description updated successfully',
+                'description' => $span->description
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to update span description', [
+                'span_id' => $span->id,
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update description: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     /**

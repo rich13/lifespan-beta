@@ -3,45 +3,115 @@
 @php
     // Use the WikipediaSpanMatcherService to add links to the description
     $matcherService = new \App\Services\WikipediaSpanMatcherService();
-    $linkedDescription = $span->description ? $matcherService->highlightMatches($span->description) : null;
+    
+    // Render markdown if present
+    $renderedDescription = null;
+    if ($span->description) {
+        // First render markdown
+        $markdownRendered = \Illuminate\Support\Str::markdown($span->description);
+        // Then add automatic span links
+        $renderedDescription = $matcherService->highlightMatches($markdownRendered);
+    }
 @endphp
 
-<div class="card mb-4">
+<div class="card mb-4" id="description-card">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h6 class="card-title mb-0">
             <i class="bi bi-file-text me-2"></i>
             Description
         </h6>
-        @auth
-            @if(auth()->user()->is_admin && !$span->description)
-                <button type="button" class="btn btn-sm btn-outline-primary" onclick="fetchWikidataDescription()">
-                    <i class="bi bi-cloud-download me-1"></i>
-                    Fetch from Wikidata
-                </button>
-            @endif
-        @endauth
+        <div class="btn-group">
+            @auth
+                @can('update', $span)
+                    @if($span->description)
+                        <!-- Create span button (shown when text is selected) -->
+                        <button type="button" class="btn btn-sm btn-primary d-none" id="create-span-from-selection-btn">
+                            <i class="bi bi-plus-circle me-1"></i>
+                            <span id="create-span-text">Create Span</span>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="edit-description-btn" onclick="toggleDescriptionEdit()">
+                            <i class="bi bi-pencil me-1"></i>
+                            Edit
+                        </button>
+                    @endif
+                @endcan
+                @if(auth()->user()->is_admin && !$span->description)
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="fetchWikidataDescription()">
+                        <i class="bi bi-cloud-download me-1"></i>
+                        Fetch from Wikidata
+                    </button>
+                @endif
+            @endauth
+        </div>
     </div>
     <div class="card-body">
         @if($span->description)
-            <div class="description-content">               
+            <!-- View mode -->
+            <div id="description-view-mode" class="description-content">               
                 <div class="description-text">
-                    {!! nl2br($linkedDescription) !!}
+                    {!! $renderedDescription !!}
+                </div>
+            </div>
+            
+            <!-- Edit mode -->
+            <div id="description-edit-mode" class="d-none">
+                <textarea class="form-control mb-3" id="description-textarea" rows="8">{{ $span->description }}</textarea>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-sm btn-primary" onclick="saveDescription()">
+                        <i class="bi bi-check-lg me-1"></i>
+                        Save
+                    </button>
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="cancelDescriptionEdit()">
+                        <i class="bi bi-x-lg me-1"></i>
+                        Cancel
+                    </button>
+                </div>
+                <div class="form-text mt-2">
+                    <i class="bi bi-info-circle me-1"></i>
+                    You can use Markdown formatting. Existing span links will be preserved automatically.
                 </div>
             </div>
         @else
-            <div class="text-muted">
-                <div class="text-center py-3">
-                    <i class="bi bi-info-circle display-6 text-muted mb-2"></i>
-                    <p class="mb-1">
-                        No description available for this {{ $span->type_id }}.
-                    </p>
-                    @auth
-                                            @if(auth()->user()->is_admin)
-                        <p class="small mb-0">
-                            As an admin, you can fetch a description from Wikidata using the button above.
+            <div id="description-no-content">
+                <div class="text-muted">
+                    <div class="text-center py-3">
+                        <i class="bi bi-info-circle display-6 text-muted mb-2"></i>
+                        <p class="mb-1">
+                            No description available for this {{ $span->type_id }}.
                         </p>
-                    @endif
-                    @endauth
+                        @auth
+                            @can('update', $span)
+                                <button type="button" class="btn btn-sm btn-outline-primary mt-2" onclick="showAddDescription()">
+                                    <i class="bi bi-plus-lg me-1"></i>
+                                    Add Description
+                                </button>
+                            @endcan
+                            @if(auth()->user()->is_admin)
+                                <p class="small mb-0 mt-2">
+                                    As an admin, you can also fetch a description from Wikidata using the button above.
+                                </p>
+                            @endif
+                        @endauth
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Add mode (when no description exists) -->
+            <div id="description-add-mode" class="d-none">
+                <textarea class="form-control mb-3" id="description-add-textarea" rows="8" placeholder="Enter a description..."></textarea>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-sm btn-primary" onclick="saveNewDescription()">
+                        <i class="bi bi-check-lg me-1"></i>
+                        Save
+                    </button>
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="cancelAddDescription()">
+                        <i class="bi bi-x-lg me-1"></i>
+                        Cancel
+                    </button>
+                </div>
+                <div class="form-text mt-2">
+                    <i class="bi bi-info-circle me-1"></i>
+                    You can use Markdown formatting (bold, italic, lists, links, etc.).
                 </div>
             </div>
         @endif
@@ -67,6 +137,199 @@
 </div>
 
 @auth
+    @can('update', $span)
+        <script>
+        let selectedText = '';
+        
+        // Text selection handling for admin users
+        @if(auth()->user()->is_admin)
+        $(document).ready(function() {
+            const descriptionText = document.querySelector('#description-view-mode .description-text');
+            const createButton = document.getElementById('create-span-from-selection-btn');
+            const createSpanText = document.getElementById('create-span-text');
+            
+            if (descriptionText && createButton) {
+                // Show button on text selection
+                descriptionText.addEventListener('mouseup', function(e) {
+                    const selection = window.getSelection();
+                    selectedText = selection.toString().trim();
+                    
+                    if (selectedText.length > 0 && selectedText.length < 100) {
+                        // Update button text with selected text
+                        const displayText = selectedText.length > 20 
+                            ? selectedText.substring(0, 20) + '...' 
+                            : selectedText;
+                        createSpanText.textContent = 'Create "' + displayText + '"';
+                        createButton.classList.remove('d-none');
+                    } else {
+                        createButton.classList.add('d-none');
+                    }
+                });
+                
+                // Hide button when clicking elsewhere
+                document.addEventListener('mousedown', function(e) {
+                    if (!createButton.contains(e.target) && !descriptionText.contains(e.target)) {
+                        createButton.classList.add('d-none');
+                        window.getSelection().removeAllRanges();
+                    }
+                });
+                
+                // Handle create span button click
+                createButton.addEventListener('click', function() {
+                    if (selectedText) {
+                        // Hide button
+                        createButton.classList.add('d-none');
+                        window.getSelection().removeAllRanges();
+                        
+                        // Trigger the new span modal with prefilled name
+                        if (typeof window.openNewSpanModalWithName === 'function') {
+                            window.openNewSpanModalWithName(selectedText);
+                        } else {
+                            // Fallback: Open modal and try to prefill
+                            $('#newSpanModal').modal('show');
+                            
+                            // Wait for modal to load and try to set the name
+                            setTimeout(function() {
+                                const nameInput = document.querySelector('#newSpanModal input[name="name"]');
+                                if (nameInput) {
+                                    nameInput.value = selectedText;
+                                    $(nameInput).trigger('input');
+                                }
+                            }, 300);
+                        }
+                    }
+                });
+            }
+        });
+        @endif
+        
+        function toggleDescriptionEdit() {
+            $('#description-view-mode').addClass('d-none');
+            $('#description-edit-mode').removeClass('d-none');
+            $('#edit-description-btn').prop('disabled', true);
+        }
+
+        function cancelDescriptionEdit() {
+            $('#description-view-mode').removeClass('d-none');
+            $('#description-edit-mode').addClass('d-none');
+            $('#edit-description-btn').prop('disabled', false);
+            // Reset textarea to original value
+            $('#description-textarea').val(@json($span->description));
+        }
+
+        function showAddDescription() {
+            $('#description-no-content').addClass('d-none');
+            $('#description-add-mode').removeClass('d-none');
+        }
+
+        function cancelAddDescription() {
+            $('#description-no-content').removeClass('d-none');
+            $('#description-add-mode').addClass('d-none');
+            $('#description-add-textarea').val('');
+        }
+
+        function saveNewDescription() {
+            const newDescription = $('#description-add-textarea').val();
+            
+            if (!newDescription.trim()) {
+                alert('Please enter a description');
+                return;
+            }
+            
+            const saveButton = $('#description-add-mode button.btn-primary');
+            const cancelButton = $('#description-add-mode button.btn-secondary');
+            
+            // Disable buttons during save
+            saveButton.prop('disabled', true);
+            cancelButton.prop('disabled', true);
+            saveButton.html('<span class="spinner-border spinner-border-sm me-1"></span>Saving...');
+            
+            $.ajax({
+                url: `/api/spans/${@json($span->id)}/description`,
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                },
+                data: JSON.stringify({ description: newDescription }),
+                success: function(response) {
+                    if (response.success) {
+                        // Show success message and reload
+                        const alertDiv = $('<div>')
+                            .addClass('alert alert-success alert-sm')
+                            .html('<i class="bi bi-check-circle me-1"></i>Description added successfully!');
+                        
+                        $('#description-card .card-body').prepend(alertDiv);
+                        
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1500);
+                    } else {
+                        alert(response.message || 'Failed to add description');
+                        saveButton.prop('disabled', false);
+                        cancelButton.prop('disabled', false);
+                        saveButton.html('<i class="bi bi-check-lg me-1"></i>Save');
+                    }
+                },
+                error: function(xhr) {
+                    console.error('Error adding description:', xhr);
+                    alert('Network error occurred while adding description.');
+                    saveButton.prop('disabled', false);
+                    cancelButton.prop('disabled', false);
+                    saveButton.html('<i class="bi bi-check-lg me-1"></i>Save');
+                }
+            });
+        }
+
+        function saveDescription() {
+            const newDescription = $('#description-textarea').val();
+            const saveButton = $('#description-edit-mode button.btn-primary');
+            const cancelButton = $('#description-edit-mode button.btn-secondary');
+            
+            // Disable buttons during save
+            saveButton.prop('disabled', true);
+            cancelButton.prop('disabled', true);
+            saveButton.html('<span class="spinner-border spinner-border-sm me-1"></span>Saving...');
+            
+            $.ajax({
+                url: `/api/spans/${@json($span->id)}/description`,
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                },
+                data: JSON.stringify({ description: newDescription }),
+                success: function(response) {
+                    if (response.success) {
+                        // Show success message and reload
+                        const alertDiv = $('<div>')
+                            .addClass('alert alert-success alert-sm')
+                            .html('<i class="bi bi-check-circle me-1"></i>Description updated successfully!');
+                        
+                        $('#description-card .card-body').prepend(alertDiv);
+                        
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1500);
+                    } else {
+                        alert(response.message || 'Failed to update description');
+                        saveButton.prop('disabled', false);
+                        cancelButton.prop('disabled', false);
+                        saveButton.html('<i class="bi bi-check-lg me-1"></i>Save');
+                    }
+                },
+                error: function(xhr) {
+                    console.error('Error updating description:', xhr);
+                    alert('Network error occurred while updating description.');
+                    saveButton.prop('disabled', false);
+                    cancelButton.prop('disabled', false);
+                    saveButton.html('<i class="bi bi-check-lg me-1"></i>Save');
+                }
+            });
+        }
+        </script>
+    @endcan
+    
     @if(auth()->user()->is_admin)
         <script>
         function fetchWikidataDescription() {
@@ -133,6 +396,10 @@
 .description-text {
     line-height: 1.6;
     color: #333;
+    user-select: text;
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
 }
 
 .description-text p {
@@ -159,5 +426,29 @@
 .description-text a:focus {
     outline: 2px solid #0d6efd;
     outline-offset: 2px;
+}
+
+.description-text::selection {
+    background-color: #b3d7ff;
+    color: #000;
+}
+
+.description-text::-moz-selection {
+    background-color: #b3d7ff;
+    color: #000;
+}
+
+#create-span-from-selection-btn {
+    animation: fadeIn 0.2s ease;
+    white-space: nowrap;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
 }
 </style>
