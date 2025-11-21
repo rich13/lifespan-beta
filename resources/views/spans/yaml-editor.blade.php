@@ -3024,13 +3024,13 @@ metadata:
         
         // Dynamic baseline for comparison - starts with current span data
         let currentBaseline = @if($span) {
-            name: '{{ $span->name }}',
-            slug: '{{ $span->slug ?? "" }}',
-            type: '{{ $span->type_id }}',
-            state: '{{ $span->state }}',
-            description: '{{ $span->description ?? "" }}',
-            notes: '{{ $span->notes ?? "" }}',
-            access_level: '{{ $span->access_level }}',
+            name: @json($span->name),
+            slug: @json($span->slug ?? ""),
+            type: @json($span->type_id),
+            state: @json($span->state),
+            description: @json($span->description ?? ""),
+            notes: @json($span->notes ?? ""),
+            access_level: @json($span->access_level),
             sources: @json($span->sources ?? []),
             metadata: @json($span->metadata ?? [])
         } @else {
