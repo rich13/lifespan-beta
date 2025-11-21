@@ -36,6 +36,92 @@ class WikipediaSpanMatcherService
     }
 
     /**
+     * Find full dates in text (e.g., "25 August 1862", "January 1, 2000")
+     */
+    public function findFullDates(string $text): array
+    {
+        $matches = [];
+        
+        // Month names
+        $months = [
+            'January' => 1, 'February' => 2, 'March' => 3, 'April' => 4,
+            'May' => 5, 'June' => 6, 'July' => 7, 'August' => 8,
+            'September' => 9, 'October' => 10, 'November' => 11, 'December' => 12
+        ];
+        $monthPattern = implode('|', array_keys($months));
+        
+        // Pattern 1: "25 August 1862" or "1 January 2000" (day month year)
+        preg_match_all('/\b(\d{1,2})\s+(' . $monthPattern . ')\s+(\d{4})\b/', $text, $dateMatches1, PREG_OFFSET_CAPTURE);
+        
+        foreach ($dateMatches1[0] as $index => $match) {
+            $fullDate = $match[0];
+            $position = $match[1];
+            $day = (int) $dateMatches1[1][$index][0];
+            $monthName = $dateMatches1[2][$index][0];
+            $year = (int) $dateMatches1[3][$index][0];
+            $month = $months[$monthName];
+            
+            $matches[] = [
+                'entity' => $fullDate,
+                'text_position' => [
+                    'start' => $position,
+                    'end' => $position + strlen($fullDate),
+                    'length' => strlen($fullDate)
+                ],
+                'type' => 'full_date',
+                'date' => sprintf('%04d-%02d-%02d', $year, $month, $day)
+            ];
+        }
+        
+        // Pattern 2: "August 25, 1862" or "January 1, 2000" (month day, year - American style)
+        preg_match_all('/\b(' . $monthPattern . ')\s+(\d{1,2}),\s+(\d{4})\b/', $text, $dateMatches2, PREG_OFFSET_CAPTURE);
+        
+        foreach ($dateMatches2[0] as $index => $match) {
+            $fullDate = $match[0];
+            $position = $match[1];
+            $monthName = $dateMatches2[1][$index][0];
+            $day = (int) $dateMatches2[2][$index][0];
+            $year = (int) $dateMatches2[3][$index][0];
+            $month = $months[$monthName];
+            
+            $matches[] = [
+                'entity' => $fullDate,
+                'text_position' => [
+                    'start' => $position,
+                    'end' => $position + strlen($fullDate),
+                    'length' => strlen($fullDate)
+                ],
+                'type' => 'full_date',
+                'date' => sprintf('%04d-%02d-%02d', $year, $month, $day)
+            ];
+        }
+        
+        // Pattern 3: "August 1862" or "January 2000" (month year - no day)
+        preg_match_all('/\b(' . $monthPattern . ')\s+(\d{4})\b/', $text, $dateMatches3, PREG_OFFSET_CAPTURE);
+        
+        foreach ($dateMatches3[0] as $index => $match) {
+            $fullDate = $match[0];
+            $position = $match[1];
+            $monthName = $dateMatches3[1][$index][0];
+            $year = (int) $dateMatches3[2][$index][0];
+            $month = $months[$monthName];
+            
+            $matches[] = [
+                'entity' => $fullDate,
+                'text_position' => [
+                    'start' => $position,
+                    'end' => $position + strlen($fullDate),
+                    'length' => strlen($fullDate)
+                ],
+                'type' => 'month_year',
+                'date' => sprintf('%04d-%02d', $year, $month)
+            ];
+        }
+        
+        return $matches;
+    }
+
+    /**
      * Find years in text and create date links
      */
     public function findYears(string $text): array
@@ -67,10 +153,15 @@ class WikipediaSpanMatcherService
     {
         $entities = [];
         
+        // Look for simple two-word Title Case names (e.g., "Thomas Vyse", "John Smith")
+        // This should be checked FIRST to catch simple names before the more complex pattern
+        preg_match_all('/\b[A-Z][A-Za-z\']+\s+[A-Z][A-Za-z\']+\b/', $text, $simpleNameMatches);
+        
         // Look for multi-word Title Case phrases allowing lowercase connector words
-        // Example: "Monkey Gone to Heaven", "The Lord of the Rings"
+        // Example: "Monkey Gone to Heaven", "The Lord of the Rings", "Conservative Party"
         $connectorWords = '(?:of|to|and|or|the|a|an|in|on|for|with|from|by|at|as|but|nor|so|yet)';
-        preg_match_all('/\b[A-Z][A-Za-z’\']+(?:\s+(?:[A-Z][A-Za-z’\']+|' . $connectorWords . '))+\b/u', $text, $multiWordMatches);
+        // Pattern: Start with capital word, followed by any mix of capital words or connector words, but MUST end with a capital word
+        preg_match_all("/\b[A-Z][A-Za-z']+(?:\s+(?:[A-Z][A-Za-z']+|" . $connectorWords . "))*\s+[A-Z][A-Za-z']+\b/u", $text, $multiWordMatches);
         
         // Look for single capitalized words that are at least 4 characters (e.g., "London", "Trump")
         preg_match_all('/\b[A-Z][a-z]{3,}\b/', $text, $singleWordMatches);
@@ -81,7 +172,7 @@ class WikipediaSpanMatcherService
         // Look for quoted phrases (e.g., "Nevermind", "Foo Fighters")
         preg_match_all('/"([^"]+)"/', $text, $quotedMatches);
         
-        $allMatches = array_merge($multiWordMatches[0], $singleWordMatches[0], $acronymMatches[0], $quotedMatches[1] ?? []);
+        $allMatches = array_merge($simpleNameMatches[0], $multiWordMatches[0], $singleWordMatches[0], $acronymMatches[0], $quotedMatches[1] ?? []);
         
         foreach ($allMatches as $match) {
             // Filter out common words that aren't likely to be entities
@@ -159,18 +250,39 @@ class WikipediaSpanMatcherService
         $normalise = function(string $s): string {
             $s = trim($s);
             // Replace fancy quotes/apostrophes with ASCII
-            $s = str_replace(["“","”","‘","’"], ['"','"','\'','\''], $s);
+            $s = str_replace(["\u{201C}","\u{201D}","\u{2018}","\u{2019}"], ['"','"','\'','\''], $s);
             // Collapse multiple whitespace to single spaces
             $s = preg_replace('/\s+/', ' ', $s);
             return $s;
         };
 
         $name = $normalise($name);
+        
+        // Get current user for access control
+        $user = auth()->user();
+
+        // Build query with access control
+        $buildQuery = function($namePattern) use ($user) {
+            $query = Span::where('name', 'ILIKE', $namePattern);
+            
+            // Apply access control
+            if (!$user) {
+                // Guest users can only see public spans
+                $query->where('access_level', 'public');
+            } elseif (!$user->is_admin) {
+                // Regular users can see public spans and their own spans
+                $query->where(function ($q) use ($user) {
+                    $q->where('access_level', 'public')
+                      ->orWhere('owner_id', $user->id);
+                });
+            }
+            // Admins can see all spans (no additional restriction)
+            
+            return $query;
+        };
 
         // Use exact matching to avoid finding partial matches
-        $query = Span::where('name', 'ILIKE', $name)
-            ->where('access_level', 'public');
-
+        $query = $buildQuery($name);
         $results = $query->limit(5)->get();
         if ($results->isNotEmpty()) {
             return $results->toArray();
@@ -179,10 +291,7 @@ class WikipediaSpanMatcherService
         // If no results and the name starts with an article, also try without the leading article
         if (preg_match('/^(The|A|An)\s+(.*)$/i', $name, $m)) {
             $stripped = $m[2];
-            $altResults = Span::where('name', 'ILIKE', $stripped)
-                ->where('access_level', 'public')
-                ->limit(5)
-                ->get();
+            $altResults = $buildQuery($stripped)->limit(5)->get();
             if ($altResults->isNotEmpty()) {
                 return $altResults->toArray();
             }
@@ -191,9 +300,7 @@ class WikipediaSpanMatcherService
         // Try without surrounding quotes
         if (preg_match('/^"(.+)"$/', $name, $m)) {
             $unquoted = $m[1];
-            $altResults = Span::where('name', 'ILIKE', $unquoted)
-                ->where('access_level', 'public')
-                ->limit(5)
+            $altResults = $buildQuery($unquoted)->limit(5)
                 ->get();
             if ($altResults->isNotEmpty()) {
                 return $altResults->toArray();
@@ -228,14 +335,16 @@ class WikipediaSpanMatcherService
      */
     public function highlightMatches(string $text): string
     {
-        // Find both spans and years
+        // Find spans, full dates, and years
         $spanMatches = $this->findMatchingSpans($text);
+        $fullDateMatches = $this->findFullDates($text);
         $yearMatches = $this->findYears($text);
         
         // Combine all matches
-        $allMatches = array_merge($spanMatches, $yearMatches);
+        $allMatches = array_merge($spanMatches, $fullDateMatches, $yearMatches);
         
         // Sort matches by position (earliest first) and length (longest first to avoid partial matches)
+        // This ensures "25 August 1862" takes priority over just "1862"
         usort($allMatches, function($a, $b) {
             if ($a['text_position']['start'] !== $b['text_position']['start']) {
                 return $a['text_position']['start'] - $b['text_position']['start'];
@@ -279,6 +388,18 @@ class WikipediaSpanMatcherService
                 }
                 
                 $replacement = "<a href=\"{$link}\" class=\"{$classes}\" title=\"{$span['name']}\">{$entity}</a>";
+            } elseif ($type === 'full_date') {
+                // Full date like "25 August 1862"
+                $date = $match['date'];
+                $link = route('date.explore', ['date' => $date]);
+                
+                $replacement = "<a href=\"{$link}\" class=\"text-decoration-none\" title=\"View events on {$entity}\">{$entity}</a>";
+            } elseif ($type === 'month_year') {
+                // Month and year like "August 1862"
+                $date = $match['date'];
+                $link = route('date.explore', ['date' => $date]);
+                
+                $replacement = "<a href=\"{$link}\" class=\"text-decoration-none\" title=\"View events in {$entity}\">{$entity}</a>";
             } elseif ($type === 'year') {
                 $year = $match['year'];
                 $link = route('date.explore', ['date' => $year]);
