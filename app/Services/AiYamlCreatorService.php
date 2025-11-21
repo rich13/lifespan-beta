@@ -236,7 +236,16 @@ class AiYamlCreatorService
             $prompt .= " (disambiguation: {$disambiguation})";
         }
         
-        $prompt .= "\n\nExisting YAML:\n```yaml\n{$existingYaml}\n```\n\nPlease enhance this YAML by adding missing information, correcting any errors, and expanding with additional biographical details while preserving all existing UUIDs and IDs.";
+        $prompt .= "\n\nExisting YAML:\n```yaml\n{$existingYaml}\n```\n\n";
+        
+        $prompt .= "⚠️ CRITICAL RULES:\n";
+        $prompt .= "1. NEVER HALLUCINATE OR GUESS: Only add information you can actually verify from authoritative sources\n";
+        $prompt .= "2. If you cannot find specific information (like an architect's name, a precise date, or other details), DO NOT include that field\n";
+        $prompt .= "3. ACCURACY OVER COMPLETENESS: Better to have less information that's correct than more information that might be wrong\n";
+        $prompt .= "4. When adding new connections, you MUST use a dash (-) before each connection item to create a YAML list\n";
+        $prompt .= "5. Look at the existing YAML above - see how connections use dashes? Copy that exact format for any new connections you add\n\n";
+        
+        $prompt .= "Please enhance this YAML by adding missing information, correcting any errors, and expanding with additional biographical details while preserving all existing UUIDs and IDs. Only add information that you can verify from reliable sources.";
         
         return $prompt;
     }
@@ -295,6 +304,15 @@ class AiYamlCreatorService
 - Always quote dates in YAML format (e.g., '1939-09-01')
 - Quote any values containing special characters like /, :, {, }, [, ], ,, &, *, #, ?, |, -, >, !, %, @, or `
 - Quote values containing spaces and special characters (e.g., "Shiny and Oh So Bright, Vol. 1 / LP: No Past. No Future. No Sun.")
+
+⚠️ **CRITICAL: NEVER HALLUCINATE OR GUESS INFORMATION** ⚠️
+- ONLY include information you can find in authoritative public sources
+- If you cannot find specific information (like an architect's name, a date, or a detail), DO NOT include that field
+- DO NOT guess, infer, or make assumptions about missing information
+- DO NOT include information based on "common knowledge" unless you can verify it from sources
+- It is BETTER to omit a field entirely than to include incorrect or unverified information
+- If uncertain about ANY detail, leave it out
+- Every piece of information MUST be verifiable from the sources you list
 - Always quote URLs and web addresses (e.g., "https://en.wikipedia.org/wiki/Example")
 - Quote location names with commas (e.g., "Chicago, Illinois, United States")
 - Quote album/song titles with special characters (e.g., "Mellon Collie and the Infinite Sadness")
@@ -863,7 +881,9 @@ All dates must use the format: 'YYYY-MM-DD' if available, else 'YYYY-MM' or 'YYY
 - end: use null if place still exists
 - metadata:
   - subtype: type of place (city, country, region, building, landmark, etc.)
-  - coordinates: latitude,longitude (if known)
+  - coordinates: (if known) must be a structured object with latitude and longitude fields
+      latitude: numerical latitude value
+      longitude: numerical longitude value
   - country: country where this place is located
 - sources: list of URLs used for research (e.g. ["https://en.wikipedia.org/wiki/Place_Name"])
 - access_level: use public
@@ -874,38 +894,90 @@ All dates must use the format: 'YYYY-MM-DD' if available, else 'YYYY-MM' or 'YYY
 
 All connection groups go under connections: — include them whenever relevant data is available. Be comprehensive and include all significant place relationships and events that are publicly documented.
 
-You may include the following groups:
+⚠️ **CRITICAL YAML SYNTAX**: Every connection MUST start with a dash (-). Without the dash, YAML will NOT parse it as a list and validation will FAIL.
 
-- located: places where this place is located within:
+You may include the following connection groups:
+
+- located: places where this place is located within (use dash before EACH item):
   - name: <parent place name>
-  - type: place
-  - start: <YYYY or YYYY-MM> (when this relationship was established)
-  - end: <YYYY, YYYY-MM, or null> (when this relationship ended, null if ongoing)
-  - metadata: {}
+    type: place
+    start: <YYYY or YYYY-MM>
+    end: <YYYY, YYYY-MM, or null>
+    metadata: {}
 
-- participation: events that took place at this location:
+- created: people or organisations who designed, built, or created this place (use dash before EACH item):
+  - name: <architect, designer, or builder name>
+    type: person or organisation
+    start: <YYYY or YYYY-MM>
+    end: <YYYY, YYYY-MM, or null>
+    metadata:
+      role: <specific role like "architect", "engineer", "builder", "landscape architect">
+
+- participation: events that took place at this location (use dash before EACH item):
   - name: <event name>
-  - type: event
-  - start: <YYYY or YYYY-MM>
-  - end: <YYYY, YYYY-MM, or null>
-  - metadata: {}
+    type: event
+    start: <YYYY or YYYY-MM>
+    end: <YYYY, YYYY-MM, or null>
+    metadata: {}
 
 ---
 
 ### Important Rules:
 
-1. Only include information that is publicly verifiable from authoritative sources
-2. Be comprehensive - include all significant geographical details, historical milestones, and events that are publicly documented
-3. Use exact dates when available, approximate dates (YYYY-MM or YYYY) when necessary
-4. Set end to null for places that still exist
-5. Include connections whenever you have reliable information - be thorough rather than selective
-6. Always quote dates in YAML format
-7. Use proper YAML indentation
-8. Include sources as a top-level field, not in metadata
-9. Do not include any explanatory text or sources outside the YAML structure - only return the YAML
-10. If a value (such as a name, date, or coordinates) is not publicly known, do not include that field or connection at all. Do not use placeholders like "unknown" or similar.
-11. Research thoroughly - read full source material, not just summaries or introductions
-12. Focus on minimal but accurate information as requested
+1. ⚠️ NEVER HALLUCINATE: Only include information that is explicitly stated in authoritative public sources that you have actually found
+2. ⚠️ NEVER GUESS: If you cannot find specific information (architect, date, detail), DO NOT include that field - leave it out entirely
+3. Be comprehensive - include all significant geographical details, historical milestones, and events that are publicly documented
+4. Use exact dates when available, approximate dates (YYYY-MM or YYYY) when necessary
+5. Set end to null for places that still exist
+6. Include connections whenever you have reliable information - be thorough rather than selective
+7. Always quote dates in YAML format
+8. Use proper YAML indentation
+9. Include sources as a top-level field, not in metadata
+10. Do not include any explanatory text or sources outside the YAML structure - only return the YAML
+11. If a value (such as a name, date, or coordinates) is not publicly known, do not include that field or connection at all. Do not use placeholders like "unknown" or similar.
+12. Research thoroughly - read full source material, not just summaries or introductions
+13. ACCURACY OVER COMPLETENESS: It is better to have less information that is 100% accurate than more information that might be wrong
+14. CRITICAL: Coordinates MUST be formatted as a YAML object with separate latitude and longitude fields, NOT as a comma-separated string
+15. IMPORTANT: For architects, designers, engineers, or builders - ONLY include them if you can verify their name from sources. Do NOT guess or assume. If found, create proper connections under the "created" group with their role specified in the connection metadata
+16. CRITICAL: All connection lists MUST use YAML list syntax with a dash (-) before each connection item. Without the dash, YAML will not parse it as a list and validation will fail
+
+### Example coordinate format (CORRECT):
+metadata:
+  subtype: building
+  coordinates:
+    latitude: 51.5074
+    longitude: -0.1278
+  country: England
+
+### NEVER format coordinates like this (WRONG):
+metadata:
+  coordinates: "51.5074,-0.1278"  # WRONG - do not use this format
+
+### Example architect/designer connection (CORRECT - note the dash before 'name'):
+connections:
+  created:
+    - name: Charles Henry Driver
+      type: person
+      start: '1862'
+      end: '1862'
+      metadata:
+        role: architect
+    - name: Another Architect
+      type: person
+      start: '1863'
+      end: '1863'
+      metadata:
+        role: engineer
+
+### WRONG - Missing dashes makes it invalid YAML:
+connections:
+  created:
+    name: Charles Henry Driver  # WRONG - no dash means not a list item
+    type: person
+    
+### WRONG - Putting architects in metadata:
+metadata:
+  architect: Charles Henry Driver  # WRONG - use a connection instead
 
 Return only the YAML content, no additional text or formatting.
 PROMPT;
@@ -954,7 +1026,9 @@ All dates must use the format: 'YYYY-MM-DD' if available, else 'YYYY-MM' or 'YYY
 - end: use null if place still exists
 - metadata:
   - subtype: type of place (city, country, region, building, landmark, etc.)
-  - coordinates: latitude,longitude (if known)
+  - coordinates: (if known) must be a structured object with latitude and longitude fields
+      latitude: numerical latitude value
+      longitude: numerical longitude value
   - country: country where this place is located
 - sources: list of URLs used for research (e.g. ["https://en.wikipedia.org/wiki/Place_Name"])
 - access_level: use public
@@ -965,21 +1039,31 @@ All dates must use the format: 'YYYY-MM-DD' if available, else 'YYYY-MM' or 'YYY
 
 All connection groups go under connections: — include them whenever relevant data is available. Be comprehensive and include all significant place relationships and events that are publicly documented.
 
-You may include the following groups:
+⚠️ **CRITICAL YAML SYNTAX**: Every connection MUST start with a dash (-). Without the dash, YAML will NOT parse it as a list and validation will FAIL.
 
-- located: places where this place is located within:
+You may include the following connection groups:
+
+- located: places where this place is located within (use dash before EACH item):
   - name: <parent place name>
-  - type: place
-  - start: <YYYY or YYYY-MM> (when this relationship was established)
-  - end: <YYYY, YYYY-MM, or null> (when this relationship ended, null if ongoing)
-  - metadata: {}
+    type: place
+    start: <YYYY or YYYY-MM>
+    end: <YYYY, YYYY-MM, or null>
+    metadata: {}
 
-- participation: events that took place at this location:
+- created: people or organisations who designed, built, or created this place (use dash before EACH item):
+  - name: <architect, designer, or builder name>
+    type: person or organisation
+    start: <YYYY or YYYY-MM>
+    end: <YYYY, YYYY-MM, or null>
+    metadata:
+      role: <specific role like "architect", "engineer", "builder", "landscape architect">
+
+- participation: events that took place at this location (use dash before EACH item):
   - name: <event name>
-  - type: event
-  - start: <YYYY or YYYY-MM>
-  - end: <YYYY, YYYY-MM, or null>
-  - metadata: {}
+    type: event
+    start: <YYYY or YYYY-MM>
+    end: <YYYY, YYYY-MM, or null>
+    metadata: {}
 
 ---
 

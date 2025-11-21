@@ -545,6 +545,9 @@ class YamlSpanService
                 ];
             }
             
+            // Normalize AI-generated data (e.g., convert JSON strings to arrays)
+            $this->normalizeAiGeneratedData($data);
+            
             // Filter out unsupported connection types before validation
             $this->filterUnsupportedConnections($data);
             
@@ -1238,6 +1241,64 @@ class YamlSpanService
      * Filter out unsupported connection types from the data
      * This prevents errors when AI generates connection types that aren't supported
      */
+    /**
+     * Normalize AI-generated data to fix common issues
+     * 
+     * AI sometimes returns fields in incorrect formats (e.g., JSON-encoded strings
+     * instead of arrays). This method normalizes the data structure.
+     */
+    private function normalizeAiGeneratedData(array &$data): void
+    {
+        // Normalize sources - AI sometimes returns it as a JSON-encoded string
+        if (isset($data['sources']) && is_string($data['sources'])) {
+            $originalSources = $data['sources'];
+            
+            // Try to decode as JSON
+            $decoded = json_decode($originalSources, true);
+            
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                // Successfully decoded JSON string to array
+                $data['sources'] = $decoded;
+                Log::info('Normalized sources from JSON string to array', [
+                    'original' => $originalSources,
+                    'normalized' => $decoded
+                ]);
+            } else {
+                // Not valid JSON, treat the string as a single source URL
+                Log::info('Converting non-JSON sources string to array', [
+                    'original' => $originalSources
+                ]);
+                $data['sources'] = [$originalSources];
+            }
+        }
+        
+        // Normalize empty sources to null instead of empty array if needed
+        if (isset($data['sources']) && is_array($data['sources']) && empty($data['sources'])) {
+            $data['sources'] = null;
+        }
+        
+        // Normalize connections - AI sometimes forgets the dash syntax for YAML lists
+        if (isset($data['connections']) && is_array($data['connections'])) {
+            foreach ($data['connections'] as $connectionType => &$connectionList) {
+                if (is_array($connectionList) && !empty($connectionList)) {
+                    // Check if this looks like a single connection object instead of a list
+                    // It's a single object if it has keys like 'name', 'type', etc. and is NOT a sequential array
+                    $keys = array_keys($connectionList);
+                    $isSequential = $keys === range(0, count($keys) - 1);
+                    
+                    if (!$isSequential && isset($connectionList['name']) && isset($connectionList['type'])) {
+                        // This is a single connection object, wrap it in an array to make it a list
+                        Log::warning("Normalizing connection '{$connectionType}' - AI forgot dash syntax, converting single object to list", [
+                            'connection_type' => $connectionType,
+                            'original_keys' => $keys
+                        ]);
+                        $data['connections'][$connectionType] = [$connectionList];
+                    }
+                }
+            }
+        }
+    }
+    
     private function filterUnsupportedConnections(array &$data): void
     {
         if (!isset($data['connections']) || !is_array($data['connections'])) {
@@ -3783,6 +3844,9 @@ class YamlSpanService
                     'errors' => ['YAML must parse to an array']
                 ];
             }
+            
+            // Normalize AI-generated data (e.g., convert JSON strings to arrays)
+            $this->normalizeAiGeneratedData($data);
             
             // Filter out unsupported connection types before validation
             $this->filterUnsupportedConnections($data);

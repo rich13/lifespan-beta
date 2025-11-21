@@ -212,7 +212,7 @@ $(document).ready(function() {
                 method: 'GET',
                 success: function(response) {
                     if (response.success) {
-                        window.existingYaml = response.yaml;
+                        window.existingYaml = response.yaml_content;
                     }
                 },
                 error: function() {
@@ -250,6 +250,23 @@ $(document).ready(function() {
         $('#newSpanModalLabel').html('<i class="bi bi-plus-circle me-2 text-primary"></i>Create New Span');
     });
     
+    // Global function to open modal with prefilled name
+    window.openNewSpanModalWithName = function(name) {
+        // Reset modal state
+        isImproveMode = false;
+        currentStep = 1;
+        aiData = null;
+        selectedCreationMethod = null;
+        formData = { name: name };
+        window.currentSpanId = null;
+        window.existingYaml = null;
+        $('#newSpanModalLabel').html('<i class="bi bi-plus-circle me-2 text-primary"></i>Create New Span');
+        
+        // Show the modal and go to step 1
+        $('#newSpanModal').modal('show');
+        showStep(1);
+    };
+    
     // Step content templates
     const stepContent = {
         1: `
@@ -271,12 +288,20 @@ $(document).ready(function() {
                 <select class="form-select" id="modal_type_id" name="type_id" required>
                     <option value="">Choose a type...</option>
                     @foreach($spanTypes as $type)
-                        <option value="{{ $type->type_id }}">
+                        <option value="{{ $type->type_id }}" data-subtypes='@json($type->getSubtypeOptions())'>
                             {{ ucfirst($type->name) }}
                         </option>
                     @endforeach
                 </select>
                 <div class="invalid-feedback" id="type_id-error"></div>
+            </div>
+            
+            <div class="mb-3" id="subtype-container" style="display: none;">
+                <label for="modal_subtype" class="form-label fw-medium">Subtype</label>
+                <select class="form-select" id="modal_subtype" name="subtype">
+                    <option value="">None (optional)</option>
+                </select>
+                <small class="text-muted">Optional: Select a subtype if applicable</small>
             </div>
         `,
         
@@ -320,6 +345,31 @@ $(document).ready(function() {
             </div>
             
             <form id="new-span-form">
+                <div class="mb-3">
+                    <label class="form-label fw-medium">State <span class="text-danger">*</span></label>
+                    <div class="btn-group btn-group-sm w-100" role="group" aria-label="Span state selection">                                 
+                        <input type="radio" class="btn-check" name="state" id="state_placeholder" value="placeholder" checked>
+                        <label class="btn btn-outline-secondary" for="state_placeholder">
+                            <i class="bi bi-question-circle me-1"></i>Placeholder
+                        </label>
+                        
+                        <input type="radio" class="btn-check" name="state" id="state_draft" value="draft">
+                        <label class="btn btn-outline-secondary" for="state_draft">
+                            <i class="bi bi-pencil me-1"></i>Draft
+                        </label>
+
+                        <input type="radio" class="btn-check" name="state" id="state_complete" value="complete">
+                        <label class="btn btn-outline-secondary" for="state_complete">
+                            <i class="bi bi-check-circle me-1"></i>Complete
+                        </label>
+                    </div>
+                    <small class="text-muted d-block mt-1">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Placeholder: No dates required. Draft/Complete: Start year required.
+                    </small>
+                    <div class="invalid-feedback" id="state-error"></div>
+                </div>
+            
                 <div class="mb-3">
                     <label class="form-label fw-medium">Start Date</label>
                     <div class="row g-2">
@@ -490,36 +540,12 @@ $(document).ready(function() {
         `,
         
         3: `
-            <div class="d-flex align-items-center">
-                <div class="me-3">
-                    <div class="btn-group btn-group-sm" role="group" aria-label="Span state selection">                                 
-                        <input type="radio" class="btn-check" name="state" id="state_placeholder" value="placeholder" checked>
-                        <label class="btn btn-outline-secondary" for="state_placeholder">
-                            <i class="bi bi-question-circle me-1"></i>Placeholder
-                        </label>
-                        
-                        <input type="radio" class="btn-check" name="state" id="state_draft" value="draft">
-                        <label class="btn btn-outline-secondary" for="state_draft">
-                            <i class="bi bi-pencil me-1"></i>Draft
-                        </label>
-
-                        <input type="radio" class="btn-check" name="state" id="state_complete" value="complete">
-                        <label class="btn btn-outline-secondary" for="state_complete">
-                            <i class="bi bi-check-circle me-1"></i>Complete
-                        </label>
-                    </div>
-                    <div class="invalid-feedback" id="state-error"></div>
-                </div>
-            </div>
-            
-            <div class="ms-auto">
-                <button type="button" class="btn btn-outline-secondary me-2" data-bs-dismiss="modal">
-                    <i class="bi bi-x-circle me-1"></i>Cancel
-                </button>
-                <button type="button" class="btn btn-primary px-4" id="save-span-btn" tabindex="1" autofocus>
-                    <i class="bi bi-check-circle me-1"></i>Create Span
-                </button>
-            </div>
+            <button type="button" class="btn btn-outline-secondary me-2" data-bs-dismiss="modal">
+                <i class="bi bi-x-circle me-1"></i>Cancel
+            </button>
+            <button type="button" class="btn btn-primary px-4" id="save-span-btn" tabindex="1" autofocus>
+                <i class="bi bi-check-circle me-1"></i>Create Span
+            </button>
         `,
         
         4: `
@@ -575,10 +601,22 @@ $(document).ready(function() {
         // Re-attach event listeners for the new content
         attachEventListeners(step);
         
-        // Prefill form fields if in improve mode
-        if (isImproveMode && step === 1) {
+        // Prefill form fields if data exists
+        if (step === 1 && formData.name) {
             $('#modal_name').val(formData.name);
-            $('#modal_type_id').val(formData.type_id);
+            if (formData.type_id) {
+                $('#modal_type_id').val(formData.type_id);
+                
+                // Trigger change event to populate subtypes
+                $('#modal_type_id').trigger('change');
+                
+                // Set subtype if it exists
+                if (formData.subtype) {
+                    setTimeout(() => {
+                        $('#modal_subtype').val(formData.subtype);
+                    }, 100);
+                }
+            }
         }
         
         // Autofill merge info if merge step
@@ -590,10 +628,33 @@ $(document).ready(function() {
     
     function attachEventListeners(step) {
         if (step === 1) {
+            // Handle type selection to show/hide subtype dropdown
+            $('#modal_type_id').on('change', function() {
+                const selectedOption = $(this).find(':selected');
+                const subtypes = selectedOption.data('subtypes');
+                const subtypeContainer = $('#subtype-container');
+                const subtypeSelect = $('#modal_subtype');
+                
+                // Clear previous subtype options
+                subtypeSelect.empty();
+                subtypeSelect.append('<option value="">None (optional)</option>');
+                
+                // Show subtype dropdown if this type has subtypes
+                if (subtypes && subtypes.length > 0) {
+                    subtypes.forEach(function(subtype) {
+                        subtypeSelect.append(`<option value="${subtype}">${subtype.charAt(0).toUpperCase() + subtype.slice(1)}</option>`);
+                    });
+                    subtypeContainer.show();
+                } else {
+                    subtypeContainer.hide();
+                }
+            });
+            
             // Step 1: Next button
             $('#next-step-btn').on('click', function() {
                 const name = $('#modal_name').val().trim();
                 const typeId = $('#modal_type_id').val();
+                const subtype = $('#modal_subtype').val();
                 
                 if (!name || !typeId) {
                     if (!name) {
@@ -611,9 +672,12 @@ $(document).ready(function() {
                 $('.is-invalid').removeClass('is-invalid');
                 $('.invalid-feedback').text('');
                 
-                // Store form data
+                // Store form data (including subtype if selected)
                 formData.name = name;
                 formData.type_id = typeId;
+                if (subtype) {
+                    formData.subtype = subtype;
+                }
                 
                 if (typeId === 'person') {
                     showStep(2);
@@ -657,15 +721,16 @@ $(document).ready(function() {
                 // Add stored data
                 formDataObj.append('name', formData.name);
                 formDataObj.append('type_id', formData.type_id);
+                if (formData.subtype) {
+                    formDataObj.append('metadata[subtype]', formData.subtype);
+                }
                 formDataObj.append('_token', csrfToken);
                 
-                // Ensure state is set
-                const selectedState = $('input[name="state"]:checked').val();
-                if (!selectedState) {
+                // State is now included in FormData automatically since it's inside the form
+                // Just ensure placeholder is checked if nothing is selected
+                if (!$('input[name="state"]:checked').val()) {
                     $('#state_placeholder').prop('checked', true);
                     formDataObj.set('state', 'placeholder');
-                } else {
-                    formDataObj.set('state', selectedState);
                 }
                 
                 // Clear previous errors
@@ -723,16 +788,15 @@ $(document).ready(function() {
                                     
                                     // Add stored data with new token
                                     formDataObj.set('_token', newCsrfToken);
-                                    formDataObj.append('name', formData.name);
-                                    formDataObj.append('type_id', formData.type_id);
+                                    formDataObj.set('name', formData.name);
+                                    formDataObj.set('type_id', formData.type_id);
+                                    if (formData.subtype) {
+                                        formDataObj.set('metadata[subtype]', formData.subtype);
+                                    }
                                     
-                                    // Set state again
-                                    const selectedState = $('input[name="state"]:checked').val();
-                                    if (!selectedState) {
-                                        $('#state_placeholder').prop('checked', true);
+                                    // State should already be in FormData, but ensure it's set
+                                    if (!formDataObj.get('state')) {
                                         formDataObj.set('state', 'placeholder');
-                                    } else {
-                                        formDataObj.set('state', selectedState);
                                     }
                                     
                                     // Retry the request with new token
@@ -821,16 +885,11 @@ $(document).ready(function() {
             });
             
             $('#confirm-ai-btn').on('click', function() {
-                if (!aiData) {
-                    alert('No AI data available');
-                    return;
-                }
-                
-                if (!aiData.yaml) {
-                    console.error('aiData exists but aiData.yaml is missing:', aiData);
-                    console.error('aiData keys:', Object.keys(aiData));
-                    console.error('aiData full structure:', JSON.stringify(aiData, null, 2));
-                    alert('AI data is missing YAML content');
+                if (!aiData || !aiData.yaml) {
+                    // This shouldn't happen anymore since we check in startAiProcess, but keep as safety
+                    console.error('No AI YAML data available, falling back to manual creation');
+                    selectedCreationMethod = 'manual';
+                    showStep(3);
                     return;
                 }
                 
@@ -883,16 +942,22 @@ $(document).ready(function() {
                     btn.html('<span class="spinner-border spinner-border-sm me-1"></span>Creating...');
                     
                     // Create new span with AI data
+                    const aiCreateData = {
+                        name: formData.name,
+                        type_id: formData.type_id,
+                        state: 'placeholder',
+                        ai_yaml: aiData.yaml,
+                        _token: $('meta[name="csrf-token"]').attr('content')
+                    };
+                    
+                    if (formData.subtype) {
+                        aiCreateData['metadata[subtype]'] = formData.subtype;
+                    }
+                    
                     $.ajax({
                         url: '{{ route("spans.store") }}',
                         method: 'POST',
-                        data: {
-                            name: formData.name,
-                            type_id: formData.type_id,
-                            state: 'placeholder',
-                            ai_yaml: aiData.yaml,
-                            _token: $('meta[name="csrf-token"]').attr('content')
-                        },
+                        data: aiCreateData,
                         headers: {
                             'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content'),
                             'Accept': 'application/json'
@@ -935,17 +1000,23 @@ $(document).ready(function() {
                 btn.html('<span class="spinner-border spinner-border-sm me-1"></span>Merging...');
                 
                 // Send confirm_merge=true
+                const mergeData = {
+                    name: formData.name,
+                    type_id: formData.type_id,
+                    state: 'placeholder',
+                    ai_yaml: aiData.yaml,
+                    confirm_merge: true,
+                    _token: $('meta[name="csrf-token"]').attr('content')
+                };
+                
+                if (formData.subtype) {
+                    mergeData['metadata[subtype]'] = formData.subtype;
+                }
+                
                 $.ajax({
                     url: '{{ route("spans.store") }}',
                     method: 'POST',
-                    data: {
-                        name: formData.name,
-                        type_id: formData.type_id,
-                        state: 'placeholder',
-                        ai_yaml: aiData.yaml,
-                        confirm_merge: true,
-                        _token: $('meta[name="csrf-token"]').attr('content')
-                    },
+                    data: mergeData,
                     headers: {
                         'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content'),
                         'Accept': 'application/json'
@@ -1087,6 +1158,15 @@ $(document).ready(function() {
             success: function(response) {
                 console.log('AI Process - success response:', response);
                 if (response.success) {
+                    // Check if we have valid YAML content
+                    if (!response.yaml) {
+                        console.warn('AI Process - no YAML content in response, falling back to manual creation');
+                        // Automatically fall back to manual creation
+                        selectedCreationMethod = 'manual';
+                        showStep(3);
+                        return;
+                    }
+                    
                     aiData = response;
                     console.log('AI Process - aiData set to:', aiData);
                     console.log('AI Process - aiData.yaml:', aiData.yaml);
