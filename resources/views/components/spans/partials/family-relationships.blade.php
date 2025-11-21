@@ -22,17 +22,25 @@ $hasFamily = $ancestors->isNotEmpty() || $descendants->isNotEmpty() ||
 @endphp
 
 @if($hasFamily)
-    <div class="card mb-4">
+    <div class="card mb-4" id="family-card">
         <div class="card-header">
             <div class="d-flex justify-content-between align-items-center">
                 <h6 class="card-title mb-0">
                     <i class="bi bi-people-fill me-2"></i>
                     <a href="{{ route('family.show', $span) }}" class="text-decoration-none">Family</a>
                 </h6>
+                <div class="btn-group btn-group-sm" role="group" aria-label="View toggle">
+                    <button type="button" class="btn btn-outline-secondary active" id="family-list-toggle">
+                        <i class="bi bi-list-ul"></i> List
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" id="family-graph-toggle">
+                        <i class="bi bi-diagram-3"></i> Graph
+                    </button>
+                </div>
             </div>
         </div>
         <div class="card-body" style="font-size: 0.875rem;">
-            <div class="row g-2">
+            <div id="family-list-view" class="row g-2">
                 {{-- Generation +3: Great-Grandparents --}}
                 @php $greatGrandparents = $ancestors->filter(function($item) { return $item['generation'] === 3; })->pluck('span'); @endphp
                 <x-spans.partials.family-relationship-section 
@@ -118,13 +126,304 @@ $hasFamily = $ancestors->isNotEmpty() || $descendants->isNotEmpty() ||
                         :colClass="$colClass" />
                 @endif
             </div>
+            
+            {{-- Graph View Container (hidden by default) --}}
+            <div id="family-graph-view" style="display: none; height: 600px; position: relative;">
+                <div class="text-center text-muted" id="family-graph-loading">
+                    <div class="spinner-border spinner-border-sm me-2" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    Loading family graph...
+                </div>
+                <div id="family-graph-container" style="width: 100%; height: 100%;"></div>
+                
+                {{-- Legend --}}
+                <div style="position: absolute; top: 10px; right: 10px; background: white; border: 1px solid #ddd; border-radius: 6px; padding: 12px; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); z-index: 10;">
+                    <div style="font-weight: 600; margin-bottom: 8px;">Generations</div>
+                    <div style="display: flex; align-items: center; margin-bottom: 4px;">
+                        <div style="width: 12px; height: 12px; border-radius: 50%; background: #93c5fd; margin-right: 6px;"></div>
+                        <span>Great-grandparents</span>
+                    </div>
+                    <div style="display: flex; align-items: center; margin-bottom: 4px;">
+                        <div style="width: 12px; height: 12px; border-radius: 50%; background: #60a5fa; margin-right: 6px;"></div>
+                        <span>Grandparents</span>
+                    </div>
+                    <div style="display: flex; align-items: center; margin-bottom: 4px;">
+                        <div style="width: 12px; height: 12px; border-radius: 50%; background: #3b82f6; margin-right: 6px;"></div>
+                        <span>Parents</span>
+                    </div>
+                    <div style="display: flex; align-items: center; margin-bottom: 4px;">
+                        <div style="width: 14px; height: 14px; border-radius: 50%; background: #6366f1; margin-right: 6px; border: 2px solid #4f46e5;"></div>
+                        <span style="font-weight: 600;">You</span>
+                    </div>
+                    <div style="display: flex; align-items: center; margin-bottom: 4px;">
+                        <div style="width: 12px; height: 12px; border-radius: 50%; background: #f59e0b; margin-right: 6px;"></div>
+                        <span>Siblings / Spouses</span>
+                    </div>
+                    <div style="display: flex; align-items: center; margin-bottom: 4px;">
+                        <div style="width: 12px; height: 12px; border-radius: 50%; background: #10b981; margin-right: 6px;"></div>
+                        <span>Children</span>
+                    </div>
+                    <div style="display: flex; align-items: center;">
+                        <div style="width: 12px; height: 12px; border-radius: 50%; background: #86efac; margin-right: 6px;"></div>
+                        <span>Grandchildren</span>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 @endif
 
 @push('scripts')
+<script src="https://d3js.org/d3.v7.min.js"></script>
 <script>
 $(document).ready(function() {
+    // Check if elements exist
+    if ($('#family-list-toggle').length === 0 || $('#family-graph-toggle').length === 0) {
+        console.log('Family toggle buttons not found');
+        return;
+    }
+    
+    console.log('Family graph toggle initialized');
+    
+    let familyGraphInitialized = false;
+    let simulation = null;
+    
+    // Toggle between list and graph view
+    $('#family-list-toggle').on('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('List toggle clicked');
+        $('#family-list-view').css('display', '');  // Reset to default (flex from row class)
+        $('#family-graph-view').css('display', 'none');
+        $('#family-list-toggle').addClass('active');
+        $('#family-graph-toggle').removeClass('active');
+    });
+    
+    $('#family-graph-toggle').on('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('Graph toggle clicked');
+        $('#family-list-view').css('display', 'none');
+        $('#family-graph-view').css('display', 'block');
+        $('#family-list-toggle').removeClass('active');
+        $('#family-graph-toggle').addClass('active');
+        
+        // Initialize graph on first view
+        if (!familyGraphInitialized) {
+            console.log('Initializing family graph for the first time');
+            initializeFamilyGraph();
+            familyGraphInitialized = true;
+        }
+    });
+    
+    // Initialize the force-directed family graph
+    function initializeFamilyGraph() {
+        const spanId = '{{ $span->id }}';
+        console.log('Fetching family graph for span:', spanId);
+        
+        // Fetch family graph data
+        $.ajax({
+            url: `/api/spans/${spanId}/family-graph`,
+            method: 'GET',
+            success: function(graphData) {
+                console.log('Family graph data received:', graphData);
+                $('#family-graph-loading').hide();
+                renderFamilyGraph(graphData);
+            },
+            error: function(xhr, status, error) {
+                console.error('Error loading family graph:', error, xhr);
+                $('#family-graph-loading').html(
+                    '<div class="text-danger"><i class="bi bi-exclamation-triangle"></i> Error loading family graph</div>'
+                );
+            }
+        });
+    }
+    
+    // Render the family graph using D3
+    function renderFamilyGraph(graphData) {
+        const container = document.getElementById('family-graph-container');
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+        
+        // Clear any existing content
+        container.innerHTML = '';
+        
+        // Create SVG
+        const svg = d3.select('#family-graph-container')
+            .append('svg')
+            .attr('width', width)
+            .attr('height', height);
+        
+        // Add zoom behavior
+        const g = svg.append('g');
+        const zoom = d3.zoom()
+            .scaleExtent([0.1, 4])
+            .on('zoom', (event) => {
+                g.attr('transform', event.transform);
+            });
+        
+        svg.call(zoom);
+        
+        // Create tooltip
+        const tooltip = d3.select('body').append('div')
+            .attr('class', 'graph-tooltip')
+            .style('position', 'absolute')
+            .style('background', 'rgba(0, 0, 0, 0.8)')
+            .style('color', 'white')
+            .style('padding', '8px 12px')
+            .style('border-radius', '4px')
+            .style('font-size', '12px')
+            .style('pointer-events', 'none')
+            .style('opacity', 0)
+            .style('z-index', 10000);
+        
+        // Color scale for relationship types
+        const linkColor = d => {
+            if (d.type === 'parent') return '#3b82f6';
+            if (d.type === 'child') return '#10b981';
+            if (d.type === 'spouse') return '#ef4444';
+            return '#999';
+        };
+        
+        // Node color based on generation
+        const nodeColor = d => {
+            if (d.isCurrent) return '#6366f1'; // Current person - indigo
+            
+            // Ancestors - blues (lighter for older generations)
+            if (d.generation === 3) return '#93c5fd'; // Great-grandparents - light blue
+            if (d.generation === 2) return '#60a5fa'; // Grandparents - medium blue
+            if (d.generation === 1) return '#3b82f6'; // Parents - darker blue
+            
+            // Descendants - greens (lighter for younger generations)
+            if (d.generation === -2) return '#86efac'; // Grandchildren - light green
+            if (d.generation === -1) return '#10b981'; // Children - medium green
+            
+            return '#f59e0b'; // Same generation (siblings, spouses, cousins) - orange
+        };
+        
+        // Create force simulation
+        simulation = d3.forceSimulation(graphData.nodes)
+            .force('link', d3.forceLink(graphData.links)
+                .id(d => d.id)
+                .distance(d => {
+                    // Closer spacing for parent-child relationships
+                    if (d.type === 'parent' || d.type === 'child') return 100;
+                    if (d.type === 'spouse') return 80;
+                    return 120;
+                }))
+            .force('charge', d3.forceManyBody().strength(-400))
+            .force('center', d3.forceCenter(width / 2, height / 2))
+            .force('collision', d3.forceCollide().radius(35))
+            .force('y', d3.forceY(d => {
+                // Vertical positioning based on generation
+                return height / 2 + (d.generation * 120);
+            }).strength(0.3));
+        
+        // Create links
+        const link = g.append('g')
+            .selectAll('line')
+            .data(graphData.links)
+            .enter().append('line')
+            .attr('stroke', linkColor)
+            .attr('stroke-opacity', 0.6)
+            .attr('stroke-width', 2);
+        
+        // Create nodes
+        const node = g.append('g')
+            .selectAll('g')
+            .data(graphData.nodes)
+            .enter().append('g')
+            .attr('class', 'node')
+            .style('cursor', 'pointer')
+            .call(d3.drag()
+                .on('start', dragstarted)
+                .on('drag', dragged)
+                .on('end', dragended))
+            .on('click', (event, d) => {
+                window.location.href = `/spans/${d.id}`;
+            });
+        
+        // Add circles to nodes
+        node.append('circle')
+            .attr('r', d => d.isCurrent ? 25 : 20)
+            .attr('fill', nodeColor)
+            .attr('stroke', '#fff')
+            .attr('stroke-width', d => d.isCurrent ? 3 : 2);
+        
+        // Add labels to nodes
+        node.append('text')
+            .text(d => d.name)
+            .attr('x', 0)
+            .attr('y', 35)
+            .attr('text-anchor', 'middle')
+            .attr('font-size', '11px')
+            .attr('fill', '#333')
+            .attr('font-weight', d => d.isCurrent ? 'bold' : 'normal');
+        
+        // Add tooltips
+        node.on('mouseenter', function(event, d) {
+            let tooltipText = d.name;
+            if (d.dates) {
+                tooltipText += `<br/>${d.dates}`;
+            }
+            if (d.relationshipLabel) {
+                tooltipText += `<br/><em>${d.relationshipLabel}</em>`;
+            }
+            
+            tooltip.html(tooltipText)
+                .style('opacity', 1)
+                .style('left', (event.pageX + 10) + 'px')
+                .style('top', (event.pageY - 10) + 'px');
+        })
+        .on('mousemove', function(event) {
+            tooltip.style('left', (event.pageX + 10) + 'px')
+                .style('top', (event.pageY - 10) + 'px');
+        })
+        .on('mouseleave', function() {
+            tooltip.style('opacity', 0);
+        });
+        
+        // Update positions on simulation tick
+        simulation.on('tick', () => {
+            link
+                .attr('x1', d => d.source.x)
+                .attr('y1', d => d.source.y)
+                .attr('x2', d => d.target.x)
+                .attr('y2', d => d.target.y);
+            
+            node.attr('transform', d => `translate(${d.x},${d.y})`);
+        });
+        
+        // Drag functions
+        function dragstarted(event, d) {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x;
+            d.fy = d.y;
+        }
+        
+        function dragged(event, d) {
+            d.fx = event.x;
+            d.fy = event.y;
+        }
+        
+        function dragended(event, d) {
+            if (!event.active) simulation.alphaTarget(0);
+            d.fx = null;
+            d.fy = null;
+        }
+        
+        // Handle window resize
+        $(window).on('resize', function() {
+            const newWidth = container.clientWidth;
+            const newHeight = container.clientHeight;
+            
+            svg.attr('width', newWidth).attr('height', newHeight);
+            simulation.force('center', d3.forceCenter(newWidth / 2, newHeight / 2));
+            simulation.alpha(0.3).restart();
+        });
+    }
+    
     // Initialize Bootstrap tooltips for family members with parents
     $('.family-member-link[data-parents]').each(function() {
         const $link = $(this);

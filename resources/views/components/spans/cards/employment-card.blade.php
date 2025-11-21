@@ -6,10 +6,10 @@
         return;
     }
 
-    // Get employment connections
+    // Get employment connections (direct person -> organisation)
     $employmentConnections = $span->connectionsAsSubject()
         ->whereHas('type', function($q) { $q->where('type', 'employment'); })
-        ->with(['child'])
+        ->with(['child', 'connectionSpan'])
         ->get();
 
     // Get has_role connections with nested at_organisation connections
@@ -18,40 +18,34 @@
         ->with(['child', 'connectionSpan.connectionsAsSubject.child', 'connectionSpan.connectionsAsSubject.type'])
         ->get();
 
-    // Collect unique organisations
-    $uniqueOrganisations = collect();
+    // Combine both types into a unified collection with sorting info
+    $allEmployment = collect();
     
-    // Add organisations from employment connections
+    // Add employment connections
     foreach ($employmentConnections as $connection) {
-        if ($connection->child && $connection->child->type_id === 'organisation') {
-            $uniqueOrganisations->put($connection->child->id, [
-                'organisation' => $connection->child,
-                'connection_type' => 'employment'
-            ]);
-        }
+        $allEmployment->push([
+            'type' => 'employment',
+            'connection' => $connection,
+            'sort_key' => $connection->getEffectiveSortDate()
+        ]);
     }
     
-    // Add organisations from role connections
+    // Add role connections
     foreach ($roleConnections as $connection) {
-        $dates = $connection->connectionSpan;
-        
-        // Find the at_organisation connection
-        if ($dates) {
-            foreach ($dates->connectionsAsSubject as $nestedConnection) {
-                if ($nestedConnection->type_id === 'at_organisation' && $nestedConnection->child) {
-                    $uniqueOrganisations->put($nestedConnection->child->id, [
-                        'organisation' => $nestedConnection->child,
-                        'connection_type' => 'has_role'
-                    ]);
-                    break; // Only need one connection per organisation
-                }
-            }
-        }
+        $allEmployment->push([
+            'type' => 'role',
+            'connection' => $connection,
+            'sort_key' => $connection->getEffectiveSortDate()
+        ]);
     }
     
-    // Sort organisations by name
-    $uniqueOrganisations = $uniqueOrganisations->sortBy(function($item) {
-        return $item['organisation']->name;
+    // Sort all employment by date
+    $allEmployment = $allEmployment->sortBy(function($item) {
+        $parts = $item['sort_key'];
+        $y = $parts[0] ?? PHP_INT_MAX;
+        $m = $parts[1] ?? PHP_INT_MAX;
+        $d = $parts[2] ?? PHP_INT_MAX;
+        return sprintf('%08d-%02d-%02d', $y, $m, $d);
     })->values();
 @endphp
 
@@ -72,17 +66,77 @@
         @endauth
     </div>
     <div class="card-body p-2">
-        @if($uniqueOrganisations->isEmpty())
+        @if($allEmployment->isEmpty())
         @else
-            <div class="d-flex flex-wrap gap-1">
-                @foreach($uniqueOrganisations as $item)
-                    <a href="{{ route('spans.show', $item['organisation']) }}" class="text-decoration-none">
-                        <div class="border rounded px-2 py-1 small bg-light" title="{{ $item['organisation']->name }}" data-bs-toggle="tooltip" data-bs-placement="top">
-                            {{ $item['organisation']->name }}
+        <div class="d-grid gap-2">
+            @foreach($allEmployment as $item)
+                @php
+                    $connection = $item['connection'];
+                    $connectionType = $item['type'];
+                    $dates = $connection->connectionSpan;
+                    $hasDates = $dates && ($dates->start_year || $dates->end_year);
+                    $dateText = null;
+                    if ($hasDates) {
+                        if ($dates->start_year && $dates->end_year) {
+                            $dateText = ($dates->formatted_start_date ?? $dates->start_year) . ' – ' . ($dates->formatted_end_date ?? $dates->end_year);
+                        } elseif ($dates->start_year) {
+                            $dateText = 'from ' . ($dates->formatted_start_date ?? $dates->start_year);
+                        } elseif ($dates->end_year) {
+                            $dateText = 'until ' . ($dates->formatted_end_date ?? $dates->end_year);
+                        }
+                    }
+                    
+                    // Determine what to display based on connection type
+                    $role = null;
+                    $organisation = null;
+                    
+                    if ($connectionType === 'role') {
+                        // has_role connection: child is the role
+                        $role = $connection->child;
+                        // Find the at_organisation connection
+                        if ($dates) {
+                            foreach ($dates->connectionsAsSubject as $nestedConnection) {
+                                if ($nestedConnection->type_id === 'at_organisation' && $nestedConnection->child) {
+                                    $organisation = $nestedConnection->child;
+                                    break;
+                                }
+                            }
+                        }
+                    } else {
+                        // employment connection: child is the organisation directly
+                        $organisation = $connection->child;
+                    }
+                @endphp
+                <div class="card">
+                    <div class="card-body p-3">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div>
+                                @if($role)
+                                    <h6 class="mb-1">
+                                        <a href="{{ route('spans.show', $role) }}" class="text-decoration-none">
+                                            {{ $role->name }}
+                                        </a>
+                                    </h6>
+                                @endif
+                                @if($organisation)
+                                    <div class="text-muted small{{ $role ? '' : ' fw-semibold' }}">
+                                        <i class="bi bi-building me-1"></i>
+                                        <a href="{{ route('spans.show', $organisation) }}" class="text-decoration-none text-muted">
+                                            {{ $organisation->name }}
+                                        </a>
+                                    </div>
+                                @endif
+                            </div>
+                            @if($dateText)
+                                <div class="text-muted small text-end">
+                                    <i class="bi bi-calendar me-1"></i>{{ $dateText }}
+                                </div>
+                            @endif
                         </div>
-                    </a>
-                @endforeach
-            </div>
+                    </div>
+                </div>
+            @endforeach
+        </div>
         @endif
     </div>
 </div>

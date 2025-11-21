@@ -83,7 +83,16 @@
 @elseif($parentConnections->isNotEmpty() || $childConnections->isNotEmpty())
     <div class="card mb-4">
         <div class="card-header d-flex justify-content-between align-items-center">
-            <h2 class="card-title h5 mb-0">Connections</h2>
+            <button class="btn btn-link text-decoration-none text-start p-0 d-flex align-items-center flex-grow-1 collapsed" 
+                    type="button" 
+                    data-bs-toggle="collapse" 
+                    data-bs-target="#connectionsCollapse-{{ $span->id }}" 
+                    aria-expanded="false" 
+                    aria-controls="connectionsCollapse-{{ $span->id }}"
+                    style="color: inherit; cursor: pointer;">
+                <i class="bi bi-chevron-right me-2 collapse-chevron" style="transition: transform 0.2s ease;"></i>
+                <h2 class="card-title h5 mb-0">Connections</h2>
+            </button>
             <div class="d-flex gap-2">
                 <a href="{{ route('spans.all-connections', $span) }}" class="btn btn-sm btn-outline-secondary">
                     <i class="bi bi-clock-history me-1"></i>
@@ -101,7 +110,8 @@
             </div>
         </div>
         
-        <div class="card-body">
+        <div class="collapse" id="connectionsCollapse-{{ $span->id }}">
+            <div class="card-body">
             @if($parentConnections->isNotEmpty())
             <h3 class="h6 mb-2"><i class="bi bi-box-arrow-in-right me-2"></i>From this span</h3>
             <div class="connection-spans mb-4">
@@ -123,6 +133,7 @@
                     @endforeach
                 </div>
             @endif
+            </div>
         </div>
     </div>
 @else
@@ -144,4 +155,22 @@
             <p class="text-muted mb-0">No connections yet.</p>
         </div>
     </div>
+@endif
+
+@if($parentConnections->isNotEmpty() || $childConnections->isNotEmpty())
+    @once
+    @push('styles')
+    <style>
+        /* Rotate chevron when NOT collapsed (i.e., when expanded) */
+        button:not(.collapsed) .collapse-chevron {
+            transform: rotate(90deg);
+        }
+        
+        /* Chevron points right when collapsed */
+        button.collapsed .collapse-chevron {
+            transform: rotate(0deg);
+        }
+    </style>
+    @endpush
+    @endonce
 @endif 
