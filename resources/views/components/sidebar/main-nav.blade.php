@@ -47,6 +47,12 @@
         </a>
     </li>
 
+    <li class="nav-item">
+        <a class="nav-link {{ request()->routeIs('collections.*') ? 'active' : '' }}" href="{{ route('collections.index') }}">
+            <i class="bi bi-grid-3x3-gap me-1"></i> <span>Collections</span>
+        </a>
+    </li>
+
     <!--<li class="nav-item">
         <a class="nav-link {{ request()->routeIs('viewer.*') ? 'active' : '' }}" href="{{ route('viewer.index') }}">
             <i class="bi bi-body-text me-1"></i> <span>Timeline</span>

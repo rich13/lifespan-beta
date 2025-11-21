@@ -2274,16 +2274,45 @@ class Span extends Model
                 ->with([
                     'connectionSpan:id,description',
                     'child:id,name,type_id,description,start_year,end_year,owner_id,access_level,metadata',
+                    // Eager load ALL connections for children (tracks/books)
+                    // This includes both creators AND album containers for tracks
                     'child.connectionsAsObject' => function ($query) {
-                        $query->whereHas('type', function ($q) {
-                            $q->where('type', 'created');
+                        $query->where(function ($q) {
+                            // Load creators (artists/authors)
+                            $q->whereHas('type', function ($subQ) {
+                                $subQ->where('type', 'created');
+                            })
+                            ->whereHas('parent', function ($subQ) {
+                                $subQ->whereIn('type_id', ['person', 'band']);
+                            });
+                        })->orWhere(function ($q) {
+                            // Load album containers (for tracks)
+                            $q->whereHas('type', function ($subQ) {
+                                $subQ->where('type', 'contains');
+                            })
+                            ->whereHas('parent', function ($subQ) {
+                                $subQ->where('type_id', 'thing')
+                                    ->whereJsonContains('metadata->subtype', 'album');
+                            });
                         })
-                        ->whereHas('parent', function ($q) {
-                            $q->whereIn('type_id', ['person', 'band']);
-                        })
-                        ->with(['parent:id,name,type_id']);
-                    },
-                    'child.connectionsAsObject.parent'
+                        ->with([
+                            'type:type,forward_predicate,inverse_predicate', // Eager load connection type
+                            'parent:id,name,type_id,description,start_year,end_year,owner_id,access_level,metadata',
+                            // For albums: eager load their creators too
+                            'parent.connectionsAsObject' => function ($subQuery) {
+                                $subQuery->whereHas('type', function ($q) {
+                                    $q->where('type', 'created');
+                                })
+                                ->whereHas('parent', function ($q) {
+                                    $q->whereIn('type_id', ['person', 'band']);
+                                })
+                                ->with([
+                                    'type:type,forward_predicate,inverse_predicate', // Eager load connection type
+                                    'parent:id,name,type_id'
+                                ]);
+                            }
+                        ]);
+                    }
                 ])
                 ->get()
                 ->map(function ($connection) {
@@ -2374,6 +2403,151 @@ class Span extends Model
                 })
                 ->exists();
         });
+    }
+
+    // ==================== Collection Methods ====================
+
+    /**
+     * Check if this span is a collection
+     */
+    public function isCollection(): bool
+    {
+        return $this->type_id === 'collection';
+    }
+
+    /**
+     * Add an item to this collection
+     */
+    public function addToCollection(Span $item): bool
+    {
+        if (!$this->isCollection()) {
+            return false;
+        }
+        if ($this->containsItem($item)) {
+            return false;
+        }
+        $connection = new \App\Models\Connection([
+            'parent_id' => $this->id,
+            'child_id' => $item->id,
+            'type_id' => 'contains',
+            'connection_span_id' => self::create([
+                'name' => "{$this->name} contains {$item->name}",
+                'type_id' => 'connection',
+                'owner_id' => auth()->id(),
+                'updater_id' => auth()->id(),
+                'state' => 'complete',
+                'access_level' => 'public',
+                'metadata' => ['timeless' => true]
+            ])->id
+        ]);
+        $result = $connection->save();
+        if ($result) {
+            $this->clearCollectionCaches($item);
+        }
+        return $result;
+    }
+
+    /**
+     * Remove an item from this collection
+     */
+    public function removeFromCollection(Span $item): bool
+    {
+        if (!$this->isCollection()) {
+            return false;
+        }
+        $connection = $this->connectionsAsSubject()
+            ->where('child_id', $item->id)
+            ->whereHas('type', function ($query) {
+                $query->where('type', 'contains');
+            })
+            ->first();
+        if ($connection) {
+            if ($connection->connectionSpan) {
+                $connection->connectionSpan->delete();
+            }
+            $result = $connection->delete();
+            if ($result) {
+                $this->clearCollectionCaches($item);
+            }
+            return $result;
+        }
+        return false;
+    }
+
+    /**
+     * Get the contents of this collection
+     */
+    public function getCollectionContents()
+    {
+        if (!$this->isCollection()) {
+            return collect();
+        }
+        $user = auth()->user();
+        $cacheKey = "collection_contents_{$this->id}_" . ($user?->id ?? 'guest');
+        return \Cache::remember($cacheKey, 604800, function () {
+            return $this->connectionsAsSubject()
+                ->whereHas('type', function ($query) {
+                    $query->where('type', 'contains');
+                })
+                ->with([
+                    'connectionSpan:id,description',
+                    'child:id,name,type_id,description,start_year,end_year,owner_id,access_level,metadata',
+                    'child.connectionsAsObject' => function ($query) {
+                        $query->where(function ($q) {
+                            $q->whereHas('type', function ($subQ) {
+                                $subQ->where('type', 'created');
+                            })
+                            ->whereHas('parent', function ($subQ) {
+                                $subQ->whereIn('type_id', ['person', 'band']);
+                            });
+                        })->orWhere(function ($q) {
+                            $q->whereHas('type', function ($subQ) {
+                                $subQ->where('type', 'contains');
+                            })
+                            ->whereHas('parent', function ($subQ) {
+                                $subQ->where('type_id', 'album');
+                            });
+                        });
+                    },
+                    'child.connectionsAsObject.parent:id,name,type_id',
+                    'child.connectionsAsObject.type:type,forward_description',
+                    'child.type:type_id,name'
+                ])
+                ->get();
+        });
+    }
+
+    /**
+     * Get all collections that contain this span
+     */
+    public function getContainingCollections()
+    {
+        $user = auth()->user();
+        $cacheKey = "containing_collections_{$this->id}_" . ($user?->id ?? 'guest');
+        return \Cache::remember($cacheKey, 604800, function () {
+            return $this->connectionsAsObject()
+                ->whereHas('type', function ($query) {
+                    $query->where('type', 'contains');
+                })
+                ->whereHas('parent', function ($query) {
+                    $query->where('type_id', 'collection')
+                        ->where('access_level', 'public');
+                })
+                ->with(['parent:id,name,description,slug,owner_id,access_level'])
+                ->get()
+                ->pluck('parent');
+        });
+    }
+
+    /**
+     * Clear collection-related caches
+     */
+    protected function clearCollectionCaches(Span $item): void
+    {
+        $user = auth()->user();
+        \Cache::forget("collection_contents_{$this->id}_" . ($user?->id ?? 'guest'));
+        \Cache::forget("containing_collections_{$item->id}_" . ($user?->id ?? 'guest'));
+        \Cache::forget("contains_item_{$this->id}_{$item->id}");
     }
 
     /**

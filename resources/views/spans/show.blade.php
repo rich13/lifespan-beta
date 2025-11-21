@@ -198,6 +198,9 @@
                 <!-- Annotations Card - Show notes that annotate this span -->
                 <x-spans.cards.note-spans-card :span="$span" />
                 
+                <!-- Collections Card - Show collections that contain this span -->
+                <x-spans.cards.collections-card :span="$span" />
+                
                 <x-spans.partials.connections :span="$span" />
             </div>
 

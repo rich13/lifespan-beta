@@ -25,6 +25,7 @@ use App\Http\Controllers\Admin\BookImportController;
 use App\Http\Controllers\AdminModeController;
 use App\Http\Controllers\FriendsController;
 use App\Http\Controllers\NewSpanController;
+use App\Http\Controllers\CollectionsController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
@@ -727,6 +728,11 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
         ->middleware('auth')
         ->name('spans.quick-education.store');
 
+    // Quick Residence creation
+    Route::post('/spans/quick-residence', [\App\Http\Controllers\SpanController::class, 'quickAddResidence'])
+        ->middleware('auth')
+        ->name('spans.quick-residence.store');
+
     // Photo routes - dedicated routes for photo spans (thing type with photo subtype)
     Route::prefix('photos')->group(function () {
         // Public routes with photo access control
@@ -767,6 +773,11 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
         Route::get('/api/sets/containing/{item}', [\App\Http\Controllers\SetsController::class, 'getContainingSets'])->name('sets.containing');
         Route::get('/api/sets/{set}/membership/{item}', [\App\Http\Controllers\SetsController::class, 'checkMembership'])->name('sets.membership');
     });
+
+    // Collections routes (public viewing)
+    Route::get('/collections', [CollectionsController::class, 'index'])->name('collections.index');
+    Route::get('/collections/{collection}', [CollectionsController::class, 'show'])->name('collections.show');
+    Route::get('/api/collections/containing/{item}', [CollectionsController::class, 'getContainingCollections'])->name('collections.containing');
 
     // Notes routes
     Route::get('/notes', [\App\Http\Controllers\NoteController::class, 'index'])->name('notes.index');
@@ -907,6 +918,12 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
             Route::post('/ai-yaml-generator/generate-organisation', [\App\Http\Controllers\AiYamlController::class, 'generateOrganisationYaml'])->name('ai-yaml-generator.generate-organisation');
             Route::post('/ai-yaml-generator/improve-organisation', [\App\Http\Controllers\AiYamlController::class, 'improveOrganisationYaml'])->name('ai-yaml-generator.improve-organisation');
             Route::get('/ai-yaml-generator/placeholders', [\App\Http\Controllers\AiYamlController::class, 'getPlaceholderSpans'])->name('ai-yaml-generator.placeholders');
+
+            // Collections Management (admin only)
+            Route::post('/collections', [CollectionsController::class, 'store'])->name('collections.store');
+            Route::post('/collections/{collection}/add-item', [CollectionsController::class, 'addItem'])->name('collections.add-item');
+            Route::delete('/collections/{collection}/remove-item', [CollectionsController::class, 'removeItem'])->name('collections.remove-item');
+            Route::post('/collections/{collection}/items', [CollectionsController::class, 'toggleItem'])->name('collections.toggle-item');
 
             // Import Management
             Route::prefix('import')->name('import.')->group(function () {
