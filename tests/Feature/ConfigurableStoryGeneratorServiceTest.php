@@ -314,4 +314,225 @@ class ConfigurableStoryGeneratorServiceTest extends TestCase
         $this->assertStringContainsString('plaque thing', $storyText);
         $this->assertStringContainsString("That's all for now", $storyText);
     }
+
+    public function test_photo_story_generation_with_context_aware_sentences(): void
+    {
+        // Create a person (Björk)
+        $person = Span::factory()->create([
+            'name' => 'Björk',
+            'type_id' => 'person',
+            'start_year' => 1965,
+            'start_month' => 11,
+            'start_day' => 21,
+            'metadata' => ['gender' => 'female'],
+        ]);
+
+        // Create a band (The Sugarcubes)
+        $band = Span::factory()->create([
+            'name' => 'The Sugarcubes',
+            'type_id' => 'band',
+        ]);
+
+        // Create a place (Iceland)
+        $iceland = Span::factory()->create([
+            'name' => 'Iceland',
+            'type_id' => 'place',
+        ]);
+
+        // Create a photo taken in 1992
+        $photo = Span::factory()->create([
+            'name' => 'Photo of Björk 1992',
+            'type_id' => 'thing',
+            'metadata' => ['subtype' => 'photo'],
+            'start_year' => 1992,
+            'start_month' => 6,
+            'start_day' => 15,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
+            'start_precision' => 'day',
+            'end_precision' => null,
+        ]);
+
+        // Connect photo to person (photo features person)
+        Connection::factory()->create([
+            'parent_id' => $photo->id,
+            'child_id' => $person->id,
+            'type_id' => 'features',
+        ]);
+
+        // Create membership connection span (1986-1992)
+        $membershipSpan = Span::factory()->create([
+            'type_id' => 'connection',
+            'start_year' => 1986,
+            'start_month' => null,
+            'start_day' => null,
+            'end_year' => 1992,
+            'end_month' => null,
+            'end_day' => null,
+            'start_precision' => 'year',
+            'end_precision' => 'year',
+        ]);
+
+        // Connect person to band (membership active at photo date)
+        Connection::factory()->create([
+            'parent_id' => $person->id,
+            'child_id' => $band->id,
+            'type_id' => 'membership',
+            'connection_span_id' => $membershipSpan->id,
+        ]);
+
+        // Create residence connection span (1965-2000)
+        $residenceSpan = Span::factory()->create([
+            'type_id' => 'connection',
+            'start_year' => 1965,
+            'start_month' => null,
+            'start_day' => null,
+            'end_year' => 2000,
+            'end_month' => null,
+            'end_day' => null,
+            'start_precision' => 'year',
+            'end_precision' => 'year',
+        ]);
+
+        // Connect person to place (residence active at photo date)
+        Connection::factory()->create([
+            'parent_id' => $person->id,
+            'child_id' => $iceland->id,
+            'type_id' => 'residence',
+            'connection_span_id' => $residenceSpan->id,
+        ]);
+
+        $service = new ConfigurableStoryGeneratorService();
+        $story = $service->generateStory($photo);
+
+        $storyText = $story['paragraphs'][0] ?? '';
+
+        // Should include basic photo information
+        $this->assertStringContainsString('This is a photo of', $storyText);
+        $this->assertStringContainsString('Björk', $storyText);
+        $this->assertStringContainsString('It was taken', $storyText);
+        $this->assertStringContainsString('1992', $storyText);
+
+        // Should include age
+        $this->assertStringContainsString('26 years old', $storyText);
+
+        // Should include membership at photo date
+        $this->assertStringContainsString('At the time, she was a member of', $storyText);
+        $this->assertStringContainsString('The Sugarcubes', $storyText);
+
+        // Should include residence at photo date
+        $this->assertStringContainsString('She lived in', $storyText);
+        $this->assertStringContainsString('Iceland', $storyText);
+    }
+
+    public function test_photo_story_generation_with_education_and_employment(): void
+    {
+        // Create a person
+        $person = Span::factory()->create([
+            'name' => 'Richard Northover',
+            'type_id' => 'person',
+            'start_year' => 1977,
+            'start_month' => 1,
+            'start_day' => 15,
+            'metadata' => ['gender' => 'male'],
+        ]);
+
+        // Create a school
+        $school = Span::factory()->create([
+            'name' => 'St Saviours School',
+            'type_id' => 'organisation',
+            'metadata' => ['subtype' => 'school'],
+        ]);
+
+        // Create a place (London)
+        $london = Span::factory()->create([
+            'name' => 'London',
+            'type_id' => 'place',
+        ]);
+
+        // Create a photo taken in 1985
+        $photo = Span::factory()->create([
+            'name' => 'Photo of Richard Northover 1985',
+            'type_id' => 'thing',
+            'metadata' => ['subtype' => 'photo'],
+            'start_year' => 1985,
+            'start_month' => 9,
+            'start_day' => 1,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
+            'start_precision' => 'day',
+            'end_precision' => null,
+        ]);
+
+        // Connect photo to person
+        Connection::factory()->create([
+            'parent_id' => $photo->id,
+            'child_id' => $person->id,
+            'type_id' => 'features',
+        ]);
+
+        // Create education connection span (1982-1988)
+        $educationSpan = Span::factory()->create([
+            'type_id' => 'connection',
+            'start_year' => 1982,
+            'start_month' => null,
+            'start_day' => null,
+            'end_year' => 1988,
+            'end_month' => null,
+            'end_day' => null,
+            'start_precision' => 'year',
+            'end_precision' => 'year',
+        ]);
+
+        // Connect person to school
+        Connection::factory()->create([
+            'parent_id' => $person->id,
+            'child_id' => $school->id,
+            'type_id' => 'education',
+            'connection_span_id' => $educationSpan->id,
+        ]);
+
+        // Create residence connection span (1977-1990)
+        $residenceSpan = Span::factory()->create([
+            'type_id' => 'connection',
+            'start_year' => 1977,
+            'start_month' => null,
+            'start_day' => null,
+            'end_year' => 1990,
+            'end_month' => null,
+            'end_day' => null,
+            'start_precision' => 'year',
+            'end_precision' => 'year',
+        ]);
+
+        // Connect person to place
+        Connection::factory()->create([
+            'parent_id' => $person->id,
+            'child_id' => $london->id,
+            'type_id' => 'residence',
+            'connection_span_id' => $residenceSpan->id,
+        ]);
+
+        $service = new ConfigurableStoryGeneratorService();
+        $story = $service->generateStory($photo);
+
+        $storyText = $story['paragraphs'][0] ?? '';
+
+        // Should include basic photo information
+        $this->assertStringContainsString('This is a photo of', $storyText);
+        $this->assertStringContainsString('Richard Northover', $storyText);
+
+        // Should include age (8 years old in 1985)
+        $this->assertStringContainsString('8 years old', $storyText);
+
+        // Should include education at photo date
+        $this->assertStringContainsString('He studied at', $storyText);
+        $this->assertStringContainsString('St Saviours School', $storyText);
+
+        // Should include residence at photo date
+        $this->assertStringContainsString('He lived in', $storyText);
+        $this->assertStringContainsString('London', $storyText);
+    }
 } 

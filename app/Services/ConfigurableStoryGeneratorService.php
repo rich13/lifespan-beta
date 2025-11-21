@@ -937,6 +937,11 @@ class ConfigurableStoryGeneratorService
             'hasFeaturedSpan' => $this->hasFeaturedSpan($span),
             'hasPhotoDate' => $this->hasPhotoDate($span),
             'hasFeaturedSpanAgeAtPhotoDate' => $this->hasFeaturedSpanAgeAtPhotoDate($span),
+            'hasRoleAtPhotoDate' => $this->hasRoleAtPhotoDate($span),
+            'hasMembershipAtPhotoDate' => $this->hasMembershipAtPhotoDate($span),
+            'hasResidenceAtPhotoDate' => $this->hasResidenceAtPhotoDate($span),
+            'hasEducationAtPhotoDate' => $this->hasEducationAtPhotoDate($span),
+            'hasEmploymentAtPhotoDate' => $this->hasEmploymentAtPhotoDate($span),
             'hasPlaqueFeatures' => $this->hasPlaqueFeatures($span),
             'hasPlaqueLocation' => $this->hasPlaqueLocation($span),
             'wasDeadAtDate' => $this->wasDeadAtDate($span),
@@ -1028,6 +1033,14 @@ class ConfigurableStoryGeneratorService
             'getPhotoDate' => $this->getPhotoDate($span),
             'getPhotoDatePreposition' => $this->getPhotoDatePreposition($span),
             'getFeaturedSpanAgeAtPhotoDate' => $this->getFeaturedSpanAgeAtPhotoDate($span),
+            'getFeaturedPersonPronoun' => $this->getFeaturedPersonPronoun($span),
+            'getRoleAtPhotoDate' => $this->getRoleAtPhotoDate($span),
+            'getRoleOrganisationAtPhotoDate' => $this->getRoleOrganisationAtPhotoDate($span),
+            'getMembershipAtPhotoDate' => $this->getMembershipAtPhotoDate($span),
+            'getResidenceAtPhotoDate' => $this->getResidenceAtPhotoDate($span),
+            'getEducationAtPhotoDate' => $this->getEducationAtPhotoDate($span),
+            'getEmploymentRoleAtPhotoDate' => $this->getEmploymentRoleAtPhotoDate($span),
+            'getEmploymentOrganisationAtPhotoDate' => $this->getEmploymentOrganisationAtPhotoDate($span),
             'getPlaqueFeatures' => $this->getPlaqueFeatures($span),
             'getPlaqueLocation' => $this->getPlaqueLocation($span),
             'getAtDateDisplay' => $this->getAtDateDisplay($span),
@@ -2998,6 +3011,389 @@ class ConfigurableStoryGeneratorService
     protected function hasFeaturedSpanAgeAtPhotoDate(Span $photo): bool
     {
         return $this->getFeaturedSpanAgeAtPhotoDate($photo) !== null;
+    }
+
+    /**
+     * Get the pronoun for the featured person in a photo
+     * Returns lowercase pronoun (he/she/they) - capitalization is handled by sentence generator
+     */
+    protected function getFeaturedPersonPronoun(Span $photo): ?string
+    {
+        // Get the first featured person
+        $featuredPerson = $this->getFirstFeaturedPerson($photo);
+        
+        if (!$featuredPerson) {
+            return null;
+        }
+        
+        // Return lowercase pronoun - capitalization is handled automatically for sentence starts
+        return $this->getPronoun($featuredPerson, 'subject');
+    }
+
+    /**
+     * Helper method to get the first featured person from a photo
+     */
+    protected function getFirstFeaturedPerson(Span $photo): ?Span
+    {
+        $featuresConnection = $photo->connectionsAsSubject()
+            ->where('type_id', 'features')
+            ->whereHas('child', function ($query) {
+                $query->where('type_id', 'person');
+            })
+            ->with(['child'])
+            ->first();
+        
+        return $featuresConnection?->child;
+    }
+
+    /**
+     * Get role held at photo date
+     */
+    protected function getRoleAtPhotoDate(Span $photo): ?string
+    {
+        $featuredPerson = $this->getFirstFeaturedPerson($photo);
+        
+        if (!$featuredPerson || !$photo->start_year) {
+            return null;
+        }
+        
+        // Create context date from photo date
+        $photoDate = $this->createDateFromSpan($photo);
+        if (!$photoDate) {
+            return null;
+        }
+        
+        // Look for has_role connections active at the photo date
+        $roleConnection = $featuredPerson->connectionsAsSubject()
+            ->where('connections.type_id', 'has_role')
+            ->whereHas('connectionSpan', function ($query) use ($photoDate) {
+                $query->where(function ($q) use ($photoDate) {
+                    $q->whereNull('start_year')
+                      ->orWhere(function ($q2) use ($photoDate) {
+                          $q2->where('start_year', '<=', $photoDate->format('Y'))
+                             ->where(function ($q3) use ($photoDate) {
+                                 $q3->whereNull('end_year')
+                                    ->orWhere('end_year', '>=', $photoDate->format('Y'));
+                             });
+                      });
+                });
+            })
+            ->with(['child', 'connectionSpan'])
+            ->join('spans as connection_spans', 'connections.connection_span_id', '=', 'connection_spans.id')
+            ->orderBy('connection_spans.start_year', 'desc')
+            ->orderBy('connection_spans.start_month', 'desc')
+            ->orderBy('connection_spans.start_day', 'desc')
+            ->select('connections.*')
+            ->first();
+        
+        $roleSpan = $roleConnection?->child;
+        return $roleSpan ? $this->makeSpanLink($roleSpan->name, $roleSpan) : null;
+    }
+
+    /**
+     * Get organisation where role was held at photo date
+     */
+    protected function getRoleOrganisationAtPhotoDate(Span $photo): ?string
+    {
+        $featuredPerson = $this->getFirstFeaturedPerson($photo);
+        
+        if (!$featuredPerson || !$photo->start_year) {
+            return null;
+        }
+        
+        // Create context date from photo date
+        $photoDate = $this->createDateFromSpan($photo);
+        if (!$photoDate) {
+            return null;
+        }
+        
+        // Look for has_role connections active at the photo date
+        $roleConnection = $featuredPerson->connectionsAsSubject()
+            ->where('connections.type_id', 'has_role')
+            ->whereHas('connectionSpan', function ($query) use ($photoDate) {
+                $query->where(function ($q) use ($photoDate) {
+                    $q->whereNull('start_year')
+                      ->orWhere(function ($q2) use ($photoDate) {
+                          $q2->where('start_year', '<=', $photoDate->format('Y'))
+                             ->where(function ($q3) use ($photoDate) {
+                                 $q3->whereNull('end_year')
+                                    ->orWhere('end_year', '>=', $photoDate->format('Y'));
+                             });
+                      });
+                });
+            })
+            ->with(['child', 'connectionSpan'])
+            ->join('spans as connection_spans', 'connections.connection_span_id', '=', 'connection_spans.id')
+            ->orderBy('connection_spans.start_year', 'desc')
+            ->orderBy('connection_spans.start_month', 'desc')
+            ->orderBy('connection_spans.start_day', 'desc')
+            ->select('connections.*')
+            ->first();
+        
+        if (!$roleConnection || !$roleConnection->connectionSpan) {
+            return null;
+        }
+        
+        // Look for at_organisation connection from the connection span
+        $atOrgConnection = Connection::where('type_id', 'at_organisation')
+            ->where('parent_id', $roleConnection->connectionSpan->id)
+            ->whereHas('child')
+            ->with(['child'])
+            ->first();
+        
+        $organisationSpan = $atOrgConnection?->child;
+        return $organisationSpan ? $this->makeSpanLink($organisationSpan->name, $organisationSpan) : null;
+    }
+
+    /**
+     * Get membership (band, organisation) active at photo date
+     */
+    protected function getMembershipAtPhotoDate(Span $photo): ?string
+    {
+        $featuredPerson = $this->getFirstFeaturedPerson($photo);
+        
+        if (!$featuredPerson || !$photo->start_year) {
+            return null;
+        }
+        
+        // Create context date from photo date
+        $photoDate = $this->createDateFromSpan($photo);
+        if (!$photoDate) {
+            return null;
+        }
+        
+        // Look for membership connections active at the photo date
+        $membershipConnection = $featuredPerson->connectionsAsSubject()
+            ->where('connections.type_id', 'membership')
+            ->whereHas('connectionSpan', function ($query) use ($photoDate) {
+                $query->where(function ($q) use ($photoDate) {
+                    $q->whereNull('start_year')
+                      ->orWhere(function ($q2) use ($photoDate) {
+                          $q2->where('start_year', '<=', $photoDate->format('Y'))
+                             ->where(function ($q3) use ($photoDate) {
+                                 $q3->whereNull('end_year')
+                                    ->orWhere('end_year', '>=', $photoDate->format('Y'));
+                             });
+                      });
+                });
+            })
+            ->with(['child', 'connectionSpan'])
+            ->join('spans as connection_spans', 'connections.connection_span_id', '=', 'connection_spans.id')
+            ->orderBy('connection_spans.start_year', 'desc')
+            ->orderBy('connection_spans.start_month', 'desc')
+            ->orderBy('connection_spans.start_day', 'desc')
+            ->select('connections.*')
+            ->first();
+        
+        $organisationSpan = $membershipConnection?->child;
+        return $organisationSpan ? $this->makeSpanLink($organisationSpan->name, $organisationSpan) : null;
+    }
+
+    /**
+     * Get residence active at photo date
+     */
+    protected function getResidenceAtPhotoDate(Span $photo): ?string
+    {
+        $featuredPerson = $this->getFirstFeaturedPerson($photo);
+        
+        if (!$featuredPerson || !$photo->start_year) {
+            return null;
+        }
+        
+        // Create context date from photo date
+        $photoDate = $this->createDateFromSpan($photo);
+        if (!$photoDate) {
+            return null;
+        }
+        
+        // Get the most recent residence that was active at this date
+        $residenceConnection = $featuredPerson->connectionsAsSubject()
+            ->where('connections.type_id', 'residence')
+            ->whereHas('connectionSpan', function ($query) use ($photoDate) {
+                $query->where(function ($q) use ($photoDate) {
+                    $q->whereNull('start_year')
+                      ->orWhere(function ($q2) use ($photoDate) {
+                          $q2->where('start_year', '<=', $photoDate->format('Y'))
+                             ->where(function ($q3) use ($photoDate) {
+                                 $q3->whereNull('end_year')
+                                    ->orWhere('end_year', '>=', $photoDate->format('Y'));
+                             });
+                      });
+                });
+            })
+            ->with(['child', 'connectionSpan'])
+            ->join('spans as connection_spans', 'connections.connection_span_id', '=', 'connection_spans.id')
+            ->orderBy('connection_spans.start_year', 'desc')
+            ->orderBy('connection_spans.start_month', 'desc')
+            ->orderBy('connection_spans.start_day', 'desc')
+            ->select('connections.*')
+            ->first();
+        
+        $residenceSpan = $residenceConnection?->child;
+        return $residenceSpan ? $this->makeSpanLink($residenceSpan->name, $residenceSpan) : null;
+    }
+
+    /**
+     * Get education active at photo date
+     */
+    protected function getEducationAtPhotoDate(Span $photo): ?string
+    {
+        $featuredPerson = $this->getFirstFeaturedPerson($photo);
+        
+        if (!$featuredPerson || !$photo->start_year) {
+            return null;
+        }
+        
+        // Create context date from photo date
+        $photoDate = $this->createDateFromSpan($photo);
+        if (!$photoDate) {
+            return null;
+        }
+        
+        // Get the most recent education connection that was active at this date
+        $educationConnection = $featuredPerson->connectionsAsSubject()
+            ->where('connections.type_id', 'education')
+            ->whereHas('connectionSpan', function ($query) use ($photoDate) {
+                $query->where(function ($q) use ($photoDate) {
+                    $q->whereNull('start_year')
+                      ->orWhere(function ($q2) use ($photoDate) {
+                          $q2->where('start_year', '<=', $photoDate->format('Y'))
+                             ->where(function ($q3) use ($photoDate) {
+                                 $q3->whereNull('end_year')
+                                    ->orWhere('end_year', '>=', $photoDate->format('Y'));
+                             });
+                      });
+                });
+            })
+            ->with(['child', 'connectionSpan'])
+            ->join('spans as connection_spans', 'connections.connection_span_id', '=', 'connection_spans.id')
+            ->orderBy('connection_spans.start_year', 'desc')
+            ->orderBy('connection_spans.start_month', 'desc')
+            ->orderBy('connection_spans.start_day', 'desc')
+            ->select('connections.*')
+            ->first();
+        
+        $institutionSpan = $educationConnection?->child;
+        return $institutionSpan ? $this->makeSpanLink($institutionSpan->name, $institutionSpan) : null;
+    }
+
+    /**
+     * Get employment role active at photo date
+     */
+    protected function getEmploymentRoleAtPhotoDate(Span $photo): ?string
+    {
+        $featuredPerson = $this->getFirstFeaturedPerson($photo);
+        
+        if (!$featuredPerson || !$photo->start_year) {
+            return null;
+        }
+        
+        // Create context date from photo date
+        $photoDate = $this->createDateFromSpan($photo);
+        if (!$photoDate) {
+            return null;
+        }
+        
+        // Get the most recent employment connection that was active at this date
+        $employmentConnection = $featuredPerson->connectionsAsSubject()
+            ->where('connections.type_id', 'employment')
+            ->whereHas('connectionSpan', function ($query) use ($photoDate) {
+                $query->where(function ($q) use ($photoDate) {
+                    $q->whereNull('start_year')
+                      ->orWhere(function ($q2) use ($photoDate) {
+                          $q2->where('start_year', '<=', $photoDate->format('Y'))
+                             ->where(function ($q3) use ($photoDate) {
+                                 $q3->whereNull('end_year')
+                                    ->orWhere('end_year', '>=', $photoDate->format('Y'));
+                             });
+                      });
+                });
+            })
+            ->with(['child', 'connectionSpan'])
+            ->join('spans as connection_spans', 'connections.connection_span_id', '=', 'connection_spans.id')
+            ->orderBy('connection_spans.start_year', 'desc')
+            ->orderBy('connection_spans.start_month', 'desc')
+            ->orderBy('connection_spans.start_day', 'desc')
+            ->select('connections.*')
+            ->first();
+        
+        if (!$employmentConnection || !$employmentConnection->connectionSpan) {
+            return null;
+        }
+        
+        // Get role from connection span metadata
+        $role = $employmentConnection->connectionSpan->getMeta('role');
+        return $role;
+    }
+
+    /**
+     * Get employment organisation active at photo date
+     */
+    protected function getEmploymentOrganisationAtPhotoDate(Span $photo): ?string
+    {
+        $featuredPerson = $this->getFirstFeaturedPerson($photo);
+        
+        if (!$featuredPerson || !$photo->start_year) {
+            return null;
+        }
+        
+        // Create context date from photo date
+        $photoDate = $this->createDateFromSpan($photo);
+        if (!$photoDate) {
+            return null;
+        }
+        
+        // Get the most recent employment connection that was active at this date
+        $employmentConnection = $featuredPerson->connectionsAsSubject()
+            ->where('connections.type_id', 'employment')
+            ->whereHas('connectionSpan', function ($query) use ($photoDate) {
+                $query->where(function ($q) use ($photoDate) {
+                    $q->whereNull('start_year')
+                      ->orWhere(function ($q2) use ($photoDate) {
+                          $q2->where('start_year', '<=', $photoDate->format('Y'))
+                             ->where(function ($q3) use ($photoDate) {
+                                 $q3->whereNull('end_year')
+                                    ->orWhere('end_year', '>=', $photoDate->format('Y'));
+                             });
+                      });
+                });
+            })
+            ->with(['child', 'connectionSpan'])
+            ->join('spans as connection_spans', 'connections.connection_span_id', '=', 'connection_spans.id')
+            ->orderBy('connection_spans.start_year', 'desc')
+            ->orderBy('connection_spans.start_month', 'desc')
+            ->orderBy('connection_spans.start_day', 'desc')
+            ->select('connections.*')
+            ->first();
+        
+        $organisationSpan = $employmentConnection?->child;
+        return $organisationSpan ? $this->makeSpanLink($organisationSpan->name, $organisationSpan) : null;
+    }
+
+    // Photo context condition methods
+    protected function hasRoleAtPhotoDate(Span $photo): bool
+    {
+        return $this->getRoleAtPhotoDate($photo) !== null;
+    }
+
+    protected function hasMembershipAtPhotoDate(Span $photo): bool
+    {
+        return $this->getMembershipAtPhotoDate($photo) !== null;
+    }
+
+    protected function hasResidenceAtPhotoDate(Span $photo): bool
+    {
+        return $this->getResidenceAtPhotoDate($photo) !== null;
+    }
+
+    protected function hasEducationAtPhotoDate(Span $photo): bool
+    {
+        return $this->getEducationAtPhotoDate($photo) !== null;
+    }
+
+    protected function hasEmploymentAtPhotoDate(Span $photo): bool
+    {
+        return $this->getEmploymentRoleAtPhotoDate($photo) !== null;
     }
 
     // Plaque-specific methods

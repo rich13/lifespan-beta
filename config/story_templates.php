@@ -270,7 +270,7 @@ return [
         ],
     ],
     'thing_photo' => [
-        'story_template' => '{photo_subject}{photo_date}{photo_age}',
+        'story_template' => '{photo_subject}{photo_date}{photo_age}{photo_role}{photo_membership}{photo_residence}{photo_education}{photo_employment}',
         'sentences' => [
             'photo_subject' => [
                 'template' => 'This is a photo of {featured_span}.',
@@ -293,6 +293,50 @@ return [
                     'age' => 'getFeaturedSpanAgeAtPhotoDate',
                 ],
                 'condition' => 'hasFeaturedSpanAgeAtPhotoDate',
+            ],
+            'photo_role' => [
+                'template' => '{subject} was {role} at {organisation}.',
+                'fallback_template' => '{subject} was {role}.',
+                'data_methods' => [
+                    'subject' => 'getFeaturedPersonPronoun',
+                    'role' => 'getRoleAtPhotoDate',
+                    'organisation' => 'getRoleOrganisationAtPhotoDate',
+                ],
+                'condition' => 'hasRoleAtPhotoDate',
+            ],
+            'photo_membership' => [
+                'template' => 'At the time, {subject} was a member of {organisation}.',
+                'data_methods' => [
+                    'subject' => 'getFeaturedPersonPronoun',
+                    'organisation' => 'getMembershipAtPhotoDate',
+                ],
+                'condition' => 'hasMembershipAtPhotoDate',
+            ],
+            'photo_residence' => [
+                'template' => '{subject} lived in {place}.',
+                'data_methods' => [
+                    'subject' => 'getFeaturedPersonPronoun',
+                    'place' => 'getResidenceAtPhotoDate',
+                ],
+                'condition' => 'hasResidenceAtPhotoDate',
+            ],
+            'photo_education' => [
+                'template' => '{subject} studied at {institution}.',
+                'data_methods' => [
+                    'subject' => 'getFeaturedPersonPronoun',
+                    'institution' => 'getEducationAtPhotoDate',
+                ],
+                'condition' => 'hasEducationAtPhotoDate',
+            ],
+            'photo_employment' => [
+                'template' => '{subject} worked as {role} at {organisation}.',
+                'fallback_template' => '{subject} worked as {role}.',
+                'data_methods' => [
+                    'subject' => 'getFeaturedPersonPronoun',
+                    'role' => 'getEmploymentRoleAtPhotoDate',
+                    'organisation' => 'getEmploymentOrganisationAtPhotoDate',
+                ],
+                'condition' => 'hasEmploymentAtPhotoDate',
             ],
         ],
     ],
