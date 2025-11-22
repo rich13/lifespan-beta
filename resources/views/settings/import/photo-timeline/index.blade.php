@@ -92,14 +92,43 @@
                                     </div>
 
                                     <div class="mb-3">
-                                        <label for="importMode" class="form-label">Import Mode</label>
-                                        <select class="form-select" id="importMode" name="import_mode" required>
-                                            <option value="preview">Preview Only (No Import)</option>
-                                            <option value="create">Create New Travel Spans</option>
-                                            <option value="merge">Merge with Existing Data</option>
-                                        </select>
-                                        <div class="form-text">
-                                            Choose how to handle the imported data.
+                                        <label class="form-label">Travel Filter Options</label>
+                                        <div class="form-text mb-2">
+                                            <i class="bi bi-info-circle me-1"></i>
+                                            Filter out domestic travel to focus on international trips only.
+                                        </div>
+                                        
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="filterInternational" name="filter_international" value="1">
+                                            <label class="form-check-label" for="filterInternational">
+                                                <strong>Show only international travel</strong> (outside home country)
+                                            </label>
+                                        </div>
+                                        
+                                        <div id="homeCountrySection" class="mt-2" style="display: none;">
+                                            <label for="homeCountry" class="form-label small">Home Country</label>
+                                            <select class="form-select form-select-sm" id="homeCountry" name="home_country">
+                                                <option value="United Kingdom" selected>United Kingdom</option>
+                                                <option value="United States">United States</option>
+                                                <option value="Canada">Canada</option>
+                                                <option value="Australia">Australia</option>
+                                                <option value="New Zealand">New Zealand</option>
+                                                <option value="Ireland">Ireland</option>
+                                                <option value="France">France</option>
+                                                <option value="Germany">Germany</option>
+                                                <option value="Spain">Spain</option>
+                                                <option value="Italy">Italy</option>
+                                                <option value="Netherlands">Netherlands</option>
+                                                <option value="Belgium">Belgium</option>
+                                                <option value="Switzerland">Switzerland</option>
+                                                <option value="Austria">Austria</option>
+                                                <option value="Japan">Japan</option>
+                                                <option value="Singapore">Singapore</option>
+                                                <option value="Other">Other</option>
+                                            </select>
+                                            <div class="form-text">
+                                                Travel to this country will be filtered out from the preview and import.
+                                            </div>
                                         </div>
                                     </div>
 
@@ -214,11 +243,26 @@ $(document).ready(function() {
         importTimeline();
     });
     
+    // Handle international filter toggle
+    $('#filterInternational').on('change', function() {
+        if ($(this).is(':checked')) {
+            $('#homeCountrySection').slideDown();
+        } else {
+            $('#homeCountrySection').slideUp();
+        }
+    });
+    
     function previewTimeline() {
         const formData = new FormData();
         formData.append('timeline_file', currentFile);
         formData.append('import_mode', 'preview');
         formData.append('_token', $('input[name="_token"]').val());
+        
+        // Add filter parameters
+        if ($('#filterInternational').is(':checked')) {
+            formData.append('filter_international', '1');
+            formData.append('home_country', $('#homeCountry').val());
+        }
         
         // Show progress indicator for large datasets
         $('#preview-progress').show();
@@ -283,12 +327,19 @@ $(document).ready(function() {
             return;
         }
         
-        const importMode = $('#importMode').val();
+        // Force "create" mode for import button (not preview)
+        const importMode = 'create';
         const formData = new FormData();
         formData.append('timeline_file', currentFile);
         formData.append('import_mode', importMode);
         formData.append('selected_spans', JSON.stringify(selectedSpans));
         formData.append('_token', $('input[name="_token"]').val());
+        
+        // Add filter parameters
+        if ($('#filterInternational').is(':checked')) {
+            formData.append('filter_international', '1');
+            formData.append('home_country', $('#homeCountry').val());
+        }
         
         showProgress(`Importing ${selectedSpans.length} selected travel spans...`);
         
@@ -300,10 +351,13 @@ $(document).ready(function() {
             contentType: false,
             success: function(response) {
                 hideProgress();
-                if (response.success) {
+                console.log('Import response:', response);
+                if (response.success && response.import_result) {
                     displayImportResults(response.import_result);
+                } else if (response.success) {
+                    showError('Import completed but result data is missing. Check server logs.');
                 } else {
-                    showError('Import failed: ' + response.message);
+                    showError('Import failed: ' + (response.message || 'Unknown error'));
                 }
             },
             error: function(xhr) {
@@ -335,6 +389,28 @@ $(document).ready(function() {
             `;
         }
         
+        // Show filter information if applied
+        if (preview.filter_applied) {
+            html += `
+                <div class="alert alert-info">
+                    <h6 class="alert-heading">
+                        <i class="bi bi-funnel me-2"></i>International Travel Filter Applied
+                    </h6>
+                    <p class="mb-2">
+                        Showing only travel outside <strong>${preview.home_country}</strong>.
+                    </p>
+                    ${preview.detailed_preview && preview.detailed_preview.summary ? `
+                        <ul class="mb-0 small">
+                            <li>Total periods analysed: <strong>${preview.detailed_preview.summary.total_periods_analyzed}</strong></li>
+                            <li>Filtered by country (domestic travel): <strong>${preview.detailed_preview.summary.filtered_by_country || 0}</strong></li>
+                            <li>Filtered by residence (local movement): <strong>${preview.detailed_preview.summary.filtered_by_residence || 0}</strong></li>
+                            <li>Remaining international travel spans: <strong>${preview.detailed_preview.summary.total_spans_previewed}</strong></li>
+                        </ul>
+                    ` : ''}
+                </div>
+            `;
+        }
+        
         // Detailed Preview Section
         if (preview.detailed_preview && preview.detailed_preview.summary) {
             
@@ -357,7 +433,10 @@ $(document).ready(function() {
                             </div>
                         </div>
                         
-                        <h6 class="mt-4 mb-3">Travel Spans to be Created:</h6>
+                        <h6 class="mt-4 mb-3">
+                            Travel Spans to be Created
+                            ${preview.filter_applied ? '<span class="badge bg-info ms-2">International only</span>' : ''}
+                        </h6>
                         <div class="mb-3">
                             <button type="button" class="btn btn-sm btn-outline-secondary me-2" onclick="selectAllSpans()">
                                 <i class="bi bi-check-all me-1"></i>Select All
@@ -396,9 +475,9 @@ $(document).ready(function() {
                                 </thead>
                                 <tbody>
                                     ${detailed.spans_to_create.map((span, index) => `
-                                        <tr data-span-index="${index}">
+                                        <tr data-span-index="${span.original_index}">
                                             <td>
-                                                <input type="checkbox" class="span-checkbox" data-span-index="${index}" checked>
+                                                <input type="checkbox" class="span-checkbox" data-span-index="${span.original_index}" checked>
                                             </td>
                                             <td>${index + 1}</td>
                                             <td><strong>${span.name}</strong></td>
@@ -464,30 +543,117 @@ $(document).ready(function() {
     }
     
     function displayImportResults(results) {
+        console.log('Displaying import results:', results);
+        
+        // Ensure all fields have default values
+        const travelSpans = results.travel_spans_created || 0;
+        const connectionsCreated = results.connections_created || 0;
+        const placesCreated = results.places_created || 0;
+        const placesReused = results.places_reused || 0;
+        const filteredByCountry = results.filtered_by_country || 0;
+        const filteredByResidence = results.filtered_by_residence || 0;
+        const createdItems = results.created_items || [];
+        const errors = results.errors || [];
+        const warnings = results.warnings || [];
+        
         let html = `
             <div class="alert alert-success">
-                <h6>Import Completed Successfully!</h6>
-                <p class="mb-0">Created ${results.travel_spans_created} travel spans from ${results.total_periods} timeline periods.</p>
+                <h6><i class="bi bi-check-circle me-2"></i>Import Completed Successfully!</h6>
+                <p class="mb-2">
+                    Created <strong>${travelSpans}</strong> travel connection${travelSpans !== 1 ? 's' : ''}.
+                </p>
+                <ul class="mb-0">
+                    <li><strong>${connectionsCreated}</strong> travel connection${connectionsCreated !== 1 ? 's' : ''} created</li>
+                    <li><strong>${placesCreated}</strong> new place${placesCreated !== 1 ? 's' : ''} created</li>
+                    ${placesReused > 0 ? `<li><strong>${placesReused}</strong> existing place${placesReused !== 1 ? 's' : ''} connected to</li>` : ''}
+                </ul>
+                ${(filteredByCountry > 0 || filteredByResidence > 0) ? `
+                    <hr class="my-2">
+                    <p class="mb-0 small">
+                        <i class="bi bi-funnel me-1"></i>
+                        Filtered out: 
+                        ${filteredByCountry > 0 ? `<strong>${filteredByCountry}</strong> domestic travel, ` : ''}
+                        ${filteredByResidence > 0 ? `<strong>${filteredByResidence}</strong> local movement` : ''}
+                    </p>
+                ` : ''}
             </div>
         `;
         
-        if (results.errors.length > 0) {
+        // Show detailed list of what was created
+        if (createdItems.length > 0) {
             html += `
-                <div class="alert alert-warning">
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="bi bi-list-check me-2"></i>Created Connections</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Place</th>
+                                        <th>Status</th>
+                                        <th>Travel Dates</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${createdItems.map((item, index) => `
+                                        <tr>
+                                            <td>${index + 1}</td>
+                                            <td><strong>${item.place_name}</strong></td>
+                                            <td>
+                                                ${item.place_created ? 
+                                                    '<span class="badge bg-success">New place created</span>' : 
+                                                    '<span class="badge bg-info">Connected to existing</span>'
+                                                }
+                                            </td>
+                                            <td class="small">${item.start_date || 'N/A'} to ${item.end_date || 'N/A'}</td>
+                                            <td>
+                                                <a href="/spans/${item.place_id}" class="btn btn-sm btn-outline-primary" target="_blank">
+                                                    <i class="bi bi-box-arrow-up-right me-1"></i>View
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Add action buttons
+        html += `
+            <div class="mt-3">
+                <a href="/connections?type=travel" class="btn btn-primary">
+                    <i class="bi bi-airplane me-2"></i>View All Travel Connections
+                </a>
+                <button type="button" class="btn btn-outline-secondary" onclick="location.reload()">
+                    <i class="bi bi-arrow-clockwise me-2"></i>Import More
+                </button>
+            </div>
+        `;
+        
+        if (errors.length > 0) {
+            html += `
+                <div class="alert alert-warning mt-3">
                     <h6>Some errors occurred:</h6>
                     <ul class="mb-0">
-                        ${results.errors.map(error => `<li>${error}</li>`).join('')}
+                        ${errors.map(error => `<li>${error}</li>`).join('')}
                     </ul>
                 </div>
             `;
         }
         
-        if (results.warnings.length > 0) {
+        if (warnings.length > 0) {
             html += `
-                <div class="alert alert-info">
+                <div class="alert alert-info mt-3">
                     <h6>Warnings:</h6>
                     <ul class="mb-0">
-                        ${results.warnings.map(warning => `<li>${warning}</li>`).join('')}
+                        ${warnings.map(warning => `<li>${warning}</li>`).join('')}
                     </ul>
                 </div>
             `;

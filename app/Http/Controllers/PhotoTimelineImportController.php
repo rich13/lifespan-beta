@@ -32,13 +32,19 @@ class PhotoTimelineImportController extends Controller
     {
         $request->validate([
             'timeline_file' => 'required|file|mimes:json|max:10240', // 10MB max
+            'filter_international' => 'nullable|boolean',
+            'home_country' => 'nullable|string',
         ]);
 
         try {
             $file = $request->file('timeline_file');
             $user = Auth::user();
             
-            $previewData = $this->previewTimeline($file, $user);
+            // Get filter parameters
+            $filterInternational = $request->input('filter_international', false);
+            $homeCountry = $request->input('home_country', 'United Kingdom');
+            
+            $previewData = $this->previewTimeline($file, $user, $filterInternational, $homeCountry);
             
             return response()->json([
                 'success' => true,
@@ -66,6 +72,8 @@ class PhotoTimelineImportController extends Controller
         $request->validate([
             'timeline_file' => 'required|file|mimes:json|max:10240', // 10MB max
             'import_mode' => 'required|in:create,merge,preview',
+            'filter_international' => 'nullable|boolean',
+            'home_country' => 'nullable|string',
         ]);
 
         try {
@@ -73,8 +81,12 @@ class PhotoTimelineImportController extends Controller
             $user = Auth::user();
             $importMode = $request->input('import_mode');
             
+            // Get filter parameters
+            $filterInternational = $request->input('filter_international', false);
+            $homeCountry = $request->input('home_country', 'United Kingdom');
+            
             if ($importMode === 'preview') {
-                $previewData = $this->previewTimeline($file, $user);
+                $previewData = $this->previewTimeline($file, $user, $filterInternational, $homeCountry);
                 return response()->json([
                     'success' => true,
                     'preview' => $previewData
@@ -90,7 +102,7 @@ class PhotoTimelineImportController extends Controller
                 }
             }
             
-            $importResult = $this->importTimeline($file, $user, $selectedSpans);
+            $importResult = $this->importTimeline($file, $user, $selectedSpans, $filterInternational, $homeCountry);
             
             return response()->json([
                 'success' => true,
@@ -113,7 +125,7 @@ class PhotoTimelineImportController extends Controller
     /**
      * Preview the timeline data without importing
      */
-    protected function previewTimeline($file, $user)
+    protected function previewTimeline($file, $user, $filterInternational = false, $homeCountry = 'United Kingdom')
     {
         $jsonContent = file_get_contents($file->getRealPath());
         $timelineData = json_decode($jsonContent, true);
@@ -127,7 +139,7 @@ class PhotoTimelineImportController extends Controller
         }
         
         // Generate detailed preview of what will be created
-        $detailedPreview = $this->generateDetailedPreview($timelineData, $user);
+        $detailedPreview = $this->generateDetailedPreview($timelineData, $user, $filterInternational, $homeCountry);
         
         $preview = [
             'total_periods' => count($timelineData),
@@ -135,7 +147,9 @@ class PhotoTimelineImportController extends Controller
             'countries' => $this->extractCountries($timelineData),
             'sample_periods' => array_slice($timelineData, 0, 5),
             'validation_errors' => $this->validateTimelineData($timelineData),
-            'detailed_preview' => $detailedPreview
+            'detailed_preview' => $detailedPreview,
+            'filter_applied' => $filterInternational,
+            'home_country' => $homeCountry
         ];
         
         return $preview;
@@ -144,12 +158,18 @@ class PhotoTimelineImportController extends Controller
     /**
      * Generate detailed preview of what will be created
      */
-    protected function generateDetailedPreview($timelineData, $user)
+    protected function generateDetailedPreview($timelineData, $user, $filterInternational = false, $homeCountry = 'United Kingdom')
     {
         $preview = [
             'spans_to_create' => [],
             'connections_to_create' => [],
-            'summary' => []
+            'summary' => [],
+            'filter_stats' => [
+                'total_periods' => count($timelineData),
+                'filtered_by_country' => 0,
+                'filtered_by_residence' => 0,
+                'remaining_periods' => 0
+            ]
         ];
         
         // Get or create connection types (same as import logic)
@@ -279,10 +299,10 @@ class PhotoTimelineImportController extends Controller
         $batchSize = 100;
         $totalBatches = ceil(count($previewPeriods) / $batchSize);
         
-        for ($batch = 0; $batch < $totalBatches; $batch++) {
+            for ($batch = 0; $batch < $totalBatches; $batch++) {
             $startIndex = $batch * $batchSize;
             $endIndex = min($startIndex + $batchSize, count($previewPeriods));
-            $batchPeriods = array_slice($previewPeriods, $startIndex, $batchSize);
+            $batchPeriods = array_slice($previewPeriods, $startIndex, $batchSize, true); // preserve keys
             
             \Log::info('Processing batch', [
                 'batch' => $batch + 1,
@@ -292,7 +312,7 @@ class PhotoTimelineImportController extends Controller
                 'periods_in_batch' => count($batchPeriods)
             ]);
             
-            foreach ($batchPeriods as $index => $period) {
+            foreach ($batchPeriods as $originalIndex => $period) {
                 try {
                     // Generate what the travel span would look like
                     $travelSpanName = $this->generateTravelName($period);
@@ -307,8 +327,24 @@ class PhotoTimelineImportController extends Controller
                     // Check if this is genuine travel (different from residence)
                     $isGenuineTravel = $this->isGenuineTravel($period, $overlappingResidences);
                     
-                    // Only include if it's genuine travel
-                    if ($isGenuineTravel) {
+                    // Apply country filter if enabled
+                    $passesCountryFilter = true;
+                    if ($filterInternational && isset($period['lat']) && isset($period['lon'])) {
+                        $travelCountry = $this->getCountryFromCoordinates($period['lat'], $period['lon']);
+                        $passesCountryFilter = ($travelCountry !== $homeCountry && $travelCountry !== 'Unknown');
+                        
+                        if (!$passesCountryFilter) {
+                            $preview['filter_stats']['filtered_by_country']++;
+                            \Log::info('Filtered by country', [
+                                'travel_country' => $travelCountry,
+                                'home_country' => $homeCountry,
+                                'period' => $period
+                            ]);
+                        }
+                    }
+                    
+                    // Only include if it's genuine travel AND passes country filter
+                    if ($isGenuineTravel && $passesCountryFilter) {
                         // Find the nearest place span for this travel location
                         $nearestPlace = null;
                         if (isset($period['lat']) && isset($period['lon'])) {
@@ -324,6 +360,7 @@ class PhotoTimelineImportController extends Controller
                             'latitude' => $period['latitude'] ?? $period['lat'] ?? null,
                             'longitude' => $period['longitude'] ?? $period['lon'] ?? null,
                             'description' => $period['description'] ?? 'Travel event from photo timeline',
+                            'original_index' => $originalIndex, // Store the original array index
                             'metadata' => [
                                 'source' => 'photo_timeline_import',
                                 'photo_count' => $period['total_photos'] ?? $period['photo_count'] ?? 1,
@@ -352,11 +389,15 @@ class PhotoTimelineImportController extends Controller
                         $preview['connections_to_create'][] = $connection;
                     } else {
                         // Log filtered out periods for transparency
-                        \Log::info('Filtered out local movement', [
-                            'period' => $period,
-                            'overlapping_residences' => $overlappingResidences,
-                            'reason' => 'Same location as residence'
-                        ]);
+                        if (!$isGenuineTravel) {
+                            $preview['filter_stats']['filtered_by_residence']++;
+                            \Log::info('Filtered out local movement', [
+                                'period' => $period,
+                                'overlapping_residences' => $overlappingResidences,
+                                'reason' => 'Same location as residence'
+                            ]);
+                        }
+                        // Country filtering is already logged above
                     }
                     
                 } catch (\Exception $e) {
@@ -379,12 +420,17 @@ class PhotoTimelineImportController extends Controller
             ]);
         }
         
+        // Update filter stats
+        $preview['filter_stats']['remaining_periods'] = count($preview['spans_to_create']);
+        
         // Generate summary statistics
         $preview['summary'] = [
             'total_spans_previewed' => count($preview['spans_to_create']),
             'total_connections_previewed' => count($preview['connections_to_create']),
             'total_periods_analyzed' => count($previewPeriods),
             'total_periods_filtered' => count($previewPeriods) - count($preview['spans_to_create']),
+            'filtered_by_country' => $preview['filter_stats']['filtered_by_country'],
+            'filtered_by_residence' => $preview['filter_stats']['filtered_by_residence'],
             'date_range_previewed' => $this->calculateDateRange($previewPeriods),
             'location_types' => $this->categorizeLocations($previewPeriods),
             'photo_count_summary' => [
@@ -647,7 +693,7 @@ class PhotoTimelineImportController extends Controller
     /**
      * Import the timeline data
      */
-    protected function importTimeline($file, $user, $selectedSpans = null)
+    protected function importTimeline($file, $user, $selectedSpans = null, $filterInternational = false, $homeCountry = 'United Kingdom')
     {
         $jsonContent = file_get_contents($file->getRealPath());
         $timelineData = json_decode($jsonContent, true);
@@ -664,6 +710,12 @@ class PhotoTimelineImportController extends Controller
         $importResult = [
             'total_periods' => count($timelineData),
             'travel_spans_created' => 0,
+            'places_created' => 0,
+            'places_reused' => 0,
+            'connections_created' => 0,
+            'filtered_by_country' => 0,
+            'filtered_by_residence' => 0,
+            'created_items' => [],
             'errors' => [],
             'warnings' => []
         ];
@@ -685,7 +737,7 @@ class PhotoTimelineImportController extends Controller
         );
         
         // Get user's personal span
-        $personalSpan = $user->personal_span;
+        $personalSpan = $user->personalSpan;
         if (!$personalSpan) {
             throw new \Exception('User does not have a personal span. Please create one first.');
         }
@@ -747,14 +799,26 @@ class PhotoTimelineImportController extends Controller
             foreach ($selectedSpans as $spanIndex) {
                 if (isset($timelineData[$spanIndex])) {
                     $periodsToProcess[] = $timelineData[$spanIndex];
+                } else {
+                    \Log::warning('Selected span index not found in timeline data', [
+                        'span_index' => $spanIndex,
+                        'timeline_count' => count($timelineData)
+                    ]);
                 }
             }
             \Log::info('Filtering import to selected spans', [
                 'total_periods' => count($timelineData),
+                'selected_indices' => $selectedSpans,
                 'selected_count' => count($selectedSpans),
                 'filtered_count' => count($periodsToProcess)
             ]);
         }
+        
+        \Log::info('Starting import processing', [
+            'periods_to_process' => count($periodsToProcess),
+            'filter_international' => $filterInternational,
+            'home_country' => $homeCountry
+        ]);
         
         foreach ($periodsToProcess as $index => $period) {
             try {
@@ -768,21 +832,72 @@ class PhotoTimelineImportController extends Controller
                 // Check if this is genuine travel (different from residence)
                 $isGenuineTravel = $this->isGenuineTravel($period, $overlappingResidences);
                 
-                // Only import if it's genuine travel
-                if ($isGenuineTravel) {
-                    $this->createTravelSpan($period, $personalSpan, $travelConnectionType);
-                    $importResult['travel_spans_created']++;
+                // Apply country filter if enabled
+                $passesCountryFilter = true;
+                if ($filterInternational && isset($period['lat']) && isset($period['lon'])) {
+                    $travelCountry = $this->getCountryFromCoordinates($period['lat'], $period['lon']);
+                    $passesCountryFilter = ($travelCountry !== $homeCountry && $travelCountry !== 'Unknown');
+                    
+                    if (!$passesCountryFilter) {
+                        $importResult['filtered_by_country']++;
+                        \Log::info('Skipped domestic travel during import', [
+                            'travel_country' => $travelCountry,
+                            'home_country' => $homeCountry,
+                            'period' => $period
+                        ]);
+                    }
+                }
+                
+                // Only import if it's genuine travel AND passes country filter
+                if ($isGenuineTravel && $passesCountryFilter) {
+                    $result = $this->createTravelConnection($period, $personalSpan, $travelConnectionType);
+                    if ($result['success']) {
+                        $importResult['travel_spans_created']++;
+                        $importResult['connections_created']++;
+                        if ($result['place_created']) {
+                            $importResult['places_created']++;
+                        } else {
+                            $importResult['places_reused']++;
+                        }
+                        $importResult['created_items'][] = [
+                            'place_name' => $result['place_name'],
+                            'place_id' => $result['place_id'],
+                            'place_created' => $result['place_created'],
+                            'connection_id' => $result['connection_id'],
+                            'start_date' => $period['start_date'] ?? null,
+                            'end_date' => $period['end_date'] ?? null
+                        ];
+                    } else {
+                        $importResult['errors'][] = "Failed to create travel for period {$index}: {$result['error']}";
+                    }
                 } else {
-                    \Log::info('Skipped local movement during import', [
-                        'period' => $period,
-                        'overlapping_residences' => $overlappingResidences,
-                        'reason' => 'Same location as residence'
-                    ]);
+                    if (!$isGenuineTravel) {
+                        $importResult['filtered_by_residence']++;
+                        \Log::info('Skipped local movement during import', [
+                            'period' => $period,
+                            'overlapping_residences' => $overlappingResidences,
+                            'reason' => 'Same location as residence'
+                        ]);
+                    }
+                    // Country filtering is already logged above
                 }
             } catch (\Exception $e) {
                 $importResult['errors'][] = "Period {$index}: " . $e->getMessage();
+                \Log::error('Error processing period during import', [
+                    'index' => $index,
+                    'error' => $e->getMessage(),
+                    'period' => $period
+                ]);
             }
         }
+        
+        \Log::info('Import completed', [
+            'travel_spans_created' => $importResult['travel_spans_created'],
+            'connections_created' => $importResult['connections_created'],
+            'places_created' => $importResult['places_created'],
+            'places_reused' => $importResult['places_reused'],
+            'errors_count' => count($importResult['errors'])
+        ]);
         
         return $importResult;
     }
@@ -790,7 +905,202 @@ class PhotoTimelineImportController extends Controller
 
 
     /**
-     * Create a travel span from a timeline period
+     * Create a simpler travel connection directly to a place span
+     */
+    protected function createTravelConnection($period, $personalSpan, $connectionType)
+    {
+        try {
+            // Get system user for place spans
+            $systemUser = \App\Models\User::where('email', 'system@lifespan.app')->first();
+            if (!$systemUser) {
+                throw new \Exception('System user not found. Please ensure system@lifespan.app user exists.');
+            }
+            
+            // Determine the place name from the period data
+            $placeName = null;
+            $latitude = $period['lat'] ?? $period['latitude'] ?? null;
+            $longitude = $period['lon'] ?? $period['longitude'] ?? null;
+            
+            // Try to get location name from the period data
+            if (isset($period['name'])) {
+                // Remove "Travel to " prefix if present
+                $placeName = str_replace('Travel to ', '', $period['name']);
+            } elseif ($latitude && $longitude) {
+                // Get country or location name from coordinates
+                $placeName = $this->getCountryFromCoordinates($latitude, $longitude);
+                
+                // If we got "Unknown", try the more specific location name method
+                if ($placeName === 'Unknown') {
+                    $locationName = $this->getLocationNameFromCoordinates($latitude, $longitude);
+                    if ($locationName && $locationName !== "Location ({$latitude}, {$longitude})") {
+                        $placeName = $locationName;
+                    }
+                }
+            }
+            
+            if (!$placeName || $placeName === 'Unknown') {
+                return [
+                    'success' => false,
+                    'error' => 'Could not determine place name'
+                ];
+            }
+            
+            // Check if place span already exists
+            $placeSpan = Span::where('name', $placeName)
+                ->where('type_id', 'place')
+                ->first();
+            
+            $placeCreated = false;
+            
+            if (!$placeSpan) {
+                // Create new place span owned by system user (public entity)
+                $placeData = [
+                    'name' => $placeName,
+                    'type_id' => 'place',
+                    'user_id' => $systemUser->id,
+                    'owner_id' => $systemUser->id,
+                    'updater_id' => $systemUser->id,
+                    'access_level' => 'public',
+                    'state' => 'complete',
+                    'latitude' => $latitude,
+                    'longitude' => $longitude,
+                    'metadata' => [
+                        'source' => 'photo_timeline_import',
+                        'imported_at' => now()->toISOString(),
+                        'coordinates' => [
+                            'latitude' => $latitude,
+                            'longitude' => $longitude
+                        ],
+                        'photo_count' => $period['photo_count'] ?? $period['total_photos'] ?? 0
+                    ]
+                ];
+                
+                \Log::info('Creating place span with data', [
+                    'place_name' => $placeName,
+                    'has_owner_id' => isset($placeData['owner_id']),
+                    'owner_id' => $placeData['owner_id'] ?? 'MISSING',
+                    'has_updater_id' => isset($placeData['updater_id']),
+                    'updater_id' => $placeData['updater_id'] ?? 'MISSING',
+                    'system_user_id' => $systemUser->id
+                ]);
+                
+                $placeSpan = Span::create($placeData);
+                
+                $placeCreated = true;
+                
+                \Log::info('Created new place span from photo timeline', [
+                    'place_name' => $placeName,
+                    'place_id' => $placeSpan->id,
+                    'coordinates' => "{$latitude}, {$longitude}"
+                ]);
+            } else {
+                \Log::info('Reusing existing place span', [
+                    'place_name' => $placeName,
+                    'place_id' => $placeSpan->id
+                ]);
+            }
+            
+            // Parse dates for the connection span
+            $startDate = $period['start_date'] ?? null;
+            $endDate = $period['end_date'] ?? null;
+            
+            // Parse start date components
+            $startYear = null;
+            $startMonth = null;
+            $startDay = null;
+            if ($startDate) {
+                $startParts = explode('-', $startDate);
+                $startYear = (int)$startParts[0];
+                $startMonth = isset($startParts[1]) ? (int)$startParts[1] : null;
+                $startDay = isset($startParts[2]) ? (int)$startParts[2] : null;
+            }
+            
+            // Parse end date components
+            $endYear = null;
+            $endMonth = null;
+            $endDay = null;
+            if ($endDate) {
+                $endParts = explode('-', $endDate);
+                $endYear = (int)$endParts[0];
+                $endMonth = isset($endParts[1]) ? (int)$endParts[1] : null;
+                $endDay = isset($endParts[2]) ? (int)$endParts[2] : null;
+            }
+            
+            // Create connection span for the travel (owned by the user)
+            // Include year to differentiate multiple trips to the same place
+            $yearSuffix = $startYear ? " {$startYear}" : '';
+            $connectionData = [
+                'name' => "{$personalSpan->name} trip to {$placeName}{$yearSuffix}",
+                'type_id' => 'connection',
+                'user_id' => $personalSpan->owner_id,  // Use owner_id from the personal span
+                'owner_id' => $personalSpan->owner_id,  // The user owns their travel connections
+                'updater_id' => $personalSpan->owner_id,
+                'access_level' => 'private',
+                'state' => 'complete',
+                'start_year' => $startYear,
+                'start_month' => $startMonth,
+                'start_day' => $startDay,
+                'end_year' => $endYear,
+                'end_month' => $endMonth,
+                'end_day' => $endDay,
+                'metadata' => [
+                    'source' => 'photo_timeline_import',
+                    'imported_at' => now()->toISOString(),
+                    'photo_count' => $period['photo_count'] ?? $period['total_photos'] ?? 0
+                ]
+            ];
+            
+            \Log::info('Creating connection span with data', [
+                'connection_name' => $connectionData['name'],
+                'has_owner_id' => isset($connectionData['owner_id']),
+                'owner_id' => $connectionData['owner_id'] ?? 'MISSING',
+                'has_updater_id' => isset($connectionData['updater_id']),
+                'updater_id' => $connectionData['updater_id'] ?? 'MISSING',
+                'personal_span_owner_id' => $personalSpan->owner_id
+            ]);
+            
+            $connectionSpan = Span::create($connectionData);
+            
+            // Create the connection from personal span to place
+            $connection = Connection::create([
+                'parent_id' => $personalSpan->id,
+                'child_id' => $placeSpan->id,
+                'connection_span_id' => $connectionSpan->id,
+                'type_id' => 'travel'
+            ]);
+            
+            \Log::info('Created travel connection', [
+                'connection_id' => $connection->id,
+                'from' => $personalSpan->name,
+                'to' => $placeName,
+                'dates' => "{$startDate} to {$endDate}"
+            ]);
+            
+            return [
+                'success' => true,
+                'place_name' => $placeName,
+                'place_id' => $placeSpan->id,
+                'place_created' => $placeCreated,
+                'connection_id' => $connection->id,
+                'connection_span_id' => $connectionSpan->id
+            ];
+            
+        } catch (\Exception $e) {
+            \Log::error('Failed to create travel connection', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'period' => $period
+            ]);
+            
+            return [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+        }
+    }
+    
+    /**
+     * Create a travel span from a timeline period (OLD METHOD - KEEPING FOR REFERENCE)
      */
     protected function createTravelSpan($period, $personalSpan, $connectionType)
     {
@@ -979,12 +1289,22 @@ class PhotoTimelineImportController extends Controller
                 })->toArray()
             ]);
             
+            // Get system user for place spans
+            $systemUser = \App\Models\User::where('email', 'system@lifespan.app')->first();
+            if (!$systemUser) {
+                \Log::error('System user not found when creating place from OSM');
+                return null;
+            }
+            
             // Create the place span
             $placeSpan = Span::create([
                 'name' => $bestLocation['name'] ?? 'Unknown Location',
                 'type_id' => 'place',
-                'user_id' => auth()->id(),
+                'user_id' => $systemUser->id,
+                'owner_id' => $systemUser->id,
+                'updater_id' => $systemUser->id,
                 'access_level' => 'public',
+                'state' => 'complete',
                 'latitude' => $latitude,
                 'longitude' => $longitude,
                 'metadata' => [
@@ -1817,13 +2137,45 @@ class PhotoTimelineImportController extends Controller
      */
     protected function getCountryFromCoordinates($lat, $lon)
     {
-        $location = $this->getLocationNameFromCoordinates($lat, $lon);
+        // Country boundaries for identification (approximate)
+        $countries = [
+            ['name' => 'United Kingdom', 'bounds' => ['min_lat' => 49.9, 'max_lat' => 60.85, 'min_lon' => -8.65, 'max_lon' => 1.77]],
+            ['name' => 'France', 'bounds' => ['min_lat' => 41.0, 'max_lat' => 51.5, 'min_lon' => -5.0, 'max_lon' => 10.0]],
+            ['name' => 'Spain', 'bounds' => ['min_lat' => 36.0, 'max_lat' => 43.8, 'min_lon' => -9.4, 'max_lon' => 3.3]],
+            ['name' => 'Italy', 'bounds' => ['min_lat' => 35.5, 'max_lat' => 47.1, 'min_lon' => 6.7, 'max_lon' => 18.5]],
+            ['name' => 'Germany', 'bounds' => ['min_lat' => 47.3, 'max_lat' => 55.1, 'min_lon' => 5.9, 'max_lon' => 15.0]],
+            ['name' => 'Netherlands', 'bounds' => ['min_lat' => 50.8, 'max_lat' => 53.7, 'min_lon' => 3.2, 'max_lon' => 7.2]],
+            ['name' => 'Belgium', 'bounds' => ['min_lat' => 49.5, 'max_lat' => 51.5, 'min_lon' => 2.5, 'max_lon' => 6.4]],
+            ['name' => 'Switzerland', 'bounds' => ['min_lat' => 45.8, 'max_lat' => 47.8, 'min_lon' => 5.9, 'max_lon' => 10.5]],
+            ['name' => 'Austria', 'bounds' => ['min_lat' => 46.4, 'max_lat' => 49.0, 'min_lon' => 9.5, 'max_lon' => 17.2]],
+            ['name' => 'Ireland', 'bounds' => ['min_lat' => 51.4, 'max_lat' => 55.4, 'min_lon' => -10.5, 'max_lon' => -6.0]],
+            ['name' => 'Portugal', 'bounds' => ['min_lat' => 36.9, 'max_lat' => 42.2, 'min_lon' => -9.5, 'max_lon' => -6.2]],
+            ['name' => 'United States', 'bounds' => ['min_lat' => 24.4, 'max_lat' => 71.4, 'min_lon' => -125.0, 'max_lon' => -66.9]],
+            ['name' => 'Canada', 'bounds' => ['min_lat' => 41.7, 'max_lat' => 83.1, 'min_lon' => -141.0, 'max_lon' => -52.6]],
+            ['name' => 'Australia', 'bounds' => ['min_lat' => -43.6, 'max_lat' => -10.7, 'min_lon' => 113.2, 'max_lon' => 153.6]],
+            ['name' => 'New Zealand', 'bounds' => ['min_lat' => -52.6, 'max_lat' => -29.2, 'min_lon' => 160.5, 'max_lon' => 179.0]],
+            ['name' => 'Japan', 'bounds' => ['min_lat' => 24.4, 'max_lat' => 45.5, 'min_lon' => 122.9, 'max_lon' => 153.6]],
+            ['name' => 'India', 'bounds' => ['min_lat' => 6.7, 'max_lat' => 35.7, 'min_lon' => 68.2, 'max_lon' => 97.4]],
+            ['name' => 'China', 'bounds' => ['min_lat' => 18.2, 'max_lat' => 53.6, 'min_lon' => 73.7, 'max_lon' => 135.1]],
+            ['name' => 'Mexico', 'bounds' => ['min_lat' => 14.5, 'max_lat' => 32.7, 'min_lon' => -118.4, 'max_lon' => -86.7]],
+            ['name' => 'Brazil', 'bounds' => ['min_lat' => -33.8, 'max_lat' => 5.3, 'min_lon' => -73.9, 'max_lon' => -34.8]],
+            ['name' => 'Argentina', 'bounds' => ['min_lat' => -55.1, 'max_lat' => -21.8, 'min_lon' => -73.6, 'max_lon' => -53.6]],
+            ['name' => 'South Africa', 'bounds' => ['min_lat' => -34.8, 'max_lat' => -22.1, 'min_lon' => 16.5, 'max_lon' => 32.9]],
+            ['name' => 'Egypt', 'bounds' => ['min_lat' => 22.0, 'max_lat' => 31.9, 'min_lon' => 25.0, 'max_lon' => 36.9]],
+            ['name' => 'Morocco', 'bounds' => ['min_lat' => 27.7, 'max_lat' => 36.0, 'min_lon' => -13.2, 'max_lon' => -0.9]],
+            ['name' => 'Thailand', 'bounds' => ['min_lat' => 5.6, 'max_lat' => 20.5, 'min_lon' => 97.3, 'max_lon' => 105.6]],
+            ['name' => 'Vietnam', 'bounds' => ['min_lat' => 8.2, 'max_lat' => 23.4, 'min_lon' => 102.1, 'max_lon' => 109.5]],
+            ['name' => 'Singapore', 'bounds' => ['min_lat' => 1.2, 'max_lat' => 1.5, 'min_lon' => 103.6, 'max_lon' => 104.1]],
+            ['name' => 'Malaysia', 'bounds' => ['min_lat' => 0.9, 'max_lat' => 7.4, 'min_lon' => 99.6, 'max_lon' => 119.3]],
+        ];
         
-        // Extract country from location string
-        if (is_string($location) && strpos($location, ',') !== false) {
-            $parts = explode(',', $location);
-            $country = trim(end($parts));
-            return $country;
+        // Check if coordinates fall within any country's bounds
+        foreach ($countries as $country) {
+            $bounds = $country['bounds'];
+            if ($lat >= $bounds['min_lat'] && $lat <= $bounds['max_lat'] && 
+                $lon >= $bounds['min_lon'] && $lon <= $bounds['max_lon']) {
+                return $country['name'];
+            }
         }
         
         return 'Unknown';
