@@ -51,6 +51,7 @@
 
                         <div class="mb-3">
                             <div class="form-check">
+                                <input type="hidden" name="is_admin" value="0">
                                 <input type="checkbox" class="form-check-input @error('is_admin') is-invalid @enderror" 
                                        id="is_admin" name="is_admin" value="1" 
                                        {{ old('is_admin', $user->is_admin) ? 'checked' : '' }}>
@@ -116,16 +117,53 @@
                     <button type="submit" class="btn btn-primary">Save Changes</button>
                     
                     @unless($user->is_admin)
-                        <form action="{{ route('admin.users.destroy', $user) }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this user? This action cannot be undone.');">
-                            @csrf
-                            @method('DELETE')
-                            <button type="submit" class="btn btn-danger">
-                                Delete User
-                            </button>
-                        </form>
+                        <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteUserModal">
+                            Delete User
+                        </button>
                     @endunless
                 </div>
             </form>
+
+            @unless($user->is_admin)
+            <!-- Delete User Confirmation Modal -->
+            <div class="modal fade" id="deleteUserModal" tabindex="-1" aria-labelledby="deleteUserModalLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header bg-danger text-white">
+                            <h5 class="modal-title" id="deleteUserModalLabel">
+                                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                                Confirm User Deletion
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="alert alert-warning">
+                                <i class="bi bi-exclamation-triangle me-2"></i>
+                                <strong>Warning:</strong> This action cannot be undone!
+                            </div>
+                            <p><strong>You are about to delete:</strong></p>
+                            <ul class="mb-3">
+                                <li>User: <strong>{{ $user->name }}</strong> ({{ $user->email }})</li>
+                                <li>All spans owned by this user (<strong>{{ $user->ownedSpans->count() }} span(s)</strong>)</li>
+                                <li>All user-span relationships</li>
+                                <li>All group memberships</li>
+                            </ul>
+                            <p class="mb-0">Are you absolutely sure you want to proceed?</p>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <form action="{{ route('admin.users.destroy', $user) }}" method="POST" class="d-inline">
+                                @csrf
+                                @method('DELETE')
+                                <button type="submit" class="btn btn-danger">
+                                    <i class="bi bi-trash me-1"></i> Yes, Delete User and All Data
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            @endunless
         </div>
 
         <div class="col-md-4">

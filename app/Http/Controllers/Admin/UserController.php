@@ -50,6 +50,12 @@ class UserController extends Controller
             'is_admin' => 'sometimes|boolean',
         ]);
 
+        // Handle checkbox: when unchecked, it won't be in the request
+        // We need to explicitly set it to false in that case
+        if (!$request->has('is_admin')) {
+            $validated['is_admin'] = false;
+        }
+
         $user->update($validated);
         return redirect()->route('admin.users.show', $user)
             ->with('status', 'User updated successfully');

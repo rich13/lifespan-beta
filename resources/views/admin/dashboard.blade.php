@@ -173,6 +173,22 @@
                         </div>
                     </div>
                 </div>
+                <div class="col-md-3 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-3">
+                                <i class="bi bi-cloud-upload fs-2 text-primary me-3"></i>
+                                <div>
+                                    <h5 class="card-title mb-1">Upload Photos</h5>
+                                    <p class="card-text text-muted">Upload and import photos into the system</p>
+                                </div>
+                            </div>
+                            <a href="{{ route('settings.upload.photos.create') }}" class="btn btn-outline-primary btn-sm w-100">
+                                <i class="bi bi-arrow-right"></i> Upload
+                            </a>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -598,6 +614,22 @@
                             </div>
                             <a href="{{ route('admin.slack-notifications.index') }}" class="btn btn-outline-info btn-sm w-100">
                                 <i class="bi bi-arrow-right"></i> Manage
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-3">
+                                <i class="bi bi-graph-up fs-2 text-warning me-3"></i>
+                                <div>
+                                    <h5 class="card-title mb-1">Span Metrics</h5>
+                                    <p class="card-text text-muted">View span completeness scores and analytics</p>
+                                </div>
+                            </div>
+                            <a href="{{ route('admin.metrics.index') }}" class="btn btn-outline-warning btn-sm w-100">
+                                <i class="bi bi-arrow-right"></i> View Metrics
                             </a>
                         </div>
                     </div>
