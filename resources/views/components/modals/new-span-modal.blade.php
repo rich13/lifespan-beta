@@ -165,6 +165,34 @@
         font-size: 0.85rem;
     }
     
+    /* Wikipedia search styling */
+    #newSpanModal #wikipedia-search-results .list-group-item {
+        cursor: pointer;
+        transition: all 0.2s ease;
+        border-radius: 0.5rem;
+        margin-bottom: 0.5rem;
+        border: 1px solid #dee2e6;
+    }
+    
+    #newSpanModal #wikipedia-search-results .list-group-item:hover {
+        background-color: #f8f9fa;
+        border-color: #0d6efd;
+    }
+    
+    #newSpanModal #wikipedia-search-results .list-group-item.active {
+        background-color: #e7f1ff;
+        border-color: #0d6efd;
+    }
+    
+    #newSpanModal #wikipedia-search-results .list-group-item h6 {
+        color: #0d6efd;
+        font-size: 0.95rem;
+    }
+    
+    #newSpanModal #wikipedia-selected-name {
+        font-size: 0.9rem;
+    }
+    
     /* Responsive adjustments */
     @media (max-width: 768px) {
         #newSpanModal .modal-body {
@@ -276,11 +304,43 @@ $(document).ready(function() {
             </div>
             
             <div class="mb-3">
-                <label for="modal_name" class="form-label fw-medium">Name <span class="text-danger">*</span></label>
-                <input type="text" class="form-control" 
-                       id="modal_name" name="name" required 
-                       placeholder="Enter span name...">
-                <div class="invalid-feedback" id="name-error"></div>
+                <label for="modal_name" class="form-label fw-medium d-flex justify-content-between align-items-center">
+                    <span>Name <span class="text-danger">*</span></span>
+                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" id="toggle-wikipedia-search">
+                        <i class="bi bi-wikipedia me-1"></i>Search Wikipedia
+                    </button>
+                </label>
+                
+                <!-- Manual name entry (default) -->
+                <div id="manual-name-entry">
+                    <input type="text" class="form-control" 
+                           id="modal_name" name="name" required 
+                           placeholder="Enter span name...">
+                    <div class="invalid-feedback" id="name-error"></div>
+                </div>
+                
+                <!-- Wikipedia search interface (hidden by default) -->
+                <div id="wikipedia-search-interface" style="display: none;">
+                    <div class="input-group mb-2">
+                        <input type="text" class="form-control" 
+                               id="wikipedia_search_query" 
+                               placeholder="Search Wikipedia (e.g., '2012 olympics opening')...">
+                        <button class="btn btn-outline-secondary" type="button" id="wikipedia-search-btn">
+                            <i class="bi bi-search"></i>
+                        </button>
+                    </div>
+                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none mb-2" id="back-to-manual-entry">
+                        <i class="bi bi-arrow-left me-1"></i>Back to manual entry
+                    </button>
+                    
+                    <div id="wikipedia-search-results" style="max-height: 300px; overflow-y: auto;">
+                        <!-- Results will be populated here -->
+                    </div>
+                    
+                    <div id="wikipedia-selected-name" class="alert alert-info py-2 mt-2" style="display: none;">
+                        <strong>Selected:</strong> <span id="selected-wikipedia-name"></span>
+                    </div>
+                </div>
             </div>
 
             <div class="mb-3">
@@ -628,6 +688,101 @@ $(document).ready(function() {
     
     function attachEventListeners(step) {
         if (step === 1) {
+            // Wikipedia search toggle
+            $('#toggle-wikipedia-search').on('click', function() {
+                $('#manual-name-entry').hide();
+                $('#wikipedia-search-interface').show();
+                $('#wikipedia_search_query').focus();
+            });
+            
+            $('#back-to-manual-entry').on('click', function() {
+                $('#wikipedia-search-interface').hide();
+                $('#manual-name-entry').show();
+                $('#modal_name').focus();
+            });
+            
+            // Wikipedia search functionality
+            $('#wikipedia-search-btn').on('click', function() {
+                performWikipediaSearch();
+            });
+            
+            $('#wikipedia_search_query').on('keypress', function(e) {
+                if (e.which === 13) { // Enter key
+                    e.preventDefault();
+                    performWikipediaSearch();
+                }
+            });
+            
+            function performWikipediaSearch() {
+                const query = $('#wikipedia_search_query').val().trim();
+                
+                if (!query) {
+                    return;
+                }
+                
+                // Show loading state
+                $('#wikipedia-search-results').html('<div class="text-center p-3"><div class="spinner-border spinner-border-sm text-primary"></div> Searching Wikipedia...</div>');
+                
+                $.ajax({
+                    url: '{{ route("wikipedia.search") }}',
+                    method: 'GET',
+                    data: { query: query },
+                    success: function(response) {
+                        if (response.success && response.results && response.results.length > 0) {
+                            displayWikipediaResults(response.results);
+                        } else {
+                            $('#wikipedia-search-results').html('<div class="alert alert-warning mb-0">No results found. Try a different search term.</div>');
+                        }
+                    },
+                    error: function() {
+                        $('#wikipedia-search-results').html('<div class="alert alert-danger mb-0">Search failed. Please try again.</div>');
+                    }
+                });
+            }
+            
+            function displayWikipediaResults(results) {
+                let html = '<div class="list-group">';
+                
+                results.forEach(function(result) {
+                    html += `
+                        <button type="button" class="list-group-item list-group-item-action wikipedia-result-item" data-title="${result.title}">
+                            <div class="d-flex w-100 justify-content-between align-items-start">
+                                <div class="flex-grow-1">
+                                    <h6 class="mb-1">${result.title}</h6>
+                                    ${result.description ? `<p class="mb-0 small text-muted">${result.description}</p>` : ''}
+                                </div>
+                                <i class="bi bi-arrow-right text-muted ms-2"></i>
+                            </div>
+                        </button>
+                    `;
+                });
+                
+                html += '</div>';
+                $('#wikipedia-search-results').html(html);
+                
+                // Handle result selection
+                $('.wikipedia-result-item').on('click', function() {
+                    const selectedTitle = $(this).data('title');
+                    
+                    // Populate the main name field
+                    $('#modal_name').val(selectedTitle);
+                    
+                    // Show selected indicator
+                    $('#selected-wikipedia-name').text(selectedTitle);
+                    $('#wikipedia-selected-name').show();
+                    
+                    // Highlight the selected item
+                    $('.wikipedia-result-item').removeClass('active');
+                    $(this).addClass('active');
+                    
+                    // Switch back to manual view (with populated name)
+                    setTimeout(() => {
+                        $('#wikipedia-search-interface').hide();
+                        $('#manual-name-entry').show();
+                    }, 500);
+                });
+            }
+            
             // Handle type selection to show/hide subtype dropdown
             $('#modal_type_id').on('change', function() {
                 const selectedOption = $(this).find(':selected');

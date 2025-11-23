@@ -816,6 +816,9 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
         // Sets modal routes
         Route::post('/sets/{set}/items', [\App\Http\Controllers\SetsController::class, 'toggleItem'])->name('sets.toggle-item');
         
+        // Wikipedia search for authenticated users (for modal use)
+        Route::get('/wikipedia/search', [\App\Http\Controllers\WikipediaSearchController::class, 'search'])->name('wikipedia.search');
+        
         // AI YAML Generator for authenticated users (for modal use)
         Route::post('/ai-yaml-generator/generate', [\App\Http\Controllers\AiYamlController::class, 'generateYaml'])->name('ai-yaml-generator.generate');
         Route::post('/ai-yaml-generator/improve', [\App\Http\Controllers\AiYamlController::class, 'improveYaml'])->name('ai-yaml-generator.improve');
