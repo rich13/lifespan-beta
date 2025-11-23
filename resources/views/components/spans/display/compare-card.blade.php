@@ -22,18 +22,18 @@
                 // The span person was born after you
                 // Check if you were still alive when they were born
                 if (!$personalEndYear || $personalEndYear >= $spanStartYear) {
-                    $comparisons[] = "You were {$yearDiff} years old when {$span->name} was born.";
+                    $comparisons[] = "You were {$yearDiff} years old when {$span->getDisplayTitle()} was born.";
                 }
             } elseif ($yearDiff < 0) {
                 // You were born after the span person
                 $yearDiff = abs($yearDiff);
                 // Check if they were still alive when you were born
                 if (!$spanEndYear || $spanEndYear >= $personalStartYear) {
-                    $comparisons[] = "{$span->name} was {$yearDiff} years old when you were born.";
+                    $comparisons[] = "{$span->getDisplayTitle()} was {$yearDiff} years old when you were born.";
                 } else {
                     // They had already passed away
                     $yearsSinceDeath = $personalStartYear - $spanEndYear;
-                    $comparisons[] = "{$span->name} died {$yearsSinceDeath} years before you were born.";
+                    $comparisons[] = "{$span->getDisplayTitle()} died {$yearsSinceDeath} years before you were born.";
                 }
             }
         }
@@ -76,14 +76,14 @@
             if ($spanEndYear >= $personalStartYear) {
                 $ageAtDeath = $spanEndYear - $personalStartYear;
                 if ($ageAtDeath > 0) {
-                    $comparisons[] = "You were {$ageAtDeath} years old when {$span->name} died.";
+                    $comparisons[] = "You were {$ageAtDeath} years old when {$span->getDisplayTitle()} died.";
                 }
             }
         } elseif ($spanStartYear && $personalEndYear) {
             if ($personalEndYear >= $spanStartYear) {
                 $ageAtDeath = $personalEndYear - $spanStartYear;
                 if ($ageAtDeath > 0) {
-                    $comparisons[] = "{$span->name} was {$ageAtDeath} years old when you died.";
+                    $comparisons[] = "{$span->getDisplayTitle()} was {$ageAtDeath} years old when you died.";
                 }
             }
         }
@@ -97,7 +97,7 @@
             if ($personalLifespan > $spanLifespan) {
                 $comparisons[] = "You lived {$lifespanDiff} years longer.";
             } elseif ($spanLifespan > $personalLifespan) {
-                $comparisons[] = "{$span->name} lived {$lifespanDiff} years longer.";
+                $comparisons[] = "{$span->getDisplayTitle()} lived {$lifespanDiff} years longer.";
             }
         }
     }

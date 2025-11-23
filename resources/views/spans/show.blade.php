@@ -217,7 +217,7 @@
                             <div class="text-center">
                                 <div class="ratio ratio-1x1">
                                     <img src="{{ $span->cover_art_url }}" 
-                                         alt="{{ $span->name }} album cover" 
+                                         alt="{{ $span->getDisplayTitle() }} album cover" 
                                          class="img-fluid rounded" 
                                          style="object-fit: cover;"
                                          loading="lazy">
@@ -229,6 +229,9 @@
                 
                 <!-- Image Gallery -->
                 <x-spans.partials.image-gallery :span="$span" />
+                
+                <!-- AKA Card - Show alternative names if they exist -->
+                <x-spans.cards.aka-card :span="$span" />
                 
                 <!-- Blue Plaque Card (for people with plaques) - placed under image gallery -->
                 @if($span->type_id === 'person')
@@ -292,7 +295,7 @@
                                 <div class="text-center">
                                     <a href="{{ $posterUrl }}" target="_blank" rel="noopener noreferrer" class="text-decoration-none">
                                         <img src="{{ $posterUrl }}" 
-                                             alt="{{ $span->name }} poster" 
+                                             alt="{{ $span->getDisplayTitle() }} poster" 
                                              class="img-fluid rounded shadow-sm" 
                                              style="max-width: 100%; height: auto;"
                                              loading="lazy">
@@ -367,7 +370,7 @@
                     
                     <!-- Guardian Articles about this person (only for public persons and admin users) -->
                     @if($span->access_level === 'public' && $span->getMeta('subtype') !== 'private_individual' && auth()->check() && auth()->user()->getEffectiveAdminStatus())
-                        <x-guardian-about-person :personName="$span->name" />
+                        <x-guardian-about-person :personName="$span->getDisplayTitle()" />
                     @endif
                 @endif
                 <x-spans.partials.sources :span="$span" />

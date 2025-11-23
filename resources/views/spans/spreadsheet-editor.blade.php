@@ -1110,12 +1110,14 @@ function validateConnectionRow(subject, predicate, object, startDate, endDate, m
     }
     
     // Send to server for validation
+    const csrfToken = $('meta[name="csrf-token"]').attr('content');
+    
     $.ajax({
                         url: `/spans/${spanData.id}/spanner/validate-connection`,
         method: 'POST',
         data: {
             connection: connectionData,
-            _token: $('meta[name="csrf-token"]').attr('content')
+            _token: csrfToken
         },
         success: function(response) {
             if (response.success) {
@@ -1319,13 +1321,23 @@ function validateData() {
     console.log('Validation data connections:', spanData.connections);
     console.log('About to make AJAX request to:', '{{ route("spans.spanner-validate", $span) }}');
     
+    // Get CSRF token from meta tag
+    const csrfToken = $('meta[name="csrf-token"]').attr('content');
+    
+    console.log('=== CSRF TOKEN DEBUG ===');
+    console.log('CSRF token from meta tag:', csrfToken);
+    console.log('Token length:', csrfToken ? csrfToken.length : 0);
+    console.log('Meta tag exists:', $('meta[name="csrf-token"]').length);
+    console.log('All cookies:', document.cookie);
+    console.log('=== END CSRF DEBUG ===');
+    
     // First, validate the data
     $.ajax({
                         url: '{{ route("spans.spanner-validate", $span) }}',
         method: 'POST',
         data: {
             ...spanData,
-            _token: '{{ csrf_token() }}'
+            _token: csrfToken
         },
         success: function(validationResponse) {
             console.log('Validation AJAX success:', validationResponse);
@@ -1340,7 +1352,7 @@ function validateData() {
                     method: 'POST',
                     data: {
                         ...spanData,
-                        _token: '{{ csrf_token() }}'
+                        _token: csrfToken
                     },
                     success: function(previewResponse) {
                         console.log('Preview AJAX success:', previewResponse);
@@ -1402,6 +1414,17 @@ function validateData() {
             console.log('Validation AJAX error:', xhr);
             console.log('Validation error status:', xhr.status);
             console.log('Validation error response:', xhr.responseText);
+            
+            // Handle 419 CSRF token mismatch
+            if (xhr.status === 419) {
+                console.error('419 CSRF error - session expired or corrupted');
+                updateValidationStatus('Session expired', 'danger');
+                alert('Your session has expired. Please refresh the page and try again.');
+                validateBtn.prop('disabled', false).html(originalValidateText);
+                return;
+            }
+            
+            // Handle other errors
             updateValidationStatus('Validation failed', 'danger');
             $('#save-btn').prop('disabled', true);
             updateSaveButtonText();
@@ -1435,7 +1458,7 @@ function saveSpan() {
     // Prepare data for saving
     const saveData = {
         ...spanData,
-        _token: '{{ csrf_token() }}'
+        _token: $('meta[name="csrf-token"]').attr('content') // Use current token from meta tag (kept fresh)
     };
     
     console.log('Prepared saveData:', saveData);

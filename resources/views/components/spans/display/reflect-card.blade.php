@@ -232,16 +232,16 @@
             <p class="mb-3">
                 @if($reflectionType === 'person_older')
                     @if($personDiedBeforeReachingUserAge)
-                        {{ $span->name }} died at {{ $personAgeAtDeath['years'] }} years, {{ $personAgeAtDeath['months'] }} months, and {{ $personAgeAtDeath['days'] }} days old, which was before reaching your current age.
+                        {{ $span->getDisplayTitle() }} died at {{ $personAgeAtDeath['years'] }} years, {{ $personAgeAtDeath['months'] }} months, and {{ $personAgeAtDeath['days'] }} days old, which was before reaching your current age.
                     @elseif(!$isReflectionInPast)
-                        When {{ $span->name }} is your current age, it will be 
+                        When {{ $span->getDisplayTitle() }} is your current age, it will be 
                     @else
-                        When {{ $span->name }} was your current age, it was 
+                        When {{ $span->getDisplayTitle() }} was your current age, it was 
                     @endif
                 @elseif($reflectionType === 'person_younger')
-                    When you were {{ $span->name }}'s current age, it was 
+                    When you were {{ $span->getDisplayTitle() }}'s current age, it was 
                 @elseif($reflectionType === 'person_younger_dead')
-                    When you were {{ $span->name }}'s age at death ({{ $personAgeAtDeath['years'] }} years, {{ $personAgeAtDeath['months'] }} months, and {{ $personAgeAtDeath['days'] }} days old), it was 
+                    When you were {{ $span->getDisplayTitle() }}'s age at death ({{ $personAgeAtDeath['years'] }} years, {{ $personAgeAtDeath['months'] }} months, and {{ $personAgeAtDeath['days'] }} days old), it was 
                 @endif
                 
                 @if($personDiedBeforeReachingUserAge)
@@ -262,7 +262,7 @@
                 @elseif($isReflectionBeforeBirth)
                     @if($isReflectionAfterDeath && isset($timeAfterDeath))
                         <p class="text-muted mb-0">
-                            This was {{ $timeAfterDeath['years'] ?? 0 }} years, {{ $timeAfterDeath['months'] ?? 0 }} months, and {{ $timeAfterDeath['days'] ?? 0 }} days after {{ $span->name }} died, and {{ $duration['years'] ?? 0 }} years, {{ $duration['months'] ?? 0 }} months, and {{ $duration['days'] ?? 0 }} days before you were born.
+                            This was {{ $timeAfterDeath['years'] ?? 0 }} years, {{ $timeAfterDeath['months'] ?? 0 }} months, and {{ $timeAfterDeath['days'] ?? 0 }} days after {{ $span->getDisplayTitle() }} died, and {{ $duration['years'] ?? 0 }} years, {{ $duration['months'] ?? 0 }} months, and {{ $duration['days'] ?? 0 }} days before you were born.
                         </p>
                     @else
                         <p class="text-muted mb-0">
@@ -280,7 +280,7 @@
                 @if(isset($userAtPersonDeathAgeObj))
                     <div class="mt-4">
                         <p class="text-muted mb-2">
-                            When you were the same age as {{ $span->name }} when they died, it was 
+                            When you were the same age as {{ $span->getDisplayTitle() }} when they died, it was 
                             <a href="{{ route('date.explore', ['date' => $userAtPersonDeathAgeObj->year . '-' . 
                                 str_pad($userAtPersonDeathAgeObj->month, 2, '0', STR_PAD_LEFT) . '-' . 
                                 str_pad($userAtPersonDeathAgeObj->day, 2, '0', STR_PAD_LEFT)]) }}" 
@@ -305,7 +305,7 @@
                             <div class="card mb-3">
                                 <div class="card-header py-2">
                                     <h6 class="mb-0">
-                                        When you were the same age as {{ $span->name }} when they died, it was {{ \App\Helpers\DateHelper::formatDate($userAtPersonDeathAgeObj->year, $userAtPersonDeathAgeObj->month, $userAtPersonDeathAgeObj->day) }}
+                                        When you were the same age as {{ $span->getDisplayTitle() }} when they died, it was {{ \App\Helpers\DateHelper::formatDate($userAtPersonDeathAgeObj->year, $userAtPersonDeathAgeObj->month, $userAtPersonDeathAgeObj->day) }}
                                     </h6>
                                 </div>
                                 <div class="card-body py-3">
@@ -333,11 +333,11 @@
                                     <h6 class="mb-0">
                                         @if($reflectionType === 'person_older')
                                             @if($personDiedBeforeReachingUserAge)
-                                                {{ $span->name }} died at {{ $personAgeAtDeath['years'] }} years, {{ $personAgeAtDeath['months'] }} months, and {{ $personAgeAtDeath['days'] }} days old, which was before reaching your current age.
+                                                {{ $span->getDisplayTitle() }} died at {{ $personAgeAtDeath['years'] }} years, {{ $personAgeAtDeath['months'] }} months, and {{ $personAgeAtDeath['days'] }} days old, which was before reaching your current age.
                                             @elseif(!$isReflectionInPast)
-                                                When {{ $span->name }} is your current age, it will be {{ \App\Helpers\DateHelper::formatDate($reflectionDateObj->year, $reflectionDateObj->month, $reflectionDateObj->day) }}
+                                                When {{ $span->getDisplayTitle() }} is your current age, it will be {{ \App\Helpers\DateHelper::formatDate($reflectionDateObj->year, $reflectionDateObj->month, $reflectionDateObj->day) }}
                                             @else
-                                                When {{ $span->name }} was your current age, it was {{ \App\Helpers\DateHelper::formatDate($reflectionDateObj->year, $reflectionDateObj->month, $reflectionDateObj->day) }}
+                                                When {{ $span->getDisplayTitle() }} was your current age, it was {{ \App\Helpers\DateHelper::formatDate($reflectionDateObj->year, $reflectionDateObj->month, $reflectionDateObj->day) }}
                                             @endif
                                         @endif
                                     </h6>
@@ -382,9 +382,9 @@
                                 <div class="card-header py-2">
                                     <h6 class="mb-0">
                                         @if($reflectionType === 'person_younger')
-                                            When you were {{ $span->name }}'s current age, it was {{ \App\Helpers\DateHelper::formatDate($reflectionDateObj->year, $reflectionDateObj->month, $reflectionDateObj->day) }}
+                                            When you were {{ $span->getDisplayTitle() }}'s current age, it was {{ \App\Helpers\DateHelper::formatDate($reflectionDateObj->year, $reflectionDateObj->month, $reflectionDateObj->day) }}
                                         @elseif($reflectionType === 'person_younger_dead')
-                                            When you were the same age as {{ $span->name }} when they died, it was {{ \App\Helpers\DateHelper::formatDate($reflectionDateObj->year, $reflectionDateObj->month, $reflectionDateObj->day) }}
+                                            When you were the same age as {{ $span->getDisplayTitle() }} when they died, it was {{ \App\Helpers\DateHelper::formatDate($reflectionDateObj->year, $reflectionDateObj->month, $reflectionDateObj->day) }}
                                         @endif
                                     </h6>
                                 </div>
@@ -417,7 +417,7 @@
                                                 }
                                             @endphp
                                             @if(!$isReflectionBeforePersonBirth)
-                                                This is when {{ $span->name }} {{ $isReflectionAgeInPast ? 'was' : 'will be' }} {{ $personAgeAtReflection['years'] ?? 0 }} years, {{ $personAgeAtReflection['months'] ?? 0 }} months, and {{ $personAgeAtReflection['days'] ?? 0 }} days old.
+                                                This is when {{ $span->getDisplayTitle() }} {{ $isReflectionAgeInPast ? 'was' : 'will be' }} {{ $personAgeAtReflection['years'] ?? 0 }} years, {{ $personAgeAtReflection['months'] ?? 0 }} months, and {{ $personAgeAtReflection['days'] ?? 0 }} days old.
                                             @else
                                                 @php
                                                     // Calculate time before person's birth
@@ -426,10 +426,10 @@
                                                         (object)['year' => $personBirthDate->year, 'month' => $personBirthDate->month, 'day' => $personBirthDate->day]
                                                     );
                                                 @endphp
-                                                This is {{ $timeBeforePersonBirth['years'] ?? 0 }} years, {{ $timeBeforePersonBirth['months'] ?? 0 }} months, and {{ $timeBeforePersonBirth['days'] ?? 0 }} days before {{ $span->name }} was born.
+                                                This is {{ $timeBeforePersonBirth['years'] ?? 0 }} years, {{ $timeBeforePersonBirth['months'] ?? 0 }} months, and {{ $timeBeforePersonBirth['days'] ?? 0 }} days before {{ $span->getDisplayTitle() }} was born.
                                             @endif
                                         @elseif($reflectionType === 'person_younger_dead')
-                                            This is when {{ $span->name }} {{ $isReflectionAgeInPast ? 'was' : 'would have been' }} {{ $personAgeAtDeath['years'] ?? 0 }} years, {{ $personAgeAtDeath['months'] ?? 0 }} months, and {{ $personAgeAtDeath['days'] ?? 0 }} days old.
+                                            This is when {{ $span->getDisplayTitle() }} {{ $isReflectionAgeInPast ? 'was' : 'would have been' }} {{ $personAgeAtDeath['years'] ?? 0 }} years, {{ $personAgeAtDeath['months'] ?? 0 }} months, and {{ $personAgeAtDeath['days'] ?? 0 }} days old.
                                         @endif
                                     </h6>
                                 </div>
@@ -442,7 +442,7 @@
                         @elseif(!$isReflectionBeforePersonBirth)
                             <div class="alert alert-info mb-3">
                                 <i class="bi bi-info-circle me-1"></i>
-                                No story available for {{ $span->name }} on this date. Try the connections view instead.
+                                No story available for {{ $span->getDisplayTitle() }} on this date. Try the connections view instead.
                             </div>
                         @endif
                     @endif
@@ -495,16 +495,16 @@
                             @endphp
                             @if(!$isReflectionBeforePersonBirth)
                                 <p class="text-muted mb-2">
-                                    This is when {{ $span->name }} {{ $isReflectionAgeInPast ? 'was' : 'will be' }} {{ $personAgeAtReflection['years'] ?? 0 }} years, {{ $personAgeAtReflection['months'] ?? 0 }} months, and {{ $personAgeAtReflection['days'] ?? 0 }} days old.
+                                    This is when {{ $span->getDisplayTitle() }} {{ $isReflectionAgeInPast ? 'was' : 'will be' }} {{ $personAgeAtReflection['years'] ?? 0 }} years, {{ $personAgeAtReflection['months'] ?? 0 }} months, and {{ $personAgeAtReflection['days'] ?? 0 }} days old.
                                 </p>
                             @else
                                 <p class="text-muted mb-2">
-                                    This is {{ $timeBeforePersonBirth['years'] ?? 0 }} years, {{ $timeBeforePersonBirth['months'] ?? 0 }} months, and {{ $timeBeforePersonBirth['days'] ?? 0 }} days before {{ $span->name }} was born.
+                                    This is {{ $timeBeforePersonBirth['years'] ?? 0 }} years, {{ $timeBeforePersonBirth['months'] ?? 0 }} months, and {{ $timeBeforePersonBirth['days'] ?? 0 }} days before {{ $span->getDisplayTitle() }} was born.
                                 </p>
                             @endif
                         @elseif($reflectionType === 'person_younger_dead')
                             <p class="text-muted mb-2">
-                                This is when {{ $span->name }} {{ $isReflectionAgeInPast ? 'was' : 'would have been' }} {{ $personAgeAtDeath['years'] ?? 0 }} years, {{ $personAgeAtDeath['months'] ?? 0 }} months, and {{ $personAgeAtDeath['days'] ?? 0 }} days old.
+                                This is when {{ $span->getDisplayTitle() }} {{ $isReflectionAgeInPast ? 'was' : 'would have been' }} {{ $personAgeAtDeath['years'] ?? 0 }} years, {{ $personAgeAtDeath['months'] ?? 0 }} months, and {{ $personAgeAtDeath['days'] ?? 0 }} days old.
                             </p>
                         @endif
                         

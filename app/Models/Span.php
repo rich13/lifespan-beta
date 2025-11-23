@@ -699,15 +699,155 @@ class Span extends Model
     }
 
     /**
+     * Track if we're currently resolving a time-aware name to prevent infinite recursion
+     */
+    protected static $resolvingTimeAwareName = [];
+    
+    /**
      * Get the span's display title
      * This might be different from the name based on type-specific rules
+     * Now includes time-aware name resolution from has_name connections
+     *
+     * @param \Carbon\Carbon|null $asOfDate Optional date to get the name as of (defaults to current viewing context)
+     * @return string
+     */
+    public function getDisplayTitle(?\Carbon\Carbon $asOfDate = null): string
+    {
+        return $this->getTimeAwareName($asOfDate);
+    }
+    
+    /**
+     * Get the raw database name without time-aware resolution
+     * Useful when you need the actual stored name value
      *
      * @return string
      */
-    public function getDisplayTitle(): string
+    public function getRawName(): string
     {
-        // TODO: Implement type-specific title formatting
-        return $this->name;
+        return $this->attributes['name'] ?? '';
+    }
+
+    /**
+     * Get the time-aware name for this span
+     * Checks for has_name connections active at the specified date
+     * Falls back to the default spans.name if no active has_name connection exists
+     *
+     * @param \Carbon\Carbon|null $asOfDate Date to check for active names (defaults to current viewing context)
+     * @return string
+     */
+    public function getTimeAwareName(?\Carbon\Carbon $asOfDate = null): string
+    {
+        // Get the viewing date (respects time-travel mode)
+        $viewingDate = $asOfDate ?? \App\Helpers\DateHelper::getCurrentDate();
+        
+        // Query for has_name connections where this span is the parent (subject)
+        $nameConnections = $this->connectionsAsSubject()
+            ->where('type_id', 'has_name')
+            ->with(['connectionSpan', 'child']) // Load the connection span (for dates) and the name span
+            ->get();
+        
+        if ($nameConnections->isEmpty()) {
+            return $this->attributes['name'] ?? ''; // No name connections, use default
+        }
+        
+        // Filter to only connections active at the viewing date
+        $activeNames = $nameConnections->filter(function($connection) use ($viewingDate) {
+            return $this->isConnectionActiveAtDate($connection, $viewingDate);
+        });
+        
+        if ($activeNames->isEmpty()) {
+            return $this->attributes['name'] ?? ''; // No active names at this date, use default
+        }
+        
+        // If multiple names are active, use priority: regnal_name > legal_name > others
+        // Then sort by most recently started
+        $priorityOrder = ['regnal_name', 'legal_name', 'stage_name', 'married_name', 'birth_name', 'other'];
+        
+        $sortedNames = $activeNames->sort(function($a, $b) use ($priorityOrder) {
+            $aSubtype = $a->child->getMeta('subtype') ?? 'other';
+            $bSubtype = $b->child->getMeta('subtype') ?? 'other';
+            
+            $aPriority = array_search($aSubtype, $priorityOrder);
+            $bPriority = array_search($bSubtype, $priorityOrder);
+            
+            // If priorities are different, use priority
+            if ($aPriority !== $bPriority) {
+                return $aPriority <=> $bPriority;
+            }
+            
+            // Otherwise, use most recently started connection
+            $aStart = $this->getConnectionSortDate($a);
+            $bStart = $this->getConnectionSortDate($b);
+            
+            return $bStart <=> $aStart; // Most recent first
+        });
+        
+        $selectedConnection = $sortedNames->first();
+        
+        return $selectedConnection->child->attributes['name'] ?? $this->attributes['name'] ?? '';
+    }
+    
+    /**
+     * Check if a connection is active at a specific date
+     * Uses the same logic as SpanController::isConnectionOngoingAtDate
+     *
+     * @param Connection $connection
+     * @param \Carbon\Carbon $targetDate
+     * @return bool
+     */
+    private function isConnectionActiveAtDate(Connection $connection, \Carbon\Carbon $targetDate): bool
+    {
+        $connectionSpan = $connection->connectionSpan;
+        
+        if (!$connectionSpan) {
+            // For timeless connections without a connection span, consider them always active
+            return true;
+        }
+
+        // Check if the connection has start/end dates
+        $hasStartDate = $connectionSpan->start_year || $connectionSpan->start_month || $connectionSpan->start_day;
+        $hasEndDate = $connectionSpan->end_year || $connectionSpan->end_month || $connectionSpan->end_day;
+
+        if (!$hasStartDate && !$hasEndDate) {
+            // No temporal data - connection is always active
+            return true;
+        }
+
+        // Get the expanded date ranges based on precision
+        $startRange = $connectionSpan->getStartDateRange();
+        $endRange = $connectionSpan->getEndDateRange();
+
+        // Check if the target date falls within the connection's date range
+        if ($startRange[0] && $targetDate < $startRange[0]) {
+            return false; // Connection hasn't started yet
+        }
+
+        if ($endRange[1] && $targetDate > $endRange[1]) {
+            return false; // Connection has already ended
+        }
+
+        return true; // Connection is active at this date
+    }
+    
+    /**
+     * Get a sortable date value from a connection's start date
+     *
+     * @param Connection $connection
+     * @return int
+     */
+    private function getConnectionSortDate(Connection $connection): int
+    {
+        $connectionSpan = $connection->connectionSpan;
+        
+        if (!$connectionSpan || !$connectionSpan->start_year) {
+            return 0; // No start date
+        }
+        
+        $year = $connectionSpan->start_year;
+        $month = $connectionSpan->start_month ?? 1;
+        $day = $connectionSpan->start_day ?? 1;
+        
+        return (int) sprintf('%04d%02d%02d', $year, $month, $day);
     }
 
     /**
