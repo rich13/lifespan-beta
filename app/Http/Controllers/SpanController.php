@@ -2026,7 +2026,7 @@ class SpanController extends Controller
         $spanData = [
             'id' => $span->id,
             'slug' => $span->slug,
-            'name' => $span->name,
+            'name' => $span->getRawName(), // Use raw name to avoid time-aware resolution during data loading
             'type' => $span->type->type_id ?? '',
             'state' => $span->state,
             'start_year' => $span->start_year,
@@ -2050,10 +2050,10 @@ class SpanController extends Controller
                 // Outgoing connections (span is subject)
                 ->concat($span->connectionsAsSubject->map(function($conn) use ($span) {
                     return [
-                        'subject' => $span->name,
+                        'subject' => $span->getRawName(),
                         'subject_id' => $span->id,
                         'predicate' => $conn->type->type,
-                        'object' => $conn->object->name ?? '',
+                        'object' => $conn->object ? $conn->object->getRawName() : '',
                         'object_id' => $conn->object_id,
                         'direction' => 'outgoing',
                         'start_year' => $conn->connectionSpan?->start_year,
@@ -2068,10 +2068,10 @@ class SpanController extends Controller
                 // Incoming connections (span is object)
                 ->concat($span->connectionsAsObject->map(function($conn) use ($span) {
                     return [
-                        'subject' => $conn->subject->name ?? '',
+                        'subject' => $conn->subject ? $conn->subject->getRawName() : '',
                         'subject_id' => $conn->subject_id,
                         'predicate' => $conn->type->type,
-                        'object' => $span->name,
+                        'object' => $span->getRawName(),
                         'object_id' => $span->id,
                         'direction' => 'incoming',
                         'start_year' => $conn->connectionSpan?->start_year,
@@ -4822,7 +4822,7 @@ class SpanController extends Controller
                 'connection_type' => $connectionType->toArray()
             ]);
 
-            // Use the IDs directly from the spreadsheet data
+            // Use the IDs directly from the spreadsheet data (IDs are required, no name fallback)
             $subject = null;
             $object = null;
             
@@ -4832,17 +4832,11 @@ class SpanController extends Controller
             if (isset($connData['object_id']) && $connData['object_id']) {
                 $object = Span::find($connData['object_id']);
             }
-            
-            // Fallback to name lookup if IDs are not available (for backward compatibility)
-            if (!$subject && isset($connData['subject'])) {
-                $subject = Span::where('name', $connData['subject'])->first();
-            }
-            if (!$object && isset($connData['object'])) {
-                $object = Span::where('name', $connData['object'])->first();
-            }
 
             if (!$subject || !$object) {
-                Log::channel('spans')->warning('Subject or object not found', [
+                Log::channel('spans')->error('Connection missing required IDs or spans not found', [
+                    'subject_id' => $connData['subject_id'] ?? 'missing',
+                    'object_id' => $connData['object_id'] ?? 'missing',
                     'subject_name' => $connData['subject'] ?? 'N/A',
                     'object_name' => $connData['object'] ?? 'N/A',
                     'subject_found' => $subject ? true : false,

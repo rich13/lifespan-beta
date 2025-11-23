@@ -129,6 +129,33 @@ class SpanObserver
         $changes = $span->getDirty();
         $this->slackService->notifySpanUpdated($span, $changes);
     }
+
+    /**
+     * Handle the Span "deleting" event (fires BEFORE deletion).
+     * We use deleting instead of deleted because the span must still exist
+     * in the database for the foreign key constraint on span_versions to work.
+     */
+    public function deleting(Span $span): void
+    {
+        // Create a final version snapshot before deletion
+        // This allows us to restore or audit deleted spans
+        try {
+            $span->createVersion('Span deleted');
+            
+            Log::info('Created deletion version snapshot', [
+                'span_id' => $span->id,
+                'span_name' => $span->name,
+                'span_type' => $span->type_id
+            ]);
+        } catch (\Exception $e) {
+            // Log error but don't prevent deletion
+            Log::error('Failed to create deletion version snapshot', [
+                'span_id' => $span->id,
+                'span_name' => $span->name,
+                'error' => $e->getMessage()
+            ]);
+        }
+    }
     
     /**
      * Make all connections for a public figure public

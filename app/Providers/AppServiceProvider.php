@@ -193,5 +193,8 @@ class AppServiceProvider extends ServiceProvider
     {
         // Register Span observer to enforce personal span constraints
         \App\Models\Span::observe(\App\Observers\SpanObserver::class);
+        
+        // Register Connection observer to capture deletion snapshots
+        \App\Models\Connection::observe(\App\Observers\ConnectionObserver::class);
     }
 }
