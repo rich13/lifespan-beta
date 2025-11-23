@@ -61,6 +61,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Application User-Agent
+    |--------------------------------------------------------------------------
+    |
+    | This User-Agent string is used when making HTTP requests to external
+    | APIs (Wikipedia, Wikidata, OpenStreetMap, etc.). It identifies our
+    | application and provides contact information as required by many APIs.
+    |
+    */
+
+    'user_agent' => env('APP_USER_AGENT', 'Lifespan/0.1 (https://lifespan.dev; richard@lifespan.dev)'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |
