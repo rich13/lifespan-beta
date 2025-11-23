@@ -26,7 +26,7 @@ class UKParliamentSparqlService
                     'format' => 'json'
                 ], [
                     'Accept' => 'application/sparql-results+json',
-                    'User-Agent' => 'Lifespan-Beta/1.0 (https://lifespan-beta.com)'
+                    'User-Agent' => config('app.user_agent')
                 ]);
                 
                 if ($response->successful()) {
@@ -63,7 +63,7 @@ class UKParliamentSparqlService
                     'format' => 'json'
                 ], [
                     'Accept' => 'application/sparql-results+json',
-                    'User-Agent' => 'Lifespan-Beta/1.0 (https://lifespan-beta.com)'
+                    'User-Agent' => config('app.user_agent')
                 ]);
                 
                 if ($response->successful()) {
@@ -255,7 +255,7 @@ class UKParliamentSparqlService
                     'format' => 'json'
                 ], [
                     'Accept' => 'application/sparql-results+json',
-                    'User-Agent' => 'Lifespan-Beta/1.0 (https://lifespan-beta.com)'
+                    'User-Agent' => config('app.user_agent')
                 ]);
                 
                 if ($response->successful()) {

@@ -14,9 +14,14 @@ class InvalidImportDateException extends Exception {}
 class MusicBrainzImportService
 {
     protected $musicBrainzApiUrl = 'https://musicbrainz.org/ws/2';
-    protected $userAgent = 'LifespanBeta/1.0 (richard@lifespan.dev)';
+    protected $userAgent;
     protected $rateLimitKey = 'musicbrainz_rate_limit';
     protected $minRequestInterval = 1.0; // 1 second minimum between requests
+
+    public function __construct()
+    {
+        $this->userAgent = config('app.user_agent');
+    }
 
     /**
      * Ensure we respect the rate limit (1 request per second)

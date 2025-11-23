@@ -100,7 +100,7 @@ class PlaceBoundaryService
         try {
             $response = Http::timeout(25)
                 ->withHeaders([
-                    'User-Agent' => 'Lifespan-Beta/1.0 (https://lifespan-beta.com)',
+                    'User-Agent' => config('app.user_agent'),
                 ])
                 ->get(self::OVERPASS_ENDPOINT, [
                     'data' => $query,

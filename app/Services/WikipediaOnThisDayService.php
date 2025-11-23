@@ -30,7 +30,7 @@ class WikipediaOnThisDayService
                 $response = Http::timeout(10)
                     ->retry(2, 2000)
                     ->withHeaders([
-                        'User-Agent' => 'LifespanBeta/1.0 (https://lifespan-beta.railway.app; contact@lifespan-beta.railway.app)'
+                        'User-Agent' => config('app.user_agent')
                     ])
                     ->get($this->baseUrl . "/all/{$monthPadded}/{$dayPadded}");
                 

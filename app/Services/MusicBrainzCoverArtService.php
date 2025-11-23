@@ -10,9 +10,14 @@ use Exception;
 class MusicBrainzCoverArtService
 {
     protected $coverArtApiUrl = 'https://coverartarchive.org';
-    protected $userAgent = 'LifespanBeta/1.0 (richard@lifespan.dev)';
+    protected $userAgent;
     protected $rateLimitKey = 'coverart_rate_limit';
     protected $minRequestInterval = 1.0; // 1 second minimum between requests
+
+    public function __construct()
+    {
+        $this->userAgent = config('app.user_agent');
+    }
 
     /**
      * Get a singleton instance of the service

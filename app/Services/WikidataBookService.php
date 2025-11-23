@@ -52,7 +52,7 @@ class WikidataBookService
 
         try {
             $response = Http::withHeaders([
-                'User-Agent' => 'Lifespan-Beta/1.0 (https://lifespan-beta.com; admin@lifespan-beta.com) Laravel/10.0'
+                'User-Agent' => config('app.user_agent')
             ])->timeout(10)->get($this->wikidataUrl, [
                 'action' => 'wbsearchentities',
                 'format' => 'json',
@@ -155,7 +155,7 @@ class WikidataBookService
 
             $sparqlUrl = 'https://query.wikidata.org/sparql';
             $response = Http::withHeaders([
-                'User-Agent' => 'Lifespan-Beta/1.0 (https://lifespan-beta.com; admin@lifespan-beta.com) Laravel/10.0',
+                'User-Agent' => config('app.user_agent'),
                 'Accept' => 'application/sparql-results+json'
             ])->timeout(15)->get($sparqlUrl, [
                 'query' => $sparqlQuery,

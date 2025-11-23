@@ -9,10 +9,15 @@ use Illuminate\Support\Facades\Cache;
 class WikimediaCommonsApiService
 {
     protected string $baseUrl = 'https://commons.wikimedia.org/w/api.php';
-    protected array $headers = [
-        'Accept' => 'application/json',
-        'User-Agent' => 'Lifespan/1.0 (Wikimedia Commons Importer)'
-    ];
+    protected array $headers;
+
+    public function __construct()
+    {
+        $this->headers = [
+            'Accept' => 'application/json',
+            'User-Agent' => config('app.user_agent')
+        ];
+    }
 
     /**
      * Search for images in Wikimedia Commons

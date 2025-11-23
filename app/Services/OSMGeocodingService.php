@@ -156,7 +156,7 @@ class OSMGeocodingService
                 
                 $response = Http::timeout(10)
                     ->withHeaders([
-                        'User-Agent' => 'Lifespan-Beta/1.0 (https://lifespan-beta.com)',
+                        'User-Agent' => config('app.user_agent'),
                         'Accept-Language' => 'en'
                     ])
                     ->get(self::NOMINATIM_BASE_URL . '/search', $params);
@@ -205,7 +205,7 @@ class OSMGeocodingService
             // Use Nominatim reverse geocoding to get the base location
             $response = Http::withHeaders([
                 'Accept-Language' => 'en',
-                'User-Agent' => 'Lifespan/1.0'
+                'User-Agent' => config('app.user_agent')
             ])->get(self::NOMINATIM_BASE_URL . '/reverse', [
                 'lat' => $latitude,
                 'lon' => $longitude,
@@ -262,7 +262,7 @@ class OSMGeocodingService
             ";
 
             $response = Http::withHeaders([
-                'User-Agent' => 'Lifespan/1.0'
+                'User-Agent' => config('app.user_agent')
             ])->post('https://overpass-api.de/api/interpreter', $query);
 
             if (!$response->successful()) {

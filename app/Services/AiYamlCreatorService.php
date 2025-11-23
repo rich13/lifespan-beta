@@ -133,7 +133,8 @@ class AiYamlCreatorService
             Log::info('AI cleaned response for ' . $spanType . ' improvement', [
                 'name' => $name,
                 'cleaned_content' => $yamlContent,
-                'cleaned_length' => strlen($yamlContent)
+                'cleaned_length' => strlen($yamlContent),
+                'sources_lines' => $this->extractLinesContaining($yamlContent, 'sources', 20)
             ]);
             
             $result = [
@@ -1712,7 +1713,7 @@ PROMPT;
                 continue;
             }
             
-            // Start collecting YAML when we see a valid YAML line
+            // Start collecting YAML when we see a valid YAML line (but skip 'id:' if it's at the start)
             if (!$inYaml && (strpos($trimmed, 'name:') === 0 || strpos($trimmed, 'type:') === 0)) {
                 $inYaml = true;
                 Log::info('cleanYamlResponse found YAML start', ['line' => $line]);
@@ -1729,8 +1730,11 @@ PROMPT;
                     break;
                 }
                 
-                // Skip lines that are just markdown artifacts
-                if (preg_match('/^[`\-\*]+$/', $trimmed)) {
+                // Skip lines that are just markdown artifacts (backticks or horizontal rules)
+                // NOTE: We preserve dash-only lines as they are valid YAML list markers
+                if (preg_match('/^[`]+$/', $trimmed) || preg_match('/^[\-\*]{3,}$/', $trimmed)) {
+                    // This is a markdown artifact (multiple backticks or a horizontal rule like --- or ***)
+                    Log::info('cleanYamlResponse skipping markdown artifact', ['line' => $line]);
                     continue;
                 }
                 
@@ -1749,7 +1753,10 @@ PROMPT;
         $result = implode("\n", $yamlLines);
         
         // Final cleanup - remove any remaining markdown artifacts
-        $result = preg_replace('/^\s*[`\-\*]+\s*$/m', '', $result);
+        // Only remove lines with multiple dashes/asterisks (horizontal rules) or backticks
+        // Preserve YAML list markers (single dash with optional leading whitespace and content after)
+        $result = preg_replace('/^\s*[`]+\s*$/m', '', $result); // Remove lines with only backticks
+        $result = preg_replace('/^\s*[\-\*]{3,}\s*$/m', '', $result); // Remove horizontal rules (3+ dashes or asterisks)
         $result = preg_replace('/\n\s*\n\s*\n/', "\n\n", $result); // Remove excessive blank lines
         $result = trim($result);
         
@@ -1885,6 +1892,30 @@ PROMPT;
         }
         
         return false;
+    }
+
+    /**
+     * Extract lines containing a specific string (for debugging)
+     */
+    private function extractLinesContaining(string $content, string $search, int $contextLines = 5): string
+    {
+        $lines = explode("\n", $content);
+        $result = [];
+        
+        foreach ($lines as $index => $line) {
+            if (stripos($line, $search) !== false) {
+                // Found the search term, include context
+                $start = max(0, $index - $contextLines);
+                $end = min(count($lines) - 1, $index + $contextLines);
+                
+                for ($i = $start; $i <= $end; $i++) {
+                    $result[] = sprintf("%4d: %s", $i + 1, $lines[$i]);
+                }
+                break; // Only show first occurrence
+            }
+        }
+        
+        return implode("\n", $result);
     }
 
     /**
