@@ -41,6 +41,14 @@ class YamlValidationService
                 if (!$this->isTypeCompatible($actualType, $expectedType)) {
                     $errors[] = "Field '{$field}' should be of type '{$expectedType}', got '{$actualType}'";
                 }
+                
+                // Validate UUID format if specified
+                if (isset($baseSchema[$field]['format']) && 
+                    $baseSchema[$field]['format'] === 'uuid' && 
+                    $value !== null && 
+                    !$this->isValidUuid($value)) {
+                    $errors[] = "Field '{$field}' must be a valid UUID format (got: '{$value}')";
+                }
             }
         }
         
@@ -167,7 +175,7 @@ class YamlValidationService
     private function getBaseSchema(): array
     {
         return [
-            'id' => ['type' => 'string', 'required' => false],
+            'id' => ['type' => 'string', 'required' => false, 'format' => 'uuid'],
             'name' => ['type' => 'string', 'required' => true],
             'slug' => ['type' => 'string', 'required' => false],
             'type' => ['type' => 'string', 'required' => true],
@@ -250,10 +258,10 @@ class YamlValidationService
         // Define connection item schema
         $connectionItemSchema = [
             'name' => ['type' => 'string', 'required' => true],
-            'id' => ['type' => 'string', 'required' => false],
+            'id' => ['type' => 'string', 'required' => false, 'format' => 'uuid'],
             'type' => ['type' => 'string', 'required' => true],
             'connection_type' => ['type' => 'string', 'required' => false], // For connection spans
-            'connection_id' => ['type' => 'string', 'required' => false],
+            'connection_id' => ['type' => 'string', 'required' => false, 'format' => 'uuid'],
             'start' => ['type' => 'string|integer|null', 'required' => false],
             'end' => ['type' => 'string|integer|null', 'required' => false],
             'state' => ['type' => 'string', 'required' => false],
@@ -312,6 +320,14 @@ class YamlValidationService
                         
                         if (!$this->isTypeCompatible($actualType, $expectedType)) {
                             $errors[] = "Field '{$field}' in connection {$index} of type '{$connectionType}' should be of type '{$expectedType}', got '{$actualType}'";
+                        }
+                        
+                        // Validate UUID format if specified
+                        if (isset($connectionItemSchema[$field]['format']) && 
+                            $connectionItemSchema[$field]['format'] === 'uuid' && 
+                            $value !== null && 
+                            !$this->isValidUuid($value)) {
+                            $errors[] = "Field '{$field}' in connection {$index} of type '{$connectionType}' must be a valid UUID format (got: '{$value}')";
                         }
                     }
                 }
@@ -523,6 +539,15 @@ class YamlValidationService
     {
         $types = ConnectionType::pluck('type')->toArray();
         return array_merge($types, ['parents', 'children']); // Include special family types
+    }
+    
+    /**
+     * Validate if a string is a valid UUID format
+     */
+    private function isValidUuid(string $uuid): bool
+    {
+        $pattern = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
+        return preg_match($pattern, $uuid) === 1;
     }
     
     /**

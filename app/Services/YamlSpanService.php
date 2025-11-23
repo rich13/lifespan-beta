@@ -1606,22 +1606,13 @@ class YamlSpanService
                                 throw new \InvalidArgumentException("Span with ID '{$connectionData['id']}' not found, and no existing span with name '{$connectionData['name']}' and type '{$connectionData['type']}' exists");
                             }
                         }
-                        // Update start, end, and state if present in YAML
+                        // IMPORTANT: Don't update the connected span's dates here!
+                        // The dates in the connection data are for the CONNECTION (e.g., when someone worked there),
+                        // NOT for the span itself (e.g., when the organisation existed).
+                        // Connection dates will be applied to the connection span below.
+                        
+                        // Only update state if present in YAML
                         $spanChanged = false;
-                        if (isset($connectionData['start'])) {
-                            $parsedStart = $this->parseDate($connectionData['start']);
-                            $connectedSpan->start_year = $parsedStart['year'];
-                            $connectedSpan->start_month = $parsedStart['month'];
-                            $connectedSpan->start_day = $parsedStart['day'];
-                            $spanChanged = true;
-                        }
-                        if (isset($connectionData['end'])) {
-                            $parsedEnd = $this->parseDate($connectionData['end']);
-                            $connectedSpan->end_year = $parsedEnd['year'];
-                            $connectedSpan->end_month = $parsedEnd['month'];
-                            $connectedSpan->end_day = $parsedEnd['day'];
-                            $spanChanged = true;
-                        }
                         if (isset($connectionData['state'])) {
                             $connectedSpan->state = $connectionData['state'];
                             $spanChanged = true;
@@ -1639,22 +1630,13 @@ class YamlSpanService
                             null, // Don't pass connection dates as span dates
                             $metadata
                         );
-                        // Update start, end, and state if present in YAML
+                        // IMPORTANT: Don't update the connected span's dates here!
+                        // The dates in the connection data are for the CONNECTION (e.g., when someone worked there),
+                        // NOT for the span itself (e.g., when the organisation existed).
+                        // Connection dates will be applied to the connection span below.
+                        
+                        // Only update state if present in YAML
                         $spanChanged = false;
-                        if (isset($connectionData['start'])) {
-                            $parsedStart = $this->parseDate($connectionData['start']);
-                            $connectedSpan->start_year = $parsedStart['year'];
-                            $connectedSpan->start_month = $parsedStart['month'];
-                            $connectedSpan->start_day = $parsedStart['day'];
-                            $spanChanged = true;
-                        }
-                        if (isset($connectionData['end'])) {
-                            $parsedEnd = $this->parseDate($connectionData['end']);
-                            $connectedSpan->end_year = $parsedEnd['year'];
-                            $connectedSpan->end_month = $parsedEnd['month'];
-                            $connectedSpan->end_day = $parsedEnd['day'];
-                            $spanChanged = true;
-                        }
                         if (isset($connectionData['state'])) {
                             $connectedSpan->state = $connectionData['state'];
                             $spanChanged = true;

@@ -5,7 +5,7 @@
 # Basic span information
 id: "<UUID>"  # UUID - required for existing spans, omit for new spans
 name: "<Full Name>"  # Full name - required
-type: "<span_type>"  # Required: person, organisation, place, event, thing, band, role
+type: "<span_type>"  # Required: person, organisation, place, event, thing, band, role, name
 state: "<state>"  # Required: complete, draft, placeholder
 start: "<YYYY-MM-DD>"  # Start date in YYYY-MM-DD format, or YYYY-MM, or YYYY
 end: null  # End date in same format, or null if ongoing
@@ -36,6 +36,9 @@ metadata:
   # Thing-specific metadata
   creator: "<Creator Span ID>"  # UUID of creator span, or null
   subtype: "<subtype>"  # album, song, book, film, etc., or null
+  
+  # Name-specific metadata (for type: name)
+  subtype: "<subtype>"  # birth_name, legal_name, stage_name, regnal_name, nickname, alias, married_name, maiden_name, brand_name, former_name, other
   
   # General metadata
   tags: ["<tag1>", "<tag2>"]  # Array of tags for categorization
@@ -198,6 +201,18 @@ connections:
           target_name: "<Organisation Name>"  # Name of the target entity
           target_id: "<UUID>"  # UUID of target entity, or omit for new entities
           target_type: "organisation"  # Type of target entity
+
+  # Name connections - temporal names of entities
+  has_name:
+    - name: "King Charles III"
+      id: "<UUID>"
+      type: "name"
+      connection_id: "<UUID>"
+      start_date: "2022-09-08"  # When this name became active
+      end_date: null  # null if still current
+      metadata:
+        subtype: "regnal_name"  # Optional: type of name (birth_name, stage_name, etc.)
+        notes: "<Notes>"
 
 # Notes:
 # - All dates should be quoted to prevent YAML from interpreting them as mathematical expressions
