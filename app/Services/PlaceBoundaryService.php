@@ -36,31 +36,88 @@ class PlaceBoundaryService
         }
 
         // Check if boundary is already stored in metadata
+        // Check both external_refs.osm and osm_data for backward compatibility
         $metadata = $place->metadata ?? [];
-        $storedBoundary = $metadata['osm_data']['boundary_geojson'] ?? null;
+        $storedBoundary = $metadata['external_refs']['osm']['boundary_geojson'] 
+            ?? $metadata['osm_data']['boundary_geojson'] 
+            ?? null;
         if ($storedBoundary && is_array($storedBoundary)) {
             return $storedBoundary;
         }
 
-        $cacheKey = self::CACHE_PREFIX . $osmData['osm_type'] . '_' . $osmData['osm_id'];
+        $osmType = $osmData['osm_type'];
+        $osmId = $osmData['osm_id'];
+        
+        // If this is a node (point) but it's an administrative area, try to find the relation
+        if ($osmType === 'node') {
+            $metadata = $place->metadata ?? [];
+            $subtype = $metadata['subtype'] ?? null;
+            $placeType = $osmData['place_type'] ?? '';
+            
+            // Check if this is an administrative area that should have a boundary
+            $isAdministrative = $placeType === 'administrative' || in_array($subtype, [
+                'country', 'state_region', 'county_province', 'city_district', 'suburb_area'
+            ]);
+            
+            if ($isAdministrative) {
+                // Try to find the relation for this administrative area
+                $relation = $this->findBoundaryRelationForNode($place, $osmData);
+                if ($relation) {
+                    $osmType = 'relation';
+                    $osmId = $relation['id'];
+                    Log::info('Found boundary relation for node', [
+                        'span_id' => $place->id,
+                        'span_name' => $place->name,
+                        'node_id' => $osmData['osm_id'],
+                        'relation_id' => $osmId
+                    ]);
+                } else {
+                    // Node doesn't have a boundary relation
+                    return null;
+                }
+            } else {
+                // Nodes that aren't administrative areas don't have boundaries
+                return null;
+            }
+        }
 
-        return Cache::remember($cacheKey, self::CACHE_TTL_SECONDS, function () use ($place, $metadata, $osmData) {
+        $cacheKey = self::CACHE_PREFIX . $osmType . '_' . $osmId;
+
+        return Cache::remember($cacheKey, self::CACHE_TTL_SECONDS, function () use ($place, $metadata, $osmType, $osmId) {
             Log::info('Fetching place boundary from Overpass', [
                 'span_id' => $place->id,
                 'span_name' => $place->name,
-                'osm_type' => $osmData['osm_type'],
-                'osm_id' => $osmData['osm_id'],
+                'osm_type' => $osmType,
+                'osm_id' => $osmId,
             ]);
 
             $geoJson = $this->fetchBoundaryFromOverpass(
-                $osmData['osm_type'],
-                $osmData['osm_id']
+                $osmType,
+                $osmId
             );
 
             if ($geoJson) {
                 // Store boundary in metadata for long-term caching
-                $metadata['osm_data']['boundary_geojson'] = $geoJson;
-                $metadata['osm_data']['boundary_cached_at'] = now()->toIso8601String();
+                // Store in the same location as OSM data (external_refs.osm or osm_data)
+                if (isset($metadata['external_refs']['osm'])) {
+                    // Store in external_refs.osm if it exists
+                    if (!isset($metadata['external_refs'])) {
+                        $metadata['external_refs'] = [];
+                    }
+                    if (!isset($metadata['external_refs']['osm'])) {
+                        $metadata['external_refs']['osm'] = [];
+                    }
+                    $metadata['external_refs']['osm']['boundary_geojson'] = $geoJson;
+                    $metadata['external_refs']['osm']['boundary_cached_at'] = now()->toIso8601String();
+                } else {
+                    // Fall back to osm_data for backward compatibility
+                    if (!isset($metadata['osm_data'])) {
+                        $metadata['osm_data'] = [];
+                    }
+                    $metadata['osm_data']['boundary_geojson'] = $geoJson;
+                    $metadata['osm_data']['boundary_cached_at'] = now()->toIso8601String();
+                }
+                
                 $place->metadata = $metadata;
 
                 // Avoid triggering model events/listeners (this is a cache update)
@@ -102,9 +159,8 @@ class PlaceBoundaryService
                 ->withHeaders([
                     'User-Agent' => config('app.user_agent'),
                 ])
-                ->get(self::OVERPASS_ENDPOINT, [
-                    'data' => $query,
-                ]);
+                ->withBody($query, 'text/plain')
+                ->post(self::OVERPASS_ENDPOINT);
 
             if (!$response->successful()) {
                 Log::warning('Overpass boundary request failed', [
@@ -143,6 +199,174 @@ class PlaceBoundaryService
         }
 
         return null;
+    }
+
+    /**
+     * Find the boundary relation for a node that represents an administrative area
+     * 
+     * @param  Span  $place
+     * @param  array  $osmData
+     * @return array|null  Relation data with 'id' and 'type' keys, or null if not found
+     */
+    public function findBoundaryRelationForNode(Span $place, array $osmData): ?array
+    {
+        $coordinates = $place->getCoordinates();
+        if (!$coordinates || !isset($coordinates['latitude']) || !isset($coordinates['longitude'])) {
+            return null;
+        }
+
+        $latitude = $coordinates['latitude'];
+        $longitude = $coordinates['longitude'];
+        $placeName = $place->name;
+        
+        // Cache the relation lookup to avoid repeated API calls
+        $cacheKey = 'place_boundary_relation_' . md5($place->id . '_' . $placeName . '_' . $latitude . '_' . $longitude);
+        
+        return Cache::remember($cacheKey, self::CACHE_TTL_SECONDS, function () use ($place, $osmData, $latitude, $longitude, $placeName) {
+            try {
+                // Use Nominatim to search for the administrative boundary relation
+                // Search for "London Borough of {name}" or "{name} Borough" for UK places
+                $searchTerms = [
+                    "London Borough of {$placeName}",
+                    "{$placeName} Borough",
+                    $placeName,
+                ];
+            
+            foreach ($searchTerms as $searchTerm) {
+                $response = Http::timeout(10)
+                    ->withHeaders([
+                        'User-Agent' => config('app.user_agent'),
+                        'Accept-Language' => 'en',
+                    ])
+                    ->get('https://nominatim.openstreetmap.org/search', [
+                        'q' => $searchTerm,
+                        'format' => 'json',
+                        'addressdetails' => 1,
+                        'limit' => 5,
+                        'extratags' => 1,
+                    ]);
+                
+                if (!$response->successful()) {
+                    continue;
+                }
+                
+                $results = $response->json();
+                if (empty($results)) {
+                    continue;
+                }
+                
+                // Look for a relation - check class/type for boundary, or if it matches the name pattern
+                foreach ($results as $result) {
+                    if (isset($result['osm_type']) && $result['osm_type'] === 'relation') {
+                        $extratags = $result['extratags'] ?? [];
+                        $class = $result['class'] ?? '';
+                        $type = $result['type'] ?? '';
+                        
+                        // Check if it's an administrative boundary
+                        $isBoundary = (isset($extratags['boundary']) && $extratags['boundary'] === 'administrative') ||
+                                     ($class === 'boundary' && $type === 'administrative') ||
+                                     (strpos(strtolower($result['display_name'] ?? ''), 'borough') !== false && 
+                                      strpos(strtolower($result['display_name'] ?? ''), strtolower($placeName)) !== false);
+                        
+                        if ($isBoundary) {
+                            $adminLevel = isset($extratags['admin_level']) ? (int)$extratags['admin_level'] : null;
+                            
+                            Log::info('Found boundary relation via Nominatim', [
+                                'span_id' => $place->id,
+                                'span_name' => $placeName,
+                                'search_term' => $searchTerm,
+                                'relation_id' => $result['osm_id'],
+                                'relation_name' => $result['display_name'] ?? '',
+                                'admin_level' => $adminLevel,
+                                'class' => $class,
+                                'type' => $type,
+                            ]);
+                            
+                            return [
+                                'id' => $result['osm_id'],
+                                'type' => 'relation',
+                                'admin_level' => $adminLevel,
+                                'name' => $result['display_name'] ?? '',
+                            ];
+                        }
+                    }
+                }
+            }
+            
+            // If Nominatim didn't find it, try a simple Overpass query
+            $metadata = $place->metadata ?? [];
+            $subtype = $metadata['subtype'] ?? null;
+            
+            $adminLevelMap = [
+                'country' => 2,
+                'state_region' => 4,
+                'county_province' => 6,
+                'city_district' => 8,
+                'suburb_area' => 10,
+            ];
+            
+            $expectedAdminLevel = $adminLevelMap[$subtype] ?? null;
+            
+            if ($expectedAdminLevel) {
+                // Simple Overpass query - just get relations with the right admin level near the point
+                $query = sprintf(
+                    '[out:json][timeout:10];relation["boundary"="administrative"]["admin_level"="%d"](around:5000,%f,%f);out ids;',
+                    $expectedAdminLevel,
+                    $latitude,
+                    $longitude
+                );
+
+                $response = Http::timeout(15)
+                    ->withHeaders([
+                        'User-Agent' => config('app.user_agent'),
+                    ])
+                    ->get(self::OVERPASS_ENDPOINT, [
+                        'data' => $query,
+                    ]);
+
+                if (!$response->successful()) {
+                    Log::debug('Overpass relation search failed for node', [
+                        'span_id' => $place->id,
+                        'span_name' => $placeName,
+                        'status' => $response->status(),
+                    ]);
+                    return null;
+                }
+
+                $data = $response->json();
+                if (!isset($data['elements']) || empty($data['elements'])) {
+                    return null;
+                }
+
+                // Return the first relation found (they should all match the admin level)
+                $element = $data['elements'][0];
+                if (isset($element['id'])) {
+                    Log::info('Found boundary relation via Overpass for administrative node', [
+                        'span_id' => $place->id,
+                        'span_name' => $placeName,
+                        'node_id' => $osmData['osm_id'],
+                        'relation_id' => $element['id'],
+                        'admin_level' => $expectedAdminLevel,
+                    ]);
+                    
+                    return [
+                        'id' => $element['id'],
+                        'type' => 'relation',
+                        'admin_level' => $expectedAdminLevel,
+                    ];
+                }
+            }
+            
+                return null;
+            } catch (\Throwable $e) {
+                Log::warning('Error finding boundary relation for node', [
+                    'span_id' => $place->id,
+                    'span_name' => $placeName,
+                    'error' => $e->getMessage(),
+                ]);
+                return null;
+            }
+        });
     }
 
     /**

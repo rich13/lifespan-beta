@@ -617,7 +617,7 @@ class BluePlaqueService
             $validation['status'] = 'error';
         } else {
             // Validate against allowed span types
-            $allowedTypes = ['person', 'place', 'thing', 'event', 'organisation'];
+            $allowedTypes = ['person', 'place', 'thing', 'event', 'organisation', 'name', 'geometry'];
             if (!in_array($span['span_type'], $allowedTypes)) {
                 $validation['errors'][] = "Invalid span type '{$span['span_type']}' (must be one of: " . implode(', ', $allowedTypes) . ")";
                 $validation['status'] = 'error';
@@ -699,7 +699,7 @@ class BluePlaqueService
             $validation['status'] = 'error';
         } else {
             // Validate against allowed connection types
-            $allowedTypes = ['features', 'located', 'residence', 'created', 'participated_in', 'owned', 'founded'];
+            $allowedTypes = ['features', 'located', 'residence', 'created', 'participated_in', 'owned', 'founded', 'has_name', 'has_geometry'];
             if (!in_array($connection['connection_type'], $allowedTypes)) {
                 $validation['warnings'][] = "Connection type '{$connection['connection_type']}' may not be standard";
             }
@@ -753,10 +753,11 @@ class BluePlaqueService
     {
         $validSubtypes = [
             'person' => ['private_individual', 'public_figure', 'historical_figure', 'artist', 'writer', 'scientist', 'politician'],
-            'place' => ['address', 'building', 'city', 'country', 'landmark', 'museum', 'gallery', 'theatre'],
+            'place' => ['country', 'state_region', 'county_province', 'city_district', 'suburb_area', 'neighbourhood', 'sub_neighbourhood', 'building_property'],
             'thing' => ['artwork', 'book', 'document', 'photo', 'plaque', 'monument', 'sculpture'],
             'event' => ['exhibition', 'performance', 'meeting', 'birth', 'death', 'marriage'],
-            'organisation' => ['company', 'institution', 'government', 'charity', 'school', 'university']
+            'organisation' => ['company', 'institution', 'government', 'charity', 'school', 'university'],
+            'geometry' => ['point', 'polygon', 'line']
         ];
         
         if (isset($validSubtypes[$spanType])) {

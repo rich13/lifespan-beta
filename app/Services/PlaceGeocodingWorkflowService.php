@@ -12,10 +12,12 @@ use Illuminate\Support\Facades\Log;
 class PlaceGeocodingWorkflowService
 {
     private OSMGeocodingService $osmService;
+    private PlaceBoundaryService $boundaryService;
 
-    public function __construct(OSMGeocodingService $osmService)
+    public function __construct(OSMGeocodingService $osmService, PlaceBoundaryService $boundaryService)
     {
         $this->osmService = $osmService;
+        $this->boundaryService = $boundaryService;
     }
 
     /**
@@ -52,6 +54,38 @@ class PlaceGeocodingWorkflowService
             $osmData = $this->osmService->geocode($span->name, $latitude, $longitude);
             
             if ($osmData) {
+                // If we got a node but this is an administrative area, try to find the relation
+                $osmType = $osmData['osm_type'] ?? null;
+                if ($osmType === 'node') {
+                    $metadata = $span->metadata ?? [];
+                    $subtype = $metadata['subtype'] ?? null;
+                    $placeType = $osmData['place_type'] ?? '';
+                    
+                    // Check if this is an administrative area that should have a boundary
+                    $isAdministrative = $placeType === 'administrative' || in_array($subtype, [
+                        'country', 'state_region', 'county_province', 'city_district', 'suburb_area'
+                    ]);
+                    
+                    if ($isAdministrative) {
+                        // Try to find the boundary relation for this node
+                        $relation = $this->boundaryService->findBoundaryRelationForNode($span, $osmData);
+                        if ($relation) {
+                            // Update OSM data to use the relation instead of the node
+                            $originalNodeId = $osmData['osm_id']; // Save original node ID before changing it
+                            $osmData['osm_type'] = 'relation';
+                            $osmData['osm_id'] = $relation['id'];
+                            $osmData['original_node_id'] = $originalNodeId; // Keep track of original node
+                            
+                            Log::info('Upgraded node to relation during geocoding', [
+                                'span_id' => $span->id,
+                                'span_name' => $span->name,
+                                'node_id' => $osmData['original_node_id'],
+                                'relation_id' => $relation['id'],
+                            ]);
+                        }
+                    }
+                }
+                
                 // Set the OSM data and coordinates
                 $span->setOsmData($osmData);
                 
@@ -74,6 +108,9 @@ class PlaceGeocodingWorkflowService
                 }
                 
                 $span->save();
+                
+                // Fetch boundary if this place should have one
+                $this->fetchBoundaryIfApplicable($span, $osmData);
                 
                 // Create missing administrative spans for higher-level divisions
                 $this->createMissingAdministrativeSpans($span, $osmData);
@@ -154,6 +191,9 @@ class PlaceGeocodingWorkflowService
             }
             
             $span->save();
+            
+            // Fetch boundary if this place should have one
+            $this->fetchBoundaryIfApplicable($span, $osmData);
             
             // Create missing administrative spans for higher-level divisions
             $this->createMissingAdministrativeSpans($span, $osmData);
@@ -583,5 +623,73 @@ class PlaceGeocodingWorkflowService
         }
         
         return $osmData;
+    }
+
+    /**
+     * Fetch boundary for a place if it should have one
+     * Places with OSM type 'relation' are most likely to have boundaries
+     * Also fetch for administrative places (countries, states, counties, cities, districts)
+     */
+    private function fetchBoundaryIfApplicable(Span $span, array $osmData): void
+    {
+        try {
+            // Only fetch boundaries for relations and ways (they can have polygon boundaries)
+            $osmType = $osmData['osm_type'] ?? null;
+            if (!in_array($osmType, ['relation', 'way'])) {
+                return;
+            }
+
+            // Check if we should fetch boundary based on subtype
+            $metadata = $span->metadata ?? [];
+            $subtype = $metadata['subtype'] ?? null;
+            
+            // These subtypes typically have boundaries
+            $boundarySubtypes = [
+                'country',
+                'state_region',
+                'county_province',
+                'city_district',
+                'suburb_area',
+                'neighbourhood'
+            ];
+
+            // Also check place_type from OSM data
+            $placeType = $osmData['place_type'] ?? '';
+            $isAdministrative = $placeType === 'administrative' || in_array($subtype, $boundarySubtypes);
+
+            // Fetch boundary if it's a relation (most likely to have boundaries) or if it's an administrative place
+            if ($osmType === 'relation' || $isAdministrative) {
+                Log::info('Fetching boundary for place during geocoding', [
+                    'span_id' => $span->id,
+                    'span_name' => $span->name,
+                    'osm_type' => $osmType,
+                    'subtype' => $subtype,
+                    'place_type' => $placeType
+                ]);
+
+                // This will fetch and cache the boundary
+                $boundary = $this->boundaryService->getBoundaryGeoJson($span);
+                
+                if ($boundary) {
+                    Log::info('Successfully fetched boundary during geocoding', [
+                        'span_id' => $span->id,
+                        'span_name' => $span->name
+                    ]);
+                } else {
+                    Log::debug('No boundary found for place (this is normal for some places)', [
+                        'span_id' => $span->id,
+                        'span_name' => $span->name,
+                        'osm_type' => $osmType
+                    ]);
+                }
+            }
+        } catch (\Exception $e) {
+            // Don't fail geocoding if boundary fetch fails
+            Log::warning('Error fetching boundary during geocoding (non-fatal)', [
+                'span_id' => $span->id,
+                'span_name' => $span->name,
+                'error' => $e->getMessage()
+            ]);
+        }
     }
 }

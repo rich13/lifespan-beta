@@ -51,6 +51,25 @@ class GeospatialCapability implements SpanCapability
                     'place_type' => ['type' => 'string'],
                     'importance' => ['type' => 'number']
                 ]
+            ],
+            'external_refs' => [
+                'type' => 'object',
+                'properties' => [
+                    'osm' => [
+                        'type' => 'object',
+                        'description' => 'OpenStreetMap reference data'
+                    ],
+                    'wikidata' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'id' => ['type' => 'string', 'description' => 'Wikidata Q ID (e.g., Q123)'],
+                            'label' => ['type' => 'string', 'description' => 'Wikidata label'],
+                            'description' => ['type' => 'string', 'description' => 'Wikidata description'],
+                            'url' => ['type' => 'string', 'description' => 'Wikidata URL']
+                        ]
+                    ]
+                ],
+                'description' => 'External references to OSM, Wikidata, and other sources'
             ]
         ];
     }
@@ -67,8 +86,28 @@ class GeospatialCapability implements SpanCapability
             }
         }
         
-        if (isset($metadata['osm_data'])) {
-            $this->validateOsmData($metadata['osm_data']);
+        // Validate OSM data (check both old osm_data and new external_refs.osm)
+        $osmData = $metadata['external_refs']['osm'] ?? $metadata['osm_data'] ?? null;
+        if ($osmData) {
+            $this->validateOsmData($osmData);
+        }
+        
+        // Validate external_refs structure if present
+        if (isset($metadata['external_refs'])) {
+            if (!is_array($metadata['external_refs'])) {
+                throw new \InvalidArgumentException('external_refs must be an object/array');
+            }
+            
+            // Validate Wikidata if present
+            if (isset($metadata['external_refs']['wikidata'])) {
+                $wikidata = $metadata['external_refs']['wikidata'];
+                if (!is_array($wikidata)) {
+                    throw new \InvalidArgumentException('external_refs.wikidata must be an object/array');
+                }
+                if (isset($wikidata['id']) && !preg_match('/^Q\d+$/', $wikidata['id'])) {
+                    throw new \InvalidArgumentException('Wikidata ID must be in format Q123');
+                }
+            }
         }
     }
 
@@ -371,7 +410,13 @@ class GeospatialCapability implements SpanCapability
     public function setOsmData(array $osmData): void
     {
         $metadata = $this->span->metadata ?? [];
-        $metadata['osm_data'] = $osmData;
+        
+        // Store in both external_refs.osm (new format) and osm_data (backward compatibility)
+        if (!isset($metadata['external_refs'])) {
+            $metadata['external_refs'] = [];
+        }
+        $metadata['external_refs']['osm'] = $osmData;
+        $metadata['osm_data'] = $osmData; // Keep for backward compatibility
         
         // Also set coordinates if they're in the OSM data
         if (isset($osmData['coordinates'])) {
@@ -499,7 +544,9 @@ class GeospatialCapability implements SpanCapability
      */
     public function getOsmData(): ?array
     {
-        return $this->span->metadata['osm_data'] ?? null;
+        // Check external_refs.osm first (new format), then fall back to osm_data (backward compatibility)
+        $metadata = $this->span->metadata ?? [];
+        return $metadata['external_refs']['osm'] ?? $metadata['osm_data'] ?? null;
     }
 
     /**
@@ -594,6 +641,60 @@ class GeospatialCapability implements SpanCapability
     /**
      * Validate OSM data structure
      */
+    /**
+     * Get Wikidata data from external_refs
+     */
+    public function getWikidataData(): ?array
+    {
+        $metadata = $this->span->metadata ?? [];
+        return $metadata['external_refs']['wikidata'] ?? null;
+    }
+
+    /**
+     * Set Wikidata data in external_refs
+     */
+    public function setWikidataData(array $wikidataData): void
+    {
+        $metadata = $this->span->metadata ?? [];
+        
+        if (!isset($metadata['external_refs'])) {
+            $metadata['external_refs'] = [];
+        }
+        
+        $metadata['external_refs']['wikidata'] = $wikidataData;
+        $this->span->metadata = $metadata;
+    }
+
+    /**
+     * Get Wikidata ID (Q number) from external_refs
+     */
+    public function getWikidataId(): ?string
+    {
+        $wikidata = $this->getWikidataData();
+        return $wikidata['id'] ?? null;
+    }
+
+    /**
+     * Set Wikidata ID in external_refs
+     */
+    public function setWikidataId(string $wikidataId): void
+    {
+        if (!preg_match('/^Q\d+$/', $wikidataId)) {
+            throw new \InvalidArgumentException('Wikidata ID must be in format Q123');
+        }
+        
+        $metadata = $this->span->metadata ?? [];
+        $wikidata = $metadata['external_refs']['wikidata'] ?? [];
+        $wikidata['id'] = $wikidataId;
+        
+        if (!isset($metadata['external_refs'])) {
+            $metadata['external_refs'] = [];
+        }
+        
+        $metadata['external_refs']['wikidata'] = $wikidata;
+        $this->span->metadata = $metadata;
+    }
+
     protected function validateOsmData(array $osmData): void
     {
         $requiredFields = ['place_id', 'osm_type', 'osm_id', 'canonical_name'];

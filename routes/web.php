@@ -158,6 +158,9 @@ Route::middleware('web')->group(function () {
         Route::get('/places/{span}/boundary', [\App\Http\Controllers\PlaceBoundaryController::class, 'show'])
             ->name('places.boundary');
 
+    // Places map route
+    Route::get('/places', [\App\Http\Controllers\PlacesController::class, 'index'])->name('places.index');
+
     // Explore routes
     Route::prefix('explore')->group(function () {
         Route::get('/', [SpanController::class, 'explore'])->name('explore.index');
@@ -1328,14 +1331,68 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
                 
                 try {
                     $geocodingWorkflow = app(\App\Services\PlaceGeocodingWorkflowService::class);
+                    $boundaryService = app(\App\Services\PlaceBoundaryService::class);
+                    
+                    // Check if we already have OSM data
+                    $hasOsmData = $span->fresh()->getOsmData() !== null;
+                    
+                    // Fetch OSM data (this will also fetch boundary if applicable)
                     $success = $geocodingWorkflow->resolvePlace($span);
                     
                     if ($success) {
+                        $span = $span->fresh();
+                        $osmData = $span->getOsmData();
+                        $hasBoundary = false;
+                        
+                        // Check if boundary was fetched or already exists
+                        if ($osmData) {
+                            $metadata = $span->metadata ?? [];
+                            $hasBoundary = !!(isset($metadata['external_refs']['osm']['boundary_geojson']) || 
+                                            isset($metadata['osm_data']['boundary_geojson']));
+                            
+                            // If we have OSM data but no boundary, and this place should have one, try to fetch it
+                            if (!$hasBoundary && $osmData) {
+                                $osmType = $osmData['osm_type'] ?? null;
+                                $metadata = $span->metadata ?? [];
+                                $subtype = $metadata['subtype'] ?? null;
+                                $placeType = $osmData['place_type'] ?? '';
+                                
+                                // Check if this place should have a boundary
+                                $shouldHaveBoundary = false;
+                                
+                                // Relations are most likely to have boundaries
+                                if ($osmType === 'relation') {
+                                    $shouldHaveBoundary = true;
+                                }
+                                // Ways can have boundaries for administrative areas
+                                elseif ($osmType === 'way' && in_array($subtype, ['country', 'state_region', 'county_province', 'city_district', 'suburb_area'])) {
+                                    $shouldHaveBoundary = true;
+                                }
+                                // Nodes that are administrative areas might have a boundary relation
+                                elseif ($osmType === 'node') {
+                                    $isAdministrative = $placeType === 'administrative' || in_array($subtype, [
+                                        'country', 'state_region', 'county_province', 'city_district', 'suburb_area'
+                                    ]);
+                                    if ($isAdministrative) {
+                                        $shouldHaveBoundary = true;
+                                    }
+                                }
+                                
+                                if ($shouldHaveBoundary) {
+                                    // Try to fetch boundary (this will also try to find relation for nodes)
+                                    $boundary = $boundaryService->getBoundaryGeoJson($span);
+                                    $hasBoundary = $boundary !== null;
+                                    $span = $span->fresh(); // Refresh to get updated metadata
+                                }
+                            }
+                        }
+                        
                         return response()->json([
                             'success' => true, 
-                            'message' => 'OSM data fetched successfully',
-                            'has_osm_data' => $span->fresh()->getOsmData() !== null,
-                            'has_coordinates' => $span->fresh()->getCoordinates() !== null
+                            'message' => $hasOsmData ? 'Map data updated successfully' : 'OSM data fetched successfully',
+                            'has_osm_data' => $span->getOsmData() !== null,
+                            'has_coordinates' => $span->getCoordinates() !== null,
+                            'has_boundary' => $hasBoundary
                         ]);
                     } else {
                         return response()->json([

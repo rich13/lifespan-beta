@@ -186,6 +186,11 @@ Route::middleware(['auth', 'admin'])->group(function () {
 // Span search API
 Route::get('/spans/search', [SpanSearchController::class, 'search']);
 
+// Places API - get places within map bounds
+Route::get('/places', [\App\Http\Controllers\PlacesController::class, 'getPlacesInBounds'])->name('api.places.bounds');
+Route::get('/places/{span}', [\App\Http\Controllers\PlacesController::class, 'getPlaceDetails'])->name('api.places.details');
+Route::get('/places/{span}/lived-here-card', [\App\Http\Controllers\PlacesController::class, 'getLivedHereCard'])->name('api.places.lived-here-card');
+
 // Timeline APIs - allow unauthenticated access, let the controller handle access control
 Route::get('/spans/{span}', [SpanSearchController::class, 'timeline'])->middleware('timeout.prevention');
 Route::get('/spans/{span}/object-connections', [SpanSearchController::class, 'timelineObjectConnections'])->middleware('timeout.prevention');
