@@ -104,7 +104,10 @@ class PhotoController extends Controller
             ->with(['connectionsAsObject' => function ($q) {
                 $q->where('type_id', 'created')->with('parent');
             }])
-            ->orderBy('name')
+            ->orderBy('start_year', 'desc')
+            ->orderBy('start_month', 'desc')
+            ->orderBy('start_day', 'desc')
+            ->orderBy('name') // Secondary sort by name for photos without dates
             ->paginate(24);
 
         // Determine if user can see my photos tab
