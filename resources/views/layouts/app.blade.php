@@ -317,6 +317,74 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
         <!-- Page-specific scripts -->
         @yield('scripts')
         @stack('scripts')
+        
+        <!-- Global initialization for place residence cards (works on all pages) -->
+        <script>
+        (function() {
+            // Global function to initialize toggle buttons for place card (works in both contexts)
+            if (typeof window.initPlaceCardToggle === 'undefined') {
+                window.initPlaceCardToggle = function(cardElement) {
+                    // Find the toggle buttons and views within the card
+                    const livedToggle = cardElement.querySelector('input[id^="lived-toggle-"]');
+                    const locatedToggle = cardElement.querySelector('input[id^="located-toggle-"]');
+                    const livedView = cardElement.querySelector('div[id^="lived-view-"]');
+                    const locatedView = cardElement.querySelector('div[id^="located-view-"]');
+                    
+                    if (livedToggle && locatedToggle && livedView && locatedView) {
+                        // Check if already initialized
+                        if (livedToggle.dataset.initialized === 'true') {
+                            return true; // Already initialized
+                        }
+                        
+                        // Set up event listeners directly
+                        livedToggle.addEventListener('change', function() {
+                            if (this.checked) {
+                                livedView.style.display = 'block';
+                                locatedView.style.display = 'none';
+                            }
+                        });
+                        
+                        locatedToggle.addEventListener('change', function() {
+                            if (this.checked) {
+                                livedView.style.display = 'none';
+                                locatedView.style.display = 'block';
+                            }
+                        });
+                        
+                        // Mark as initialized
+                        livedToggle.dataset.initialized = 'true';
+                        locatedToggle.dataset.initialized = 'true';
+                        
+                        return true;
+                    }
+                    return false;
+                };
+            }
+            
+            // Initialize any existing cards on page load (for server-rendered content)
+            function initializeAllPlaceCards() {
+                document.querySelectorAll('.place-residence-card').forEach(function(card) {
+                    // Check if already initialized by looking for data attribute
+                    if (!card.dataset.toggleInitialized) {
+                        if (window.initPlaceCardToggle(card)) {
+                            card.dataset.toggleInitialized = 'true';
+                        }
+                    }
+                });
+            }
+            
+            // Run on DOMContentLoaded
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', initializeAllPlaceCards);
+            } else {
+                // DOM already loaded
+                initializeAllPlaceCards();
+            }
+            
+            // Also run after a short delay to catch any late-loading content
+            setTimeout(initializeAllPlaceCards, 500);
+        })();
+        </script>
     </head>
     <body class="bg-light">
         <div class="row">

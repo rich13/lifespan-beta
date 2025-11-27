@@ -83,64 +83,221 @@
     $allResidents = $allResidents->sortBy(function($item) {
         return $item['person']->name;
     })->values();
+
+    // Get all things/organisations/events that are located at this place
+    $locatedConnections = \App\Models\Connection::where('type_id', 'located')
+        ->where('child_id', $span->id) // Place is the child in located connections
+        ->whereHas('parent', function($q) {
+            $q->whereIn('type_id', ['thing', 'organisation', 'event', 'place']);
+        })
+        ->with(['parent', 'connectionSpan'])
+        ->get();
+
+    // Collect all located items with their photos and dates
+    $allLocated = collect();
     
-    // Don't show the card if there are no residents
-    if ($allResidents->isEmpty()) {
+    foreach ($locatedConnections as $connection) {
+        if ($connection->parent) {
+            $item = $connection->parent;
+            $itemType = $item->type_id;
+            
+            // Get photo for things (photos, etc.)
+            $photoUrl = null;
+            if ($itemType === 'thing') {
+                $metadata = $item->metadata ?? [];
+                $subtype = $metadata['subtype'] ?? null;
+                
+                // Check if it's a photo
+                if ($subtype === 'photo') {
+                    $photoUrl = $metadata['thumbnail_url'] 
+                        ?? $metadata['medium_url'] 
+                        ?? $metadata['large_url'] 
+                        ?? null;
+                    
+                    // If we have a filename but no URL, use proxy route
+                    if (!$photoUrl && isset($metadata['filename']) && $metadata['filename']) {
+                        $photoUrl = route('images.proxy', ['spanId' => $item->id, 'size' => 'thumbnail']);
+                    }
+                }
+            }
+            
+            // Get dates from connection span
+            $dates = $connection->connectionSpan;
+            $hasDates = $dates && ($dates->start_year || $dates->end_year);
+            $dateText = null;
+            if ($hasDates) {
+                if ($dates->start_year && $dates->end_year) {
+                    $dateText = ($dates->formatted_start_date ?? $dates->start_year) . ' – ' . ($dates->formatted_end_date ?? $dates->end_year);
+                } elseif ($dates->start_year) {
+                    $dateText = 'from ' . ($dates->formatted_start_date ?? $dates->start_year);
+                } elseif ($dates->end_year) {
+                    $dateText = 'until ' . ($dates->formatted_end_date ?? $dates->end_year);
+                }
+            }
+            
+            $allLocated->put($item->id, [
+                'item' => $item,
+                'item_type' => $itemType,
+                'connection_type' => 'located',
+                'connection' => $connection,
+                'photo_url' => $photoUrl,
+                'date_text' => $dateText
+            ]);
+        }
+    }
+
+    // Sort located items by name
+    $allLocated = $allLocated->sortBy(function($item) {
+        return $item['item']->name;
+    })->values();
+    
+    // Don't show the card if there are no residents and no located items
+    if ($allResidents->isEmpty() && $allLocated->isEmpty()) {
         return;
     }
+    
+    // Determine which tab to show by default (show first non-empty tab)
+    $defaultTab = $allResidents->isNotEmpty() ? 'lived' : 'located';
 @endphp
 
-<div class="card mb-4">
+<div class="card mb-4 place-residence-card" data-place-id="{{ $span->id }}">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h6 class="card-title mb-0">
-            <i class="bi bi-house me-2"></i>
+            <i class="bi bi-geo-alt me-2"></i>
             <a href="{{ url('/spans/' . $span->id . '/lived-in') }}" class="text-decoration-none">
-                Lived at {{ $span->name }}
+                In {{ $span->name }}
             </a>
         </h6>
+        <!-- Button Group Toggle -->
+        <div class="btn-group btn-group-sm" role="group" aria-label="Toggle view">
+            <input type="radio" class="btn-check" name="view-toggle-{{ $span->id }}" id="lived-toggle-{{ $span->id }}" autocomplete="off" {{ $defaultTab === 'lived' ? 'checked' : '' }}>
+            <label class="btn btn-outline-primary" for="lived-toggle-{{ $span->id }}">
+                <i class="bi bi-house me-1"></i>
+                Lived
+                @if($allResidents->isNotEmpty())
+                    <span class="badge bg-secondary ms-1">{{ $allResidents->count() }}</span>
+                @endif
+            </label>
+
+            <input type="radio" class="btn-check" name="view-toggle-{{ $span->id }}" id="located-toggle-{{ $span->id }}" autocomplete="off" {{ $defaultTab === 'located' ? 'checked' : '' }}>
+            <label class="btn btn-outline-primary" for="located-toggle-{{ $span->id }}">
+                <i class="bi bi-geo-alt me-1"></i>
+                Located
+                @if($allLocated->isNotEmpty())
+                    <span class="badge bg-secondary ms-1">{{ $allLocated->count() }}</span>
+                @endif
+            </label>
+        </div>
     </div>
     <div class="card-body p-2">
-        <div class="list-group list-group-flush">
-            @foreach($allResidents as $resident)
-                <div class="list-group-item px-0 py-2 border-0 border-bottom">
-                    <div class="d-flex align-items-center">
-                        <!-- Photo on the left -->
-                        <div class="me-3 flex-shrink-0">
-                            @if($resident['photo_url'])
-                                <a href="{{ route('spans.show', $resident['person']) }}">
-                                    <img src="{{ $resident['photo_url'] }}" 
-                                         alt="{{ $resident['person']->name }}"
-                                         class="rounded"
-                                         style="width: 50px; height: 50px; object-fit: cover;"
-                                         loading="lazy">
-                                </a>
-                            @else
-                                <a href="{{ route('spans.show', $resident['person']) }}" 
-                                   class="d-flex align-items-center justify-content-center bg-light rounded text-muted text-decoration-none"
-                                   style="width: 50px; height: 50px;">
-                                    <i class="bi bi-person"></i>
-                                </a>
-                            @endif
-                        </div>
-                        
-                        <!-- Name and dates on the right -->
-                        <div class="flex-grow-1">
-                            <a href="{{ route('spans.show', $resident['person']) }}" 
-                               class="text-decoration-none fw-semibold">
-                                {{ $resident['person']->name }}
-                            </a>
-                            @if($resident['date_text'])
-                                <div class="text-muted small">
-                                    <i class="bi bi-calendar me-1"></i>{{ $resident['date_text'] }}
+        <!-- Lived Here View -->
+        <div class="view-content" id="lived-view-{{ $span->id }}" style="display: {{ $defaultTab === 'lived' ? 'block' : 'none' }};">
+                @if($allResidents->isNotEmpty())
+                    <div class="list-group list-group-flush">
+                        @foreach($allResidents as $resident)
+                            <div class="list-group-item px-0 py-2 border-0 border-bottom">
+                                <div class="d-flex align-items-center">
+                                    <!-- Photo on the left -->
+                                    <div class="me-3 flex-shrink-0">
+                                        @if($resident['photo_url'])
+                                            <a href="{{ route('spans.show', $resident['person']) }}">
+                                                <img src="{{ $resident['photo_url'] }}" 
+                                                     alt="{{ $resident['person']->name }}"
+                                                     class="rounded"
+                                                     style="width: 50px; height: 50px; object-fit: cover;"
+                                                     loading="lazy">
+                                            </a>
+                                        @else
+                                            <a href="{{ route('spans.show', $resident['person']) }}" 
+                                               class="d-flex align-items-center justify-content-center bg-light rounded text-muted text-decoration-none"
+                                               style="width: 50px; height: 50px;">
+                                                <i class="bi bi-person"></i>
+                                            </a>
+                                        @endif
+                                    </div>
+                                    
+                                    <!-- Name and dates on the right -->
+                                    <div class="flex-grow-1">
+                                        <a href="{{ route('spans.show', $resident['person']) }}" 
+                                           class="text-decoration-none fw-semibold">
+                                            {{ $resident['person']->name }}
+                                        </a>
+                                        @if($resident['date_text'])
+                                            <div class="text-muted small">
+                                                <i class="bi bi-calendar me-1"></i>{{ $resident['date_text'] }}
+                                            </div>
+                                        @endif
+                                    </div>
                                 </div>
-                            @endif
-                        </div>
+                            </div>
+                        @endforeach
                     </div>
-                </div>
-            @endforeach
+                @else
+                    <p class="text-muted small mb-0">No residents found.</p>
+                @endif
+        </div>
+        
+        <!-- Located Here View -->
+        <div class="view-content" id="located-view-{{ $span->id }}" style="display: {{ $defaultTab === 'located' ? 'block' : 'none' }};">
+                @if($allLocated->isNotEmpty())
+                    <div class="list-group list-group-flush">
+                        @foreach($allLocated as $located)
+                            <div class="list-group-item px-0 py-2 border-0 border-bottom">
+                                <div class="d-flex align-items-center">
+                                    <!-- Photo/Icon on the left -->
+                                    <div class="me-3 flex-shrink-0">
+                                        @if($located['photo_url'])
+                                            <a href="{{ route('spans.show', $located['item']) }}">
+                                                <img src="{{ $located['photo_url'] }}" 
+                                                     alt="{{ $located['item']->name }}"
+                                                     class="rounded"
+                                                     style="width: 50px; height: 50px; object-fit: cover;"
+                                                     loading="lazy">
+                                            </a>
+                                        @else
+                                            <a href="{{ route('spans.show', $located['item']) }}" 
+                                               class="d-flex align-items-center justify-content-center bg-light rounded text-muted text-decoration-none"
+                                               style="width: 50px; height: 50px;">
+                                                @if($located['item_type'] === 'organisation')
+                                                    <i class="bi bi-building"></i>
+                                                @elseif($located['item_type'] === 'event')
+                                                    <i class="bi bi-calendar-event"></i>
+                                                @elseif($located['item_type'] === 'thing')
+                                                    <i class="bi bi-box"></i>
+                                                @else
+                                                    <i class="bi bi-geo-alt"></i>
+                                                @endif
+                                            </a>
+                                        @endif
+                                    </div>
+                                    
+                                    <!-- Name and dates on the right -->
+                                    <div class="flex-grow-1">
+                                        <a href="{{ route('spans.show', $located['item']) }}" 
+                                           class="text-decoration-none fw-semibold">
+                                            {{ $located['item']->name }}
+                                        </a>
+                                        <div class="text-muted small">
+                                            <span class="badge bg-secondary">{{ ucfirst($located['item_type']) }}</span>
+                                        </div>
+                                        @if($located['date_text'])
+                                            <div class="text-muted small mt-1">
+                                                <i class="bi bi-calendar me-1"></i>{{ $located['date_text'] }}
+                                            </div>
+                                        @endif
+                                    </div>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                @else
+                    <p class="text-muted small mb-0">No items located here.</p>
+                @endif
         </div>
     </div>
 </div>
+
+
 
 
 

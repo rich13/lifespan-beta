@@ -53,6 +53,12 @@
         </a>
     </li>
 
+    <li class="nav-item">
+        <a class="nav-link {{ request()->routeIs('places.*') ? 'active' : '' }}" href="{{ route('places.index') }}">
+            <i class="bi bi-geo-alt me-1"></i> <span>Places</span>
+        </a>
+    </li>
+
     <!--<li class="nav-item">
         <a class="nav-link {{ request()->routeIs('viewer.*') ? 'active' : '' }}" href="{{ route('viewer.index') }}">
             <i class="bi bi-body-text me-1"></i> <span>Timeline</span>
