@@ -242,11 +242,6 @@
     
     // Now select diverse candidates: try to get people from different time periods
     if (count($validCandidates) >= 1) {
-        // Sort by connection count (descending) to prioritize people with more data
-        usort($validCandidates, function($a, $b) {
-            return $b['connection_count'] <=> $a['connection_count'];
-        });
-        
         // Select diverse candidates: divide into time period buckets and pick from each
         $targetCount = 5;
         $selectedComparisons = [];
@@ -276,56 +271,106 @@
         }
         
         // Try to select one from each available period first
+        // Use weighted random selection: prefer higher connection counts but add randomness
         $periodsUsed = [];
         foreach ($candidatesByPeriod as $period => $periodCandidates) {
             if (count($selectedComparisons) >= $targetCount) {
                 break;
             }
             
-            // Sort period candidates by connection count
-            usort($periodCandidates, function($a, $b) {
-                return $b['connection_count'] <=> $a['connection_count'];
+            // Shuffle to randomize, but weight by connection count
+            // Create a weighted array where candidates with more connections have higher weight
+            $weightedCandidates = [];
+            foreach ($periodCandidates as $candidate) {
+                $weight = $candidate['connection_count'];
+                // Add some randomness: multiply weight by random factor between 0.5 and 1.5
+                $randomFactor = 0.5 + (mt_rand() / mt_getrandmax()) * 1.0;
+                $weightedCandidates[] = [
+                    'candidate' => $candidate,
+                    'weight' => $weight * $randomFactor
+                ];
+            }
+            
+            // Sort by weighted score (descending)
+            usort($weightedCandidates, function($a, $b) {
+                return $b['weight'] <=> $a['weight'];
             });
             
-            // Take the best candidate from this period
-            foreach ($periodCandidates as $candidate) {
-                $selectedComparisons[] = [
-                    'span' => $candidate['span'],
-                    'date' => $candidate['date']
-                ];
-                $usedBirthYears[] = $candidate['birth_year'];
-                $usedAgeDateYears[] = $candidate['age_date_year'];
-                $periodsUsed[] = $period;
-                break; // Only take one from each period initially
-            }
+            // Take a random candidate from the top 30% (to ensure quality but add variety)
+            $topCount = max(1, (int) ceil(count($weightedCandidates) * 0.3));
+            $topCandidates = array_slice($weightedCandidates, 0, $topCount);
+            $selected = $topCandidates[array_rand($topCandidates)];
+            $candidate = $selected['candidate'];
+            
+            $selectedComparisons[] = [
+                'span' => $candidate['span'],
+                'date' => $candidate['date']
+            ];
+            $usedBirthYears[] = $candidate['birth_year'];
+            $usedAgeDateYears[] = $candidate['age_date_year'];
+            $periodsUsed[] = $period;
         }
         
         // If we still need more, select from remaining candidates with wider time gaps
         if (count($selectedComparisons) < $targetCount) {
-            foreach ($validCandidates as $candidate) {
+            // Filter out already used candidates
+            $remainingCandidates = array_filter($validCandidates, function($candidate) use ($selectedComparisons) {
+                foreach ($selectedComparisons as $selected) {
+                    if ($selected['span']->id === $candidate['span']->id) {
+                        return false;
+                    }
+                }
+                return true;
+            });
+            
+            // Score candidates by diversity (time gaps) and connection count
+            $scoredCandidates = [];
+            foreach ($remainingCandidates as $candidate) {
+                $diversityScore = 0;
+                $minBirthYearGap = PHP_INT_MAX;
+                $minAgeDateGap = PHP_INT_MAX;
+                
+                // Calculate minimum gaps to already selected candidates
+                foreach ($usedBirthYears as $usedYear) {
+                    $gap = abs($candidate['birth_year'] - $usedYear);
+                    $minBirthYearGap = min($minBirthYearGap, $gap);
+                }
+                foreach ($usedAgeDateYears as $usedYear) {
+                    $gap = abs($candidate['age_date_year'] - $usedYear);
+                    $minAgeDateGap = min($minAgeDateGap, $gap);
+                }
+                
+                // Diversity score: prefer larger gaps
+                $diversityScore = $minBirthYearGap + ($minAgeDateGap * 0.5);
+                
+                // Combine diversity score with connection count, add randomness
+                $randomFactor = 0.7 + (mt_rand() / mt_getrandmax()) * 0.6; // 0.7 to 1.3
+                $totalScore = ($diversityScore * 0.6) + ($candidate['connection_count'] * 0.4) * $randomFactor;
+                
+                $scoredCandidates[] = [
+                    'candidate' => $candidate,
+                    'score' => $totalScore,
+                    'diversity_score' => $diversityScore
+                ];
+            }
+            
+            // Sort by score (descending)
+            usort($scoredCandidates, function($a, $b) {
+                return $b['score'] <=> $a['score'];
+            });
+            
+            // Take candidates from the top, ensuring diversity
+            foreach ($scoredCandidates as $scored) {
                 if (count($selectedComparisons) >= $targetCount) {
                     break;
                 }
                 
-                // Check if we've already used this candidate
-                $alreadyUsed = false;
-                foreach ($selectedComparisons as $selected) {
-                    if ($selected['span']->id === $candidate['span']->id) {
-                        $alreadyUsed = true;
-                        break;
-                    }
-                }
+                $candidate = $scored['candidate'];
                 
-                if ($alreadyUsed) {
-                    continue;
-                }
-                
+                // Check diversity thresholds
                 $isDiverse = true;
-                // Check if this candidate's birth year is too close to already selected ones
-                // Use larger gap (100 years) to ensure wider temporal spread
                 foreach ($usedBirthYears as $usedYear) {
                     if (abs($candidate['birth_year'] - $usedYear) < 100) {
-                        // Too close, but we'll check if we can still use it if we don't have enough
                         if (count($selectedComparisons) < $targetCount - 1) {
                             $isDiverse = false;
                             break;
@@ -333,10 +378,8 @@
                     }
                 }
                 
-                // Also check if the age date year is too close to already selected ones
                 foreach ($usedAgeDateYears as $usedYear) {
                     if (abs($candidate['age_date_year'] - $usedYear) < 30) {
-                        // Too close in time when they were the user's age
                         if (count($selectedComparisons) < $targetCount - 1) {
                             $isDiverse = false;
                             break;
@@ -381,6 +424,8 @@
             }
         }
         
+        // Shuffle the final selection to randomize display order
+        shuffle($selectedComparisons);
         $randomComparisons = $selectedComparisons;
     } else {
         // If we have fewer than 3 candidates, just use what we have

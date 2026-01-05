@@ -22,14 +22,36 @@
                 // The span person was born after you
                 // Check if you were still alive when they were born
                 if (!$personalEndYear || $personalEndYear >= $spanStartYear) {
-                    $comparisons[] = "You were {$yearDiff} years old when {$span->getDisplayTitle()} was born.";
+                    // Calculate accurate age using DateDurationCalculator (rounded down)
+                    if ($personalSpan->start_year && $personalSpan->start_month && $personalSpan->start_day &&
+                        $span->start_year && $span->start_month && $span->start_day) {
+                        $ageWhenBorn = \App\Helpers\DateDurationCalculator::calculateDuration(
+                            (object)['year' => $personalSpan->start_year, 'month' => $personalSpan->start_month, 'day' => $personalSpan->start_day],
+                            (object)['year' => $span->start_year, 'month' => $span->start_month, 'day' => $span->start_day]
+                        );
+                        $comparisons[] = "You were {$ageWhenBorn['years']} years old when {$span->getDisplayTitle()} was born.";
+                    } else {
+                        // Fallback to year-only calculation if month/day not available
+                        $comparisons[] = "You were {$yearDiff} years old when {$span->getDisplayTitle()} was born.";
+                    }
                 }
             } elseif ($yearDiff < 0) {
                 // You were born after the span person
                 $yearDiff = abs($yearDiff);
                 // Check if they were still alive when you were born
                 if (!$spanEndYear || $spanEndYear >= $personalStartYear) {
-                    $comparisons[] = "{$span->getDisplayTitle()} was {$yearDiff} years old when you were born.";
+                    // Calculate accurate age using DateDurationCalculator (rounded down)
+                    if ($span->start_year && $span->start_month && $span->start_day &&
+                        $personalSpan->start_year && $personalSpan->start_month && $personalSpan->start_day) {
+                        $ageWhenBorn = \App\Helpers\DateDurationCalculator::calculateDuration(
+                            (object)['year' => $span->start_year, 'month' => $span->start_month, 'day' => $span->start_day],
+                            (object)['year' => $personalSpan->start_year, 'month' => $personalSpan->start_month, 'day' => $personalSpan->start_day]
+                        );
+                        $comparisons[] = "{$span->getDisplayTitle()} was {$ageWhenBorn['years']} years old when you were born.";
+                    } else {
+                        // Fallback to year-only calculation if month/day not available
+                        $comparisons[] = "{$span->getDisplayTitle()} was {$yearDiff} years old when you were born.";
+                    }
                 } else {
                     // They had already passed away
                     $yearsSinceDeath = $personalStartYear - $spanEndYear;
@@ -74,16 +96,42 @@
         // Age at other's death
         if ($personalStartYear && $spanEndYear) {
             if ($spanEndYear >= $personalStartYear) {
-                $ageAtDeath = $spanEndYear - $personalStartYear;
-                if ($ageAtDeath > 0) {
-                    $comparisons[] = "You were {$ageAtDeath} years old when {$span->getDisplayTitle()} died.";
+                // Calculate accurate age using DateDurationCalculator (rounded down)
+                if ($personalSpan->start_year && $personalSpan->start_month && $personalSpan->start_day &&
+                    $span->end_year && $span->end_month && $span->end_day) {
+                    $ageAtDeath = \App\Helpers\DateDurationCalculator::calculateDuration(
+                        (object)['year' => $personalSpan->start_year, 'month' => $personalSpan->start_month, 'day' => $personalSpan->start_day],
+                        (object)['year' => $span->end_year, 'month' => $span->end_month, 'day' => $span->end_day]
+                    );
+                    if ($ageAtDeath['years'] > 0) {
+                        $comparisons[] = "You were {$ageAtDeath['years']} years old when {$span->getDisplayTitle()} died.";
+                    }
+                } else {
+                    // Fallback to year-only calculation if month/day not available
+                    $ageAtDeath = $spanEndYear - $personalStartYear;
+                    if ($ageAtDeath > 0) {
+                        $comparisons[] = "You were {$ageAtDeath} years old when {$span->getDisplayTitle()} died.";
+                    }
                 }
             }
         } elseif ($spanStartYear && $personalEndYear) {
             if ($personalEndYear >= $spanStartYear) {
-                $ageAtDeath = $personalEndYear - $spanStartYear;
-                if ($ageAtDeath > 0) {
-                    $comparisons[] = "{$span->getDisplayTitle()} was {$ageAtDeath} years old when you died.";
+                // Calculate accurate age using DateDurationCalculator (rounded down)
+                if ($span->start_year && $span->start_month && $span->start_day &&
+                    $personalSpan->end_year && $personalSpan->end_month && $personalSpan->end_day) {
+                    $ageAtDeath = \App\Helpers\DateDurationCalculator::calculateDuration(
+                        (object)['year' => $span->start_year, 'month' => $span->start_month, 'day' => $span->start_day],
+                        (object)['year' => $personalSpan->end_year, 'month' => $personalSpan->end_month, 'day' => $personalSpan->end_day]
+                    );
+                    if ($ageAtDeath['years'] > 0) {
+                        $comparisons[] = "{$span->getDisplayTitle()} was {$ageAtDeath['years']} years old when you died.";
+                    }
+                } else {
+                    // Fallback to year-only calculation if month/day not available
+                    $ageAtDeath = $personalEndYear - $spanStartYear;
+                    if ($ageAtDeath > 0) {
+                        $comparisons[] = "{$span->getDisplayTitle()} was {$ageAtDeath} years old when you died.";
+                    }
                 }
             }
         }

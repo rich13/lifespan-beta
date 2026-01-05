@@ -86,6 +86,22 @@
                 $personIsOlder = $personBirthDate->lt($viewerBirthDate);
                 $personIsYounger = $personBirthDate->gt($viewerBirthDate);
                 
+                // Check if person is currently older than user (based on current ages, not birth dates)
+                $personIsCurrentlyOlder = false;
+                $canShowFutureReflection = false;
+                if ($personIsAlive && $personCurrentAge && $yourAge) {
+                    $personIsCurrentlyOlder = $personCurrentAge['years'] > $yourAge['years'] || 
+                        ($personCurrentAge['years'] == $yourAge['years'] && $personCurrentAge['months'] > $yourAge['months']) ||
+                        ($personCurrentAge['years'] == $yourAge['years'] && $personCurrentAge['months'] == $yourAge['months'] && $personCurrentAge['days'] > $yourAge['days']);
+                    
+                    if ($personIsCurrentlyOlder) {
+                        $canShowFutureReflection = true;
+                    }
+                }
+                
+                // Initialize story generator early so it can be used in reflection calculations
+                $storyGenerator = app(\App\Services\ConfigurableStoryGeneratorService::class);
+                
                 if ($personIsOlder) {
                     // Person is older - show when they were your current age
                     $canCalculateReflection = true;
@@ -104,8 +120,8 @@
                             ($personAgeAtDeath['years'] == $yourAge['years'] && $personAgeAtDeath['months'] == $personAgeAtDeath['months'] && $personAgeAtDeath['days'] < $yourAge['days']);
                     }
                     
-                    // If they died before reaching your age, calculate when you were their age at death
-                    if ($personDiedBeforeReachingUserAge && $personAgeAtDeath) {
+                    // Calculate when you were their age at death (used for reflections and messaging)
+                    if ($personAgeAtDeath) {
                         $userAtPersonDeathAge = $viewerBirthDate->copy()
                             ->addYears($personAgeAtDeath['years'])
                             ->addMonths($personAgeAtDeath['months'])
@@ -154,7 +170,6 @@
                     ];
 
                     // Generate stories for both the person and user at the reflection date
-                    $storyGenerator = app(\App\Services\ConfigurableStoryGeneratorService::class);
                     $personStory = null;
                     $userStory = null;
                     
@@ -170,6 +185,109 @@
                     $userAtDeathStory = null;
                     if ($personDiedBeforeReachingUserAge && isset($userAtPersonDeathAge)) {
                         $userAtDeathStory = $storyGenerator->generateStoryAtDate($personalSpan, $userAtPersonDeathAge->format('Y-m-d'));
+                    }
+
+                    // Calculate future reflection: when user will be person's current age (if person is currently older and alive)
+                    $futureReflectionDate = null;
+                    $futureReflectionDateObj = null;
+                    $futureDuration = null;
+                    
+                    if ($canShowFutureReflection && $personIsAlive && $personCurrentAge) {
+                        // Calculate when user will reach person's current age
+                        $futureReflectionDate = $viewerBirthDate->copy()
+                            ->addYears($personCurrentAge['years'])
+                            ->addMonths($personCurrentAge['months'])
+                            ->addDays($personCurrentAge['days']);
+                        
+                        $futureReflectionDateObj = (object)[
+                            'year' => $futureReflectionDate->year,
+                            'month' => $futureReflectionDate->month,
+                            'day' => $futureReflectionDate->day,
+                        ];
+                        
+                        $futureDuration = \App\Helpers\DateDurationCalculator::calculateDuration(
+                            (object)['year' => $viewerBirthDate->year, 'month' => $viewerBirthDate->month, 'day' => $viewerBirthDate->day],
+                            (object)['year' => $futureReflectionDate->year, 'month' => $futureReflectionDate->month, 'day' => $futureReflectionDate->day]
+                        );
+                    }
+
+                    // Calculate when user was the same age as person was when user was born
+                    // Only makes sense if person is older than user
+                    $sameAgeReflectionDate = null;
+                    $sameAgeReflectionDateObj = null;
+                    $personAgeWhenUserBorn = null;
+                    $isSameAgeReflectionInPast = null;
+                    
+                    if ($hasPersonalStart && $hasSpanStart && $personIsOlder) {
+                        // Calculate person's age when user was born
+                        $personAgeWhenUserBorn = \App\Helpers\DateDurationCalculator::calculateDuration(
+                            (object)['year' => $personBirthDate->year, 'month' => $personBirthDate->month, 'day' => $personBirthDate->day],
+                            (object)['year' => $viewerBirthDate->year, 'month' => $viewerBirthDate->month, 'day' => $viewerBirthDate->day]
+                        );
+                        
+                        if ($personAgeWhenUserBorn) {
+                            // Calculate when user reached that age
+                            $sameAgeReflectionDate = $viewerBirthDate->copy()
+                                ->addYears($personAgeWhenUserBorn['years'])
+                                ->addMonths($personAgeWhenUserBorn['months'])
+                                ->addDays($personAgeWhenUserBorn['days']);
+                            
+                            $sameAgeReflectionDateObj = (object)[
+                                'year' => $sameAgeReflectionDate->year,
+                                'month' => $sameAgeReflectionDate->month,
+                                'day' => $sameAgeReflectionDate->day,
+                            ];
+                            
+                            // Check if this date is in the past or future
+                            $isSameAgeReflectionInPast = $sameAgeReflectionDate->lt($nowCarbon);
+                        // Adjust reflection if the person died before this reflection date
+                        $personDiedBeforeUserBirth = $spanEndCarbon && $spanEndCarbon->lt($viewerBirthDate);
+                        $personDiedBeforeSameAgeDate = $spanEndCarbon && $spanEndCarbon->lt($sameAgeReflectionDate);
+                        $effectiveSameAgeDate = $sameAgeReflectionDate;
+                        $effectiveSameAgeDateObj = $sameAgeReflectionDateObj;
+                        $effectiveIsSameAgeReflectionInPast = $isSameAgeReflectionInPast;
+                        $sameAgeReferenceAge = $personAgeWhenUserBorn;
+
+                        if (($personDiedBeforeUserBirth || $personDiedBeforeSameAgeDate) && isset($userAtPersonDeathAge) && $personAgeAtDeath) {
+                            $effectiveSameAgeDate = $userAtPersonDeathAge;
+                            $effectiveSameAgeDateObj = $userAtPersonDeathAgeObj ?? (object)[
+                                'year' => $userAtPersonDeathAge->year,
+                                'month' => $userAtPersonDeathAge->month,
+                                'day' => $userAtPersonDeathAge->day,
+                            ];
+                            $effectiveIsSameAgeReflectionInPast = $userAtPersonDeathAge->lt($nowCarbon);
+                            $sameAgeReferenceAge = $personAgeAtDeath;
+                        }
+                        }
+                    }
+
+                    // Calculate when younger person will be the same age as user is now
+                    $youngerPersonAtUserAgeDate = null;
+                    $youngerPersonAtUserAgeDateObj = null;
+                    $isYoungerPersonAtUserAgeInPast = null;
+                    $userAgeAtYoungerPersonDate = null;
+                    
+                    if ($personIsYounger && $personIsAlive && $hasPersonalStart && $hasSpanStart && $yourAge) {
+                        // Calculate when person will reach user's current age
+                        $youngerPersonAtUserAgeDate = $personBirthDate->copy()
+                            ->addYears($yourAge['years'])
+                            ->addMonths($yourAge['months'])
+                            ->addDays($yourAge['days']);
+                        
+                        $youngerPersonAtUserAgeDateObj = (object)[
+                            'year' => $youngerPersonAtUserAgeDate->year,
+                            'month' => $youngerPersonAtUserAgeDate->month,
+                            'day' => $youngerPersonAtUserAgeDate->day,
+                        ];
+                        
+                        // Check if this date is in the past or future
+                        $isYoungerPersonAtUserAgeInPast = $youngerPersonAtUserAgeDate->lt($nowCarbon);
+                        
+                        // Calculate user's age at that future date
+                        $userAgeAtYoungerPersonDate = \App\Helpers\DateDurationCalculator::calculateDuration(
+                            (object)['year' => $viewerBirthDate->year, 'month' => $viewerBirthDate->month, 'day' => $viewerBirthDate->day],
+                            (object)['year' => $youngerPersonAtUserAgeDate->year, 'month' => $youngerPersonAtUserAgeDate->month, 'day' => $youngerPersonAtUserAgeDate->day]
+                        );
                     }
 
                     // Calculate durations using DateDurationCalculator
@@ -247,12 +365,10 @@
                 @if($personDiedBeforeReachingUserAge)
                     {{-- Don't show date link when person died before reaching viewer's age --}}
                 @else
-                    <a href="{{ route('date.explore', ['date' => $reflectionDateObj->year . '-' . 
-                        str_pad($reflectionDateObj->month, 2, '0', STR_PAD_LEFT) . '-' . 
-                        str_pad($reflectionDateObj->day, 2, '0', STR_PAD_LEFT)]) }}" 
-                       class="text-muted text-dotted-underline">
-                        {{ \App\Helpers\DateHelper::formatDate($reflectionDateObj->year, $reflectionDateObj->month, $reflectionDateObj->day) }}
-                    </a>.
+                    <x-date-link 
+                        :year="$reflectionDateObj->year" 
+                        :month="$reflectionDateObj->month" 
+                        :day="$reflectionDateObj->day" />.
                 @endif
             </p>
             
@@ -281,12 +397,10 @@
                     <div class="mt-4">
                         <p class="text-muted mb-2">
                             When you were the same age as {{ $span->getDisplayTitle() }} when they died, it was 
-                            <a href="{{ route('date.explore', ['date' => $userAtPersonDeathAgeObj->year . '-' . 
-                                str_pad($userAtPersonDeathAgeObj->month, 2, '0', STR_PAD_LEFT) . '-' . 
-                                str_pad($userAtPersonDeathAgeObj->day, 2, '0', STR_PAD_LEFT)]) }}" 
-                               class="text-muted text-dotted-underline">
-                                {{ \App\Helpers\DateHelper::formatDate($userAtPersonDeathAgeObj->year, $userAtPersonDeathAgeObj->month, $userAtPersonDeathAgeObj->day) }}
-                            </a>.
+                            <x-date-link 
+                                :year="$userAtPersonDeathAgeObj->year" 
+                                :month="$userAtPersonDeathAgeObj->month" 
+                                :day="$userAtPersonDeathAgeObj->day" />.
                         </p>
                         
                         {{-- Show connections for the user at that age --}}
@@ -305,7 +419,7 @@
                             <div class="card mb-3">
                                 <div class="card-header py-2">
                                     <h6 class="mb-0">
-                                        When you were the same age as {{ $span->getDisplayTitle() }} when they died, it was {{ \App\Helpers\DateHelper::formatDate($userAtPersonDeathAgeObj->year, $userAtPersonDeathAgeObj->month, $userAtPersonDeathAgeObj->day) }}
+                                        When you were the same age as {{ $span->getDisplayTitle() }} when they died, it was <x-date-link :year="$userAtPersonDeathAgeObj->year" :month="$userAtPersonDeathAgeObj->month" :day="$userAtPersonDeathAgeObj->day" />
                                     </h6>
                                 </div>
                                 <div class="card-body py-3">
@@ -335,9 +449,9 @@
                                             @if($personDiedBeforeReachingUserAge)
                                                 {{ $span->getDisplayTitle() }} died at {{ $personAgeAtDeath['years'] }} years, {{ $personAgeAtDeath['months'] }} months, and {{ $personAgeAtDeath['days'] }} days old, which was before reaching your current age.
                                             @elseif(!$isReflectionInPast)
-                                                When {{ $span->getDisplayTitle() }} is your current age, it will be {{ \App\Helpers\DateHelper::formatDate($reflectionDateObj->year, $reflectionDateObj->month, $reflectionDateObj->day) }}
+                                                When {{ $span->getDisplayTitle() }} is your current age, it will be <x-date-link :year="$reflectionDateObj->year" :month="$reflectionDateObj->month" :day="$reflectionDateObj->day" />
                                             @else
-                                                When {{ $span->getDisplayTitle() }} was your current age, it was {{ \App\Helpers\DateHelper::formatDate($reflectionDateObj->year, $reflectionDateObj->month, $reflectionDateObj->day) }}
+                                                When {{ $span->getDisplayTitle() }} was your current age, it was <x-date-link :year="$reflectionDateObj->year" :month="$reflectionDateObj->month" :day="$reflectionDateObj->day" />
                                             @endif
                                         @endif
                                     </h6>
@@ -382,9 +496,9 @@
                                 <div class="card-header py-2">
                                     <h6 class="mb-0">
                                         @if($reflectionType === 'person_younger')
-                                            When you were {{ $span->getDisplayTitle() }}'s current age, it was {{ \App\Helpers\DateHelper::formatDate($reflectionDateObj->year, $reflectionDateObj->month, $reflectionDateObj->day) }}
+                                            When you were {{ $span->getDisplayTitle() }}'s current age, it was <x-date-link :year="$reflectionDateObj->year" :month="$reflectionDateObj->month" :day="$reflectionDateObj->day" />
                                         @elseif($reflectionType === 'person_younger_dead')
-                                            When you were the same age as {{ $span->getDisplayTitle() }} when they died, it was {{ \App\Helpers\DateHelper::formatDate($reflectionDateObj->year, $reflectionDateObj->month, $reflectionDateObj->day) }}
+                                            When you were the same age as {{ $span->getDisplayTitle() }} when they died, it was <x-date-link :year="$reflectionDateObj->year" :month="$reflectionDateObj->month" :day="$reflectionDateObj->day" />
                                         @endif
                                     </h6>
                                 </div>
@@ -445,6 +559,68 @@
                                 No story available for {{ $span->getDisplayTitle() }} on this date. Try the connections view instead.
                             </div>
                         @endif
+                    @endif
+
+                    {{-- Future Reflection: When user will be person's current age --}}
+                    @if($canShowFutureReflection && isset($futureReflectionDateObj) && isset($futureDuration))
+                        <div class="card mb-3">
+                            <div class="card-header py-2">
+                                <h6 class="mb-0">
+                                    When you are {{ $span->getDisplayTitle() }}'s age now, it will be 
+                                    <x-date-link 
+                                        :year="$futureReflectionDateObj->year" 
+                                        :month="$futureReflectionDateObj->month" 
+                                        :day="$futureReflectionDateObj->day" />
+                                </h6>
+                            </div>
+                            <div class="card-body py-3">
+                                <p class="text-muted mb-0">
+                                    This is when you'll be {{ $futureDuration['years'] ?? 0 }} years, {{ $futureDuration['months'] ?? 0 }} months, and {{ $futureDuration['days'] ?? 0 }} days old.
+                                </p>
+                            </div>
+                        </div>
+                    @endif
+
+                    {{-- Same Age Reflection: When user was the same age as person was when user was born --}}
+                    @if(isset($sameAgeReflectionDateObj) && isset($personAgeWhenUserBorn))
+                        <div class="card mb-3">
+                            <div class="card-header py-2">
+                                <h6 class="mb-0">
+                                    On 
+                                    <x-date-link 
+                                        :year="$effectiveSameAgeDateObj->year" 
+                                        :month="$effectiveSameAgeDateObj->month" 
+                                        :day="$effectiveSameAgeDateObj->day" />, 
+                                    you {{ $effectiveIsSameAgeReflectionInPast ? 'were' : 'will be' }} the same age as they were when {{ $personDiedBeforeUserBirth ? 'they died' : 'you were born' }}.
+                                </h6>
+                            </div>
+                            <div class="card-body py-3">
+                                <p class="text-muted mb-0">
+                                    {{ $span->getDisplayTitle() }} was {{ $sameAgeReferenceAge['years'] ?? 0 }} years, {{ $sameAgeReferenceAge['months'] ?? 0 }} months, and {{ $sameAgeReferenceAge['days'] ?? 0 }} days old when {{ $personDiedBeforeUserBirth ? 'they died' : 'you were born' }}.
+                                </p>
+                            </div>
+                        </div>
+                    @endif
+
+                    {{-- Younger Person Reflection: When younger person will be the same age as user is now --}}
+                    @if(isset($youngerPersonAtUserAgeDateObj))
+                        <div class="card mb-3">
+                            <div class="card-header py-2">
+                                <h6 class="mb-0">
+                                    On 
+                                    <x-date-link 
+                                        :year="$youngerPersonAtUserAgeDateObj->year" 
+                                        :month="$youngerPersonAtUserAgeDateObj->month" 
+                                        :day="$youngerPersonAtUserAgeDateObj->day" />, 
+                                    they {{ $isYoungerPersonAtUserAgeInPast ? 'were' : 'will be' }} the same age as you now.
+                                </h6>
+                            </div>
+                            <div class="card-body py-3">
+                                <p class="text-muted mb-0">
+                                    This is when you {{ $isYoungerPersonAtUserAgeInPast ? 'were' : 'will be' }} {{ $userAgeAtYoungerPersonDate['years'] ?? 0 }} years, {{ $userAgeAtYoungerPersonDate['months'] ?? 0 }} months, and {{ $userAgeAtYoungerPersonDate['days'] ?? 0 }} days old.
+                                </p>
+                            </div>
+                        </div>
                     @endif
                 </div>
 
@@ -514,6 +690,86 @@
                                 :span="$span" 
                                 :date="$reflectionDateObj" />
                         @endif
+                    @endif
+
+                    {{-- Future Reflection: When user will be person's current age --}}
+                    @if($canShowFutureReflection && isset($futureReflectionDateObj) && isset($futureDuration))
+                        <div class="mt-4">
+                            <p class="text-muted mb-2">
+                                When you are {{ $span->getDisplayTitle() }}'s age now, it will be 
+                                <x-date-link 
+                                    :year="$futureReflectionDateObj->year" 
+                                    :month="$futureReflectionDateObj->month" 
+                                    :day="$futureReflectionDateObj->day" />.
+                            </p>
+                            <p class="text-muted mb-2">
+                                This is when you'll be {{ $futureDuration['years'] ?? 0 }} years, {{ $futureDuration['months'] ?? 0 }} months, and {{ $futureDuration['days'] ?? 0 }} days old.
+                            </p>
+                            
+                            {{-- Show connections for the person at the future reflection date --}}
+                            <x-spans.display.connections-at-date 
+                                :span="$span" 
+                                :date="$futureReflectionDateObj" />
+                            
+                            {{-- Show connections for the user at the future reflection date --}}
+                            <x-spans.display.connections-at-date 
+                                :span="$personalSpan" 
+                                :date="$futureReflectionDateObj" />
+                        </div>
+                    @endif
+
+                    {{-- Same Age Reflection: When user was the same age as person was when user was born --}}
+                    @if(isset($sameAgeReflectionDateObj) && isset($personAgeWhenUserBorn))
+                        <div class="mt-4">
+                            <p class="text-muted mb-2">
+                                On 
+                                <x-date-link 
+                                    :year="$effectiveSameAgeDateObj->year" 
+                                    :month="$effectiveSameAgeDateObj->month" 
+                                    :day="$effectiveSameAgeDateObj->day" />, 
+                                you {{ $effectiveIsSameAgeReflectionInPast ? 'were' : 'will be' }} the same age as they were when {{ $personDiedBeforeUserBirth ? 'they died' : 'you were born' }}.
+                            </p>
+                            <p class="text-muted mb-2">
+                                {{ $span->getDisplayTitle() }} was {{ $sameAgeReferenceAge['years'] ?? 0 }} years, {{ $sameAgeReferenceAge['months'] ?? 0 }} months, and {{ $sameAgeReferenceAge['days'] ?? 0 }} days old when {{ $personDiedBeforeUserBirth ? 'they died' : 'you were born' }}.
+                            </p>
+                            
+                            {{-- Show connections for the person at the same age reflection date --}}
+                            <x-spans.display.connections-at-date 
+                                :span="$span" 
+                                :date="$effectiveSameAgeDateObj" />
+                            
+                            {{-- Show connections for the user at the same age reflection date --}}
+                            <x-spans.display.connections-at-date 
+                                :span="$personalSpan" 
+                                :date="$effectiveSameAgeDateObj" />
+                        </div>
+                    @endif
+
+                    {{-- Younger Person Reflection: When younger person will be the same age as user is now --}}
+                    @if(isset($youngerPersonAtUserAgeDateObj))
+                        <div class="mt-4">
+                            <p class="text-muted mb-2">
+                                On 
+                                <x-date-link 
+                                    :year="$youngerPersonAtUserAgeDateObj->year" 
+                                    :month="$youngerPersonAtUserAgeDateObj->month" 
+                                    :day="$youngerPersonAtUserAgeDateObj->day" />, 
+                                they {{ $isYoungerPersonAtUserAgeInPast ? 'were' : 'will be' }} the same age as you now.
+                            </p>
+                            <p class="text-muted mb-2">
+                                This is when you {{ $isYoungerPersonAtUserAgeInPast ? 'were' : 'will be' }} {{ $userAgeAtYoungerPersonDate['years'] ?? 0 }} years, {{ $userAgeAtYoungerPersonDate['months'] ?? 0 }} months, and {{ $userAgeAtYoungerPersonDate['days'] ?? 0 }} days old.
+                            </p>
+                            
+                            {{-- Show connections for the person at this date --}}
+                            <x-spans.display.connections-at-date 
+                                :span="$span" 
+                                :date="$youngerPersonAtUserAgeDateObj" />
+                            
+                            {{-- Show connections for the user at this date --}}
+                            <x-spans.display.connections-at-date 
+                                :span="$personalSpan" 
+                                :date="$youngerPersonAtUserAgeDateObj" />
+                        </div>
                     @endif
                 </div>
             @endif
