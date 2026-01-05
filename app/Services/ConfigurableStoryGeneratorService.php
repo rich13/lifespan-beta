@@ -2564,7 +2564,7 @@ class ConfigurableStoryGeneratorService
     }
 
     /**
-     * Get the current age of a person, rounded to the nearest 0.25 years with Unicode fractions
+     * Get the current age of a person (complete years, rounded down)
      */
     protected function getAge(Span $span): ?string
     {
@@ -2572,14 +2572,27 @@ class ConfigurableStoryGeneratorService
             return null;
         }
 
-        $startYear = $span->start_year;
-        // Use end_year for deceased people, current year for living
+        // Create proper dates for calculation
+        $birthDate = \Carbon\Carbon::create(
+            $span->start_year,
+            $span->start_month ?? 1,
+            $span->start_day ?? 1
+        );
+        
+        // Use end_year for deceased people, current date for living
         if ($span->end_year !== null && !$span->is_ongoing) {
-            $endYear = $span->end_year;
+            $endDate = \Carbon\Carbon::create(
+                $span->end_year,
+                $span->end_month ?? 12,
+                $span->end_day ?? 31
+            );
         } else {
-            $endYear = date('Y');
+            $endDate = \Carbon\Carbon::today();
         }
-        $age = $endYear - $startYear;
+        
+        // Use diff() to get complete years (always rounded down), not simple subtraction
+        $diff = $birthDate->diff($endDate);
+        $age = $diff->y; // Complete years (always rounded down)
 
         if ($age === 0) {
             return 'less than a year';

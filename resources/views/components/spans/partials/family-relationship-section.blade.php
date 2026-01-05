@@ -91,13 +91,22 @@
                             @endphp
                             
                             @php
-                                // Calculate age for living people
+                                // Calculate age for living people (complete years, rounded down)
                                 $age = null;
                                 if ($member->type_id === 'person' && $member->start_year) {
                                     $currentYear = date('Y');
                                     $isAlive = !$member->end_year || $member->end_year >= $currentYear;
                                     if ($isAlive) {
-                                        $age = $currentYear - $member->start_year;
+                                        // Use proper date calculation to get complete years (rounded down)
+                                        $birthDate = \Carbon\Carbon::create(
+                                            $member->start_year,
+                                            $member->start_month ?? 1,
+                                            $member->start_day ?? 1
+                                        );
+                                        $today = \Carbon\Carbon::today();
+                                        // Use diff() to get complete years (always rounded down), not diffInYears() which might round
+                                        $diff = $birthDate->diff($today);
+                                        $age = $diff->y; // Complete years (always rounded down)
                                     }
                                 }
                                 
