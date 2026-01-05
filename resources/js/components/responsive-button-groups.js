@@ -14,8 +14,6 @@ document.addEventListener('DOMContentLoaded', function() {
         let isScrolling = false;
         let startX = 0;
         let scrollLeft = 0;
-        let autoScrollInterval = null;
-        let originalScrollLeft = 0;
         
         // Touch events for mobile scrolling
         btnGroup.addEventListener('touchstart', function(e) {
@@ -35,42 +33,6 @@ document.addEventListener('DOMContentLoaded', function() {
         btnGroup.addEventListener('touchend', function() {
             isScrolling = false;
         });
-        
-        // Auto-scroll on hover
-        const interactiveCard = btnGroup.closest('.interactive-card-base');
-        if (interactiveCard) {
-            interactiveCard.addEventListener('mouseenter', function() {
-                // Store original scroll position
-                originalScrollLeft = btnGroup.scrollLeft;
-                
-                // Check if content is scrollable
-                if (btnGroup.scrollWidth > btnGroup.clientWidth) {
-                    // Start auto-scroll to the right
-                    autoScrollInterval = setInterval(function() {
-                        if (btnGroup.scrollLeft < btnGroup.scrollWidth - btnGroup.clientWidth) {
-                            btnGroup.scrollLeft += 3; // Faster scroll speed
-                        } else {
-                            // Stop when we reach the end
-                            clearInterval(autoScrollInterval);
-                        }
-                    }, 20); // 20ms interval for faster smooth scrolling
-                }
-            });
-            
-            interactiveCard.addEventListener('mouseleave', function() {
-                // Stop auto-scroll
-                if (autoScrollInterval) {
-                    clearInterval(autoScrollInterval);
-                    autoScrollInterval = null;
-                }
-                
-                // Return to original position
-                btnGroup.scrollTo({
-                    left: originalScrollLeft,
-                    behavior: 'smooth'
-                });
-            });
-        }
         
         // Add visual feedback for scrollable content
         function updateScrollIndicators() {
@@ -158,7 +120,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
-// Add CSS classes for enhanced accessibility and auto-scroll
+// Add CSS classes for enhanced accessibility and scrollable content indicators
 const style = document.createElement('style');
 style.textContent = `
     /* Enhanced focus styles for better accessibility */
@@ -173,13 +135,27 @@ style.textContent = `
         scroll-behavior: smooth;
     }
     
-    /* Auto-scroll hover effect - removed cursor changes to prevent hand cursor */
-    .interactive-card-base:hover .btn-group {
-        /* cursor: grab; - removed to prevent hand cursor */
+    /* Scrollable content hover effects */
+    .interactive-card-base .btn-group.scrollable {
+        cursor: ew-resize;
     }
     
-    .interactive-card-base:hover .btn-group:active {
-        /* cursor: grabbing; - removed to prevent hand cursor */
+    /* Buttons inside scrollable groups should have pointer cursor */
+    .interactive-card-base .btn-group.scrollable .btn {
+        cursor: pointer;
+    }
+    
+    /* Nudge scrollable content slightly to the right on hover to show it's scrollable */
+    /* Only nudge if at the start (scrollLeft is 0 or very close) */
+    .interactive-card-base:hover .btn-group.scrollable.scroll-start {
+        transform: translateX(2px);
+        transition: transform 0.2s ease-in-out;
+    }
+    
+    /* Don't nudge if already scrolled */
+    .interactive-card-base:hover .btn-group.scrollable:not(.scroll-start) {
+        transform: translateX(0);
+        transition: transform 0.2s ease-in-out;
     }
     
     /* Subtle transition for hover state */
