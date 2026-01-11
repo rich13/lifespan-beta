@@ -25,6 +25,15 @@ class RegisterRequest extends FormRequest
      */
     public function authorize()
     {
+        // Check honeypot field - if filled, it's likely a bot
+        if (!empty($this->input('website'))) {
+            Log::warning('Registration blocked: Honeypot field filled', [
+                'ip' => $this->ip(),
+                'email' => $this->input('email'),
+            ]);
+            abort(422, 'Invalid request.');
+        }
+        
         return true;
     }
 
@@ -47,6 +56,8 @@ class RegisterRequest extends FormRequest
             'birth_year' => ['required', 'integer', 'min:1900', 'max:' . date('Y')],
             'birth_month' => ['required', 'integer', 'min:1', 'max:12'],
             'birth_day' => ['required', 'integer', 'min:1', 'max:31'],
+            // Honeypot field 'website' is checked in authorize() method, not in validation rules
+            // to avoid exposing it in error messages
             // Invitation code validation - commented out but kept for potential future use
             // 'invitation_code' => ['nullable', 'string', function ($attribute, $value, $fail) {
             //     if ($value && $value !== 'lifespan-beta-5b18a03898a7e8dac3582ef4b58508c4' && !InvitationCode::where('code', $value)->where('used', false)->exists()) {
@@ -80,8 +91,35 @@ class RegisterRequest extends FormRequest
      */
     public function register()
     {
+        // Check email-based rate limit (IP-based is handled by middleware)
+        if ($this->email) {
+            $emailKey = 'registration-email:' . $this->email;
+            if (RateLimiter::tooManyAttempts($emailKey, 5)) {
+                $seconds = RateLimiter::availableIn($emailKey);
+                Log::warning('Registration rate limited by email', [
+                    'ip' => $this->ip(),
+                    'email' => $this->email,
+                    'retry_after' => $seconds,
+                ]);
+                
+                throw ValidationException::withMessages([
+                    'email' => trans('auth.throttle', [
+                        'seconds' => $seconds,
+                        'minutes' => ceil($seconds / 60),
+                    ]),
+                ]);
+            }
+            
+            // Increment email-based rate limiter
+            RateLimiter::hit($emailKey, 3600); // 1 hour
+        }
+
+        // Monitor for suspicious patterns
+        $this->monitorRegistrationPatterns();
+
         Log::info('Starting user registration', [
             'email' => $this->email,
+            'ip' => $this->ip(),
             // 'invitation_code' => $this->invitation_code ?? 'none' // Commented out - invite codes disabled
         ]);
 
@@ -128,6 +166,10 @@ class RegisterRequest extends FormRequest
         $userData = [
             'email' => $this->email,
             'password' => Hash::make($this->password),
+            'metadata' => [
+                'registration_ip' => $this->ip(),
+                'registration_user_agent' => $this->userAgent(),
+            ],
         ];
 
         if (!$needsApproval) {
@@ -223,6 +265,80 @@ class RegisterRequest extends FormRequest
                 'user_id' => $user->id,
                 'error' => $e->getMessage()
             ]);
+        }
+    }
+
+    /**
+     * Monitor registration patterns for suspicious activity.
+     */
+    protected function monitorRegistrationPatterns(): void
+    {
+        $ip = $this->ip();
+        $email = $this->email;
+        
+        // Check for multiple registrations from same IP in short time
+        // Query users where metadata contains the registration IP
+        $recentRegistrations = User::where('created_at', '>=', now()->subHour())
+            ->get()
+            ->filter(function ($user) use ($ip) {
+                $metadata = $user->metadata ?? [];
+                return isset($metadata['registration_ip']) && $metadata['registration_ip'] === $ip;
+            })
+            ->count();
+        
+        if ($recentRegistrations >= 2) {
+            Log::warning('Suspicious registration pattern detected', [
+                'ip' => $ip,
+                'email' => $email,
+                'recent_registrations' => $recentRegistrations,
+                'pattern' => 'multiple_registrations_same_ip',
+            ]);
+            
+            // Send alert to Slack/admin
+            try {
+                $slackService = app(SlackNotificationService::class);
+                $slackService->notifySuspiciousRegistration([
+                    'ip' => $ip,
+                    'email' => $email,
+                    'recent_registrations' => $recentRegistrations,
+                    'pattern' => 'multiple_registrations_same_ip',
+                ]);
+            } catch (\Exception $e) {
+                Log::error('Failed to send suspicious registration alert', [
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+        
+        // Check for email domain patterns (e.g., many @tempmail.com registrations)
+        $emailDomain = substr(strrchr($email, "@"), 1);
+        $domainRegistrations = User::where('created_at', '>=', now()->subDay())
+            ->where('email', 'like', '%@' . $emailDomain)
+            ->count();
+        
+        if ($domainRegistrations >= 5) {
+            Log::warning('Suspicious registration pattern: multiple registrations from same domain', [
+                'ip' => $ip,
+                'email' => $email,
+                'domain' => $emailDomain,
+                'domain_registrations' => $domainRegistrations,
+            ]);
+            
+            // Send alert for domain-based pattern
+            try {
+                $slackService = app(SlackNotificationService::class);
+                $slackService->notifySuspiciousRegistration([
+                    'ip' => $ip,
+                    'email' => $email,
+                    'domain' => $emailDomain,
+                    'domain_registrations' => $domainRegistrations,
+                    'pattern' => 'multiple_registrations_same_domain',
+                ]);
+            } catch (\Exception $e) {
+                Log::error('Failed to send suspicious registration alert', [
+                    'error' => $e->getMessage(),
+                ]);
+            }
         }
     }
 }

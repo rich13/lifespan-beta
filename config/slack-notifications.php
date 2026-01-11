@@ -35,6 +35,7 @@ return [
         'span_created' => env('SLACK_NOTIFY_SPAN_CREATED', true),
         'span_updated' => env('SLACK_NOTIFY_SPAN_UPDATED', true),
         'user_registered' => env('SLACK_NOTIFY_USER_REGISTERED', true),
+        'suspicious_registration' => env('SLACK_NOTIFY_SUSPICIOUS_REGISTRATION', true),
         'ai_yaml_generated' => env('SLACK_NOTIFY_AI_YAML', true),
         'import_completed' => env('SLACK_NOTIFY_IMPORT', true),
         'backup_completed' => env('SLACK_NOTIFY_BACKUP', true),

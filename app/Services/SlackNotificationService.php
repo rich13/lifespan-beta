@@ -107,6 +107,23 @@ class SlackNotificationService
     }
 
     /**
+     * Send notification for suspicious registration patterns
+     */
+    public function notifySuspiciousRegistration(array $data): void
+    {
+        if (!$this->shouldNotify('suspicious_registration', null, 'warning')) {
+            return;
+        }
+
+        $this->notifySystemEvent('Suspicious Registration Pattern Detected', [
+            'ip' => $data['ip'] ?? 'unknown',
+            'email' => $data['email'] ?? 'unknown',
+            'recent_registrations' => $data['recent_registrations'] ?? 0,
+            'pattern' => $data['pattern'] ?? 'unknown',
+        ], 'warning');
+    }
+
+    /**
      * Send notification for AI YAML generation
      */
     public function notifyAiYamlGenerated(string $name, bool $success, ?string $error = null): void

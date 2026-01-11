@@ -95,6 +95,12 @@
                                    id="password_confirmation" name="password_confirmation" required>
                         </div>
 
+                        {{-- Honeypot field - hidden from users but bots may fill it --}}
+                        <div style="position: absolute; left: -9999px; opacity: 0;" aria-hidden="true">
+                            <label for="website">Website</label>
+                            <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+                        </div>
+
                         {{-- Invitation code field - commented out but kept for potential future use
                         <div class="mb-3">
                             <label for="invitation_code" class="form-label">Invitation Code <span class="text-muted">(optional)</span></label>

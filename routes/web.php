@@ -1821,11 +1821,15 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
             ->name('auth.password.submit');
         Route::get('auth/clear-remembered-email', [EmailFirstAuthController::class, 'clearRememberedEmail'])
             ->name('auth.clear-remembered-email');
+        Route::post('auth/verification/resend', [EmailFirstAuthController::class, 'resendVerification'])
+            ->middleware('throttle:6,1')
+            ->name('verification.resend');
 
         // Registration routes
         Route::get('register', [App\Http\Controllers\Auth\RegisteredUserController::class, 'create'])
             ->name('register');
         Route::post('register', [App\Http\Controllers\Auth\RegisteredUserController::class, 'store'])
+            ->middleware('throttle:registration')
             ->name('register.store');
         Route::get('register/pending', [App\Http\Controllers\Auth\RegisteredUserController::class, 'pending'])
             ->name('register.pending');
