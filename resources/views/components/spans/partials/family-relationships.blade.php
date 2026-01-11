@@ -1,4 +1,4 @@
-@props(['span', 'interactive' => false, 'columns' => 3])
+@props(['span', 'interactive' => false, 'columns' => 2])
 
 @php
 // Get all family relationships using the span's capabilities

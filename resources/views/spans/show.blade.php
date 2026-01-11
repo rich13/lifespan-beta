@@ -182,7 +182,7 @@
         @endif
 
         <div class="row">
-            <div class="col-md-5">
+            <div class="col-md-4">
                 <!-- Story Card -->
                 <div class="row">
                     <div class="col-12">
@@ -204,7 +204,7 @@
                 <x-spans.partials.connections :span="$span" />
             </div>
 
-            <div class="col-md-3">
+            <div class="col-md-4">
                 <!-- Legacy Album Cover (only for albums) -->
                 @if($span->subtype === 'album' && $span->has_cover_art && $span->cover_art_url)
                     <div class="card mb-4">

@@ -58,7 +58,7 @@
                             return 'href="' . $cleanUrl . '"';
                         }, $paragraph);
                     @endphp
-                    <p class="lead mb-4">{!! $cleanParagraph !!}</p>
+                    <p class="mb-4">{!! $cleanParagraph !!}</p>
                 @endforeach
             </div>
             

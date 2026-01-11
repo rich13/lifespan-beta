@@ -59,11 +59,11 @@
 
 @if($sortedMembers->isNotEmpty())
     <div class="{{ $colClass }}">
-        <div class="border rounded p-2 bg-light h-100" style="font-size: 0.875rem;">
-            <h6 class="small mb-1 text-muted fw-bold" style="font-size: 0.75rem;">{{ $title }}</h6>
+        <div class="border rounded bg-light h-100" style="font-size: 0.875rem; padding: 0.375rem;">
+            <h6 class="small text-muted fw-bold" style="font-size: 0.75rem; margin-bottom: 0.375rem;">{{ $title }}</h6>
             <ul class="list-unstyled mb-0">
                 @foreach($sortedMembers as $member)
-                    <li class="mb-1" style="font-size: 0.875rem; line-height: 1.4;">
+                    <li style="font-size: 0.875rem; line-height: 1.4; @if(!$loop->last) margin-bottom: 0.375rem; @endif">
                         @if($isLegacy)
                             <i class="bi bi-person-fill me-1" style="font-size: 0.8rem;"></i>
                             <span>{{ $member }}</span>

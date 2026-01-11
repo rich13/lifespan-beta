@@ -58,7 +58,7 @@
             <x-spans.timeline-group :spans="$allFamilyMembers" />
             
             {{-- Main Family Relationships Component --}}
-            <x-spans.partials.family-relationships :span="$span" :interactive="true" :columns="3" />
+            <x-spans.partials.family-relationships :span="$span" :interactive="true" :columns="2" />
         </div>
     </div>
 </div>
