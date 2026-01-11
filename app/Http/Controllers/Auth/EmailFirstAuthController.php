@@ -111,7 +111,7 @@ class EmailFirstAuthController extends Controller
                 return back()
                     ->withInput(['email' => $request->email])
                     ->withErrors([
-                        'email' => 'Please verify your email address before logging in. Check your inbox for the verification link.'
+                        'email' => 'Please verify your email address before logging in. Check your inbox for the verification email we sent when you registered.'
                     ]);
             }
             
@@ -202,6 +202,42 @@ class EmailFirstAuthController extends Controller
         
         // Store token in session so it can be passed to views
         request()->session()->put('bridge_token', $token->plainTextToken);
+    }
+
+    /**
+     * Resend verification email for unauthenticated users
+     */
+    public function resendVerification(Request $request): RedirectResponse
+    {
+        $request->validate([
+            'email' => ['required', 'email'],
+        ]);
+
+        $user = User::where('email', $request->email)->first();
+
+        if (!$user) {
+            return back()
+                ->withInput(['email' => $request->email])
+                ->withErrors(['email' => 'We could not find a user with that email address.']);
+        }
+
+        if ($user->hasVerifiedEmail()) {
+            return back()
+                ->withInput(['email' => $request->email])
+                ->with('status', 'Your email is already verified. You can log in now.');
+        }
+
+        // Send verification email
+        $user->sendEmailVerificationNotification();
+
+        Log::info('Verification email resent', [
+            'user_id' => $user->id,
+            'email' => $user->email,
+        ]);
+
+        return back()
+            ->withInput(['email' => $request->email])
+            ->with('status', 'Verification email sent! Please check your inbox and click the verification link.');
     }
 
     /**

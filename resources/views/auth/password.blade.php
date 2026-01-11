@@ -7,6 +7,27 @@
             <div class="card">
                 <div class="card-body">
                     <h2 class="card-title text-center mb-4">Sign In</h2>
+                    
+                    @if (session('status'))
+                        <div class="alert alert-success mb-4">
+                            {{ session('status') }}
+                        </div>
+                    @endif
+                    
+                    @if ($errors->has('email'))
+                        <div class="alert alert-warning mb-4">
+                            <strong>Email Verification Required</strong>
+                            <p class="mb-2">{{ $errors->first('email') }}</p>
+                            <form method="POST" action="{{ route('verification.resend') }}" class="d-inline">
+                                @csrf
+                                <input type="hidden" name="email" value="{{ $email }}">
+                                <button type="submit" class="btn btn-sm btn-outline-primary">
+                                    Resend Verification Email
+                                </button>
+                            </form>
+                        </div>
+                    @endif
+                    
                     <form method="POST" action="{{ route('auth.password.submit') }}">
                         @csrf
                         <input type="hidden" name="email" value="{{ $email }}">
@@ -16,6 +37,9 @@
                             <input type="email" class="form-control bg-light" 
                                    id="email_display" name="email_display" 
                                    value="{{ $email }}" readonly>
+                            @error('email')
+                                <div class="invalid-feedback d-block">{{ $message }}</div>
+                            @enderror
                         </div>
                         
                         <div class="mb-3">
