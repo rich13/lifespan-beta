@@ -108,7 +108,13 @@
                 ->with(['parent', 'child', 'connectionSpan', 'type'])
                 ->get()
                 ->sortBy(function ($connection) {
-                    return $connection->getEffectiveSortDate();
+                    $imageSpan = $connection->parent;
+                    // Sort by the image span's start date (the date displayed on the image)
+                    return [
+                        $imageSpan->start_year ?? PHP_INT_MAX,
+                        $imageSpan->start_month ?? PHP_INT_MAX,
+                        $imageSpan->start_day ?? PHP_INT_MAX
+                    ];
                 });
         } else {
             $imageConnections = collect();
@@ -128,7 +134,13 @@
             ->with(['connectionSpan', 'parent', 'type'])
             ->get()
             ->sortBy(function ($connection) {
-                return $connection->getEffectiveSortDate();
+                $imageSpan = $connection->parent;
+                // Sort by the image span's start date (the date displayed on the image)
+                return [
+                    $imageSpan->start_year ?? PHP_INT_MAX,
+                    $imageSpan->start_month ?? PHP_INT_MAX,
+                    $imageSpan->start_day ?? PHP_INT_MAX
+                ];
             });
     }
 @endphp
@@ -140,7 +152,7 @@
                 @if($isPhotoSpan)
                     Related Photos
                 @else
-                    Photos featuring this {{ $span->type->name ?? 'span' }}
+                    Photos
                 @endif
             </h6>
             @auth
@@ -171,28 +183,26 @@
         @if($imageConnections->isNotEmpty())
             <div class="card-body">
                 @php
-                    $imageCount = $imageConnections->count();
+                    $totalImageCount = $imageConnections->count();
+                    $displayedImages = $imageConnections->take(6);
+                    $imageCount = $displayedImages->count();
                     // Determine column classes based on number of images
                     // Responsive: stack on mobile (xs), scale columns based on image count on larger screens
                     // 1 image = full width always
                     // 2 images = 2 columns on sm+ screens
-                    // 3 images = 3 columns on sm+ screens
-                    // 4+ images = up to 4 columns (responsive: 2 on sm, 3 on md, 4 on lg+)
+                    // 3+ images = 3 columns max (responsive: 2 on sm, 3 on md+)
                     if ($imageCount === 1) {
                         $colClass = 'col-12';
                     } elseif ($imageCount === 2) {
                         // 2 images: stack on mobile, 2 columns on small+ screens
                         $colClass = 'col-12 col-sm-6';
-                    } elseif ($imageCount === 3) {
-                        // 3 images: stack on mobile, 3 columns on small+ screens
-                        $colClass = 'col-12 col-sm-4';
                     } else {
-                        // 4+ images: stack on mobile, 2 columns on small, 3 columns on medium, 4 columns on large+ screens
-                        $colClass = 'col-12 col-sm-6 col-md-4 col-lg-3';
+                        // 3+ images: stack on mobile, 2 columns on small, 3 columns on medium+ screens
+                        $colClass = 'col-12 col-sm-6 col-md-4';
                     }
                 @endphp
                 <div class="row g-3">
-                    @foreach($imageConnections as $connection)
+                    @foreach($displayedImages as $connection)
                         @php
                             $imageSpan = $connection->parent;
                             $metadata = $imageSpan->metadata ?? [];
@@ -248,12 +258,12 @@
                                         
                                         if ($imageSpan->start_year) {
                                             if ($imageSpan->start_day && $imageSpan->start_month) {
-                                                // Full date: YYYY-MM-DD
-                                                $dateText = $imageSpan->start_day . ' ' . date('F', mktime(0, 0, 0, $imageSpan->start_month, 1)) . ', ' . $imageSpan->start_year;
+                                                // Full date: DD/MM/YYYY
+                                                $dateText = sprintf('%02d/%02d/%04d', $imageSpan->start_day, $imageSpan->start_month, $imageSpan->start_year);
                                                 $dateUrl = route('date.explore', ['date' => sprintf('%04d-%02d-%02d', $imageSpan->start_year, $imageSpan->start_month, $imageSpan->start_day)]);
                                             } elseif ($imageSpan->start_month) {
-                                                // Month and year: YYYY-MM
-                                                $dateText = date('F', mktime(0, 0, 0, $imageSpan->start_month, 1)) . ' ' . $imageSpan->start_year;
+                                                // Month and year: MM/YYYY
+                                                $dateText = sprintf('%02d/%04d', $imageSpan->start_month, $imageSpan->start_year);
                                                 $dateUrl = route('date.explore', ['date' => sprintf('%04d-%02d', $imageSpan->start_year, $imageSpan->start_month)]);
                                             } else {
                                                 // Year only: YYYY
@@ -278,11 +288,11 @@
                     @endforeach
                 </div>
                 
-                @if($imageConnections->count() > 6)
+                @if($totalImageCount > 6)
                     <div class="text-center mt-3">
                         <a href="{{ route('spans.connections', ['subject' => $span, 'predicate' => 'is-subject-of']) }}" 
                            class="btn btn-outline-primary btn-sm">
-                            View all {{ $imageConnections->count() }} photos
+                            View all {{ $totalImageCount }} photos
                         </a>
                     </div>
                 @endif
