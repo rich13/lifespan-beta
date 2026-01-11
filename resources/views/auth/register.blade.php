@@ -9,7 +9,19 @@
                     <h2 class="card-title text-center mb-4">Create Account</h2>
                     <form method="POST" action="{{ route('register.store') }}">
                         @csrf
-                        <input type="hidden" name="email" value="{{ $email }}">
+                        <input type="hidden" name="email" value="{{ $email ?? old('email') }}">
+                        
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Email address</label>
+                            <input type="email" class="form-control bg-light" 
+                                   id="email" name="email" 
+                                   value="{{ $email ?? old('email') }}" 
+                                   readonly 
+                                   required>
+                            @error('email')
+                                <div class="invalid-feedback d-block">{{ $message }}</div>
+                            @enderror
+                        </div>
                         
                         <div class="mb-3">
                             <label for="name" class="form-label">Name</label>
@@ -83,14 +95,17 @@
                                    id="password_confirmation" name="password_confirmation" required>
                         </div>
 
+                        {{-- Invitation code field - commented out but kept for potential future use
                         <div class="mb-3">
-                            <label for="invitation_code" class="form-label">Invitation Code</label>
+                            <label for="invitation_code" class="form-label">Invitation Code <span class="text-muted">(optional)</span></label>
                             <input type="text" class="form-control @error('invitation_code') is-invalid @enderror" 
-                                   id="invitation_code" name="invitation_code" value="{{ old('invitation_code') }}" required>
+                                   id="invitation_code" name="invitation_code" value="{{ old('invitation_code') }}">
+                            <small class="form-text text-muted">If you don't have an invitation code, your registration will be reviewed and approved manually.</small>
                             @error('invitation_code')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
                         </div>
+                        --}}
 
                         <button type="submit" class="btn btn-primary w-100">Create Account</button>
                     </form>
