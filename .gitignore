@@ -71,3 +71,6 @@ temp/
 !/yaml-samples/
 !/yaml-samples/*.yaml
 storage/debugbar/
+
+# Test output files
+test-output*.txt
