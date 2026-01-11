@@ -10,7 +10,7 @@ class EmailFirstAuthTest extends TestCase
 
     public function test_email_form_can_be_rendered()
     {
-        $response = $this->get('/login');
+        $response = $this->get('/signin');
         $response->assertStatus(200);
         $response->assertViewIs('auth.email-first');
     }

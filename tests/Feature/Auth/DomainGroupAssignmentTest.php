@@ -40,7 +40,7 @@ class DomainGroupAssignmentTest extends TestCase
             'birth_day' => 15,
         ]);
 
-        $response->assertRedirect('/');
+        $response->assertRedirect(route('register.pending'));
         
         // Find the newly created user
         $user = User::where('email', 'test@unthinkabledigital.co.uk')->first();
@@ -82,7 +82,7 @@ class DomainGroupAssignmentTest extends TestCase
             'birth_day' => 20,
         ]);
 
-        $response->assertRedirect('/');
+        $response->assertRedirect(route('register.pending'));
         
         // Find the newly created user
         $user = User::where('email', 'external@example.com')->first();
@@ -116,8 +116,8 @@ class DomainGroupAssignmentTest extends TestCase
             'birth_day' => 25,
         ]);
 
-        // Registration should still succeed
-        $response->assertRedirect('/');
+        // Registration should still succeed (redirects to pending approval)
+        $response->assertRedirect(route('register.pending'));
         
         // Verify the user was created
         $user = User::where('email', 'another@unthinkabledigital.co.uk')->first();
@@ -155,7 +155,7 @@ class DomainGroupAssignmentTest extends TestCase
             'birth_day' => 10,
         ]);
 
-        $response->assertRedirect('/');
+        $response->assertRedirect(route('register.pending'));
         
         // Find the newly created user (email is stored as entered)
         $user = User::where('email', 'MixedCase@UnthinkableDigital.Co.Uk')->first();

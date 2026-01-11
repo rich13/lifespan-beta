@@ -72,7 +72,7 @@ class RouteHealthTest extends \Tests\TestCase
         $publicRoutes = [
             '/',
             '/health',
-            '/login',
+            '/signin',
             '/register',
             '/email/verify',
             '/auth/email',

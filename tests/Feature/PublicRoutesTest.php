@@ -25,7 +25,7 @@ class PublicRoutesTest extends TestCase
 
     public function test_login_page_loads(): void
     {
-        $response = $this->get('/login');
+        $response = $this->get('/signin');
 
         $response->assertStatus(200);
         $response->assertViewIs('auth.email-first');
@@ -36,7 +36,7 @@ class PublicRoutesTest extends TestCase
         $response = $this->get('/auth/email');
 
         $response->assertStatus(302);
-        $response->assertRedirect('/login');
+        $response->assertRedirect(route('login'));
     }
 
     public function test_email_auth_submission(): void

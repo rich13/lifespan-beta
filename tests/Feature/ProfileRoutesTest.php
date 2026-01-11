@@ -24,7 +24,7 @@ class ProfileRoutesTest extends TestCase
     {
         $response = $this->get('/profile');
         $response->assertStatus(302);
-        $response->assertRedirect('/login');
+        $response->assertRedirect(route('login'));
     }
 
     public function test_profile_edit_loads_when_authenticated(): void
@@ -43,7 +43,7 @@ class ProfileRoutesTest extends TestCase
         ]);
 
         $response->assertStatus(302);
-        $response->assertRedirect('/login');
+        $response->assertRedirect(route('login'));
     }
 
     public function test_profile_update_works_when_authenticated(): void
@@ -79,7 +79,7 @@ class ProfileRoutesTest extends TestCase
         ]);
 
         $response->assertStatus(302);
-        $response->assertRedirect('/login');
+        $response->assertRedirect(route('login'));
     }
 
     public function test_password_update_works_when_authenticated(): void
@@ -99,7 +99,7 @@ class ProfileRoutesTest extends TestCase
     {
         $response = $this->delete('/profile');
         $response->assertStatus(302);
-        $response->assertRedirect('/login');
+        $response->assertRedirect(route('login'));
     }
 
     public function test_profile_delete_works_when_authenticated(): void
@@ -119,7 +119,7 @@ class ProfileRoutesTest extends TestCase
     {
         $response = $this->post('/logout');
         $response->assertStatus(302);
-        $response->assertRedirect('/login');
+        $response->assertRedirect(route('login'));
     }
 
     public function test_logout_works_when_authenticated(): void

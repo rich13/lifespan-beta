@@ -23,7 +23,7 @@ class SpanRoutesTest extends TestCase
     {
         $response = $this->get('/spans/create');
         $response->assertStatus(302);
-        $response->assertRedirect('/login');
+        $response->assertRedirect(route('login'));
     }
 
     public function test_create_span_page_loads_when_authenticated(): void
@@ -45,7 +45,7 @@ class SpanRoutesTest extends TestCase
         ]);
 
         $response->assertStatus(302);
-        $response->assertRedirect('/login');
+        $response->assertRedirect(route('login'));
     }
 
     public function test_store_span_works_when_authenticated(): void
@@ -71,7 +71,7 @@ class SpanRoutesTest extends TestCase
     {
         $response = $this->get("/spans/{$this->span->id}/edit");
         $response->assertStatus(302);
-        $response->assertRedirect('/login');
+        $response->assertRedirect(route('login'));
     }
 
     public function test_edit_span_loads_when_authenticated(): void
@@ -90,7 +90,7 @@ class SpanRoutesTest extends TestCase
         ]);
 
         $response->assertStatus(302);
-        $response->assertRedirect('/login');
+        $response->assertRedirect(route('login'));
     }
 
     public function test_update_span_works_when_authenticated(): void
@@ -116,7 +116,7 @@ class SpanRoutesTest extends TestCase
     {
         $response = $this->delete("/spans/{$this->span->id}");
         $response->assertStatus(302);
-        $response->assertRedirect('/login');
+        $response->assertRedirect(route('login'));
     }
 
     public function test_delete_span_works_when_authenticated(): void
@@ -149,6 +149,6 @@ class SpanRoutesTest extends TestCase
 
         $response = $this->get("/spans/{$privateSpan->id}");
         $response->assertStatus(302);
-        $response->assertRedirect('/login');
+        $response->assertRedirect(route('login'));
     }
 } 

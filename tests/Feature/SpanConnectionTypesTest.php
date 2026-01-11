@@ -170,7 +170,7 @@ class SpanConnectionTypesTest extends TestCase
         
         $response = $this->get(route('spans.connections', ['subject' => $span, 'predicate' => 'lived-in']));
         
-        $response->assertRedirect('/login');
+        $response->assertRedirect(route('login'));
     }
 
     public function test_authenticated_user_can_access_own_span_connections()
