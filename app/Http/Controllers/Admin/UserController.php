@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Auth\Events\Verified;
 
 class UserController extends Controller
 {
@@ -50,6 +51,9 @@ class UserController extends Controller
         $validated = $request->validate([
             'email' => 'sometimes|required|email|unique:users,email,' . $user->id,
             'is_admin' => 'sometimes|boolean',
+            'password' => 'sometimes|nullable|min:8|confirmed',
+            'verify_email' => 'sometimes|boolean',
+            'unverify_email' => 'sometimes|boolean',
         ]);
 
         // Handle checkbox: when unchecked, it won't be in the request
@@ -57,6 +61,29 @@ class UserController extends Controller
         if (!$request->has('is_admin')) {
             $validated['is_admin'] = false;
         }
+
+        // Handle password update if provided
+        if (!empty($validated['password'])) {
+            $validated['password'] = Hash::make($validated['password']);
+        } else {
+            unset($validated['password']);
+        }
+
+        // Handle email verification
+        if ($request->has('verify_email') && $request->verify_email) {
+            // Mark email as verified
+            if (!$user->hasVerifiedEmail()) {
+                $user->markEmailAsVerified();
+                event(new Verified($user));
+            }
+        } elseif ($request->has('unverify_email') && $request->unverify_email) {
+            // Unverify email
+            $user->email_verified_at = null;
+            $user->save();
+        }
+
+        // Remove verification fields from validated array (they're handled above)
+        unset($validated['verify_email'], $validated['unverify_email']);
 
         $user->update($validated);
         return redirect()->route('admin.users.show', $user)
@@ -205,7 +232,12 @@ class UserController extends Controller
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
             'is_admin' => false,
+            'approved_at' => now(), // Auto-approve since admin is creating the account
         ]);
+
+        // Since this is created by an admin, automatically verify email
+        $user->markEmailAsVerified();
+        event(new Verified($user));
 
         // Convert the span to a personal span
         $span->is_personal_span = true;
