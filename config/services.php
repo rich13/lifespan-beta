@@ -62,4 +62,8 @@ return [
         'api_key' => env('GUARDIAN_API_KEY', '09621a6e-033b-43be-87b2-4b5f0b27055e'),
     ],
 
+    'mailersend' => [
+        'api_key' => env('MAILERSEND_API_KEY'),
+    ],
+
 ];

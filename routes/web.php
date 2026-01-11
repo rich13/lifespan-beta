@@ -1805,6 +1805,9 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
     Route::middleware('guest')->group(function () {
         Route::get('signin', [EmailFirstAuthController::class, 'showEmailForm'])
             ->name('login');
+        Route::get('login', function() {
+            return redirect()->route('login');
+        });
         Route::get('auth/email', function() {
             return redirect()->route('login');
         });
