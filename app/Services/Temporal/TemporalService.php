@@ -58,27 +58,19 @@ class TemporalService
 
     /**
      * Validate that a span's end date is not before its start date
-     * and that precision transitions are valid
+     * 
+     * This validates the date order by normalizing dates to their appropriate boundaries
+     * (start dates to earliest possible, end dates to latest possible) and comparing them.
+     * Different precisions are allowed (e.g., start "1978" and end "1994-09" is valid).
      */
     public function validateSpanDates(Span $span): bool
     {
         try {
-            // First validate the temporal range (start/end date order)
+            // Validate the temporal range (start/end date order)
+            // This handles different precisions correctly by normalizing:
+            // - Start dates use toDate() (earliest possible: 1978 -> 1978-01-01)
+            // - End dates use toEndDate() (latest possible: 1994-09 -> 1994-09-30)
             TemporalRange::fromSpan($span);
-
-            // Then validate precision transitions
-            $startPoint = TemporalPoint::fromSpan($span, false);
-            $endPoint = $span->end_year !== null ? TemporalPoint::fromSpan($span, true) : null;
-
-            // Validate that end date precision is not more specific than start date
-            if ($endPoint !== null) {
-                if (!$this->precisionValidator->validateSpanPrecisions(
-                    $startPoint->precision(),
-                    $endPoint->precision()
-                )) {
-                    return false;
-                }
-            }
 
             return true;
         } catch (\InvalidArgumentException) {

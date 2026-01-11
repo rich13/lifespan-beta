@@ -184,6 +184,30 @@ class TemporalServiceTest extends TestCase
             'access_level' => 'public'
         ]);
         $this->assertTrue($this->service->validateSpanDates($span3));
+
+        // Valid dates with different precisions (start year, end month)
+        // Start: 1978 (year precision) normalizes to 1978-01-01
+        // End: 1994-09 (month precision) normalizes to 1994-09-30
+        // This should be valid because 1994-09-30 > 1978-01-01
+        $span4 = new Span([
+            'start_year' => 1978,
+            'start_month' => null,
+            'end_year' => 1994,
+            'end_month' => 9,
+        ]);
+        $this->assertTrue($this->service->validateSpanDates($span4));
+
+        // Invalid dates with different precisions (end before start)
+        // Start: 1994-09 (month precision) normalizes to 1994-09-01
+        // End: 1978 (year precision) normalizes to 1978-12-31
+        // This should be invalid because 1978-12-31 < 1994-09-01
+        $span5 = new Span([
+            'start_year' => 1994,
+            'start_month' => 9,
+            'end_year' => 1978,
+            'end_month' => null,
+        ]);
+        $this->assertFalse($this->service->validateSpanDates($span5));
     }
 
     public function test_normalizes_dates_based_on_precision(): void
