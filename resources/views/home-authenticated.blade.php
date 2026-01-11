@@ -2,7 +2,8 @@
 
 @php
     // Get the user's personal span for use throughout the template
-    $personalSpan = auth()->user()->personalSpan ?? null;
+    // Note: RequireProfileCompletion middleware ensures user has personal span before reaching this view
+    $personalSpan = auth()->user()->personalSpan;
     
     // Load connections once for all components to avoid duplicate queries
     $userConnectionsAsSubject = collect();
@@ -475,33 +476,8 @@
 @section('content')
 <div class="container-fluid">
     <div class="row">
-        <!-- Column 1: Personal Information -->
-        <div class="col-md-3">
-
-            <!-- Lifespan Summary Card -->
-            <x-home.lifespan-summary-card />
-            
-            <!-- Column 1: Missing Connections Prompt -->
-            <x-home.missing-connections-prompt 
-                :personalSpan="$personalSpan" 
-                :userConnectionsAsSubject="$userConnectionsAsSubject"
-                :userConnectionsAsObject="$userConnectionsAsObject"
-                :allUserConnections="$allUserConnections"
-            />
-            
-            <!-- Life Activity Heatmap -->
-            <x-home.life-heatmap-card 
-                :userConnectionsAsSubject="$userConnectionsAsSubject"
-                :userConnectionsAsObject="$userConnectionsAsObject"
-                :allUserConnections="$allUserConnections"
-            />
-            
-            <!-- Lifespan Stats -->
-            <x-home.lifespan-stats-card />
-        </div>
-
-        <!-- Column 2: Today's Events -->
-        <div class="col-md-3">
+        <!-- Column 1: Today's Events -->
+        <div class="col-md-4">
             <!-- At Your Age Card -->
             <div class="mb-4">
                 <x-home.at-your-age-card />
@@ -583,8 +559,8 @@
             </div>
         </div>
 
-        <!-- Column 3: Missing Connections -->
-        <div class="col-md-3">
+        <!-- Column 2: Featured Content -->
+        <div class="col-md-4">
             <!-- Featured Person -->
             <x-home.random-person-card />
 
@@ -774,8 +750,8 @@
 
         </div>
 
-        <!-- Column 4: Spans of Type Cards -->
-        <div class="col-md-3">
+        <!-- Column 3: Spans of Type Cards -->
+        <div class="col-md-4">
             <!-- Bands Card -->
             <div class="mb-4">
                 <x-home.spans-of-type-card 

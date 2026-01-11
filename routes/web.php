@@ -153,10 +153,11 @@ Route::post('/sentry-test', function() {
 })->name('sentry.test');
 
 Route::middleware('web')->group(function () {
-    // Public routes
+    // Home route - public for guests, but requires profile completion for authenticated users
+    // The profile.complete middleware checks Auth::check() first, so guests can still access
     Route::get('/', function () {
         return view('home');
-    })->name('home');
+    })->middleware('profile.complete')->name('home');
 
         Route::get('/places/{span}/boundary', [\App\Http\Controllers\PlaceBoundaryController::class, 'show'])
             ->name('places.boundary');
@@ -182,7 +183,10 @@ Route::middleware('web')->group(function () {
         ->where('date', '[0-9]{4}(-[0-9]{2}(-[0-9]{2})?)?')
         ->name('date.explore');
 
-    Route::middleware('auth')->group(function () {
+    Route::middleware(['auth', 'verified', 'profile.complete'])->group(function () {
+        // Info page with summary and stats
+        Route::get('/info', [App\Http\Controllers\InfoController::class, 'index'])->name('info');
+        
         Route::prefix('new')->group(function () {
             Route::get('/span', [NewSpanController::class, 'showSpan'])->name('new.span');
             Route::get('/person-role-org', [NewSpanController::class, 'showPersonRoleOrganisation'])->name('new.person-role-org');
@@ -207,7 +211,7 @@ Route::middleware('web')->group(function () {
             Route::get('/types/{type}/subtypes/{subtype}', [SpanController::class, 'showTypeSubtype'])->name('spans.types.subtypes.show');
             
             // Protected routes
-            Route::middleware('auth')->group(function () {
+            Route::middleware(['auth', 'verified', 'profile.complete'])->group(function () {
 
             Route::get('/shared-with-me', [SpanController::class, 'sharedWithMe'])->name('spans.shared-with-me');
             Route::get('/create', [SpanController::class, 'create'])->name('spans.create');
@@ -763,7 +767,7 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
         });
 
         // Protected routes for photo management
-        Route::middleware('auth')->group(function () {
+        Route::middleware(['auth', 'verified', 'profile.complete'])->group(function () {
             Route::get('/{photo}/edit', [PhotoController::class, 'edit'])->name('photos.edit');
             Route::put('/{photo}', [PhotoController::class, 'update'])->name('photos.update');
             Route::delete('/{photo}', [PhotoController::class, 'destroy'])->name('photos.destroy');
@@ -789,7 +793,7 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
     Route::get('/notes', [\App\Http\Controllers\NoteController::class, 'index'])->name('notes.index');
 
     // Protected routes
-    Route::middleware('auth')->group(function () {
+    Route::middleware(['auth', 'verified', 'profile.complete'])->group(function () {
         // Connection Management (for regular users) - must be before wildcard routes
         Route::delete('/connections/{connection}', [\App\Http\Controllers\ConnectionController::class, 'destroy'])->name('connections.destroy');
         // Profile routes
@@ -1915,7 +1919,15 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
             ->with('status', 'Your email has been verified! Your account is now pending admin approval. You will receive an email once approved.');
     })->middleware('signed')->name('verification.verify');
     
-    // Routes that require authentication
+    // Profile completion routes (must be authenticated and verified, but before profile.complete middleware)
+    Route::middleware(['auth', 'verified'])->group(function () {
+        Route::get('profile/complete', [App\Http\Controllers\Auth\CompleteProfileController::class, 'show'])
+            ->name('profile.complete');
+        Route::post('profile/complete', [App\Http\Controllers\Auth\CompleteProfileController::class, 'store'])
+            ->name('profile.complete.store');
+    });
+
+    // Routes that require authentication (email verification routes don't need profile completion)
     Route::middleware('auth')->group(function () {
         Route::get('/email/verify', function () {
             return view('auth.verify-email');
@@ -1925,8 +1937,10 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
             $request->user()->sendEmailVerificationNotification();
             return back()->with('message', 'Verification link sent!');
         })->middleware('throttle:6,1')->name('verification.send');
+    });
 
-        // Timeline Viewer
+    // Timeline Viewer (requires profile completion)
+    Route::middleware(['auth', 'verified', 'profile.complete'])->group(function () {
         Route::get('/viewer', [App\Http\Controllers\TimelineViewerController::class, 'index'])->name('viewer.index');
         Route::get('/viewer/spans', [App\Http\Controllers\TimelineViewerController::class, 'getSpansInViewport'])->name('viewer.spans');
     });
