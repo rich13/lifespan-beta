@@ -389,8 +389,25 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
     <body class="bg-light">
         <div class="row">
             @auth
-                <!-- Sidebar and Main Content -->
-                <div class="row sidebar-row">
+                @if(request()->routeIs('profile.complete') || request()->routeIs('profile.complete.store'))
+                    <!-- Profile completion uses guest-style layout (no nav) -->
+                    <x-topnav.guest-topnav />
+                    
+                    <!-- Guest Content Area -->
+                    <div class="row">
+                        <div class="col-12 bg-light py-3 px-3">
+                            <div class="header-section mb-4">
+                                @yield('header')
+                                <x-flash-messages />
+                            </div>
+                            <div class="guest-content-wrapper">
+                                @yield('content')
+                            </div>
+                        </div>
+                    </div>
+                @else
+                    <!-- Sidebar and Main Content -->
+                    <div class="row sidebar-row">
                     <!-- Sidebar -->
                     <div id="sidebar" class="bg-dark border-end d-none d-md-block p-0 sidebar{{ $sidebarCollapsed ? ' collapsed' : '' }}">
                         <div class="sticky-top" style="top: 0; height: 100vh; overflow-y: auto;">
@@ -441,6 +458,7 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
                 <button id="sidebar-toggle" class="sidebar-toggle-btn{{ $sidebarCollapsed ? ' collapsed' : '' }}" type="button" title="Toggle Sidebar">
                     <i class="bi bi-chevron-left"></i>
                 </button>
+                @endif
             @else
                 <!-- Guest Top Navigation Bar -->
                 <x-topnav.guest-topnav />
@@ -461,6 +479,7 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
         </div>
         
         @auth
+        @if(!request()->routeIs('profile.complete') && !request()->routeIs('profile.complete.store'))
         <!-- Mobile Navigation Offcanvas -->
         <div class="offcanvas offcanvas-start" tabindex="-1" id="mobileNav" aria-labelledby="mobileNavLabel">
             <div class="offcanvas-header bg-dark text-white">
@@ -478,6 +497,7 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
         
         <!-- Mobile Right Navigation Offcanvas -->
         <x-mobile-right-nav :span="$span ?? null" />
+        @endif
         @endauth
         
         <!-- Modals -->

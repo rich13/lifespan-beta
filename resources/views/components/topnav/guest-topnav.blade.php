@@ -7,7 +7,8 @@
     <!-- Spacer -->
     <div class="flex-grow-1"></div>
     
-    <!-- Guest Actions -->
+    <!-- Guest Actions (only show if user is not authenticated) -->
+    @guest
     <div class="d-flex align-items-center">
         <div class="d-flex gap-2">
             <a href="{{ route('login') }}" class="btn btn-primary btn-sm">
@@ -15,4 +16,5 @@
             </a>
         </div>
     </div>
+    @endguest
 </x-topnav-container> 
