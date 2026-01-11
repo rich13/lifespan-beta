@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -15,6 +15,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
 use App\Models\Connection;
+use App\Notifications\VerifyEmail;
+use App\Notifications\ResetPassword;
 
 /**
  * User Model
@@ -46,7 +48,7 @@ use App\Models\Connection;
  * @property-read \App\Models\Span|null $personalSpan The user's personal span containing their name
  * @property-read \Illuminate\Database\Eloquent\Collection<int, Span> $spans Spans associated with this user
  */
-class User extends Authenticatable
+class User extends Authenticatable implements MustVerifyEmail
 {
     use HasApiTokens, HasFactory, HasUuids, Notifiable;
 
@@ -61,6 +63,7 @@ class User extends Authenticatable
         'password',
         'is_admin',
         'personal_span_id',
+        'approved_at',
     ];
 
     /**
@@ -80,6 +83,7 @@ class User extends Authenticatable
      */
     protected $casts = [
         'email_verified_at' => 'datetime',
+        'approved_at' => 'datetime',
         'password' => 'hashed',
         'is_admin' => 'boolean',
         'metadata' => 'array',
@@ -628,5 +632,26 @@ class User extends Authenticatable
     public function canToggleAdminMode(): bool
     {
         return (bool) $this->is_admin;
+    }
+
+    /**
+     * Send the email verification notification.
+     *
+     * @return void
+     */
+    public function sendEmailVerificationNotification()
+    {
+        $this->notify(new VerifyEmail);
+    }
+
+    /**
+     * Send the password reset notification.
+     *
+     * @param  string  $token
+     * @return void
+     */
+    public function sendPasswordResetNotification($token)
+    {
+        $this->notify(new ResetPassword($token));
     }
 }

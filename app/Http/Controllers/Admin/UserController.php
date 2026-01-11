@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\Span;
+use App\Mail\WelcomeEmail;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Hash;
 
@@ -59,6 +61,44 @@ class UserController extends Controller
         $user->update($validated);
         return redirect()->route('admin.users.show', $user)
             ->with('status', 'User updated successfully');
+    }
+
+    public function approve(User $user)
+    {
+        if ($user->approved_at) {
+            return redirect()->route('admin.users.show', $user)
+                ->with('status', 'User is already approved.');
+        }
+
+        $user->update([
+            'approved_at' => now(),
+        ]);
+
+        Log::info('User approved by admin', [
+            'user_id' => $user->id,
+            'user_email' => $user->email,
+            'approved_by' => auth()->id(),
+        ]);
+
+        // Send welcome email to the newly approved user
+        try {
+            Mail::to($user->email)->send(new WelcomeEmail($user));
+            
+            Log::info('Welcome email sent to approved user', [
+                'user_id' => $user->id,
+                'user_email' => $user->email,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to send welcome email to approved user', [
+                'user_id' => $user->id,
+                'user_email' => $user->email,
+                'error' => $e->getMessage(),
+            ]);
+            // Don't fail the approval if email sending fails
+        }
+
+        return redirect()->route('admin.users.show', $user)
+            ->with('status', 'User approved successfully. Welcome email sent.');
     }
 
     public function generateInvitationCodes(Request $request)
