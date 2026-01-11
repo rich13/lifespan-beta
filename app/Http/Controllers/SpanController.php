@@ -2086,6 +2086,31 @@ class SpanController extends Controller
                 ->toArray()
         ];
         
+        // If this span is a connection span, load connection details
+        if ($span->type_id === 'connection') {
+            $connection = Connection::where('connection_span_id', $span->id)
+                ->with(['subject', 'object', 'type'])
+                ->first();
+            
+            if ($connection) {
+                $spanData['connection_details'] = [
+                    'type_id' => $connection->type_id,
+                    'subject_id' => $connection->parent_id,
+                    'subject_name' => $connection->subject?->getRawName() ?? '',
+                    'subject_type' => $connection->subject?->type_id ?? null,
+                    'subject_subtype' => $connection->subject?->metadata['subtype'] ?? null,
+                    'object_id' => $connection->child_id,
+                    'object_name' => $connection->object?->getRawName() ?? '',
+                    'object_type' => $connection->object?->type_id ?? null,
+                    'object_subtype' => $connection->object?->metadata['subtype'] ?? null,
+                ];
+            } else {
+                $spanData['connection_details'] = null;
+            }
+        } else {
+            $spanData['connection_details'] = null;
+        }
+        
         // Get all connection types and span types for help text
         $connectionTypes = ConnectionTypeModel::orderBy('type')->get();
         $spanTypes = SpanType::orderBy('type_id')->get();
