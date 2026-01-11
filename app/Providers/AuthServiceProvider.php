@@ -27,5 +27,10 @@ class AuthServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->registerPolicies();
+
+        // Define gate for Laravel Pulse access
+        Gate::define('viewPulse', function ($user = null) {
+            return $this->app->environment('local', 'testing') || ($user && $user->is_admin);
+        });
     }
 }
