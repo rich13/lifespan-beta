@@ -24,26 +24,23 @@ class DomainGroupAssignmentTest extends TestCase
 
         // Create a valid invitation code
         $code = InvitationCode::create([
-            'code' => 'test-code',
+            'code' => 'test-code-' . uniqid(),
             'used' => false,
         ]);
 
         // Register a user with unthinkabledigital.co.uk email
+        $uniqueEmail = 'test-' . uniqid() . '@unthinkabledigital.co.uk';
         $response = $this->post('/register', [
-            'name' => 'Test User',
-            'email' => 'test@unthinkabledigital.co.uk',
+            'email' => $uniqueEmail,
             'password' => 'password123',
             'password_confirmation' => 'password123',
             'invitation_code' => 'test-code',
-            'birth_year' => 1990,
-            'birth_month' => 6,
-            'birth_day' => 15,
         ]);
 
         $response->assertRedirect(route('register.pending'));
         
         // Find the newly created user
-        $user = User::where('email', 'test@unthinkabledigital.co.uk')->first();
+        $user = User::where('email', $uniqueEmail)->first();
         $this->assertNotNull($user);
 
         // Verify the user was added to the Unthinkable group
@@ -66,26 +63,23 @@ class DomainGroupAssignmentTest extends TestCase
 
         // Create a valid invitation code
         $code = InvitationCode::create([
-            'code' => 'test-code-2',
+            'code' => 'test-code-2-' . uniqid(),
             'used' => false,
         ]);
 
         // Register a user with a different email domain
+        $uniqueEmail = 'external-' . uniqid() . '@example.com';
         $response = $this->post('/register', [
-            'name' => 'External User',
-            'email' => 'external@example.com',
+            'email' => $uniqueEmail,
             'password' => 'password123',
             'password_confirmation' => 'password123',
             'invitation_code' => 'test-code-2',
-            'birth_year' => 1985,
-            'birth_month' => 3,
-            'birth_day' => 20,
         ]);
 
         $response->assertRedirect(route('register.pending'));
         
         // Find the newly created user
-        $user = User::where('email', 'external@example.com')->first();
+        $user = User::where('email', $uniqueEmail)->first();
         $this->assertNotNull($user);
 
         // Verify the user was NOT added to the Unthinkable group
@@ -100,27 +94,24 @@ class DomainGroupAssignmentTest extends TestCase
 
         // Create a valid invitation code
         $code = InvitationCode::create([
-            'code' => 'test-code-3',
+            'code' => 'test-code-3-' . uniqid(),
             'used' => false,
         ]);
 
         // Register a user with unthinkabledigital.co.uk email
+        $uniqueEmail = 'another-' . uniqid() . '@unthinkabledigital.co.uk';
         $response = $this->post('/register', [
-            'name' => 'Test User',
-            'email' => 'another@unthinkabledigital.co.uk',
+            'email' => $uniqueEmail,
             'password' => 'password123',
             'password_confirmation' => 'password123',
             'invitation_code' => 'test-code-3',
-            'birth_year' => 1995,
-            'birth_month' => 12,
-            'birth_day' => 25,
         ]);
 
         // Registration should still succeed (redirects to pending approval)
         $response->assertRedirect(route('register.pending'));
         
         // Verify the user was created
-        $user = User::where('email', 'another@unthinkabledigital.co.uk')->first();
+        $user = User::where('email', $uniqueEmail)->first();
         $this->assertNotNull($user);
     }
 
@@ -139,26 +130,24 @@ class DomainGroupAssignmentTest extends TestCase
 
         // Create a valid invitation code
         $code = InvitationCode::create([
-            'code' => 'test-code-4',
+            'code' => 'test-code-4-' . uniqid(),
             'used' => false,
         ]);
 
         // Register a user with mixed case email
+        $uniqueId = uniqid();
+        $uniqueEmail = 'MixedCase' . $uniqueId . '@UnthinkableDigital.Co.Uk';
         $response = $this->post('/register', [
-            'name' => 'Mixed Case User',
-            'email' => 'MixedCase@UnthinkableDigital.Co.Uk',
+            'email' => $uniqueEmail,
             'password' => 'password123',
             'password_confirmation' => 'password123',
             'invitation_code' => 'test-code-4',
-            'birth_year' => 1988,
-            'birth_month' => 9,
-            'birth_day' => 10,
         ]);
 
         $response->assertRedirect(route('register.pending'));
         
         // Find the newly created user (email is stored as entered)
-        $user = User::where('email', 'MixedCase@UnthinkableDigital.Co.Uk')->first();
+        $user = User::where('email', $uniqueEmail)->first();
         $this->assertNotNull($user);
 
         // Verify the user was added to the Unthinkable group (case-insensitive match)

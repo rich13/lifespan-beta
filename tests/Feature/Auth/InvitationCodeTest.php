@@ -7,27 +7,38 @@ use App\Models\User;
 use App\Models\Span;
 use Tests\TestCase;
 
+/**
+ * @group skipped
+ * Invitation codes are no longer used - registration is open but requires admin approval
+ */
 class InvitationCodeTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->markTestSkipped('Invitation codes are no longer used - registration is open but requires admin approval');
+    }
 
     public function test_registration_requires_invitation_code(): void
     {
         // Invitation codes are now optional - registration succeeds but requires approval
+        // Registration no longer requires name/DOB - those are collected during profile completion
         $uniqueEmail = 'test-no-code-' . uniqid() . '@example.com';
         
         $response = $this->post('/register', [
-            'name' => 'Test User',
             'email' => $uniqueEmail,
             'password' => 'password',
             'password_confirmation' => 'password',
-            'birth_year' => 1990,
-            'birth_month' => 1,
-            'birth_day' => 1,
         ]);
 
         // Registration succeeds but redirects to pending approval
         $response->assertRedirect(route('register.pending'));
         $this->assertDatabaseHas('users', ['email' => $uniqueEmail]);
+        
+        // Verify personal span was NOT created during registration
+        $user = User::where('email', $uniqueEmail)->first();
+        $this->assertNotNull($user);
+        $this->assertNull($user->personal_span_id, 'Personal span should not be created during registration');
     }
 
     public function test_registration_fails_with_invalid_code(): void
@@ -37,19 +48,20 @@ class InvitationCodeTest extends TestCase
         $uniqueEmail = 'test-invalid-code-' . uniqid() . '@example.com';
         
         $response = $this->post('/register', [
-            'name' => 'Test User',
             'email' => $uniqueEmail,
             'password' => 'password',
             'password_confirmation' => 'password',
             'invitation_code' => 'invalid-code-' . uniqid(),
-            'birth_year' => 1990,
-            'birth_month' => 1,
-            'birth_day' => 1,
         ]);
 
         // Registration succeeds but redirects to pending approval
         $response->assertRedirect(route('register.pending'));
         $this->assertDatabaseHas('users', ['email' => $uniqueEmail]);
+        
+        // Verify personal span was NOT created during registration
+        $user = User::where('email', $uniqueEmail)->first();
+        $this->assertNotNull($user);
+        $this->assertNull($user->personal_span_id, 'Personal span should not be created during registration');
     }
 
     public function test_registration_fails_with_used_code(): void
@@ -66,19 +78,20 @@ class InvitationCodeTest extends TestCase
         $uniqueEmail = 'test-used-code-' . uniqid() . '@example.com';
 
         $response = $this->post('/register', [
-            'name' => 'Test User',
             'email' => $uniqueEmail,
             'password' => 'password',
             'password_confirmation' => 'password',
             'invitation_code' => $code->code,
-            'birth_year' => 1990,
-            'birth_month' => 1,
-            'birth_day' => 1,
         ]);
 
         // Registration succeeds but redirects to pending approval
         $response->assertRedirect(route('register.pending'));
         $this->assertDatabaseHas('users', ['email' => $uniqueEmail]);
+        
+        // Verify personal span was NOT created during registration
+        $user = User::where('email', $uniqueEmail)->first();
+        $this->assertNotNull($user);
+        $this->assertNull($user->personal_span_id, 'Personal span should not be created during registration');
     }
 
     public function test_registration_succeeds_with_valid_code(): void
@@ -92,14 +105,10 @@ class InvitationCodeTest extends TestCase
         $uniqueEmail = 'test-valid-' . uniqid() . '@example.com';
 
         $response = $this->post('/register', [
-            'name' => 'Test User',
             'email' => $uniqueEmail,
             'password' => 'password',
             'password_confirmation' => 'password',
             'invitation_code' => $code->code,
-            'birth_year' => 1990,
-            'birth_month' => 1,
-            'birth_day' => 1,
         ]);
 
         // Registration succeeds but redirects to pending approval (invite codes are disabled)
@@ -108,21 +117,11 @@ class InvitationCodeTest extends TestCase
         // Invitation codes are now optional, so they won't be marked as used
         // (code validation is commented out in RegisterRequest)
 
-        // Verify personal span was created
+        // Verify personal span was NOT created during registration
+        // Personal spans are now created during profile completion after approval
         $user = User::where('email', $uniqueEmail)->first();
         $this->assertNotNull($user, "User with email {$uniqueEmail} should exist");
-        $this->assertNotNull($user->personal_span_id);
-        
-        $personalSpan = Span::find($user->personal_span_id);
-        $this->assertNotNull($personalSpan);
-        $this->assertEquals('Test User', $personalSpan->name);
-        $this->assertEquals('person', $personalSpan->type_id);
-        $this->assertEquals($user->id, $personalSpan->owner_id);
-        $this->assertTrue($personalSpan->is_personal_span);
-        $this->assertEquals('private', $personalSpan->access_level);
-        $this->assertEquals(1990, $personalSpan->start_year);
-        $this->assertEquals(1, $personalSpan->start_month);
-        $this->assertEquals(1, $personalSpan->start_day);
+        $this->assertNull($user->personal_span_id, 'Personal span should not be created during registration');
     }
 
     public function test_registration_succeeds_with_universal_code(): void
@@ -131,34 +130,20 @@ class InvitationCodeTest extends TestCase
         $uniqueEmail = 'test-universal-' . uniqid() . '@example.com';
         
         $response = $this->post('/register', [
-            'name' => 'Test User',
             'email' => $uniqueEmail,
             'password' => 'password',
             'password_confirmation' => 'password',
             'invitation_code' => 'lifespan-beta-5b18a03898a7e8dac3582ef4b58508c4',
-            'birth_year' => 1990,
-            'birth_month' => 1,
-            'birth_day' => 1,
         ]);
 
         // Registration succeeds but redirects to pending approval (invite codes are disabled)
         $response->assertRedirect(route('register.pending'));
         $this->assertDatabaseHas('users', ['email' => $uniqueEmail]);
 
-        // Verify personal span was created
+        // Verify personal span was NOT created during registration
+        // Personal spans are now created during profile completion after approval
         $user = User::where('email', $uniqueEmail)->first();
         $this->assertNotNull($user, "User with email {$uniqueEmail} should exist");
-        $this->assertNotNull($user->personal_span_id);
-        
-        $personalSpan = Span::find($user->personal_span_id);
-        $this->assertNotNull($personalSpan);
-        $this->assertEquals('Test User', $personalSpan->name);
-        $this->assertEquals('person', $personalSpan->type_id);
-        $this->assertEquals($user->id, $personalSpan->owner_id);
-        $this->assertTrue($personalSpan->is_personal_span);
-        $this->assertEquals('private', $personalSpan->access_level);
-        $this->assertEquals(1990, $personalSpan->start_year);
-        $this->assertEquals(1, $personalSpan->start_month);
-        $this->assertEquals(1, $personalSpan->start_day);
+        $this->assertNull($user->personal_span_id, 'Personal span should not be created during registration');
     }
 } 

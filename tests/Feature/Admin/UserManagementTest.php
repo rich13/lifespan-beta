@@ -181,6 +181,10 @@ class UserManagementTest extends TestCase
         $newUser = User::where('email', 'john.doe@example.com')->first();
         $this->assertNotNull($newUser);
         $this->assertFalse($newUser->is_admin);
+        
+        // Check that email is verified and account is approved (since admin created it)
+        $this->assertNotNull($newUser->email_verified_at, 'Email should be verified when created by admin');
+        $this->assertNotNull($newUser->approved_at, 'Account should be approved when created by admin');
 
         // Check that the span was converted to a personal span
         $span->refresh();

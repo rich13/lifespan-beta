@@ -282,6 +282,7 @@ abstract class TestCase extends BaseTestCase
             $mock->shouldReceive('notifySpanUpdated')->andReturn(null);
             // notifyAiYamlGenerated can be called with 3 or 4 parameters (controller sometimes passes usage as 4th param, which service ignores)
             $mock->shouldReceive('notifyAiYamlGenerated')->withAnyArgs()->andReturn(null);
+            $mock->shouldReceive('notifySuspiciousRegistration')->withAnyArgs()->andReturn(null);
             $mock->shouldReceive('notify')->andReturn(null);
         });
     }
