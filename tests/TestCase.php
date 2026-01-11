@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Notification;
 use Exception;
 
 abstract class TestCase extends BaseTestCase
@@ -45,11 +47,9 @@ abstract class TestCase extends BaseTestCase
         // Validate database initialization
         $this->validateDatabaseInit();
         
-        // Run specific migrations that add connection types
-        $this->artisan('migrate', [
-            '--path' => 'database/migrations/2024_03_21_000001_add_contains_connection_type.php',
-            '--force' => true
-        ]);
+        // Note: We used to run 2024_03_21_000001_add_contains_connection_type.php here,
+        // but it's now a no-op (duplicate of 2024_03_21_000000_add_contains_connection_type.php)
+        // and is already handled by migrate:fresh, so we don't need to run it manually.
         
         // Seed common test data
         $this->seed(\Database\Seeders\TestDatabaseSeeder::class);
@@ -57,6 +57,10 @@ abstract class TestCase extends BaseTestCase
         // Disable CSRF token verification during tests
         Config::set('session.driver', 'array');
         $this->withoutMiddleware(\App\Http\Middleware\VerifyCsrfToken::class);
+        
+        // Fake mail and notifications to prevent real emails from being sent during tests
+        Mail::fake();
+        Notification::fake();
         
         // Mock external services to prevent real API calls during tests
         $this->mockExternalServices();
@@ -269,6 +273,16 @@ abstract class TestCase extends BaseTestCase
             $mock->shouldReceive('getCoverArtSummary')->andReturn(null);
             $mock->shouldReceive('clearCache')->andReturn(null);
             $mock->shouldReceive('clearAllCaches')->andReturn(null);
+        });
+        
+        // Mock SlackNotificationService to prevent real Slack API calls during tests
+        $this->mock(\App\Services\SlackNotificationService::class, function ($mock) {
+            $mock->shouldReceive('notifyUserRegistered')->andReturn(null);
+            $mock->shouldReceive('notifySpanCreated')->andReturn(null);
+            $mock->shouldReceive('notifySpanUpdated')->andReturn(null);
+            // notifyAiYamlGenerated can be called with 3 or 4 parameters (controller sometimes passes usage as 4th param, which service ignores)
+            $mock->shouldReceive('notifyAiYamlGenerated')->withAnyArgs()->andReturn(null);
+            $mock->shouldReceive('notify')->andReturn(null);
         });
     }
 }
