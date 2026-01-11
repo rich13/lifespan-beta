@@ -56,8 +56,10 @@ class SessionBridgeController extends Controller
             $newToken = $user->createToken('session-bridge');
             $request->session()->put('bridge_token', $newToken->plainTextToken);
             
-            // Ensure default sets exist
-            $user->ensureDefaultSetsExist();
+            // Ensure default sets exist (only if user has personal span)
+            if ($user->personal_span_id) {
+                $user->ensureDefaultSetsExist();
+            }
             
             return response()->json([
                 'success' => true,

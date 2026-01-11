@@ -115,7 +115,11 @@ class EmailFirstAuthController extends Controller
                     ]);
             }
             
-            $user->ensureDefaultSetsExist();
+            // Only ensure default sets if user has a personal span
+            // If no personal span, middleware will redirect to profile completion
+            if ($user->personal_span_id) {
+                $user->ensureDefaultSetsExist();
+            }
             
             // Generate session bridge token for handling redeploys
             $this->generateSessionBridgeToken($user);

@@ -126,8 +126,30 @@ class User extends Authenticatable implements MustVerifyEmail
         
         // If personal span doesn't exist or doesn't belong to this user,
         // try to find the correct one
-        if (!$currentSpan || $currentSpan->owner_id !== $this->id || !$currentSpan->is_personal_span) {
-            // Find the user's personal span
+        if (!$currentSpan) {
+            // Personal span relationship returned null - try to find one
+            $correctSpan = Span::where('owner_id', $this->id)
+                ->where('is_personal_span', true)
+                ->first();
+                
+            if ($correctSpan) {
+                // Update the relationship
+                $this->personal_span_id = $correctSpan->id;
+                $this->save();
+                
+                // Reload the relationship
+                $this->load('personalSpan');
+                
+                return $correctSpan;
+            }
+            
+            // No personal span found - return null
+            return null;
+        }
+        
+        // Check if the span belongs to this user and is marked as personal
+        if ($currentSpan->owner_id !== $this->id || !$currentSpan->is_personal_span) {
+            // Find the correct personal span
             $correctSpan = Span::where('owner_id', $this->id)
                 ->where('is_personal_span', true)
                 ->first();

@@ -78,8 +78,10 @@ class NewPasswordController extends Controller
             // Regenerate session for security
             $request->session()->regenerate();
             
-            // Ensure default sets exist
-            $userToLogin->ensureDefaultSetsExist();
+            // Ensure default sets exist (only if user has personal span)
+            if ($userToLogin->personal_span_id) {
+                $userToLogin->ensureDefaultSetsExist();
+            }
             
             // Generate session bridge token for handling redeploys
             $this->generateSessionBridgeToken($userToLogin);

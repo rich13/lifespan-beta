@@ -23,11 +23,26 @@ class LoadUserRelations
             $isSwitchedSession = $request->session()->has('admin_user_id');
             
             try {
-                // Ensure the correct personal span is loaded
-                $user->ensureCorrectPersonalSpan();
-                
-                // Reload relationship to be sure we have the correct span
-                $user->load('personalSpan');
+                // Only ensure correct personal span if user has one
+                // Users without personal spans will be redirected by RequireProfileCompletion middleware
+                if ($user->personal_span_id) {
+                    // Ensure the correct personal span is loaded
+                    $personalSpan = $user->ensureCorrectPersonalSpan();
+                    
+                    // If ensureCorrectPersonalSpan returned null, the span doesn't exist
+                    // Clear the personal_span_id to prevent errors
+                    if (!$personalSpan && $user->personal_span_id) {
+                        Log::warning('User has personal_span_id but span does not exist', [
+                            'user_id' => $user->id,
+                            'personal_span_id' => $user->personal_span_id
+                        ]);
+                        $user->personal_span_id = null;
+                        $user->save();
+                    } else {
+                        // Reload relationship to be sure we have the correct span
+                        $user->load('personalSpan');
+                    }
+                }
                 
                 // Log the personal span being used for debugging
                 if ($isSwitchedSession) {
@@ -39,7 +54,11 @@ class LoadUserRelations
                     ]);
                 }
             } catch (\Exception $e) {
-                Log::error('Error loading user relations: ' . $e->getMessage());
+                Log::error('Error loading user relations: ' . $e->getMessage(), [
+                    'user_id' => $user->id,
+                    'personal_span_id' => $user->personal_span_id,
+                    'exception' => $e
+                ]);
             }
         }
 

@@ -29,9 +29,11 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
         
-        // Ensure default sets exist as a failsafe
+        // Ensure default sets exist as a failsafe (only if user has personal span)
         $user = Auth::user();
-        $user->ensureDefaultSetsExist();
+        if ($user->personal_span_id) {
+            $user->ensureDefaultSetsExist();
+        }
         
         // Generate session bridge token for handling redeploys
         $this->generateSessionBridgeToken($user);
