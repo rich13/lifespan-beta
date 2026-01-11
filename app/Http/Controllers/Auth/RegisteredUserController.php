@@ -15,11 +15,27 @@ class RegisteredUserController extends Controller
     /**
      * Display the registration view.
      */
-    public function create(): View
+    public function create(): View|RedirectResponse
     {
+        $email = session('email') ?? old('email');
+        
+        // If no email in session, redirect back to login
+        if (!$email) {
+            return redirect()->route('login')
+                ->withErrors(['email' => 'Please enter your email address to begin registration.']);
+        }
+        
         return view('auth.register', [
-            'email' => session('email')
+            'email' => $email
         ]);
+    }
+
+    /**
+     * Display the pending approval view.
+     */
+    public function pending(): View
+    {
+        return view('auth.pending-approval');
     }
 
     /**
@@ -29,8 +45,11 @@ class RegisteredUserController extends Controller
      */
     public function store(RegisterRequest $request): RedirectResponse
     {
-        $request->register();
+        $user = $request->register();
 
-        return redirect(RouteServiceProvider::HOME);
+        // Always redirect to pending page - user needs to verify email and get approved
+        // Even if auto-approved (via invite code), they still need to verify email
+        return redirect()->route('register.pending')
+            ->with('status', 'Registration successful! Please check your email to verify your address.');
     }
 }
