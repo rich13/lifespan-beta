@@ -1,38 +1,49 @@
 @php
-    // Find a random person with connections and a photo
-    $minConnections = 5; // Minimum number of connections required
+    // First, try to find a person with a significant anniversary (preferably today)
+    // This will check death anniversaries with photos, significance >= 50, within 7 days
+    $featuredPerson = \App\Helpers\AnniversaryHelper::getHighestScoringPerson(
+        \App\Helpers\DateHelper::getCurrentDate(),
+        7, // Within 7 days
+        50 // Minimum significance (5th, 10th, 20th, etc.)
+    );
     
-    // Get people with photos
-    $peopleWithPhotos = \App\Models\Span::where('type_id', 'person')
-        ->where('access_level', 'public')
-        ->where('state', 'complete')
-        ->whereHas('connectionsAsObject', function($query) {
-            $query->where('type_id', 'features')
-                  ->whereHas('parent', function($q) {
-                      $q->where('type_id', 'thing')
-                        ->whereJsonContains('metadata->subtype', 'photo');
-                  });
-        })
-        ->inRandomOrder()
-        ->limit(50) // Limit to 50 candidates for performance
-        ->get();
-    
-    // Filter to only include people with enough connections
-    $qualifiedPeople = $peopleWithPhotos->filter(function($person) use ($minConnections) {
-        // Count all connections (excluding self-referential and 'contains' connections)
-        $connectionCount = \App\Models\Connection::where(function($query) use ($person) {
-            $query->where('parent_id', $person->id)
-                  ->orWhere('child_id', $person->id);
-        })
-        ->where('child_id', '!=', $person->id) // Exclude self-referential
-        ->where('type_id', '!=', 'contains') // Exclude contains connections
-        ->count();
+    // Otherwise, fall back to random selection
+    if (!$featuredPerson) {
+        // Find a random person with connections and a photo
+        $minConnections = 5; // Minimum number of connections required
         
-        return $connectionCount >= $minConnections;
-    });
-    
-    // Randomly select one person
-    $featuredPerson = $qualifiedPeople->isNotEmpty() ? $qualifiedPeople->random() : null;
+        // Get people with photos
+        $peopleWithPhotos = \App\Models\Span::where('type_id', 'person')
+            ->where('access_level', 'public')
+            ->where('state', 'complete')
+            ->whereHas('connectionsAsObject', function($query) {
+                $query->where('type_id', 'features')
+                      ->whereHas('parent', function($q) {
+                          $q->where('type_id', 'thing')
+                            ->whereJsonContains('metadata->subtype', 'photo');
+                      });
+            })
+            ->inRandomOrder()
+            ->limit(50) // Limit to 50 candidates for performance
+            ->get();
+        
+        // Filter to only include people with enough connections
+        $qualifiedPeople = $peopleWithPhotos->filter(function($person) use ($minConnections) {
+            // Count all connections (excluding self-referential and 'contains' connections)
+            $connectionCount = \App\Models\Connection::where(function($query) use ($person) {
+                $query->where('parent_id', $person->id)
+                      ->orWhere('child_id', $person->id);
+            })
+            ->where('child_id', '!=', $person->id) // Exclude self-referential
+            ->where('type_id', '!=', 'contains') // Exclude contains connections
+            ->count();
+            
+            return $connectionCount >= $minConnections;
+        });
+        
+        // Randomly select one person
+        $featuredPerson = $qualifiedPeople->isNotEmpty() ? $qualifiedPeople->random() : null;
+    }
     
     // Get photo and story for the featured person
     $photoUrl = null;

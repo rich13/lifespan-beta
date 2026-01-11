@@ -15,8 +15,21 @@ use Illuminate\Support\Facades\Log;
 
 class EmailFirstAuthController extends Controller
 {
-    public function showEmailForm()
+    public function showEmailForm(Request $request)
     {
+        // Check if we have a remembered email in cookie
+        $rememberedEmail = $request->cookie('remembered_email');
+        
+        if ($rememberedEmail) {
+            // Check if user exists with this email
+            $user = User::where('email', $rememberedEmail)->first();
+            if ($user) {
+                // Skip email screen and go directly to password screen
+                return redirect()->route('auth.password')
+                    ->with('email', $rememberedEmail);
+            }
+        }
+        
         return view('auth.email-first');
     }
 
@@ -39,15 +52,28 @@ class EmailFirstAuthController extends Controller
         }
     }
 
-    public function showPasswordForm()
+    public function showPasswordForm(Request $request)
     {
-        if (!session('email')) {
+        $email = session('email') ?? $request->cookie('remembered_email');
+        
+        if (!$email) {
             return redirect()->route('login');
         }
 
         return view('auth.password', [
-            'email' => session('email')
+            'email' => $email
         ]);
+    }
+    
+    /**
+     * Clear remembered email and return to email input screen
+     */
+    public function clearRememberedEmail(): RedirectResponse
+    {
+        $cookie = cookie()->forget('remembered_email');
+        
+        return redirect()->route('login')
+            ->withCookie($cookie);
     }
 
     public function login(Request $request)
@@ -62,12 +88,43 @@ class EmailFirstAuthController extends Controller
             
             // Ensure default sets exist as a failsafe
             $user = Auth::user();
+            
+            // Check if user is approved
+            if (!$user->approved_at) {
+                Auth::logout();
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+                
+                return back()
+                    ->withInput(['email' => $request->email])
+                    ->withErrors([
+                        'email' => 'Your account is pending approval. You will receive an email once your account has been approved.'
+                    ]);
+            }
+            
+            // Check if email is verified
+            if (!$user->hasVerifiedEmail()) {
+                Auth::logout();
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+                
+                return back()
+                    ->withInput(['email' => $request->email])
+                    ->withErrors([
+                        'email' => 'Please verify your email address before logging in. Check your inbox for the verification link.'
+                    ]);
+            }
+            
             $user->ensureDefaultSetsExist();
             
             // Generate session bridge token for handling redeploys
             $this->generateSessionBridgeToken($user);
             
-            return redirect()->intended(RouteServiceProvider::HOME);
+            // Store email in cookie for future logins (1 year expiration)
+            $cookie = cookie('remembered_email', $request->email, 525600); // 1 year in minutes
+            
+            return redirect()->intended(RouteServiceProvider::HOME)
+                ->withCookie($cookie);
         }
 
         return back()

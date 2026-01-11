@@ -5,28 +5,26 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
 
-class AddContainsConnectionType extends Migration
+return new class extends Migration
 {
-    public function up()
+    /**
+     * Run the migrations.
+     * 
+     * NOTE: This migration is a duplicate of 2024_03_21_000000_add_contains_connection_type.php
+     * The "contains" connection type is already created by the earlier migration.
+     * This migration is kept for historical reasons but does nothing.
+     */
+    public function up(): void
     {
-        // Check if the connection type already exists
-        if (!DB::table('connection_types')->where('type', 'contains')->exists()) {
-            DB::table('connection_types')->insert([
-                'type' => 'contains',
-                'forward_predicate' => 'contains',
-                'forward_description' => 'A contains B means that A is a container or whole that includes B as a part',
-                'inverse_predicate' => 'is contained in',
-                'inverse_description' => 'B is contained in A means that B is a part of the container or whole A',
-                'allowed_span_types' => json_encode([
-                    'parent' => ['thing'],
-                    'child' => ['thing']
-                ])
-            ]);
-        }
+        // Connection type already created by 2024_03_21_000000_add_contains_connection_type.php
+        // No action needed - this migration is effectively a no-op
     }
 
-    public function down()
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
     {
-        DB::table('connection_types')->where('type', 'contains')->delete();
+        // Do nothing - let the earlier migration handle the down() operation
     }
-}
+};

@@ -8,12 +8,15 @@ return new class extends Migration
 {
     /**
      * Run the migrations.
+     * 
+     * NOTE: This migration is superseded by 2025_07_11_080525_make_user_id_nullable_in_span_permissions_table.php
+     * which properly handles the foreign key constraint. This migration is kept for historical reasons
+     * but does nothing to avoid conflicts.
      */
     public function up(): void
     {
-        Schema::table('span_permissions', function (Blueprint $table) {
-            $table->uuid('user_id')->nullable()->change();
-        });
+        // No-op: The change is handled by 2025_07_11_080525_make_user_id_nullable_in_span_permissions_table.php
+        // which properly drops and re-adds the foreign key constraint
     }
 
     /**
@@ -21,8 +24,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('span_permissions', function (Blueprint $table) {
-            $table->uuid('user_id')->nullable(false)->change();
-        });
+        // No-op: The rollback is handled by 2025_07_11_080525_make_user_id_nullable_in_span_permissions_table.php
     }
 };

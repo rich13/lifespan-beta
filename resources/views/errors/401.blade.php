@@ -8,7 +8,7 @@
 
 @section('error_details')
     <div class="mt-4 mb-4">
-        <a href="{{ request()->getScheme() }}://{{ request()->getHttpHost() }}/login" class="btn btn-warning">
+        <a href="{{ route('login') }}" class="btn btn-warning">
             <i class="bi bi-box-arrow-in-right me-2"></i>Sign In
         </a>
     </div>

@@ -3,6 +3,36 @@
 @php
     // Get the user's personal span for use throughout the template
     $personalSpan = auth()->user()->personalSpan ?? null;
+    
+    // Load connections once for all components to avoid duplicate queries
+    $userConnectionsAsSubject = collect();
+    $userConnectionsAsObject = collect();
+    $allUserConnections = collect();
+    
+    if ($personalSpan) {
+        // Load connections as subject (outgoing) with eager loading
+        $userConnectionsAsSubject = $personalSpan->connectionsAsSubject()
+            ->whereNotNull('connection_span_id')
+            ->whereHas('connectionSpan', function($query) {
+                $query->whereNotNull('start_year');
+            })
+            ->where('child_id', '!=', $personalSpan->id)
+            ->with(['connectionSpan', 'child', 'type'])
+            ->get();
+        
+        // Load connections as object (incoming) with eager loading
+        $userConnectionsAsObject = $personalSpan->connectionsAsObject()
+            ->whereNotNull('connection_span_id')
+            ->whereHas('connectionSpan', function($query) {
+                $query->whereNotNull('start_year');
+            })
+            ->where('parent_id', '!=', $personalSpan->id)
+            ->with(['connectionSpan', 'parent', 'type'])
+            ->get();
+        
+        // Combine for components that need all connections
+        $allUserConnections = $userConnectionsAsSubject->concat($userConnectionsAsObject);
+    }
 @endphp
 
 @section('page_title')
@@ -452,10 +482,19 @@
             <x-home.lifespan-summary-card />
             
             <!-- Column 1: Missing Connections Prompt -->
-            <x-home.missing-connections-prompt :personalSpan="$personalSpan" />
+            <x-home.missing-connections-prompt 
+                :personalSpan="$personalSpan" 
+                :userConnectionsAsSubject="$userConnectionsAsSubject"
+                :userConnectionsAsObject="$userConnectionsAsObject"
+                :allUserConnections="$allUserConnections"
+            />
             
             <!-- Life Activity Heatmap -->
-            <x-home.life-heatmap-card />
+            <x-home.life-heatmap-card 
+                :userConnectionsAsSubject="$userConnectionsAsSubject"
+                :userConnectionsAsObject="$userConnectionsAsObject"
+                :allUserConnections="$allUserConnections"
+            />
             
             <!-- Lifespan Stats -->
             <x-home.lifespan-stats-card />
@@ -560,26 +599,8 @@
             <!-- Welcome Modal Logic -->
             @php
                 // Check if we should show welcome modal (no connections yet)
-                $hasAnyConnections = false;
-                if ($personalSpan) {
-                    $userConnectionsAsSubject = $personalSpan->connectionsAsSubject()
-                        ->whereNotNull('connection_span_id')
-                        ->whereHas('connectionSpan', function($query) {
-                            $query->whereNotNull('start_year');
-                        })
-                        ->where('child_id', '!=', $personalSpan->id)
-                        ->count();
-                    
-                    $userConnectionsAsObject = $personalSpan->connectionsAsObject()
-                        ->whereNotNull('connection_span_id')
-                        ->whereHas('connectionSpan', function($query) {
-                            $query->whereNotNull('start_year');
-                        })
-                        ->where('parent_id', '!=', $personalSpan->id)
-                        ->count();
-                    
-                    $hasAnyConnections = ($userConnectionsAsSubject + $userConnectionsAsObject) > 0;
-                }
+                // Use pre-loaded connections to avoid duplicate queries
+                $hasAnyConnections = $allUserConnections->count() > 0;
                 
                 // Check if we should show completion modal (all questions answered but haven't seen modal)
                 $shouldShowCompletionModal = false;
@@ -601,32 +622,10 @@
                     ];
                     
                     // Calculate total questions and answered questions
+                    // Use pre-loaded connections to avoid duplicate queries
                     $totalQuestions = 0;
                     $answeredQuestions = 0;
-                    $connectionsByType = collect();
-                    
-                    if ($personalSpan) {
-                        $userConnectionsAsSubject = $personalSpan->connectionsAsSubject()
-                            ->whereNotNull('connection_span_id')
-                            ->whereHas('connectionSpan', function($query) {
-                                $query->whereNotNull('start_year');
-                            })
-                            ->where('child_id', '!=', $personalSpan->id)
-                            ->with(['connectionSpan', 'child', 'type'])
-                            ->get();
-
-                        $userConnectionsAsObject = $personalSpan->connectionsAsObject()
-                            ->whereNotNull('connection_span_id')
-                            ->whereHas('connectionSpan', function($query) {
-                                $query->whereNotNull('start_year');
-                            })
-                            ->where('parent_id', '!=', $personalSpan->id)
-                            ->with(['connectionSpan', 'parent', 'type'])
-                            ->get();
-
-                        $allUserConnections = $userConnectionsAsSubject->concat($userConnectionsAsObject);
-                        $connectionsByType = $allUserConnections->groupBy('type_id');
-                    }
+                    $connectionsByType = $allUserConnections->groupBy('type_id');
                     
                     foreach ($questions as $type => $typeQuestions) {
                         $totalQuestions += count($typeQuestions);

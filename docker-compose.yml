@@ -33,9 +33,13 @@ services:
       - SESSION_DRIVER=file
       - SESSION_LIFETIME=525600
       - DOCKER_CONTAINER=true
+      - MAIL_HOST=mailpit
+      - MAIL_PORT=1025
     entrypoint: ["/var/www/docker/start.sh"]
     depends_on:
       db:
+        condition: service_healthy
+      mailpit:
         condition: service_healthy
 
   nginx:
@@ -104,6 +108,21 @@ services:
       db:
         condition: service_healthy
     restart: unless-stopped
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: lifespan-mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025"  # SMTP port
+      - "8025:8025"  # Web UI port
+    networks:
+      - lifespan-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8025"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
 networks:
   lifespan-network:

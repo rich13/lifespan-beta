@@ -51,6 +51,17 @@
                             @endif
                         </dd>
 
+                        <dt class="col-sm-3">Approval Status</dt>
+                        <dd class="col-sm-9">
+                            @if($user->approved_at)
+                                <span class="text-success">
+                                    Approved on {{ $user->approved_at->format('Y-m-d H:i:s') }}
+                                </span>
+                            @else
+                                <span class="text-warning">Pending Approval</span>
+                            @endif
+                        </dd>
+
                         <dt class="col-sm-3">Joined</dt>
                         <dd class="col-sm-9">{{ $user->created_at->format('Y-m-d H:i:s') }}</dd>
 
@@ -133,6 +144,15 @@
                 <div class="card-body">
                     <h2 class="card-title h5 text-danger">Account Actions</h2>
                     <div class="d-grid gap-2">
+                        @unless($user->approved_at)
+                            <form method="POST" action="{{ route('admin.users.approve', $user) }}" class="d-inline">
+                                @csrf
+                                <button type="submit" class="btn btn-success w-100">
+                                    Approve User
+                                </button>
+                            </form>
+                        @endunless
+
                         @unless($user->email_verified_at)
                             <button class="btn btn-warning" disabled>
                                 Resend Verification Email

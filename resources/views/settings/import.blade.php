@@ -89,7 +89,7 @@
                                         <h6 class="card-title">
                                             <i class="bi bi-twitter me-2"></i>Twitter Archive Import
                                         </h6>
-                                        <p class="card-text text-muted">Import your Twitter archive as private notes with engagement metrics and hashtags.</p>
+                                        <p class="card-text text-muted">Import your Twitter archive as private notes.</p>
                                         <a href="{{ route('settings.import.twitter.index') }}" class="btn btn-outline-primary btn-sm">
                                             <i class="bi bi-arrow-right me-1"></i>Import Twitter Archive
                                         </a>

@@ -31,6 +31,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 
 /*
 |--------------------------------------------------------------------------
@@ -1435,6 +1436,8 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
                 ->name('users.edit');
             Route::put('/users/{user}', [UserController::class, 'update'])
                 ->name('users.update');
+            Route::post('/users/{user}/approve', [UserController::class, 'approve'])
+                ->name('users.approve');
             Route::delete('/users/{user}', [UserController::class, 'destroy'])
                 ->name('users.destroy');
 
@@ -1800,7 +1803,7 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
 
     // Auth routes - Email First Flow
     Route::middleware('guest')->group(function () {
-        Route::get('login', [EmailFirstAuthController::class, 'showEmailForm'])
+        Route::get('signin', [EmailFirstAuthController::class, 'showEmailForm'])
             ->name('login');
         Route::get('auth/email', function() {
             return redirect()->route('login');
@@ -1811,12 +1814,26 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
             ->name('auth.password');
         Route::post('auth/password', [EmailFirstAuthController::class, 'login'])
             ->name('auth.password.submit');
+        Route::get('auth/clear-remembered-email', [EmailFirstAuthController::class, 'clearRememberedEmail'])
+            ->name('auth.clear-remembered-email');
 
         // Registration routes
         Route::get('register', [App\Http\Controllers\Auth\RegisteredUserController::class, 'create'])
             ->name('register');
         Route::post('register', [App\Http\Controllers\Auth\RegisteredUserController::class, 'store'])
             ->name('register.store');
+        Route::get('register/pending', [App\Http\Controllers\Auth\RegisteredUserController::class, 'pending'])
+            ->name('register.pending');
+
+        // Password reset routes
+        Route::get('forgot-password', [App\Http\Controllers\Auth\PasswordResetLinkController::class, 'create'])
+            ->name('password.request');
+        Route::post('forgot-password', [App\Http\Controllers\Auth\PasswordResetLinkController::class, 'store'])
+            ->name('password.email');
+        Route::get('reset-password/{token}', [App\Http\Controllers\Auth\NewPasswordController::class, 'create'])
+            ->name('password.reset');
+        Route::post('reset-password', [App\Http\Controllers\Auth\NewPasswordController::class, 'store'])
+            ->name('password.store');
     });
 
     // Session Bridge endpoints - for handling redeploy session recovery
@@ -1829,15 +1846,71 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
         ->name('session-bridge.refresh');
 
     // Email verification routes
+    // Verification link works without being logged in - we authenticate via the signed URL
+    Route::get('/email/verify/{id}/{hash}', function (Request $request, $id, $hash) {
+        try {
+            // Get the user from the signed URL
+            $user = User::find($id);
+            
+            if (!$user) {
+                return redirect()->route('login')
+                    ->withErrors(['email' => 'Invalid or expired verification link. Please request a new verification email.']);
+            }
+            
+            // Verify the hash matches (Laravel's verification hash)
+            // The hash is sha1 of the user's email
+            $expectedHash = sha1($user->getEmailForVerification());
+            if (!hash_equals((string) $hash, $expectedHash)) {
+                return redirect()->route('login')
+                    ->withErrors(['email' => 'Invalid or expired verification link. Please request a new verification email.']);
+            }
+        } catch (\Exception $e) {
+            Log::error('Email verification error', [
+                'error' => $e->getMessage(),
+                'id' => $id,
+                'hash' => $hash
+            ]);
+            
+            return redirect()->route('login')
+                ->withErrors(['email' => 'Invalid or expired verification link. Please request a new verification email.']);
+        }
+        
+        // Check if already verified
+        if ($user->hasVerifiedEmail()) {
+            // Already verified - check if we should log them in
+            if ($user->approved_at) {
+                // Log them in automatically
+                Auth::login($user);
+                return redirect()->intended(RouteServiceProvider::HOME)
+                    ->with('status', 'Your email is already verified! You are now logged in.');
+            } else {
+                return redirect()->route('login')
+                    ->with('status', 'Your email is already verified! Your account is pending admin approval.');
+            }
+        }
+        
+        // Verify the email
+        $user->markEmailAsVerified();
+        event(new \Illuminate\Auth\Events\Verified($user));
+        
+        // Check if user is also approved - if so, log them in automatically
+        if ($user->approved_at) {
+            // Log them in automatically
+            Auth::login($user);
+            return redirect()->intended(RouteServiceProvider::HOME)
+                ->with('status', 'Your email has been verified! You are now logged in.');
+        }
+        
+        // Email verified but not approved yet
+        return redirect()->route('login')
+            ->with('status', 'Your email has been verified! Your account is now pending admin approval. You will receive an email once approved.');
+    })->middleware('signed')->name('verification.verify');
+    
+    // Routes that require authentication
     Route::middleware('auth')->group(function () {
         Route::get('/email/verify', function () {
             return view('auth.verify-email');
         })->name('verification.notice');
-
-        Route::get('/email/verify/{id}/{hash}', function (EmailVerificationRequest $request) {
-            $request->fulfill();
-            return redirect('/home');
-        })->middleware('signed')->name('verification.verify');
 
         Route::post('/email/verification-notification', function (Request $request) {
             $request->user()->sendEmailVerificationNotification();

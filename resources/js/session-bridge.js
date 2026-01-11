@@ -14,30 +14,49 @@
  */
 
 const SessionBridge = {
+    // Track if we're in the middle of a navigation
+    _isNavigating: false,
+    // Track if a reload is pending (to prevent multiple reloads)
+    _reloadPending: false,
+    
     /**
      * Initialize the session bridge system
      * Should be called on page load
      */
     init: function() {
-        // Get bridge token from localStorage
-        const bridgeToken = this.getBridgeToken();
-        
-        // Check if session is still valid
-        this.checkSession()
-            .done((response) => {
-                if (response.authenticated) {
-                    // Session is still valid, refresh the token in the background
-                    this.refreshToken();
-                } else if (bridgeToken) {
-                    // Session lost but bridge token available - restore it
-                    this.restoreSession(bridgeToken);
-                }
-            })
-            .fail(() => {
-                // Check endpoint failed - might be server issue
-                // Don't do anything, let user experience play out naturally
-                console.warn('Session bridge check failed');
-            });
+        // Delay session check slightly to avoid interfering with navigation
+        // This gives the browser time to complete the navigation transition
+        setTimeout(() => {
+            // Only proceed if we're not in the middle of a navigation
+            if (this._isNavigating) {
+                return;
+            }
+            
+            // Get bridge token from localStorage
+            const bridgeToken = this.getBridgeToken();
+            
+            // Check if session is still valid
+            this.checkSession()
+                .done((response) => {
+                    // Double-check we're still not navigating before acting
+                    if (this._isNavigating) {
+                        return;
+                    }
+                    
+                    if (response.authenticated) {
+                        // Session is still valid, refresh the token in the background
+                        this.refreshToken();
+                    } else if (bridgeToken) {
+                        // Session lost but bridge token available - restore it
+                        this.restoreSession(bridgeToken);
+                    }
+                })
+                .fail(() => {
+                    // Check endpoint failed - might be server issue
+                    // Don't do anything, let user experience play out naturally
+                    console.warn('Session bridge check failed');
+                });
+        }, 100); // Small delay to let navigation settle
     },
 
     /**
@@ -96,6 +115,11 @@ const SessionBridge = {
      * @param {string} token The bridge token
      */
     restoreSession: function(token) {
+        // Prevent multiple simultaneous restore attempts
+        if (this._reloadPending) {
+            return;
+        }
+        
         console.log('Attempting to restore session with bridge token...');
         
         $.ajax({
@@ -110,15 +134,28 @@ const SessionBridge = {
             timeout: 5000
         })
         .done((response) => {
+            // Don't reload if we're in the middle of navigation
+            if (this._isNavigating) {
+                console.log('Session restored but skipping reload due to active navigation');
+                return;
+            }
+            
             if (response.success && response.new_token) {
                 console.log('Session restored successfully');
                 // Store the new token
                 this.setBridgeToken(response.new_token);
                 // Show notification
                 this.showNotification('You\'ve been automatically signed back in', 'success');
+                // Mark reload as pending
+                this._reloadPending = true;
                 // Reload the page to apply the restored session
                 setTimeout(() => {
-                    window.location.reload();
+                    // Final check before reload
+                    if (!this._isNavigating) {
+                        window.location.reload();
+                    } else {
+                        this._reloadPending = false;
+                    }
                 }, 1000); // Give user time to see the notification
             } else {
                 console.warn('Session restoration failed:', response.message);
@@ -277,6 +314,59 @@ const SessionBridge = {
         });
     }
 };
+
+// Track navigation state
+let navigationStartTime = Date.now();
+const NAVIGATION_TIMEOUT = 2000; // Consider navigation active for 2 seconds after page load
+
+// Mark navigation as active when page starts loading
+if (document.readyState === 'loading') {
+    SessionBridge._isNavigating = true;
+    navigationStartTime = Date.now();
+}
+
+// Clear navigation flag after page has settled
+window.addEventListener('load', function() {
+    // Wait a bit more to ensure navigation is complete
+    setTimeout(() => {
+        SessionBridge._isNavigating = false;
+        SessionBridge._reloadPending = false;
+    }, 300);
+});
+
+// Track link clicks to detect navigation
+document.addEventListener('click', function(e) {
+    const link = e.target.closest('a');
+    if (link && link.href && link.hostname === window.location.hostname) {
+        // Same-domain navigation detected
+        SessionBridge._isNavigating = true;
+        navigationStartTime = Date.now();
+    }
+}, true); // Use capture phase to catch links early
+
+// Also track programmatic navigation
+let originalPushState = history.pushState;
+let originalReplaceState = history.replaceState;
+
+history.pushState = function() {
+    SessionBridge._isNavigating = true;
+    navigationStartTime = Date.now();
+    return originalPushState.apply(history, arguments);
+};
+
+history.replaceState = function() {
+    SessionBridge._isNavigating = true;
+    navigationStartTime = Date.now();
+    return originalReplaceState.apply(history, arguments);
+};
+
+// Clear navigation flag after timeout (safety net)
+setInterval(function() {
+    const timeSinceNavigation = Date.now() - navigationStartTime;
+    if (timeSinceNavigation > NAVIGATION_TIMEOUT) {
+        SessionBridge._isNavigating = false;
+    }
+}, 500);
 
 // Initialize on document ready
 document.addEventListener('DOMContentLoaded', function() {

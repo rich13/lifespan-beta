@@ -1,4 +1,9 @@
-@props(['personalSpan'])
+@props([
+    'personalSpan',
+    'userConnectionsAsSubject' => null,
+    'userConnectionsAsObject' => null,
+    'allUserConnections' => null
+])
 
 @php
     // If no personal span, don't show the component
@@ -6,28 +11,32 @@
         return;
     }
     
-    // Get user's connections by type (as subject)
-    $userConnectionsAsSubject = $personalSpan->connectionsAsSubject()
-        ->whereNotNull('connection_span_id')
-        ->whereHas('connectionSpan', function($query) {
-            $query->whereNotNull('start_year');
-        })
-        ->where('child_id', '!=', $personalSpan->id)
-        ->with(['connectionSpan', 'child', 'type'])
-        ->get();
+    // Use pre-loaded connections if provided, otherwise load them (for backward compatibility)
+    if ($userConnectionsAsSubject === null || $userConnectionsAsObject === null || $allUserConnections === null) {
+        // Get user's connections by type (as subject)
+        $userConnectionsAsSubject = $personalSpan->connectionsAsSubject()
+            ->whereNotNull('connection_span_id')
+            ->whereHas('connectionSpan', function($query) {
+                $query->whereNotNull('start_year');
+            })
+            ->where('child_id', '!=', $personalSpan->id)
+            ->with(['connectionSpan', 'child', 'type'])
+            ->get();
 
-    // Get user's connections by type (as object/child)
-    $userConnectionsAsObject = $personalSpan->connectionsAsObject()
-        ->whereNotNull('connection_span_id')
-        ->whereHas('connectionSpan', function($query) {
-            $query->whereNotNull('start_year');
-        })
-        ->where('parent_id', '!=', $personalSpan->id)
-        ->with(['connectionSpan', 'parent', 'type'])
-        ->get();
+        // Get user's connections by type (as object/child)
+        $userConnectionsAsObject = $personalSpan->connectionsAsObject()
+            ->whereNotNull('connection_span_id')
+            ->whereHas('connectionSpan', function($query) {
+                $query->whereNotNull('start_year');
+            })
+            ->where('parent_id', '!=', $personalSpan->id)
+            ->with(['connectionSpan', 'parent', 'type'])
+            ->get();
 
-    // Combine and group connections by type
-    $allUserConnections = $userConnectionsAsSubject->concat($userConnectionsAsObject);
+        // Combine and group connections by type
+        $allUserConnections = $userConnectionsAsSubject->concat($userConnectionsAsObject);
+    }
+    
     $connectionsByType = $allUserConnections->groupBy('type_id');
     
     // Check if this is the first time showing the component (no connections yet)

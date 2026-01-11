@@ -3,6 +3,7 @@
 namespace App\Exceptions;
 
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
+use Illuminate\Routing\Exceptions\InvalidSignatureException;
 use Throwable;
 
 class Handler extends ExceptionHandler
@@ -23,6 +24,14 @@ class Handler extends ExceptionHandler
      */
     public function register(): void
     {
+        // Handle invalid signature exceptions (expired verification links)
+        $this->renderable(function (InvalidSignatureException $e, $request) {
+            if ($request->routeIs('verification.verify')) {
+                return redirect()->route('login')
+                    ->withErrors(['email' => 'Invalid or expired verification link. Please request a new verification email.']);
+            }
+        });
+
         $this->reportable(function (Throwable $e) {
             // Enhance logging with request details for production environment
             if (app()->environment('production')) {

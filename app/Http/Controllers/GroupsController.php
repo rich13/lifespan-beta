@@ -12,7 +12,7 @@ use Illuminate\Support\Str;
 class GroupsController extends Controller
 {
     /**
-     * Display a listing of groups the user is a member of
+     * Display a listing of groups the user is a member of or owns
      */
     public function index(): View
     {
@@ -23,10 +23,19 @@ class GroupsController extends Controller
         }
         
         // Get groups the user is a member of
-        $groups = $user->groups()
+        $memberGroups = $user->groups()
             ->with(['owner.personalSpan', 'users.personalSpan'])
             ->orderBy('name')
             ->get();
+        
+        // Get groups the user owns
+        $ownedGroups = $user->ownedGroups()
+            ->with(['owner.personalSpan', 'users.personalSpan'])
+            ->orderBy('name')
+            ->get();
+        
+        // Merge and deduplicate by ID
+        $groups = $memberGroups->merge($ownedGroups)->unique('id')->sortBy('name')->values();
         
         return view('groups.index', compact('groups'));
     }
@@ -44,13 +53,17 @@ class GroupsController extends Controller
         
         // Find group by name (convert slug back to name for matching)
         // Try to find by matching the slugified name
-        $groups = $user->groups()->get();
-        $group = $groups->first(function ($g) use ($groupSlug) {
+        // Check both member groups and owned groups
+        $memberGroups = $user->groups()->get();
+        $ownedGroups = $user->ownedGroups()->get();
+        $allGroups = $memberGroups->merge($ownedGroups)->unique('id');
+        
+        $group = $allGroups->first(function ($g) use ($groupSlug) {
             return Str::slug($g->name) === $groupSlug;
         });
         
         if (!$group) {
-            abort(404, 'Group not found or you are not a member of this group.');
+            abort(404, 'Group not found or you are not a member or owner of this group.');
         }
         
         // Load group with members and their personal spans

@@ -1,3 +1,9 @@
+@props([
+    'userConnectionsAsSubject' => null,
+    'userConnectionsAsObject' => null,
+    'allUserConnections' => null
+])
+
 @php
     // Get user's personal span
     $user = auth()->user();
@@ -39,28 +45,31 @@
             $heatmapStartDate = $birthDate->copy()->startOfWeek();
         }
         
-        // Get all connections for this person that have connection spans with dates
-        $allConnections = collect();
-        
-        // Get connections as subject (outgoing)
-        $connectionsAsSubject = $personalSpan->connectionsAsSubject()
-            ->whereNotNull('connection_span_id')
-            ->whereHas('connectionSpan', function($query) {
-                $query->whereNotNull('start_year');
-            })
-            ->with(['connectionSpan', 'child', 'type'])
-            ->get();
-        
-        // Get connections as object (incoming)
-        $connectionsAsObject = $personalSpan->connectionsAsObject()
-            ->whereNotNull('connection_span_id')
-            ->whereHas('connectionSpan', function($query) {
-                $query->whereNotNull('start_year');
-            })
-            ->with(['connectionSpan', 'parent', 'type'])
-            ->get();
-        
-        $allConnections = $connectionsAsSubject->concat($connectionsAsObject);
+        // Use pre-loaded connections if provided, otherwise load them (for backward compatibility)
+        if ($userConnectionsAsSubject === null || $userConnectionsAsObject === null || $allUserConnections === null) {
+            // Get connections as subject (outgoing)
+            $connectionsAsSubject = $personalSpan->connectionsAsSubject()
+                ->whereNotNull('connection_span_id')
+                ->whereHas('connectionSpan', function($query) {
+                    $query->whereNotNull('start_year');
+                })
+                ->with(['connectionSpan', 'child', 'type'])
+                ->get();
+            
+            // Get connections as object (incoming)
+            $connectionsAsObject = $personalSpan->connectionsAsObject()
+                ->whereNotNull('connection_span_id')
+                ->whereHas('connectionSpan', function($query) {
+                    $query->whereNotNull('start_year');
+                })
+                ->with(['connectionSpan', 'parent', 'type'])
+                ->get();
+            
+            $allConnections = $connectionsAsSubject->concat($connectionsAsObject);
+        } else {
+            // Use pre-loaded connections
+            $allConnections = $allUserConnections;
+        }
         
         // Helper function to check if a connection span overlaps with a period
         $doesConnectionOverlapWithPeriod = function($connection, $periodStart, $periodEnd) {
