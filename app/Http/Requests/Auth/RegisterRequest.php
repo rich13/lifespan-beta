@@ -52,12 +52,8 @@ class RegisterRequest extends FormRequest
         $rules = [
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
-            'name' => ['required', 'string', 'max:255'],
-            'birth_year' => ['required', 'integer', 'min:1900', 'max:' . date('Y')],
-            'birth_month' => ['required', 'integer', 'min:1', 'max:12'],
-            'birth_day' => ['required', 'integer', 'min:1', 'max:31'],
-            // Honeypot field 'website' is checked in authorize() method, not in validation rules
-            // to avoid exposing it in error messages
+            'website' => ['nullable'], // Honeypot - checked in authorize() method, not in validation rules
+            // Name and DOB removed - collected during profile completion after approval
             // Invitation code validation - commented out but kept for potential future use
             // 'invitation_code' => ['nullable', 'string', function ($attribute, $value, $fail) {
             //     if ($value && $value !== 'lifespan-beta-5b18a03898a7e8dac3582ef4b58508c4' && !InvitationCode::where('code', $value)->where('used', false)->exists()) {
@@ -184,24 +180,8 @@ class RegisterRequest extends FormRequest
             'needs_approval' => $needsApproval
         ]);
 
-        // Create personal span for the user using the User model's method
-        $personalSpan = $user->createPersonalSpan([
-            'name' => $this->name,
-            'birth_year' => $this->birth_year,
-            'birth_month' => $this->birth_month,
-            'birth_day' => $this->birth_day,
-        ]);
-
-        Log::info('Personal span created for user', [
-            'user_id' => $user->id,
-            'span_id' => $personalSpan->id,
-            'name' => $personalSpan->name,
-            'birth_date' => [
-                'year' => $this->birth_year,
-                'month' => $this->birth_month,
-                'day' => $this->birth_day
-            ]
-        ]);
+        // Note: Personal span is NOT created during registration
+        // It will be created during profile completion after approval and email verification
 
         event(new Registered($user));
 
