@@ -195,6 +195,11 @@
                     <x-spans.cards.description-card :span="$span" />
                 @endif
                 
+                <!-- Related Connections Card - Show other connections between same subject/object (only for connection spans) -->
+                @if($span->type_id === 'connection')
+                    <x-spans.cards.related-connections-card :span="$span" />
+                @endif
+                
                 <!-- Annotations Card - Show notes that annotate this span -->
                 <x-spans.cards.note-spans-card :span="$span" />
                 

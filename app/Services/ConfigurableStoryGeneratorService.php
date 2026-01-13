@@ -101,11 +101,13 @@ class ConfigurableStoryGeneratorService
             // Add date information if available
             if ($connectionSpan->start_year) {
                 $startHtml = $this->formatDateLink($connectionSpan->start_year, $connectionSpan->start_month, $connectionSpan->start_day);
-                if ($connectionSpan->end_year && $connectionSpan->end_year !== $connectionSpan->start_year) {
+                if ($connectionSpan->end_year) {
+                    // Has an end date - show "from X until Y"
                     $endHtml = $this->formatDateLink($connectionSpan->end_year, $connectionSpan->end_month, $connectionSpan->end_day);
-                    $sentence .= " between $startHtml and $endHtml";
+                    $sentence .= " from $startHtml until $endHtml";
                 } else {
-                    $sentence .= " from $startHtml";
+                    // No end date - ongoing, show "since X"
+                    $sentence .= " since $startHtml";
                 }
             }
             
@@ -1273,10 +1275,143 @@ class ConfigurableStoryGeneratorService
 
         // Only return a match if we have a reasonable score (at least year match)
         if ($bestScore >= 1 && $bestMatch && $bestMatch->child->type_id === 'place') {
-            return $this->makeSpanLink($bestMatch->child->name, $bestMatch->child);
+            $placeSpan = $bestMatch->child;
+            $displayName = $this->getDisplayPlaceName($placeSpan);
+            return $this->makeSpanLink($displayName, $placeSpan);
         }
         
         return null;
+    }
+    
+    /**
+     * Get a display name for a place span, using a higher-level place from hierarchy when available.
+     * This provides a cleaner, more readable name for stories (e.g., "London" instead of 
+     * "Brantwood Road, London Borough of Lambeth") while maintaining the connection to the 
+     * original specific place span.
+     * 
+     * Priority order for hierarchy lookup:
+     * 1. City (admin_level 8, any type)
+     * 2. Major city (admin_level 6-7, any type)
+     * 3. State/Province (admin_level 4, type 'state')
+     * 4. Country (admin_level 2, type 'country')
+     * 
+     * Falls back to the place span's name if no hierarchy data is available.
+     * 
+     * @param Span $placeSpan The place span to get display name for
+     * @return string The display name to use in stories
+     */
+    protected function getDisplayPlaceName(Span $placeSpan): string
+    {
+        // Check if the place has geospatial capabilities
+        if (!$placeSpan->hasCapability('geospatial')) {
+            \Log::debug('getDisplayPlaceName: Place does not have geospatial capability', [
+                'place_id' => $placeSpan->id,
+                'place_name' => $placeSpan->name
+            ]);
+            return $placeSpan->name;
+        }
+        
+        $hierarchy = $placeSpan->getLocationHierarchy();
+        if (empty($hierarchy)) {
+            \Log::debug('getDisplayPlaceName: Hierarchy is empty', [
+                'place_id' => $placeSpan->id,
+                'place_name' => $placeSpan->name
+            ]);
+            return $placeSpan->name;
+        }
+        
+        \Log::debug('getDisplayPlaceName: Checking hierarchy', [
+            'place_id' => $placeSpan->id,
+            'place_name' => $placeSpan->name,
+            'hierarchy_count' => count($hierarchy),
+            'hierarchy' => $hierarchy
+        ]);
+        
+        // Priority order: city (admin_level 8) > major city (admin_level 6-7) > state (admin_level 4) > country (admin_level 2)
+        // For cities, we accept any type (city, administrative, etc.) since OSM uses different types
+        // Also check for common city names that might be at different admin levels
+        $priorities = [
+            ['admin_level' => 8], // City level - accept any type
+            ['admin_level' => 7], // Major city level - accept any type
+            ['admin_level' => 6], // Major city level - accept any type
+            ['admin_level' => 4, 'type' => 'state'],
+            ['admin_level' => 2, 'type' => 'country'],
+        ];
+        
+        // Also look for common major city names regardless of admin_level
+        // This helps when admin_levels might not be set correctly or cities are named differently
+        $majorCityNames = ['London', 'Greater London', 'Manchester', 'Birmingham', 'Liverpool', 'Leeds', 'Glasgow', 'Edinburgh', 
+                          'Bristol', 'Cardiff', 'Belfast', 'Newcastle', 'Sheffield', 'Nottingham', 'Leicester',
+                          'Cape Town', 'City of Edinburgh'];
+        
+        // Normalize city names for comparison (remove "City of" prefix, etc.)
+        $normalizeCityName = function($name) {
+            $name = trim($name);
+            // Remove "City of" prefix
+            if (stripos($name, 'City of ') === 0) {
+                $name = substr($name, 8);
+            }
+            // Remove "Greater " prefix
+            if (stripos($name, 'Greater ') === 0) {
+                $name = substr($name, 8);
+            }
+            return trim($name);
+        };
+        
+        foreach ($priorities as $priority) {
+            foreach ($hierarchy as $level) {
+                $adminLevel = $level['admin_level'] ?? null;
+                $type = $level['type'] ?? '';
+                $name = $level['name'] ?? null;
+                
+                // Skip the current place itself
+                if ($level['is_current'] ?? false) {
+                    continue;
+                }
+                
+                // Skip roads
+                if ($type === 'road') {
+                    continue;
+                }
+                
+                // Check if this level matches our priority
+                $matchesAdminLevel = $adminLevel === $priority['admin_level'];
+                $matchesType = !isset($priority['type']) || $type === $priority['type'];
+                
+                if ($matchesAdminLevel && $matchesType && $name) {
+                    \Log::debug('getDisplayPlaceName: Found match', [
+                        'place_id' => $placeSpan->id,
+                        'original_name' => $placeSpan->name,
+                        'display_name' => $name,
+                        'admin_level' => $adminLevel,
+                        'type' => $type
+                    ]);
+                    return $name;
+                }
+                
+                // Also check if this is a known major city name (regardless of admin_level)
+                // Normalize both the hierarchy name and the major city names for comparison
+                $normalizedName = $normalizeCityName($name);
+                foreach ($majorCityNames as $majorCity) {
+                    $normalizedMajorCity = $normalizeCityName($majorCity);
+                    if ($normalizedName && strcasecmp($normalizedName, $normalizedMajorCity) === 0) {
+                        // Return the original name from hierarchy (not the normalized version)
+                        \Log::debug('getDisplayPlaceName: Found major city by name', [
+                            'place_id' => $placeSpan->id,
+                            'original_name' => $placeSpan->name,
+                            'display_name' => $name,
+                            'admin_level' => $adminLevel,
+                            'type' => $type,
+                            'matched_city' => $majorCity
+                        ]);
+                        return $name;
+                    }
+                }
+            }
+        }
+        
+        // Fallback to the original place name if no suitable hierarchy level found
+        return $placeSpan->name;
     }
 
     /**
@@ -1441,14 +1576,15 @@ class ConfigurableStoryGeneratorService
     {
         $residences = $this->getResidences($person);
         $placeLinks = $residences->map(function ($residence) {
-            $placeName = $residence['place'];
             $placeSpan = $residence['place_span'];
             
             if ($placeSpan) {
-                return $this->makeSpanLink($placeName, $placeSpan);
+                $displayName = $this->getDisplayPlaceName($placeSpan);
+                return $this->makeSpanLink($displayName, $placeSpan);
             }
             
-            return e($placeName);
+            // Fallback if no place span
+            return e($residence['place']);
         })->unique()->values()->toArray();
         return $this->formatList($placeLinks);
     }

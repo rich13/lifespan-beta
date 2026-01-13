@@ -791,7 +791,7 @@ class SpanController extends Controller
                 'slug' => $subject->slug
             ]);
             
-            // If we're accessing via UUID and a slug exists, redirect to the slug URL
+            // If we're accessing via UUID and a slug exists, redirect to slug URL for consistency
             $routeParam = $request->segment(2); // Get the actual URL segment
             
             if (Str::isUuid($routeParam) && $subject->slug) {
@@ -819,13 +819,25 @@ class SpanController extends Controller
             }
 
             // If this is a photo span, redirect to the photos route
+            // Redirect place spans to /places route
+            if ($subject->type_id === 'place') {
+                \Illuminate\Support\Facades\Log::info('Redirecting place span to places route', [
+                    'span_id' => $subject->id,
+                    'span_name' => $subject->name
+                ]);
+
+                return redirect()
+                    ->route('places.show', ['span' => $subject], 301)
+                    ->with('status', session('status')); // Preserve flash message
+            }
+
             if ($subject->type_id === 'thing' && ($subject->metadata['subtype'] ?? null) === 'photo') {
                 \Illuminate\Support\Facades\Log::info('Redirecting photo span to photos route', [
                     'span_id' => $subject->id,
                     'span_name' => $subject->name,
                     'subtype' => $subject->metadata['subtype'] ?? null
                 ]);
-                
+
                 return redirect()
                     ->route('photos.show', ['photo' => $subject], 301)
                     ->with('status', session('status')); // Preserve flash message
@@ -917,6 +929,18 @@ class SpanController extends Controller
                 
                 return redirect()
                     ->route('spans.at-date', ['span' => $span->slug, 'date' => $date], 301)
+                    ->with('status', session('status')); // Preserve flash message
+            }
+
+            // Redirect place spans to /places route (places are timeless, so at-date doesn't apply)
+            if ($span->type_id === 'place') {
+                \Illuminate\Support\Facades\Log::info('Redirecting place span to places route (from at-date)', [
+                    'span_id' => $span->id,
+                    'span_name' => $span->name
+                ]);
+
+                return redirect()
+                    ->route('places.show', ['span' => $span], 301)
                     ->with('status', session('status')); // Preserve flash message
             }
 
