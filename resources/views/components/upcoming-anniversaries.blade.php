@@ -5,7 +5,7 @@
     $targetDate = $date ? \Carbon\Carbon::parse($date) : \App\Helpers\DateHelper::getCurrentDate();
     
     // Get upcoming anniversaries using shared helper
-    $significantDates = \App\Helpers\AnniversaryHelper::getUpcomingAnniversaries($targetDate, 30);
+    $significantDates = \App\Helpers\AnniversaryHelper::getUpcomingAnniversaries($targetDate, 60);
     
     // Take only the first 5
     $significantDates = array_slice($significantDates, 0, 5);
