@@ -42,14 +42,19 @@
     // Get the first photo if available
     $plaquePhoto = $plaquePhotoConnections->isNotEmpty() ? $plaquePhotoConnections->first()->parent : null;
 
-    // Get plaque photo URL from metadata
+    // Get plaque photo URL from metadata (use thumbnail for left-side display)
     $photoUrl = null;
     if ($plaquePhoto) {
-        $photoUrl = $plaquePhoto->metadata['large_url'] 
+        $photoUrl = $plaquePhoto->metadata['thumbnail_url'] 
                  ?? $plaquePhoto->metadata['medium_url'] 
-                 ?? $plaquePhoto->metadata['thumbnail_url'] 
+                 ?? $plaquePhoto->metadata['large_url'] 
                  ?? $plaquePhoto->metadata['original_url'] 
                  ?? null;
+        
+        // If we have a filename but no URL, use proxy route
+        if (!$photoUrl && isset($plaquePhoto->metadata['filename']) && $plaquePhoto->metadata['filename']) {
+            $photoUrl = route('images.proxy', ['spanId' => $plaquePhoto->id, 'size' => 'thumbnail']);
+        }
     } else {
         // Fallback to plaque's own main_photo metadata if no photo connection found
         $photoUrl = $plaque->metadata['main_photo'] 
@@ -81,48 +86,54 @@
             </a>
         </h6>
     </div>
-    <div class="card-body p-0">
-        @if($photoUrl)
-            <div class="ratio ratio-16x9">
-                <img src="{{ $photoUrl }}" 
-                     alt="{{ $plaque->name }}" 
-                     class="img-fluid rounded-top"
-                     style="object-fit: cover;"
-                     loading="lazy">
+    <div class="card-body">
+        @if($photoUrl || $locationName || $erectedYear)
+            <div class="mb-3">
+                @if($photoUrl)
+                    <a href="{{ route('spans.show', $plaque) }}" class="text-decoration-none float-start me-3 mb-2">
+                        <img src="{{ $photoUrl }}" 
+                             alt="{{ $plaque->name }}" 
+                             class="rounded"
+                             style="width: 120px; height: 120px; object-fit: cover;"
+                             loading="lazy">
+                    </a>
+                @endif
+                <div class="small">
+                    @if($locationName)
+                        <p class="mb-1">
+                            <i class="bi bi-geo-alt me-1"></i>
+                            <strong>Location:</strong> 
+                            @if($location)
+                                <a href="{{ route('spans.show', $location) }}" class="text-decoration-none">
+                                    {{ $locationName }}
+                                </a>
+                            @else
+                                {{ $locationName }}
+                            @endif
+                        </p>
+                    @endif
+                    
+                    @if($erectedYear)
+                        <p class="mb-1">
+                            <i class="bi bi-calendar me-1"></i>
+                            <strong>Erected:</strong> {{ $erectedYear }}
+                        </p>
+                    @endif
+                    
+                    @if($plaqueColour && $plaqueColour !== 'blue')
+                        <p class="mb-0">
+                            <i class="bi bi-palette me-1"></i>
+                            <strong>Colour:</strong> {{ ucfirst($plaqueColour) }}
+                        </p>
+                    @endif
+                </div>
+                <div class="clearfix"></div>
             </div>
         @endif
-        <div class="p-3">
-            <h6 class="mb-2">
-                <a href="{{ route('spans.show', $plaque) }}" class="text-decoration-none">
-                    {{ $plaque->name }}
-                </a>
-            </h6>
-            
-            @if($plaque->description)
-                <p class="small text-muted mb-2">{{ Str::limit($plaque->description, 150) }}</p>
-            @endif
-            
-            @if($locationName)
-                <p class="small mb-1">
-                    <i class="bi bi-geo-alt me-1"></i>
-                    <strong>Location:</strong> 
-                    @if($location)
-                        <a href="{{ route('spans.show', $location) }}" class="text-decoration-none">
-                            {{ $locationName }}
-                        </a>
-                    @else
-                        {{ $locationName }}
-                    @endif
-                </p>
-            @endif
-            
-            @if($erectedYear)
-                <p class="small mb-0">
-                    <i class="bi bi-calendar me-1"></i>
-                    <strong>Erected:</strong> {{ $erectedYear }}
-                </p>
-            @endif
-        </div>
+        
+        @if($plaque->description)
+            <p class="small text-muted mb-0">{{ Str::limit($plaque->description, 150) }}</p>
+        @endif
     </div>
 </div>
 

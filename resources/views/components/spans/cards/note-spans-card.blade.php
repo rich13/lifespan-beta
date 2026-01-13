@@ -147,7 +147,7 @@
                 </div>
             </div>
             <div class="card-body p-2">
-                <p class="text-muted text-center small mb-0">No notes yet. Click above to add one!</p>
+                <p class="text-muted text-center small mb-0">No notes yet.</p>
             </div>
         </div>
     @endauth

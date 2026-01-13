@@ -15,7 +15,7 @@
     // Get has_role connections with nested at_organisation connections
     $roleConnections = $span->connectionsAsSubject()
         ->whereHas('type', function($q) { $q->where('type', 'has_role'); })
-        ->with(['child', 'connectionSpan.connectionsAsSubject.child', 'connectionSpan.connectionsAsSubject.type'])
+        ->with(['child', 'connectionSpan.connectionsAsSubject.child', 'connectionSpan.connectionsAsSubject.type', 'connectionSpan.connectionsAsSubject.connectionSpan'])
         ->get();
 
     // Combine both types into a unified collection with sorting info
@@ -89,6 +89,7 @@
                     // Determine what to display based on connection type
                     $role = null;
                     $organisation = null;
+                    $linkSpan = null; // The span to link to (connection span if available, otherwise role)
                     
                     if ($connectionType === 'role') {
                         // has_role connection: child is the role
@@ -98,13 +99,26 @@
                             foreach ($dates->connectionsAsSubject as $nestedConnection) {
                                 if ($nestedConnection->type_id === 'at_organisation' && $nestedConnection->child) {
                                     $organisation = $nestedConnection->child;
+                                    // Link to the connection span of the at_organisation connection
+                                    // This is the fully combined connection span (e.g., "Person has role Role at Organisation")
+                                    if ($nestedConnection->connectionSpan) {
+                                        $linkSpan = $nestedConnection->connectionSpan;
+                                    }
                                     break;
                                 }
                             }
                         }
+                        // If no at_organisation connection found, link to the has_role connection span
+                        if (!$linkSpan && $dates) {
+                            $linkSpan = $dates;
+                        }
                     } else {
                         // employment connection: child is the organisation directly
                         $organisation = $connection->child;
+                        // For employment connections, link to the connection span
+                        if ($dates) {
+                            $linkSpan = $dates;
+                        }
                     }
                 @endphp
                 <div class="card">
@@ -113,7 +127,7 @@
                             <div>
                                 @if($role)
                                     <h6 class="mb-1">
-                                        <a href="{{ route('spans.show', $role) }}" class="text-decoration-none">
+                                        <a href="{{ route('spans.show', $linkSpan ?: $role) }}" class="text-decoration-none">
                                             {{ $role->name }}
                                         </a>
                                     </h6>

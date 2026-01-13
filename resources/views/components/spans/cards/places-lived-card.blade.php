@@ -21,13 +21,10 @@
         })
         ->values();
     
-    // Don't show the card if there are no residences
-    if ($residenceConnections->isEmpty()) {
-        return;
-    }
-    
-    // Prepare place data for map view
-    $placesForMap = $residenceConnections->map(function($conn) {
+    // Prepare place data for map view (empty array if no connections)
+    $placesForMap = $residenceConnections->isEmpty() 
+        ? collect([]) 
+        : $residenceConnections->map(function($conn) {
         $place = $conn->child;
         $coords = $place->getCoordinates();
         $dates = $conn->connectionSpan;
@@ -46,7 +43,7 @@
             'name' => $place->name,
             'coordinates' => $coords,
             'dates' => $dateText,
-            'url' => route('spans.show', $place)
+            'url' => route('spans.show', $dates ?: $place) // Link to connection span (residence) instead of place
         ];
     });
 @endphp
@@ -78,6 +75,8 @@
         </div>
     </div>
     <div class="card-body p-2">
+        @if($residenceConnections->isEmpty())
+        @else
         <div id="places-list-view" class="list-group list-group-flush" style="display: none;">
             @foreach($residenceConnections as $connection)
                 @php
@@ -99,7 +98,7 @@
                     <div class="d-flex align-items-center">
                         <!-- Place name and dates -->
                         <div class="flex-grow-1">
-                            <a href="{{ route('spans.show', $place) }}" 
+                            <a href="{{ route('spans.show', $dates ?: $place) }}" 
                                class="text-decoration-none fw-semibold">
                                 {{ $place->name }}
                             </a>
@@ -118,6 +117,7 @@
         <div id="places-map-view" style="height: 400px; position: relative;">
             <div id="places-map-container" style="width: 100%; height: 100%;"></div>
         </div>
+        @endif
     </div>
 </div>
 
@@ -201,9 +201,14 @@ $(function(){
     }
   });
   
-  // Initialize map on page load since it's the default view
+  // Initialize map on page load since it's the default view (only if there are places)
+  @if(!$residenceConnections->isEmpty())
   initializeResidenceMap();
   mapInitialized = true;
+  @else
+  // Show empty state message
+  $('#places-map-container').html('<div class="d-flex align-items-center justify-content-center h-100 text-muted"><i class="bi bi-house me-2"></i>No places lived recorded yet</div>');
+  @endif
   
   function initializeResidenceMap() {
     const places = @json($placesForMap);

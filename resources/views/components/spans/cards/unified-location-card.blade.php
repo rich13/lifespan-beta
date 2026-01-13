@@ -20,15 +20,18 @@
     $primaryLocation = null;
     $mapHeight = 200; // Default height
     
-    // Find nearby places if this is a place span with coordinates
+    // Find nearby places if this is a place span with coordinates (load but hide by default)
     $nearbyPlaces = [];
     if ($isPlaceSpan && $hasCoordinates) {
         // If this span is a place with coordinates, use it as the primary location
         $primaryLocation = $span;
-        $mapHeight = 400; // Larger map for place spans to show nearby places
+        // Keep default map height - will expand when nearby places are toggled on
         
-        // Find nearby places within 50km radius, limit to 20 places
-        $nearbyPlaces = $span->findNearbyPlaces(50.0, 20);
+        // Calculate appropriate radius based on place type (smaller for buildings, larger for cities)
+        $searchRadius = $span->getRadiusForNearbyPlaces();
+        
+        // Find nearby places within calculated radius, limit to 20 places (loaded but hidden by default)
+        $nearbyPlaces = $span->findNearbyPlaces($searchRadius, 20);
     } elseif ($hasLocatedConnections) {
         // Otherwise, use the first connected location with coordinates
         foreach($locatedConnections as $connection) {
@@ -66,6 +69,15 @@
                     <i class="bi bi-geo-alt me-2"></i>
                     Location
                 </h6>
+                @if($isPlaceSpan && $hasCoordinates && !empty($nearbyPlaces))
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="show-nearby-{{ $span->id }}" 
+                               onchange="toggleNearbyPlaces('{{ $span->id }}', this.checked)">
+                        <label class="form-check-label small" for="show-nearby-{{ $span->id }}">
+                            Show nearby
+                        </label>
+                    </div>
+                @endif
                 @auth
                     @if(auth()->user()->getEffectiveAdminStatus() && $needsOsmData)
                         <button type="button" class="btn btn-sm btn-outline-primary" id="getMapDataBtn" title="Fetch OSM data for places without map data" onclick="
@@ -203,8 +215,8 @@
             @endif
             
             @if(!empty($nearbyPlaces))
-                <!-- Nearby Places Section -->
-                <div class="mt-3">
+                <!-- Nearby Places Section (hidden by default) -->
+                <div class="mt-3" id="nearby-places-{{ $span->id }}" style="display: none;">
                     <h6 class="mb-2">
                         <i class="bi bi-geo-alt-fill me-2"></i>
                         Nearby Places
@@ -289,14 +301,17 @@
 
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
         <script>
+            // Store map and markers in window scope for toggle function
+            window.locationMapData = window.locationMapData || {};
             
             document.addEventListener('DOMContentLoaded', function() {
+                const mapId = '{{ $span->id }}';
                 
-                // Initialize map
-                const map = L.map('location-map-{{ $span->id }}').setView([
+                // Initialize map centered on primary location
+                const map = L.map('location-map-' + mapId).setView([
                     {{ $primaryLocation->getCoordinates()['latitude'] }}, 
                     {{ $primaryLocation->getCoordinates()['longitude'] }}
-                ], 10);
+                ], 13); // Higher zoom level (13) to focus on the place itself
 
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     attribution: '© OpenStreetMap contributors'
@@ -316,9 +331,10 @@
                         shadowSize: [41, 41]
                     })
                 }).addTo(map)
-                  .bindPopup('<strong>{{ $primaryLocation->name }}</strong>');
+                  .bindPopup('<strong>{{ $primaryLocation->name }}</strong>')
+                  .openPopup();
 
-                // Add markers for nearby places
+                // Create markers for nearby places (but don't add to map by default)
                 const nearbyPlaces = @json($nearbyPlaces);
                 const nearbyMarkers = [];
                 
@@ -335,7 +351,7 @@
                         const marker = L.marker([
                             parseFloat(coords.latitude),
                             parseFloat(coords.longitude)
-                        ]).addTo(map);
+                        ]); // Don't add to map yet
                         
                         // Format distance
                         let distanceText = '';
@@ -358,14 +374,18 @@
                     }
                 });
                 
-                // Fit map to show all markers if we have nearby places
-                if (nearbyMarkers.length > 0) {
-                    const group = new L.featureGroup([primaryMarker, ...nearbyMarkers]);
-                    map.fitBounds(group.getBounds().pad(0.1));
-                } else {
-                    // Just show the primary location
-                    primaryMarker.openPopup();
-                }
+                // Store map, markers, and coordinates for toggle function
+                window.locationMapData[mapId] = {
+                    map: map,
+                    primaryMarker: primaryMarker,
+                    nearbyMarkers: nearbyMarkers,
+                    primaryCoords: {
+                        lat: {{ $primaryLocation->getCoordinates()['latitude'] }},
+                        lng: {{ $primaryLocation->getCoordinates()['longitude'] }}
+                    }
+                };
+                
+                // By default, just show the primary location (no nearby markers)
 
                 // Handle boundary display for larger administrative areas
                 @php
@@ -408,11 +428,66 @@
                         }
                     });
                 @else
-                    if (nearbyMarkers.length === 0) {
-                        primaryMarker.openPopup();
-                    }
+                    // No boundary, already showing primary marker
                 @endif
             });
+            
+            // Toggle function to show/hide nearby places (global function)
+            window.toggleNearbyPlaces = function(mapId, show) {
+                const mapData = window.locationMapData[mapId];
+                if (!mapData) return;
+                
+                const { map, primaryMarker, nearbyMarkers, primaryCoords } = mapData;
+                const nearbyPlacesSection = document.getElementById('nearby-places-' + mapId);
+                const mapContainer = document.getElementById('location-map-' + mapId);
+                
+                if (show) {
+                    // Show nearby places - add markers to map and fit bounds
+                    nearbyMarkers.forEach(function(marker) {
+                        marker.addTo(map);
+                    });
+                    
+                    // Fit map to show all markers
+                    if (nearbyMarkers.length > 0) {
+                        const group = new L.featureGroup([primaryMarker, ...nearbyMarkers]);
+                        map.fitBounds(group.getBounds().pad(0.1));
+                    }
+                    
+                    // Show nearby places list
+                    if (nearbyPlacesSection) {
+                        nearbyPlacesSection.style.display = 'block';
+                    }
+                    
+                    // Increase map height
+                    if (mapContainer) {
+                        mapContainer.style.height = '400px';
+                        setTimeout(function() {
+                            map.invalidateSize();
+                        }, 100);
+                    }
+                } else {
+                    // Hide nearby places - remove markers from map
+                    nearbyMarkers.forEach(function(marker) {
+                        map.removeLayer(marker);
+                    });
+                    
+                    // Center map on primary location
+                    map.setView([primaryCoords.lat, primaryCoords.lng], 13);
+                    
+                    // Hide nearby places list
+                    if (nearbyPlacesSection) {
+                        nearbyPlacesSection.style.display = 'none';
+                    }
+                    
+                    // Reset map height
+                    if (mapContainer) {
+                        mapContainer.style.height = '200px';
+                        setTimeout(function() {
+                            map.invalidateSize();
+                        }, 100);
+                    }
+                }
+            };
         </script>
     @endif
 @endif

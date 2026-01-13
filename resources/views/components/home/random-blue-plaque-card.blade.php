@@ -1,5 +1,5 @@
 @php
-    // Find a random blue plaque with a photo
+    // Find a random blue plaque with a photo and a featured person
     $plaque = \App\Models\Span::where('type_id', 'thing')
         ->whereJsonContains('metadata->subtype', 'plaque')
         ->where('access_level', 'public')
@@ -11,13 +11,47 @@
                         ->whereJsonContains('metadata->subtype', 'photo');
                   });
         })
+        ->whereHas('connectionsAsSubject', function($query) {
+            $query->where('type_id', 'features')
+                  ->whereHas('child', function($q) {
+                      $q->where('type_id', 'person');
+                  });
+        })
         ->inRandomOrder()
         ->first();
     
     $photoUrl = null;
+    $featuredPerson = null;
+    $story = null;
     
     if ($plaque) {
-        // Get photo
+        // Find the person featured on this plaque
+        // Connection: [plaque (parent)][features][person (child)]
+        $personConnection = \App\Models\Connection::where('type_id', 'features')
+            ->where('parent_id', $plaque->id)
+            ->whereHas('child', function($q) {
+                $q->where('type_id', 'person');
+            })
+            ->with(['child'])
+            ->first();
+        
+        if ($personConnection && $personConnection->child) {
+            $featuredPerson = $personConnection->child;
+            
+            // Generate story about the person
+            try {
+                $storyGenerator = app(\App\Services\ConfigurableStoryGeneratorService::class);
+                $story = $storyGenerator->generateStory($featuredPerson);
+            } catch (Exception $e) {
+                $story = [
+                    'paragraphs' => [],
+                    'metadata' => [],
+                    'error' => $e->getMessage()
+                ];
+            }
+        }
+        
+        // Get photo (use thumbnail for left-side display)
         $photoConnection = \App\Models\Connection::where('type_id', 'features')
             ->where('child_id', $plaque->id)
             ->whereHas('parent', function($q) {
@@ -30,14 +64,14 @@
         if ($photoConnection && $photoConnection->parent) {
             $photoSpan = $photoConnection->parent;
             $metadata = $photoSpan->metadata ?? [];
-            $photoUrl = $metadata['large_url'] 
+            $photoUrl = $metadata['thumbnail_url'] 
                 ?? $metadata['medium_url'] 
-                ?? $metadata['thumbnail_url'] 
+                ?? $metadata['large_url'] 
                 ?? null;
             
             // If we have a filename but no URL, use proxy route
             if (!$photoUrl && isset($metadata['filename']) && $metadata['filename']) {
-                $photoUrl = route('images.proxy', ['spanId' => $photoSpan->id, 'size' => 'medium']);
+                $photoUrl = route('images.proxy', ['spanId' => $photoSpan->id, 'size' => 'thumbnail']);
             }
         } else {
             // Fallback to plaque's own main_photo metadata if no photo connection found
@@ -59,15 +93,47 @@
             </a>
         </h3>
     </div>
-    <div class="card-body p-0">
-        @if($photoUrl)
-            <a href="{{ route('spans.show', $plaque) }}">
-                <img src="{{ $photoUrl }}" 
-                     alt="{{ $plaque->name }}" 
-                     class="img-fluid"
-                     style="object-fit: cover; width: 100%;"
-                     loading="lazy">
-            </a>
+    <div class="card-body">
+        @if($story && $featuredPerson && !empty($story['paragraphs']) && !isset($story['error']))
+            <div class="mb-3">
+                @if($photoUrl)
+                    <a href="{{ route('spans.show', $plaque) }}" class="text-decoration-none float-start me-3 mb-2">
+                        <img src="{{ $photoUrl }}" 
+                             alt="{{ $plaque->name }}" 
+                             class="rounded"
+                             style="width: 120px; height: 120px; object-fit: cover;"
+                             loading="lazy">
+                    </a>
+                @endif
+                @php
+                    // Get the first paragraph and clean it
+                    $firstParagraph = $story['paragraphs'][0];
+                    $cleanParagraph = preg_replace_callback('/href="([^"]*)"/', function ($matches) {
+                        $cleanUrl = preg_replace('/\s+/', '', $matches[1]);
+                        return 'href="' . $cleanUrl . '"';
+                    }, $firstParagraph);
+                @endphp
+                <p class="small mb-0">{!! $cleanParagraph !!}</p>
+                <div class="clearfix"></div>
+            </div>
+        @elseif($photoUrl)
+            {{-- Show photo even if no story --}}
+            <div class="mb-3">
+                <a href="{{ route('spans.show', $plaque) }}" class="text-decoration-none float-start me-3 mb-2">
+                    <img src="{{ $photoUrl }}" 
+                         alt="{{ $plaque->name }}" 
+                         class="rounded"
+                         style="width: 120px; height: 120px; object-fit: cover;"
+                         loading="lazy">
+                </a>
+                @if($plaque->description)
+                    <p class="small text-muted mb-0">{{ Str::limit($plaque->description, 200) }}</p>
+                @endif
+                <div class="clearfix"></div>
+            </div>
+        @elseif($plaque->description)
+            {{-- Show description if no photo or story --}}
+            <p class="small text-muted mb-3">{{ Str::limit($plaque->description, 200) }}</p>
         @endif
     </div>
 </div>
