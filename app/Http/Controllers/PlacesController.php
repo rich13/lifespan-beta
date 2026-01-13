@@ -21,10 +21,136 @@ class PlacesController extends Controller
 
     /**
      * Display the places map page
+     * Uses the same view as show() but without a specific place selected
      */
     public function index(): View
     {
-        return view('places.index');
+        return view('places.show', [
+            'span' => null,
+            'coordinates' => null,
+            'hierarchyWithSpans' => []
+        ]);
+    }
+
+    /**
+     * Display a single place on a full-page map
+     */
+    public function show(Span $span): View
+    {
+        // Verify it's a place span
+        if ($span->type_id !== 'place') {
+            \Log::warning('PlacesController: Span is not a place', [
+                'span_id' => $span->id,
+                'span_slug' => $span->slug,
+                'span_name' => $span->name,
+                'type_id' => $span->type_id
+            ]);
+            abort(404, 'Span is not a place');
+        }
+
+        // Check access permissions
+        if (!Auth::check()) {
+            if ($span->access_level !== 'public') {
+                abort(403, 'Unauthorized');
+            }
+        } else {
+            $user = Auth::user();
+            if (!$user->is_admin) {
+                $isPublic = $span->access_level === 'public';
+                $isOwner = $span->owner_id === $user->id;
+                $hasPermission = $span->hasPermission($user, 'view');
+                
+                if (!$isPublic && !$isOwner && !$hasPermission) {
+                    abort(403, 'Unauthorized');
+                }
+            }
+        }
+
+        // Get coordinates (may be null if not yet geocoded)
+        $coordinates = $span->getCoordinates();
+        
+        // Get location hierarchy with matching spans
+        $locationHierarchy = $span->getLocationHierarchy();
+        $hierarchyWithSpans = $this->findMatchingSpansForHierarchy($locationHierarchy);
+
+        return view('places.show', compact('span', 'coordinates', 'hierarchyWithSpans'));
+    }
+    
+    /**
+     * Find matching place spans for each level in the hierarchy
+     */
+    private function findMatchingSpansForHierarchy(array $hierarchy): array
+    {
+        if (empty($hierarchy)) {
+            return [];
+        }
+        
+        // Extract all unique names from hierarchy (excluding roads and current place)
+        $namesToSearch = [];
+        foreach ($hierarchy as $level) {
+            $name = $level['name'] ?? null;
+            $type = $level['type'] ?? '';
+            $isCurrent = $level['is_current'] ?? false;
+            
+            // Skip roads (they're not places) and the current place (we already have it)
+            if ($name && $type !== 'road' && !$isCurrent) {
+                $namesToSearch[] = $name;
+            }
+        }
+        
+        if (empty($namesToSearch)) {
+            return $hierarchy;
+        }
+        
+        // Build query with access control
+        $query = Span::where('type_id', 'place')
+            ->whereIn('name', $namesToSearch);
+        
+        // Apply access control
+        $user = Auth::user();
+        if (!$user) {
+            $query->where('access_level', 'public');
+        } elseif (!$user->is_admin) {
+            $query->where(function ($q) use ($user) {
+                $q->where('access_level', 'public')
+                  ->orWhere('owner_id', $user->id)
+                  ->orWhereHas('spanPermissions', function ($permQ) use ($user) {
+                      $permQ->where('user_id', $user->id)
+                            ->whereIn('permission_type', ['view', 'edit']);
+                  });
+            });
+        }
+        
+        // Get matching spans keyed by name for quick lookup
+        $matchingSpans = $query->get()->keyBy('name');
+        
+        // Add span information to each hierarchy level
+        $result = [];
+        foreach ($hierarchy as $level) {
+            $name = $level['name'] ?? null;
+            $type = $level['type'] ?? '';
+            $isCurrent = $level['is_current'] ?? false;
+            
+            // Don't look up spans for roads or the current place
+            if ($type === 'road' || $isCurrent) {
+                $result[] = $level;
+                continue;
+            }
+            
+            // Check if we found a matching span
+            if ($name && isset($matchingSpans[$name])) {
+                $matchingSpan = $matchingSpans[$name];
+                $level['span_id'] = $matchingSpan->id;
+                $level['span_slug'] = $matchingSpan->slug;
+                $level['has_span'] = true;
+            } else {
+                $level['has_span'] = false;
+            }
+            
+            $result[] = $level;
+        }
+        
+        return $result;
     }
 
     /**

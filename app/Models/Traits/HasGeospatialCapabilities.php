@@ -134,6 +134,17 @@ trait HasGeospatialCapabilities
     }
 
     /**
+     * Get the appropriate search radius for finding nearby places based on admin level
+     * Smaller places (buildings) use smaller radii, larger places (cities) use larger radii
+     * 
+     * @return float Radius in kilometers
+     */
+    public function getRadiusForNearbyPlaces(): float
+    {
+        return $this->geospatial()->getRadiusForNearbyPlaces();
+    }
+
+    /**
      * Generate hierarchical slug from OSM data.
      * 
      * Delegates to the GeospatialCapability for implementation.
@@ -179,5 +190,15 @@ trait HasGeospatialCapabilities
     public function getDisplayName(): ?string
     {
         return $this->geospatial()->getDisplayName();
+    }
+
+    /**
+     * Get location hierarchy (self + parents) with admin levels/types.
+     * 
+     * @return array
+     */
+    public function getLocationHierarchy(): array
+    {
+        return $this->geospatial()->getLocationHierarchy();
     }
 } 

@@ -284,6 +284,32 @@ class GeospatialCapability implements SpanCapability
     }
 
     /**
+     * Get the appropriate search radius for finding nearby places based on admin level
+     * Smaller places (buildings) use smaller radii, larger places (cities) use larger radii
+     * 
+     * @return float Radius in kilometers
+     */
+    public function getRadiusForNearbyPlaces(): float
+    {
+        $adminLevel = $this->getPlaceAdminLevel($this->span);
+        
+        // Map admin levels to appropriate radii (in kilometers)
+        // Lower admin level numbers = higher administrative level = larger radius
+        $levelToRadius = [
+            2 => 200.0,   // Country - very large radius
+            4 => 100.0,   // State/Region - large radius
+            6 => 75.0,    // County/Province - medium-large radius
+            8 => 50.0,    // City - default radius
+            10 => 10.0,   // Town/Suburb - smaller radius
+            12 => 5.0,    // Neighbourhood - small radius
+            16 => 2.0,    // Building/Property - very small radius
+        ];
+        
+        // If we can't determine the level, use the default (city level)
+        return $levelToRadius[$adminLevel] ?? 50.0;
+    }
+
+    /**
      * Get the administrative level of a place from its OSM data
      * Returns the admin level (2=country, 4=state, 6=county, 8=city, 10=town/suburb, 12=neighbourhood, 16=building)
      * Lower numbers = higher administrative level
@@ -591,14 +617,27 @@ class GeospatialCapability implements SpanCapability
         ]);
         
         foreach ($osmData['hierarchy'] as $level) {
+            $levelType = $level['type'] ?? '';
+            $adminLevel = $level['admin_level'] ?? null;
+            
             if ($isMajorCity) {
                 // For major cities, only include country
-                if ($level['type'] === 'country') {
+                if ($levelType === 'country') {
                     $parts[] = $this->slugify($level['name']);
                 }
             } else {
-                // For other places, include both country and state
-                if (in_array($level['type'], ['country', 'state'])) {
+                // For other places, include city (admin_level 8), state (admin_level 4), and country (admin_level 2)
+                // This creates slugs like "homerton-london-england-united-kingdom" or "homerton-london-united-kingdom"
+                // Include city if it exists (admin_level 8, type 'city')
+                if ($adminLevel === 8 && $levelType === 'city') {
+                    $parts[] = $this->slugify($level['name']);
+                }
+                // Include state (admin_level 4, type 'state')
+                elseif ($levelType === 'state') {
+                    $parts[] = $this->slugify($level['name']);
+                }
+                // Include country (admin_level 2, type 'country')
+                elseif ($levelType === 'country') {
                     $parts[] = $this->slugify($level['name']);
                 }
             }
@@ -693,6 +732,129 @@ class GeospatialCapability implements SpanCapability
         
         $metadata['external_refs']['wikidata'] = $wikidata;
         $this->span->metadata = $metadata;
+    }
+
+    /**
+     * Return a list of location levels (current place + parents) with admin level/type for display.
+     *
+     * Each entry: ['name' => string|null, 'type' => string|null, 'admin_level' => int|null, 'is_current' => bool]
+     */
+    public function getLocationHierarchy(): array
+    {
+        $osmData = $this->getOsmData();
+        if (!$osmData) {
+            return [];
+        }
+
+        $levels = [];
+
+        // Current place
+        $currentType = $osmData['place_type'] ?? ($osmData['type'] ?? null);
+        $currentLevel = $this->getPlaceAdminLevel($this->span);
+        $currentName = $osmData['display_name'] ?? $this->span->name;
+        $levels[] = [
+            'name' => $currentName,
+            'type' => $currentType,
+            'admin_level' => $currentLevel,
+            'is_current' => true,
+        ];
+
+        // Parents from hierarchy
+        if (isset($osmData['hierarchy']) && is_array($osmData['hierarchy'])) {
+            foreach ($osmData['hierarchy'] as $parent) {
+                $levels[] = [
+                    'name' => $parent['name'] ?? null,
+                    'type' => $parent['type'] ?? null,
+                    'admin_level' => $parent['admin_level'] ?? null,
+                    'is_current' => false,
+                ];
+            }
+        }
+        
+        // Add road/street information if available (for houses/buildings)
+        // Roads don't have admin_levels, so we'll use a special value or null
+        // Check if we have address data in the original Nominatim result
+        $metadata = $this->span->metadata ?? [];
+        $rawOsmData = $metadata['external_refs']['osm'] ?? $metadata['osm_data'] ?? null;
+        
+        // Try to extract road information from display_name or check if we stored address components
+        if ($rawOsmData && isset($rawOsmData['address'])) {
+            $address = $rawOsmData['address'];
+            if (isset($address['road'])) {
+                $roadName = $address['road'];
+                // Only add if it's not already in the hierarchy
+                $roadExists = false;
+                foreach ($levels as $level) {
+                    if (($level['name'] ?? '') === $roadName && ($level['type'] ?? '') === 'road') {
+                        $roadExists = true;
+                        break;
+                    }
+                }
+                if (!$roadExists) {
+                    // Add road as level 15 (between neighbourhood 12 and building 16)
+                    // or use null to indicate it's not an admin level
+                    $levels[] = [
+                        'name' => $roadName,
+                        'type' => 'road',
+                        'admin_level' => null, // Roads don't have admin levels
+                        'is_current' => false,
+                    ];
+                }
+            }
+        } else {
+            // Fallback: try to extract road from display_name for houses/buildings
+            if (in_array($currentType, ['house', 'building', 'address']) && $currentLevel === 16) {
+                // Try to parse road from display_name (e.g., "52, Trehurst Street, ...")
+                $displayName = $osmData['display_name'] ?? '';
+                if ($displayName) {
+                    $parts = explode(',', $displayName);
+                    if (count($parts) >= 2) {
+                        // Second part is often the road name
+                        $potentialRoad = trim($parts[1]);
+                        // Check if it looks like a road name (contains "Street", "Road", "Avenue", etc.)
+                        $roadKeywords = ['Street', 'Road', 'Avenue', 'Lane', 'Drive', 'Way', 'Close', 'Crescent', 'Grove', 'Place', 'Square', 'Terrace', 'Court', 'Gardens'];
+                        foreach ($roadKeywords as $keyword) {
+                            if (stripos($potentialRoad, $keyword) !== false) {
+                                $levels[] = [
+                                    'name' => $potentialRoad,
+                                    'type' => 'road',
+                                    'admin_level' => null,
+                                    'is_current' => false,
+                                ];
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Deduplicate by name/type/admin_level
+        $unique = [];
+        $seen = [];
+        foreach ($levels as $level) {
+            $key = strtolower(($level['name'] ?? '') . '|' . ($level['type'] ?? '') . '|' . ($level['admin_level'] ?? ''));
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $unique[] = $level;
+        }
+
+        // Sort by admin_level ascending (country first), nulls at end; keep current above same-level parents
+        // Roads (null admin_level) should appear after level 12 (neighbourhood) but before level 16 (building)
+        usort($unique, function ($a, $b) {
+            $aLevel = $a['admin_level'] ?? ($a['type'] === 'road' ? 15 : 999); // Roads treated as level 15 for sorting
+            $bLevel = $b['admin_level'] ?? ($b['type'] === 'road' ? 15 : 999);
+            if ($aLevel === $bLevel) {
+                if (($a['is_current'] ?? false) && !($b['is_current'] ?? false)) return -1;
+                if (!($a['is_current'] ?? false) && ($b['is_current'] ?? false)) return 1;
+                return 0;
+            }
+            return $aLevel <=> $bLevel;
+        });
+
+        return $unique;
     }
 
     protected function validateOsmData(array $osmData): void

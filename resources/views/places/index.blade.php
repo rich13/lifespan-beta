@@ -638,16 +638,6 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
         
-        // View full details link
-        html += `
-            <div id="viewFullDetailsSection" class="mt-4">
-                <a href="${place.url}" class="btn btn-primary w-100">
-                    View Full Details
-                    <i class="bi bi-arrow-right ms-1"></i>
-                </a>
-            </div>
-        `;
-        
         detailsContainer.innerHTML = html;
         
         // Load lived-here-card asynchronously
@@ -669,22 +659,18 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(data => {
                 console.log('[LIVED-HERE] Response data:', data);
                 if (data && data.success && data.html && data.html.trim() !== '') {
-                    // Insert the lived-here-card HTML before the "View Full Details" section
+                    // Append the lived-here-card HTML to the details container
                     const detailsContainer = document.getElementById('placeDetails');
-                    const viewFullDetailsSection = document.getElementById('viewFullDetailsSection');
                     
-                    if (detailsContainer && viewFullDetailsSection) {
+                    if (detailsContainer) {
                         // Create a container for the lived-here-card
                         const cardContainer = document.createElement('div');
                         cardContainer.innerHTML = data.html;
                         
-                        // Insert the card before the "View Full Details" section
+                        // Append the card to the end of the details container
                         if (cardContainer.firstElementChild) {
                             const insertedCard = cardContainer.firstElementChild;
-                            detailsContainer.insertBefore(
-                                insertedCard,
-                                viewFullDetailsSection
-                            );
+                            detailsContainer.appendChild(insertedCard);
                             console.log('[LIVED-HERE] Card inserted successfully');
                             
                             // Initialize toggle buttons after insertion (fallback for dynamic loading)
@@ -694,7 +680,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             }, 50);
                         }
                     } else {
-                        console.warn('[LIVED-HERE] Could not find placeDetails or viewFullDetailsSection');
+                        console.warn('[LIVED-HERE] Could not find placeDetails container');
                     }
                 } else {
                     console.log('[LIVED-HERE] No card HTML to display (no residents)');
@@ -883,15 +869,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
             `;
         }
-        
-        html += `
-            <div id="viewFullDetailsSection" class="mt-4">
-                <a href="${place.url}" class="btn btn-primary w-100">
-                    View Full Details
-                    <i class="bi bi-arrow-right ms-1"></i>
-                </a>
-            </div>
-        `;
         
         detailsContainer.innerHTML = html;
         

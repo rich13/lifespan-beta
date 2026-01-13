@@ -89,22 +89,51 @@ class PlaceGeocodingWorkflowService
                 // Set the OSM data and coordinates
                 $span->setOsmData($osmData);
                 
-                // Update the name to use the canonical name from OSM
-                if (isset($osmData['canonical_name']) && !empty($osmData['canonical_name'])) {
+                // Add OSM URL to sources if we have OSM type and ID
+                if (isset($osmData['osm_type']) && isset($osmData['osm_id'])) {
+                    $osmUrl = 'https://www.openstreetmap.org/' . strtolower($osmData['osm_type']) . '/' . $osmData['osm_id'];
+                    $sources = $span->sources ?? [];
+                    
+                    // Check if OSM URL already exists in sources
+                    $osmUrlExists = false;
+                    foreach ($sources as $source) {
+                        $sourceUrl = is_array($source) ? ($source['url'] ?? '') : $source;
+                        if ($sourceUrl === $osmUrl) {
+                            $osmUrlExists = true;
+                            break;
+                        }
+                    }
+                    
+                    // Add OSM URL if it doesn't already exist
+                    if (!$osmUrlExists) {
+                        $sources[] = [
+                            'title' => 'OpenStreetMap',
+                            'url' => $osmUrl,
+                            'type' => 'web'
+                        ];
+                        $span->sources = $sources;
+                    }
+                }
+                
+                // Only update the name if it's empty or not set
+                if (empty($span->name) && isset($osmData['canonical_name']) && !empty($osmData['canonical_name'])) {
                     $span->name = $osmData['canonical_name'];
                 }
                 
-                // Generate hierarchical slug using the span's method
-                $newSlug = $span->generateHierarchicalSlug();
-                
-                // Check if the new slug would violate uniqueness
-                $slugExists = Span::where('slug', $newSlug)
-                    ->where('id', '!=', $span->id)
-                    ->exists();
-                
-                // Only update slug if it won't violate the unique constraint
-                if (!$slugExists) {
-                    $span->slug = $newSlug;
+                // Only update slug if it's empty or not set
+                if (empty($span->slug)) {
+                    // Generate hierarchical slug using the span's method
+                    $newSlug = $span->generateHierarchicalSlug();
+                    
+                    // Check if the new slug would violate uniqueness
+                    $slugExists = Span::where('slug', $newSlug)
+                        ->where('id', '!=', $span->id)
+                        ->exists();
+                    
+                    // Only update slug if it won't violate the unique constraint
+                    if (!$slugExists) {
+                        $span->slug = $newSlug;
+                    }
                 }
                 
                 $span->save();
@@ -172,22 +201,52 @@ class PlaceGeocodingWorkflowService
         try {
             $span->setOsmData($osmData);
             
-            // Update the name to use the canonical name from OSM
-            if (isset($osmData['canonical_name']) && !empty($osmData['canonical_name'])) {
-                $span->name = $osmData['canonical_name'];
+            // Add OSM URL to sources if we have OSM type and ID
+            if (isset($osmData['osm_type']) && isset($osmData['osm_id'])) {
+                $osmUrl = 'https://www.openstreetmap.org/' . strtolower($osmData['osm_type']) . '/' . $osmData['osm_id'];
+                $sources = $span->sources ?? [];
+                
+                // Check if OSM URL already exists in sources
+                $osmUrlExists = false;
+                foreach ($sources as $source) {
+                    $sourceUrl = is_array($source) ? ($source['url'] ?? '') : $source;
+                    if ($sourceUrl === $osmUrl) {
+                        $osmUrlExists = true;
+                        break;
+                    }
+                }
+                
+                // Add OSM URL if it doesn't already exist
+                if (!$osmUrlExists) {
+                    $sources[] = [
+                        'title' => 'OpenStreetMap',
+                        'url' => $osmUrl,
+                        'type' => 'web'
+                    ];
+                    $span->sources = $sources;
+                }
             }
             
-            // Generate hierarchical slug using the span's method
-            $newSlug = $span->generateHierarchicalSlug();
-            
-            // Check if the new slug would violate uniqueness
-            $slugExists = Span::where('slug', $newSlug)
-                ->where('id', '!=', $span->id)
-                ->exists();
-            
-            // Only update slug if it won't violate the unique constraint
-            if (!$slugExists) {
-                $span->slug = $newSlug;
+            // Update the name to use the canonical name from OSM
+            // Only update the name if it's empty or not set
+            if (empty($span->name) && isset($osmData['canonical_name']) && !empty($osmData['canonical_name'])) {
+                $span->name = $osmData['canonical_name'];
+            }
+
+            // Only update slug if it's empty or not set
+            if (empty($span->slug)) {
+                // Generate hierarchical slug using the span's method
+                $newSlug = $span->generateHierarchicalSlug();
+
+                // Check if the new slug would violate uniqueness
+                $slugExists = Span::where('slug', $newSlug)
+                    ->where('id', '!=', $span->id)
+                    ->exists();
+
+                // Only update slug if it won't violate the unique constraint
+                if (!$slugExists) {
+                    $span->slug = $newSlug;
+                }
             }
             
             $span->save();
@@ -414,17 +473,20 @@ class PlaceGeocodingWorkflowService
                         $span->state = 'complete';
                     }
                     
-                    // Generate hierarchical slug using the span's method
-                    $newSlug = $span->generateHierarchicalSlug();
-                    
-                    // Check if the new slug would violate uniqueness
-                    $slugExists = Span::where('slug', $newSlug)
-                        ->where('id', '!=', $span->id)
-                        ->exists();
-                    
-                    // Only update slug if it won't violate the unique constraint
-                    if (!$slugExists) {
-                        $span->slug = $newSlug;
+                    // Only update slug if it's empty or not set
+                    if (empty($span->slug)) {
+                        // Generate hierarchical slug using the span's method
+                        $newSlug = $span->generateHierarchicalSlug();
+
+                        // Check if the new slug would violate uniqueness
+                        $slugExists = Span::where('slug', $newSlug)
+                            ->where('id', '!=', $span->id)
+                            ->exists();
+
+                        // Only update slug if it won't violate the unique constraint
+                        if (!$slugExists) {
+                            $span->slug = $newSlug;
+                        }
                     }
                     
                     $span->save();
