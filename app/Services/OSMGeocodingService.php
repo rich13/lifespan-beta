@@ -250,11 +250,14 @@ class OSMGeocodingService
     {
         try {
             // Build Overpass query to get all administrative boundaries containing this point
+            // Use a large radius to capture all nested administrative boundaries
+            // This captures all parent boundaries at all admin levels (2-16), including intermediate levels like 11, 13, 15
+            // Using a large radius (50km) to ensure we capture all nested boundaries, not just those near the point
             $query = "
                 [out:json][timeout:25];
                 (
-                    way[\"admin_level\"](around:1000,{$latitude},{$longitude});
-                    relation[\"admin_level\"](around:1000,{$latitude},{$longitude});
+                    way[\"admin_level\"][\"boundary\"=\"administrative\"](around:50000,{$latitude},{$longitude});
+                    relation[\"admin_level\"][\"boundary\"=\"administrative\"](around:50000,{$latitude},{$longitude});
                 );
                 out body;
                 >;
@@ -302,19 +305,27 @@ class OSMGeocodingService
     {
         $adminLevels = [];
         $elements = $overpassData['elements'] ?? [];
+        $seenLevels = []; // Track seen admin_level + name combinations to avoid exact duplicates
         
         foreach ($elements as $element) {
             if (isset($element['tags']['admin_level']) && isset($element['tags']['name'])) {
                 $adminLevel = (int) $element['tags']['admin_level'];
                 
-                // Only include even-numbered admin_levels (2, 4, 6, 8, 10, 12, 14, 16)
-                if ($adminLevel % 2 === 0 && $adminLevel >= 2 && $adminLevel <= 16) {
+                // Include admin_levels 2-16 (including odd numbers like 9 for London boroughs)
+                if ($adminLevel >= 2 && $adminLevel <= 16) {
                     $name = $element['tags']['name'];
                     
                     // Try to get English name if available
                     if (isset($element['tags']['name:en'])) {
                         $name = $element['tags']['name:en'];
                     }
+                    
+                    // Avoid exact duplicates (same admin_level and name)
+                    $key = $adminLevel . '|' . $name;
+                    if (isset($seenLevels[$key])) {
+                        continue;
+                    }
+                    $seenLevels[$key] = true;
                     
                     $adminLevels[] = [
                         'name' => $name,
@@ -342,12 +353,19 @@ class OSMGeocodingService
     {
         $types = [
             2 => 'country',
+            3 => 'state', // Some countries use level 3 for states
             4 => 'state',
+            5 => 'state', // Some regions use level 5
             6 => 'county',
+            7 => 'county', // Some counties use level 7
             8 => 'city',
+            9 => 'borough', // London boroughs, metropolitan boroughs
             10 => 'district',
+            11 => 'district', // Some districts use level 11
             12 => 'neighbourhood',
+            13 => 'neighbourhood', // Some neighbourhoods use level 13
             14 => 'sub-neighbourhood',
+            15 => 'sub-neighbourhood', // Some sub-neighbourhoods use level 15
             16 => 'building'
         ];
         
@@ -368,6 +386,7 @@ class OSMGeocodingService
             'state' => ['admin_level' => 4, 'type' => 'state'],
             'county' => ['admin_level' => 6, 'type' => 'county'],
             'city' => ['admin_level' => 8, 'type' => 'city'],
+            'city_district' => ['admin_level' => 9, 'type' => 'borough'], // London boroughs often appear as city_district
             'town' => ['admin_level' => 10, 'type' => 'town'],
             'suburb' => ['admin_level' => 10, 'type' => 'district'],
             'neighbourhood' => ['admin_level' => 12, 'type' => 'neighbourhood'],
@@ -478,8 +497,26 @@ class OSMGeocodingService
     {
         $address = $nominatimResult['address'] ?? [];
         
-        // Build admin hierarchy directly from the search result's address components
-        $hierarchy = $this->buildAdminHierarchyFromNominatim($nominatimResult);
+        // Try to get full admin hierarchy from Overpass if we have coordinates
+        // This captures all admin levels (2-16), including intermediate levels like 11, 13, 15
+        $hierarchy = [];
+        if (isset($nominatimResult['lat']) && isset($nominatimResult['lon'])) {
+            try {
+                $latitude = (float) $nominatimResult['lat'];
+                $longitude = (float) $nominatimResult['lon'];
+                $hierarchy = $this->buildAdminHierarchyFromOverpass($latitude, $longitude, $nominatimResult);
+            } catch (\Exception $e) {
+                // If Overpass fails, fall back to Nominatim
+                Log::warning('Overpass hierarchy fetch failed in formatOsmData, using Nominatim fallback', [
+                    'error' => $e->getMessage(),
+                    'coordinates' => [$nominatimResult['lat'] ?? null, $nominatimResult['lon'] ?? null]
+                ]);
+                $hierarchy = $this->buildAdminHierarchyFromNominatim($nominatimResult);
+            }
+        } else {
+            // No coordinates available, use Nominatim address components
+            $hierarchy = $this->buildAdminHierarchyFromNominatim($nominatimResult);
+        }
         
         // Determine if this is a building address that needs special handling
         $placeType = $nominatimResult['type'] ?? '';
@@ -521,7 +558,7 @@ class OSMGeocodingService
             }
         }
         
-        return [
+        $osmData = [
             'place_id' => $nominatimResult['place_id'],
             'osm_type' => $nominatimResult['osm_type'],
             'osm_id' => $nominatimResult['osm_id'],
@@ -535,6 +572,13 @@ class OSMGeocodingService
             'place_type' => $nominatimResult['type'] ?? 'unknown',
             'importance' => $nominatimResult['importance'] ?? 0
         ];
+        
+        // Store address components for later use (e.g., road name extraction)
+        if (isset($nominatimResult['address']) && is_array($nominatimResult['address'])) {
+            $osmData['address'] = $nominatimResult['address'];
+        }
+        
+        return $osmData;
     }
 
 
@@ -549,9 +593,22 @@ class OSMGeocodingService
         // Start with the canonical name
         $parts[] = $this->slugify($osmData['canonical_name']);
         
-        // Add hierarchy levels (country, state, etc.)
+        // Add hierarchy levels (city, state, country)
+        // Include city (admin_level 8), state (admin_level 4), and country (admin_level 2)
         foreach ($osmData['hierarchy'] as $level) {
-            if (in_array($level['type'], ['country', 'state'])) {
+            $levelType = $level['type'] ?? '';
+            $adminLevel = $level['admin_level'] ?? null;
+            
+            // Include city if it exists (admin_level 8, type 'city')
+            if ($adminLevel === 8 && $levelType === 'city') {
+                $parts[] = $this->slugify($level['name']);
+            }
+            // Include state (admin_level 4, type 'state')
+            elseif ($levelType === 'state') {
+                $parts[] = $this->slugify($level['name']);
+            }
+            // Include country (admin_level 2, type 'country')
+            elseif ($levelType === 'country') {
                 $parts[] = $this->slugify($level['name']);
             }
         }
@@ -628,42 +685,54 @@ class OSMGeocodingService
                 for ($i = $startIndex; $i < min(6, count($parts)); $i++) {
                     $part = $parts[$i];
                     
-                    // Skip postal codes (like W8, SW1A 1AA), very short parts, and borough names
-                    if (strlen($part) > 3 && 
-                        !preg_match('/^[A-Z0-9\s]+$/', $part) && 
-                        !preg_match('/^[A-Z]\d+$/', $part) &&
-                        !preg_match('/^[A-Z]\d+[A-Z]\s?\d+[A-Z]\d+$/', $part)) {
-                        
-                        // Prefer neighborhood names over borough names
-                        // Common London borough patterns to avoid
-                        $boroughPatterns = [
-                            '/^Kensington and Chelsea$/i',
-                            '/^Wandsworth$/i',
-                            '/^Westminster$/i',
-                            '/^Camden$/i',
-                            '/^Islington$/i',
-                            '/^Hackney$/i',
-                            '/^Tower Hamlets$/i',
-                            '/^Southwark$/i',
-                            '/^Lambeth$/i',
-                            '/^Hammersmith and Fulham$/i',
-                            '/^Fulham$/i',
-                            '/^Chelsea$/i',
-                            '/^Kensington$/i'
-                        ];
-                        
-                        $isBorough = false;
-                        foreach ($boroughPatterns as $pattern) {
-                            if (preg_match($pattern, $part)) {
-                                $isBorough = true;
-                                break;
-                            }
-                        }
-                        
-                        if (!$isBorough) {
-                            $cityPart = $part;
+                    // Skip very short parts (like "W8", "UK", "DC")
+                    if (strlen($part) <= 3) {
+                        continue;
+                    }
+                    
+                    // Skip specific postal code patterns
+                    // UK postal codes: W8, SW1A 2AA, EC1A 1BB, etc.
+                    // US ZIP codes: 10001, 90210, etc.
+                    $isPostalCode = false;
+                    if (preg_match('/^[A-Z]\d+$/', $part) || // UK single part: W8
+                        preg_match('/^[A-Z]\d+[A-Z]\s?\d+[A-Z]\d+$/', $part) || // UK full: SW1A 2AA
+                        preg_match('/^\d{5}(-\d{4})?$/', $part) || // US ZIP: 10001 or 10001-1234
+                        (strlen($part) <= 4 && preg_match('/^[A-Z0-9]+$/', $part))) { // Short alphanumeric codes
+                        $isPostalCode = true;
+                    }
+                    
+                    if ($isPostalCode) {
+                        continue;
+                    }
+                    
+                    // Check if it's a borough name (to skip)
+                    $boroughPatterns = [
+                        '/^Kensington and Chelsea$/i',
+                        '/^Wandsworth$/i',
+                        '/^Westminster$/i',
+                        '/^Camden$/i',
+                        '/^Islington$/i',
+                        '/^Hackney$/i',
+                        '/^Tower Hamlets$/i',
+                        '/^Southwark$/i',
+                        '/^Lambeth$/i',
+                        '/^Hammersmith and Fulham$/i',
+                        '/^Fulham$/i',
+                        '/^Chelsea$/i',
+                        '/^Kensington$/i'
+                    ];
+                    
+                    $isBorough = false;
+                    foreach ($boroughPatterns as $pattern) {
+                        if (preg_match($pattern, $part)) {
+                            $isBorough = true;
                             break;
                         }
+                    }
+                    
+                    if (!$isBorough) {
+                        $cityPart = $part;
+                        break;
                     }
                 }
                 
@@ -793,6 +862,65 @@ class OSMGeocodingService
     }
 
     /**
+     * Lookup OSM entity by type and ID using Nominatim lookup API
+     */
+    public function lookupByOsmId(string $osmType, int $osmId): ?array
+    {
+        $cacheKey = 'osm_lookup_' . $osmType . '_' . $osmId;
+        
+        // Check cache first
+        if (Cache::has($cacheKey)) {
+            return Cache::get($cacheKey);
+        }
+
+        try {
+            $response = Http::timeout(10)
+                ->withHeaders([
+                    'User-Agent' => config('app.user_agent'),
+                    'Accept-Language' => 'en'
+                ])
+                ->get(self::NOMINATIM_BASE_URL . '/lookup', [
+                    'osm_ids' => strtoupper($osmType[0]) . $osmId, // e.g., "R123456" for relation, "N123" for node, "W123" for way
+                    'format' => 'json',
+                    'addressdetails' => 1,
+                    'extratags' => 1,
+                    'namedetails' => 1
+                ]);
+
+            if (!$response->successful() || empty($response->json())) {
+                Log::warning('Nominatim lookup failed', [
+                    'osm_type' => $osmType,
+                    'osm_id' => $osmId,
+                    'status' => $response->status()
+                ]);
+                return null;
+            }
+
+            $results = $response->json();
+            if (empty($results)) {
+                return null;
+            }
+
+            // Take the first result (should only be one for a lookup)
+            $result = $results[0];
+            
+            // Cache the result
+            Cache::put($cacheKey, $result, self::CACHE_TTL);
+            
+            return $result;
+            
+        } catch (\Exception $e) {
+            Log::error('OSM lookup failed', [
+                'error' => $e->getMessage(),
+                'osm_type' => $osmType,
+                'osm_id' => $osmId
+            ]);
+            
+            return null;
+        }
+    }
+
+    /**
      * Clear cache for a specific place name
      */
     public function clearCache(string $placeName, ?float $latitude = null, ?float $longitude = null): void
@@ -802,7 +930,7 @@ class OSMGeocodingService
             $cacheKey .= '_' . round($latitude, 4) . '_' . round($longitude, 4);
         }
         Cache::forget($cacheKey);
-        
+
         $searchCacheKey = 'osm_search_' . md5(strtolower(trim($placeName)) . '_5');
         if ($latitude !== null && $longitude !== null) {
             $searchCacheKey .= '_' . round($latitude, 4) . '_' . round($longitude, 4);
