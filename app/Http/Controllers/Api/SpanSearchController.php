@@ -89,6 +89,39 @@ class SpanSearchController extends Controller
             $spans->whereJsonContains('metadata->subtype', $subtype);
         }
 
+        // Add admin_level restriction if specified (for place spans)
+        $adminLevel = $request->get('admin_level');
+        if ($adminLevel && ($type === 'place' || ($types && in_array('place', $typeArray ?? [])))) {
+            $adminLevelInt = (int) $adminLevel;
+            
+            // Map admin_level to subtype for reverse lookup
+            $levelToSubtype = [
+                2 => 'country',
+                4 => 'state_region',
+                6 => 'county_province',
+                8 => 'city_district',
+                9 => 'city_district', // Boroughs often map to city_district
+                10 => 'suburb_area',
+                12 => 'neighbourhood',
+                14 => 'sub_neighbourhood',
+                16 => 'building_property'
+            ];
+            $matchingSubtype = $levelToSubtype[$adminLevelInt] ?? null;
+            
+            // Filter by admin_level - check multiple possible locations in metadata
+            $spans->where(function ($q) use ($adminLevelInt, $matchingSubtype) {
+                // Check osm_data->admin_level (most common location)
+                $q->whereRaw("(metadata->'osm_data'->>'admin_level')::int = ?", [$adminLevelInt])
+                  // Also check administrative_level (alternative location for auto-created spans)
+                  ->orWhereRaw("(metadata->>'administrative_level')::int = ?", [$adminLevelInt]);
+                
+                // Also check subtype if we have a mapping (subtype is derived from admin_level)
+                if ($matchingSubtype) {
+                    $q->orWhereJsonContains('metadata->subtype', $matchingSubtype);
+                }
+            });
+        }
+
         // Add owner restriction if specified
         $ownerId = $request->get('owner_id');
         if ($ownerId) {
@@ -128,7 +161,7 @@ class SpanSearchController extends Controller
 
         // Get existing results with type information (including placeholders)
         $existingResults = $spans->with('type')
-            ->limit(5)
+            ->limit(20)
             ->get()
             ->map(function ($span) {
                 return [
@@ -145,35 +178,11 @@ class SpanSearchController extends Controller
 
         $results = $results->merge($existingResults);
 
-        // Add placeholder suggestions if we have a query and types and no exact match exists
-        if ($query && ($type || $types)) {
-            $placeholderTypes = $types ? explode(',', $types) : [$type];
-            
-            foreach ($placeholderTypes as $placeholderType) {
-                // Check if we already have an exact match for this type (including existing placeholders)
-                $hasExactMatch = $existingResults->contains(function ($span) use ($query, $placeholderType) {
-                    return strtolower($span['name']) === strtolower($query) && $span['type_id'] === $placeholderType;
-                });
-                
-                if (!$hasExactMatch) {
-                    $placeholderData = [
-                        'id' => null,
-                        'name' => $query,
-                        'type_id' => $placeholderType,
-                        'type_name' => ucfirst($placeholderType),
-                        'state' => 'placeholder',
-                        'is_placeholder' => true,
-                        'subtype' => $subtype ?? null,
-                        'metadata' => $subtype ? ['subtype' => $subtype] : []
-                    ];
-                    
-                    $results->push($placeholderData);
-                }
-            }
-        }
+        // Note: We no longer add placeholder suggestions with null IDs
+        // All spans must have IDs. If a placeholder span exists, it will be in $existingResults
 
         return response()->json([
-            'spans' => $results->take(5)->values()
+            'spans' => $results->take(20)->values()
         ]);
     }
 

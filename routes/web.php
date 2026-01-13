@@ -162,8 +162,11 @@ Route::middleware('web')->group(function () {
         Route::get('/places/{span}/boundary', [\App\Http\Controllers\PlaceBoundaryController::class, 'show'])
             ->name('places.boundary');
 
-    // Places map route
+    // Places routes (index must come before show to avoid conflicts)
     Route::get('/places', [\App\Http\Controllers\PlacesController::class, 'index'])->name('places.index');
+    // Route model binding handles both UUIDs and slugs via RouteServiceProvider
+    Route::get('/places/{span}', [\App\Http\Controllers\PlacesController::class, 'show'])
+        ->name('places.show');
 
     // Explore routes
     Route::prefix('explore')->group(function () {
@@ -1332,6 +1335,11 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
 
             // Fetch OSM data for a place
             Route::post('/places/{span}/fetch-osm-data', function (Request $request, \App\Models\Span $span) {
+                $user = auth()->user();
+                if (!$user || !$user->getEffectiveAdminStatus()) {
+                    return response()->json(['success' => false, 'message' => 'Unauthorized - admin access required'], 403);
+                }
+                
                 if ($span->type_id !== 'place') {
                     return response()->json(['success' => false, 'message' => 'Span is not a place'], 400);
                 }
@@ -1348,6 +1356,10 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
                     
                     if ($success) {
                         $span = $span->fresh();
+                        $oldSlug = $request->get('old_slug'); // Get the slug from when the request was made
+                        $newSlug = $span->slug;
+                        $slugChanged = $oldSlug && $oldSlug !== $newSlug;
+                        
                         $osmData = $span->getOsmData();
                         $hasBoundary = false;
                         
@@ -1394,13 +1406,24 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
                             }
                         }
                         
-                        return response()->json([
+                        $response = [
                             'success' => true, 
                             'message' => $hasOsmData ? 'Map data updated successfully' : 'OSM data fetched successfully',
                             'has_osm_data' => $span->getOsmData() !== null,
                             'has_coordinates' => $span->getCoordinates() !== null,
                             'has_boundary' => $hasBoundary
-                        ]);
+                        ];
+                        
+                        // If slug changed, include redirect information
+                        if ($slugChanged) {
+                            $response['slug_changed'] = true;
+                            $response['new_slug'] = $newSlug;
+                            $response['span_id'] = $span->id;
+                            // Prefer UUID for redirect to avoid future slug changes
+                            $response['redirect_url'] = route('places.show', $span->id);
+                        }
+                        
+                        return response()->json($response);
                     } else {
                         return response()->json([
                             'success' => false, 

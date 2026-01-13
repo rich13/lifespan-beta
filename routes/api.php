@@ -2,6 +2,7 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Http;
 use App\Http\Controllers\Api\SpanSearchController;
 
 /*
@@ -97,6 +98,589 @@ Route::middleware(['auth', 'admin'])->group(function () {
             ], 500);
         }
     })->name('api.guardian.person');
+});
+    
+// Place-related API endpoints (accessible to authenticated users)
+Route::middleware('auth')->group(function () {
+    // Check for existing place span with same coordinates
+    Route::get('/places/check-duplicate', function (Request $request) {
+        $lat = $request->get('lat');
+        $lng = $request->get('lng');
+        $osmType = $request->get('osm_type', '');
+        $osmId = $request->get('osm_id', '');
+        
+        if (!$lat || !$lng) {
+            return response()->json(['success' => false, 'message' => 'Latitude and longitude are required'], 400);
+        }
+        
+        try {
+            $latitude = (float)$lat;
+            $longitude = (float)$lng;
+            
+            // Use a small radius (e.g., 10 meters) to find exact matches
+            $radiusKm = 0.01; // 10 meters
+            
+            $geospatialCapability = new \App\Models\SpanCapabilities\GeospatialCapability(new \App\Models\Span());
+            $query = $geospatialCapability->findWithinRadius($latitude, $longitude, $radiusKm);
+            
+            // Apply access control - user can see public spans, their own spans, and shared spans they have access to
+            $user = auth()->user();
+            if (!$user) {
+                $query->where('access_level', 'public');
+            } elseif (!$user->is_admin) {
+                $query->where(function ($q) use ($user) {
+                    $q->where('access_level', 'public')
+                      ->orWhere('owner_id', $user->id)
+                      ->orWhereHas('spanPermissions', function ($permQ) use ($user) {
+                          $permQ->where('user_id', $user->id)
+                                ->whereIn('permission_type', ['view', 'edit']);
+                      });
+                });
+            }
+            
+            $existingSpans = $query->get();
+            
+            if ($existingSpans->isEmpty()) {
+                return response()->json([
+                    'success' => true,
+                    'duplicate' => false
+                ]);
+            }
+            
+            // Check if any span matches by OSM ID (more precise match)
+            $exactMatch = null;
+            if ($osmType && $osmId) {
+                foreach ($existingSpans as $span) {
+                    $osmData = $span->getOsmData();
+                    if ($osmData && 
+                        ($osmData['osm_type'] ?? null) === $osmType && 
+                        (string)($osmData['osm_id'] ?? '') === (string)$osmId) {
+                        $exactMatch = $span;
+                        break;
+                    }
+                }
+            }
+            
+            // Use exact match if found, otherwise use the first result
+            $matchedSpan = $exactMatch ?? $existingSpans->first();
+            
+            // Compare metadata to see if they match and get differences
+            $matchedSpanOsmData = $matchedSpan->getOsmData();
+            $metadataMatches = false;
+            $differences = [];
+            
+            if ($matchedSpanOsmData && $osmType && $osmId) {
+                $metadataMatches = 
+                    ($matchedSpanOsmData['osm_type'] ?? null) === $osmType &&
+                    (string)($matchedSpanOsmData['osm_id'] ?? '') === (string)$osmId;
+            }
+            
+            // If metadata doesn't match, find the differences
+            if (!$metadataMatches) {
+                // Compare OSM type
+                $existingOsmType = $matchedSpanOsmData['osm_type'] ?? null;
+                if ($existingOsmType !== $osmType) {
+                    $differences[] = [
+                        'field' => 'OSM Type',
+                        'existing' => $existingOsmType ?? '(not set)',
+                        'nominatim' => $osmType
+                    ];
+                }
+                
+                // Compare OSM ID
+                $existingOsmId = $matchedSpanOsmData['osm_id'] ?? null;
+                if ((string)($existingOsmId ?? '') !== (string)$osmId) {
+                    $differences[] = [
+                        'field' => 'OSM ID',
+                        'existing' => $existingOsmId ?? '(not set)',
+                        'nominatim' => $osmId
+                    ];
+                }
+                
+                // Compare display name
+                $existingDisplayName = $matchedSpanOsmData['display_name'] ?? null;
+                $nominatimDisplayName = $request->get('display_name', '');
+                if ($nominatimDisplayName && $existingDisplayName !== $nominatimDisplayName) {
+                    $differences[] = [
+                        'field' => 'Display Name',
+                        'existing' => $existingDisplayName ?? '(not set)',
+                        'nominatim' => $nominatimDisplayName
+                    ];
+                }
+                
+                // Compare canonical name
+                $existingCanonicalName = $matchedSpanOsmData['canonical_name'] ?? null;
+                if ($existingCanonicalName) {
+                    // Try to extract canonical name from display name if not provided
+                    $nominatimCanonicalName = $request->get('canonical_name', '');
+                    if (!$nominatimCanonicalName && $nominatimDisplayName) {
+                        // Use first part of display name as approximation
+                        $nominatimCanonicalName = explode(',', $nominatimDisplayName)[0];
+                    }
+                    if ($nominatimCanonicalName && $existingCanonicalName !== $nominatimCanonicalName) {
+                        $differences[] = [
+                            'field' => 'Canonical Name',
+                            'existing' => $existingCanonicalName,
+                            'nominatim' => $nominatimCanonicalName
+                        ];
+                    }
+                }
+                
+                // Compare place type
+                $existingPlaceType = $matchedSpanOsmData['place_type'] ?? null;
+                $nominatimPlaceType = $request->get('place_type', '');
+                if ($nominatimPlaceType && $existingPlaceType !== $nominatimPlaceType) {
+                    $differences[] = [
+                        'field' => 'Place Type',
+                        'existing' => $existingPlaceType ?? '(not set)',
+                        'nominatim' => $nominatimPlaceType
+                    ];
+                }
+                
+                // Compare admin level (if available)
+                $existingAdminLevel = null;
+                if (isset($matchedSpanOsmData['hierarchy']) && is_array($matchedSpanOsmData['hierarchy'])) {
+                    foreach ($matchedSpanOsmData['hierarchy'] as $level) {
+                        if (isset($level['admin_level']) && $level['admin_level'] !== null) {
+                            $existingAdminLevel = $level['admin_level'];
+                            break;
+                        }
+                    }
+                }
+                
+                // Note: We can't easily get admin level from Nominatim result without geocoding,
+                // so we'll skip this comparison for now or mark it as "needs geocoding"
+            }
+            
+            return response()->json([
+                'success' => true,
+                'duplicate' => true,
+                'span' => [
+                    'id' => $matchedSpan->id,
+                    'name' => $matchedSpan->name,
+                    'slug' => $matchedSpan->slug,
+                    'type_id' => $matchedSpan->type_id,
+                    'state' => $matchedSpan->state,
+                    'access_level' => $matchedSpan->access_level,
+                    'owner_id' => $matchedSpan->owner_id,
+                    'has_osm_data' => $matchedSpanOsmData !== null,
+                    'metadata_matches' => $metadataMatches
+                ],
+                'metadata_match' => $metadataMatches,
+                'differences' => $differences
+            ]);
+            
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Error checking for duplicate place', [
+                'lat' => $lat,
+                'lng' => $lng,
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while checking for duplicates'
+            ], 500);
+        }
+    });
+    
+    // Update span metadata from Nominatim result
+    Route::post('/places/{span}/update-from-nominatim', function (Request $request, \App\Models\Span $span) {
+        $user = auth()->user();
+        if (!$user || !$user->getEffectiveAdminStatus()) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized - admin access required'], 403);
+        }
+        
+        if ($span->type_id !== 'place') {
+            return response()->json(['success' => false, 'message' => 'Span is not a place'], 400);
+        }
+        
+        $request->validate([
+            'lat' => 'required|numeric',
+            'lng' => 'required|numeric',
+            'osm_type' => 'required|string',
+            'osm_id' => 'required|string',
+            'display_name' => 'required|string',
+            'place_type' => 'nullable|string',
+        ]);
+        
+        try {
+            $osmService = app(\App\Services\OSMGeocodingService::class);
+            $geocodingWorkflow = app(\App\Services\PlaceGeocodingWorkflowService::class);
+            
+            // Use reverse geocoding to get full Nominatim result
+            // We'll use the coordinates and OSM type/ID to get the complete data
+            $lat = (float)$request->get('lat');
+            $lng = (float)$request->get('lng');
+            $osmType = $request->get('osm_type');
+            $osmId = $request->get('osm_id');
+            
+            // Lookup the full Nominatim result using OSM type and ID
+            $nominatimResult = $osmService->lookupByOsmId($osmType, (int)$osmId);
+            
+            if (!$nominatimResult) {
+                // If lookup fails, try reverse geocode as fallback
+                $reverseResult = Http::withHeaders([
+                    'User-Agent' => config('app.user_agent'),
+                    'Accept-Language' => 'en'
+                ])->get('https://nominatim.openstreetmap.org/reverse', [
+                    'lat' => $lat,
+                    'lon' => $lng,
+                    'format' => 'json',
+                    'addressdetails' => 1,
+                    'extratags' => 1,
+                    'namedetails' => 1
+                ]);
+                
+                if ($reverseResult->successful()) {
+                    $reverseData = $reverseResult->json();
+                    // Verify it matches the OSM type and ID
+                    if (($reverseData['osm_type'] ?? '') === $osmType && 
+                        (string)($reverseData['osm_id'] ?? '') === (string)$osmId) {
+                        $nominatimResult = $reverseData;
+                    }
+                }
+            }
+            
+            if (!$nominatimResult) {
+                // Last resort: construct a minimal result from what we have
+                $nominatimResult = [
+                    'place_id' => null,
+                    'osm_type' => $osmType,
+                    'osm_id' => (int)$osmId,
+                    'lat' => (string)$lat,
+                    'lon' => (string)$lng,
+                    'display_name' => $request->get('display_name'),
+                    'type' => $request->get('place_type', ''),
+                    'name' => explode(',', $request->get('display_name'))[0] ?? '',
+                    'address' => [],
+                ];
+            }
+            
+            // Format the Nominatim result to OSM data format
+            $reflection = new \ReflectionClass($osmService);
+            $formatMethod = $reflection->getMethod('formatOsmData');
+            $formatMethod->setAccessible(true);
+            $osmData = $formatMethod->invoke($osmService, $nominatimResult);
+            
+            // Update the span using the geocoding workflow
+            $success = $geocodingWorkflow->resolveWithMatch($span, $osmData);
+            
+            if ($success) {
+                $span = $span->fresh();
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Span metadata updated successfully',
+                    'span' => [
+                        'id' => $span->id,
+                        'name' => $span->name,
+                        'slug' => $span->slug,
+                    ]
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to update span metadata'
+                ], 500);
+            }
+            
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Error updating span from Nominatim', [
+                'span_id' => $span->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while updating the span: ' . $e->getMessage()
+            ], 500);
+        }
+    })->name('api.places.update-from-nominatim');
+});
+    
+// Admin-only place creation endpoints
+Route::middleware(['auth', 'admin'])->group(function () {
+    // Create a new place span from Nominatim result
+    Route::post('/places/create-from-nominatim', function (Request $request) {
+        $user = auth()->user(); // Already authenticated and admin due to middleware
+        
+        $request->validate([
+            'lat' => 'required|numeric',
+            'lng' => 'required|numeric',
+            'osm_type' => 'required|string',
+            'osm_id' => 'required|string',
+            'display_name' => 'required|string',
+            'place_type' => 'nullable|string',
+        ]);
+        
+        try {
+            $osmService = app(\App\Services\OSMGeocodingService::class);
+            $geocodingWorkflow = app(\App\Services\PlaceGeocodingWorkflowService::class);
+            
+            $lat = (float)$request->get('lat');
+            $lng = (float)$request->get('lng');
+            $osmType = $request->get('osm_type');
+            $osmId = $request->get('osm_id');
+            
+            // Lookup the full Nominatim result using OSM type and ID
+            $nominatimResult = $osmService->lookupByOsmId($osmType, (int)$osmId);
+            
+            if (!$nominatimResult) {
+                // If lookup fails, try reverse geocode as fallback
+                $reverseResult = Http::withHeaders([
+                    'User-Agent' => config('app.user_agent'),
+                    'Accept-Language' => 'en'
+                ])->get('https://nominatim.openstreetmap.org/reverse', [
+                    'lat' => $lat,
+                    'lon' => $lng,
+                    'format' => 'json',
+                    'addressdetails' => 1,
+                    'extratags' => 1,
+                    'namedetails' => 1
+                ]);
+                
+                if ($reverseResult->successful()) {
+                    $reverseData = $reverseResult->json();
+                    // Verify it matches the OSM type and ID
+                    if (($reverseData['osm_type'] ?? '') === $osmType && 
+                        (string)($reverseData['osm_id'] ?? '') === (string)$osmId) {
+                        $nominatimResult = $reverseData;
+                    }
+                }
+            }
+            
+            if (!$nominatimResult) {
+                // Last resort: construct a minimal result from what we have
+                $nominatimResult = [
+                    'place_id' => null,
+                    'osm_type' => $osmType,
+                    'osm_id' => (int)$osmId,
+                    'lat' => (string)$lat,
+                    'lon' => (string)$lng,
+                    'display_name' => $request->get('display_name'),
+                    'type' => $request->get('place_type', ''),
+                    'name' => explode(',', $request->get('display_name'))[0] ?? '',
+                    'address' => [],
+                ];
+            }
+            
+            // Format the Nominatim result to OSM data format
+            $reflection = new \ReflectionClass($osmService);
+            $formatMethod = $reflection->getMethod('formatOsmData');
+            $formatMethod->setAccessible(true);
+            $osmData = $formatMethod->invoke($osmService, $nominatimResult);
+            
+            // Create a new place span
+            $span = new \App\Models\Span();
+            $span->type_id = 'place';
+            $span->name = $osmData['canonical_name'] ?? explode(',', $request->get('display_name'))[0] ?? 'Unknown Place';
+            $span->owner_id = $user->id;
+            $span->updater_id = $user->id;
+            $span->state = 'complete'; // Place is complete since we have geocoding data
+            $span->access_level = 'private'; // Default to private, user can change later
+            $span->metadata = [];
+            
+            // Save the span first (needed before we can set OSM data)
+            $span->save();
+            
+            // Now set the OSM data and geocode the place
+            $success = $geocodingWorkflow->resolveWithMatch($span, $osmData);
+            
+            if ($success) {
+                $span = $span->fresh();
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Place span created successfully',
+                    'span' => [
+                        'id' => $span->id,
+                        'name' => $span->name,
+                        'slug' => $span->slug,
+                    ]
+                ]);
+            } else {
+                // Even if geocoding workflow fails, we still created the span
+                // Return it but with a warning
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Place span created, but geocoding may be incomplete',
+                    'span' => [
+                        'id' => $span->id,
+                        'name' => $span->name,
+                        'slug' => $span->slug,
+                    ]
+                ]);
+            }
+            
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Error creating span from Nominatim', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while creating the place span: ' . $e->getMessage()
+            ], 500);
+        }
+    })->name('api.places.create-from-nominatim');
+});
+    
+// Preview geocoded data for a Nominatim result (accessible to all authenticated users)
+Route::middleware('auth')->group(function () {
+    Route::get('/places/preview-geocode', function (Request $request) {
+        $lat = $request->get('lat');
+        $lng = $request->get('lng');
+        $displayName = $request->get('display_name', '');
+        $osmType = $request->get('osm_type', '');
+        $osmId = $request->get('osm_id', '');
+        $placeType = $request->get('place_type', '');
+        
+        if (!$lat || !$lng) {
+            return response()->json(['success' => false, 'message' => 'Latitude and longitude are required'], 400);
+        }
+        
+        try {
+            $osmService = app(\App\Services\OSMGeocodingService::class);
+            
+            // Get administrative hierarchy using coordinates
+            $hierarchy = $osmService->getAdministrativeHierarchyByCoordinates((float)$lat, (float)$lng);
+            
+            // Add the current place to the hierarchy
+            $fullHierarchy = [];
+            if ($displayName) {
+                // Try to determine admin level from place type
+                $currentAdminLevel = null;
+                if ($placeType) {
+                    $typeToLevel = [
+                        'country' => 2,
+                        'state' => 4,
+                        'county' => 6,
+                        'city' => 8,
+                        'city_district' => 9,
+                        'town' => 10,
+                        'suburb' => 10,
+                        'neighbourhood' => 12,
+                        'building' => 16,
+                        'house' => 16
+                    ];
+                    $currentAdminLevel = $typeToLevel[$placeType] ?? null;
+                }
+                
+                // If we couldn't determine from type, try to find matching level in hierarchy
+                if ($currentAdminLevel === null && $hierarchy && count($hierarchy) > 0) {
+                    // Use the most specific (lowest) admin level from hierarchy
+                    foreach ($hierarchy as $level) {
+                        if (isset($level['admin_level']) && $level['admin_level'] !== null) {
+                            $currentAdminLevel = $level['admin_level'];
+                            break;
+                        }
+                    }
+                }
+                
+                $fullHierarchy[] = [
+                    'name' => $displayName,
+                    'type' => $placeType ?: 'location',
+                    'admin_level' => $currentAdminLevel,
+                    'is_current' => true
+                ];
+            }
+            
+            // Add parent levels from hierarchy
+            if ($hierarchy && is_array($hierarchy)) {
+                foreach ($hierarchy as $level) {
+                    $fullHierarchy[] = [
+                        'name' => $level['name'] ?? null,
+                        'type' => $level['type'] ?? null,
+                        'admin_level' => $level['admin_level'] ?? null,
+                        'is_current' => false
+                    ];
+                }
+            }
+            
+            // Sort by admin_level ascending (country first), nulls at end; keep current above same-level parents
+            usort($fullHierarchy, function ($a, $b) {
+                $aLevel = $a['admin_level'] ?? 999;
+                $bLevel = $b['admin_level'] ?? 999;
+                if ($aLevel === $bLevel) {
+                    if (($a['is_current'] ?? false) && !($b['is_current'] ?? false)) return -1;
+                    if (!($a['is_current'] ?? false) && ($b['is_current'] ?? false)) return 1;
+                    return 0;
+                }
+                return $aLevel <=> $bLevel;
+            });
+            
+            // Determine admin level and subtype from the current place
+            $adminLevel = null;
+            $subtype = null;
+            
+            // Get admin level from the current place in hierarchy
+            foreach ($fullHierarchy as $level) {
+                if (($level['is_current'] ?? false) && $level['admin_level'] !== null) {
+                    $adminLevel = $level['admin_level'];
+                    break;
+                }
+            }
+            
+            // Map admin level to subtype
+            if ($adminLevel !== null) {
+                $levelToSubtype = [
+                    2 => 'country',
+                    4 => 'state_region',
+                    6 => 'county_province',
+                    8 => 'city_district',
+                    9 => 'borough',
+                    10 => 'suburb_area',
+                    12 => 'neighbourhood',
+                    14 => 'sub_neighbourhood',
+                    16 => 'building_property'
+                ];
+                $subtype = $levelToSubtype[$adminLevel] ?? null;
+            }
+            
+            // If no subtype from admin level, try to infer from place type
+            if (!$subtype && $placeType) {
+                $typeToSubtype = [
+                    'country' => 'country',
+                    'state' => 'state_region',
+                    'county' => 'county_province',
+                    'city' => 'city_district',
+                    'town' => 'suburb_area',
+                    'village' => 'suburb_area',
+                    'suburb' => 'suburb_area',
+                    'neighbourhood' => 'neighbourhood',
+                    'building' => 'building_property',
+                    'house' => 'building_property'
+                ];
+                $subtype = $typeToSubtype[$placeType] ?? null;
+            }
+            
+            return response()->json([
+                'success' => true,
+                'hierarchy' => $fullHierarchy,
+                'admin_level' => $adminLevel,
+                'subtype' => $subtype,
+                'place_type' => $placeType,
+                'osm_type' => $osmType,
+                'osm_id' => $osmId
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Error previewing geocode data', [
+                'lat' => $lat,
+                'lng' => $lng,
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while previewing geocode data'
+            ], 500);
+        }
+    });
+});
+    
+// Admin-only place management endpoints
+Route::middleware(['auth', 'admin'])->group(function () {
     // Fetch OSM data for a place
     Route::post('/places/{span}/fetch-osm-data', function (Request $request, \App\Models\Span $span) {
         if ($span->type_id !== 'place') {
@@ -262,6 +846,67 @@ Route::middleware('auth')->post('/spans/create', [\App\Http\Controllers\Api\Span
 
 // Update span description
 Route::middleware('auth')->put('/spans/{span}/description', [\App\Http\Controllers\SpanController::class, 'updateDescription']);
+
+// Update span name and slug (admin only)
+Route::middleware(['auth', 'admin'])->put('/spans/{span}/name-slug', function (Request $request, \App\Models\Span $span) {
+    $validated = $request->validate([
+        'name' => 'required|string|max:255',
+        'slug' => 'nullable|string|max:255|regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/',
+    ]);
+    
+    try {
+        $oldName = $span->name;
+        $oldSlug = $span->slug;
+        
+        $span->name = $validated['name'];
+        
+        // Update slug if provided, otherwise let the model auto-generate it
+        if (isset($validated['slug']) && !empty($validated['slug'])) {
+            // Check for uniqueness
+            $slugExists = \App\Models\Span::where('slug', $validated['slug'])
+                ->where('id', '!=', $span->id)
+                ->exists();
+            
+            if ($slugExists) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Slug already exists. Please choose a different one.'
+                ], 422);
+            }
+            
+            $span->slug = $validated['slug'];
+        }
+        
+        $span->updater_id = auth()->id();
+        $span->save();
+        
+        \Illuminate\Support\Facades\Log::info('Span name and slug updated', [
+            'span_id' => $span->id,
+            'old_name' => $oldName,
+            'new_name' => $span->name,
+            'old_slug' => $oldSlug,
+            'new_slug' => $span->slug,
+            'updated_by' => auth()->id()
+        ]);
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Name and slug updated successfully',
+            'name' => $span->name,
+            'slug' => $span->slug
+        ]);
+    } catch (\Exception $e) {
+        \Illuminate\Support\Facades\Log::error('Failed to update span name and slug', [
+            'span_id' => $span->id,
+            'error' => $e->getMessage()
+        ]);
+        
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to update name and slug: ' . $e->getMessage()
+        ], 500);
+    }
+});
 
 // Wikidata description API (admin only)
 Route::middleware('auth')->post('/spans/{span}/fetch-wikimedia-description', function (Request $request, \App\Models\Span $span) {
