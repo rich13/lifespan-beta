@@ -53,9 +53,9 @@ class TemporalRange
 
     public function overlaps(TemporalRange $other): bool
     {
-        // If both ranges are open-ended, they always overlap
+        // If both ranges are open-ended, they overlap only if they start at the same time
         if ($this->isOpenEnded() && $other->isOpenEnded()) {
-            return true;
+            return !$this->start->isAfter($other->start) && !$other->start->isAfter($this->start);
         }
 
         // If this range is open-ended, it overlaps if it starts before or at the same time as the other's end
