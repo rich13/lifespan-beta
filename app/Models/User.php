@@ -674,6 +674,20 @@ class User extends Authenticatable implements MustVerifyEmail
      */
     public function sendPasswordResetNotification($token)
     {
+        // Ensure we're sending to this user's email, not any other user
         $this->notify(new ResetPassword($token));
+    }
+
+    /**
+     * Route notifications for the mail channel.
+     * This ensures password reset emails go to the correct email address.
+     *
+     * @param  \Illuminate\Notifications\Notification  $notification
+     * @return string|array
+     */
+    public function routeNotificationForMail($notification)
+    {
+        // Always use this user's email address, never any other
+        return $this->email;
     }
 }

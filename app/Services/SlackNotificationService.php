@@ -107,6 +107,95 @@ class SlackNotificationService
     }
 
     /**
+     * Send notification for successful user sign in
+     */
+    public function notifyUserSignedIn(User $user, ?string $ip = null): void
+    {
+        if (!$this->shouldNotify('user_signed_in', null, 'info', $user)) {
+            return;
+        }
+
+        $data = [
+            'user_id' => $user->id,
+            'email' => $user->email,
+            'name' => $user->name ?? 'N/A',
+        ];
+
+        if ($ip) {
+            $data['ip'] = $ip;
+        }
+
+        $this->notifySystemEvent('User Signed In', $data, 'info');
+    }
+
+    /**
+     * Send notification for password reset request
+     */
+    public function notifyPasswordResetRequested(User $user, ?string $ip = null): void
+    {
+        if (!$this->shouldNotify('password_reset_requested', null, 'warning', $user)) {
+            return;
+        }
+
+        $data = [
+            'user_id' => $user->id,
+            'email' => $user->email,
+            'name' => $user->name ?? 'N/A',
+        ];
+
+        if ($ip) {
+            $data['ip'] = $ip;
+        }
+
+        $this->notifySystemEvent('Password Reset Requested', $data, 'warning');
+    }
+
+    /**
+     * Send notification for successful password reset
+     */
+    public function notifyPasswordResetCompleted(User $user, ?string $ip = null): void
+    {
+        if (!$this->shouldNotify('password_reset_completed', null, 'warning', $user)) {
+            return;
+        }
+
+        $data = [
+            'user_id' => $user->id,
+            'email' => $user->email,
+            'name' => $user->name ?? 'N/A',
+        ];
+
+        if ($ip) {
+            $data['ip'] = $ip;
+        }
+
+        $this->notifySystemEvent('Password Reset Completed', $data, 'warning');
+    }
+
+    /**
+     * Send notification for blocked sign-in attempt (approval/verification issues)
+     */
+    public function notifySignInBlocked(User $user, string $reason, ?string $ip = null): void
+    {
+        if (!$this->shouldNotify('sign_in_blocked', null, 'warning', $user)) {
+            return;
+        }
+
+        $data = [
+            'user_id' => $user->id,
+            'email' => $user->email,
+            'name' => $user->name ?? 'N/A',
+            'reason' => $reason,
+        ];
+
+        if ($ip) {
+            $data['ip'] = $ip;
+        }
+
+        $this->notifySystemEvent('Sign In Blocked', $data, 'warning');
+    }
+
+    /**
      * Send notification for suspicious registration patterns
      */
     public function notifySuspiciousRegistration(array $data): void

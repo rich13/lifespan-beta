@@ -1472,6 +1472,12 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
                 ->name('users.update');
             Route::post('/users/{user}/approve', [UserController::class, 'approve'])
                 ->name('users.approve');
+            Route::post('/users/{user}/unapprove', [UserController::class, 'unapprove'])
+                ->name('users.unapprove');
+            Route::post('/users/{user}/verify', [UserController::class, 'verify'])
+                ->name('users.verify');
+            Route::post('/users/{user}/unverify', [UserController::class, 'unverify'])
+                ->name('users.unverify');
             Route::delete('/users/{user}', [UserController::class, 'destroy'])
                 ->name('users.destroy');
 
