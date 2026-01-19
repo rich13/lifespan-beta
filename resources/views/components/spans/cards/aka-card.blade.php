@@ -75,6 +75,24 @@
         
         $names[$index]['is_current'] = $isActive;
     }
+    
+    // Check if any non-default name Connection is active on the current date
+    $hasActiveNameConnection = false;
+    foreach ($names as $nameData) {
+        if (!$nameData['is_default'] && $nameData['is_current']) {
+            $hasActiveNameConnection = true;
+            break;
+        }
+    }
+    
+    // If there's an active name Connection, filter out the default name
+    if ($hasActiveNameConnection) {
+        $names = array_filter($names, function($nameData) {
+            return !$nameData['is_default'];
+        });
+        // Re-index the array after filtering
+        $names = array_values($names);
+    }
 @endphp
 
 @if(count($nameConnections) > 0)

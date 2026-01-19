@@ -970,7 +970,12 @@ class ConfigurableStoryGeneratorService
     protected function callDataMethod(Span $span, string $method)
     {
         $result = match ($method) {
-            'getName' => $this->makeSpanLink($span->name, $span),
+            'getName' => $this->makeSpanLink(
+                $this->contextDate 
+                    ? $span->getTimeAwareName(Carbon::parse($this->contextDate))
+                    : $span->name, 
+                $span
+            ),
             'getFormattedStartDate' => $span->formatted_start_date,
             'getFormattedEndDate' => $span->formatted_end_date,
             'getHumanReadableBirthDate' => $this->getHumanReadableBirthDate($span),
@@ -1569,7 +1574,15 @@ class ConfigurableStoryGeneratorService
                     'start_date' => $connectionSpan?->formatted_start_date,
                     'end_date' => $connectionSpan?->formatted_end_date,
                 ];
-            });
+            })
+            ->sortBy(function ($residence) {
+                $year = $residence['start_year'] ?? $residence['end_year'] ?? PHP_INT_MAX;
+                $month = $residence['start_month'] ?? $residence['end_month'] ?? 12;
+                $day = $residence['start_day'] ?? $residence['end_day'] ?? 31;
+
+                return sprintf('%08d-%02d-%02d', $year, $month, $day);
+            })
+            ->values();
     }
 
     protected function getResidencePlaces(Span $person): string
