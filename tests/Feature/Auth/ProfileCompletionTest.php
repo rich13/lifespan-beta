@@ -189,14 +189,14 @@ class ProfileCompletionTest extends TestCase
         $user->save();
         
         // Middleware should allow unverified users to access routes (they need to verify email first)
-        // But home view requires personal span, so it will error - this is expected behavior
-        // Unverified users should verify email first, then complete profile
+        // The view now handles null personal span gracefully, so it renders successfully
+        // Unverified users can access home, but they should verify email first before completing profile
         $response = $this->actingAs($user)->get(route('home'));
         
-        // The middleware allows unverified users through, but the view will fail
-        // This is acceptable - unverified users should verify email first
-        // In practice, they'd be redirected to email verification
-        $response->assertStatus(500); // View error due to null personal span
+        // The middleware allows unverified users through (they need to verify email first)
+        // The view handles null personalSpan gracefully, so it returns 200
+        // In practice, unverified users would verify email, then complete profile
+        $response->assertStatus(200);
     }
 
     public function test_require_profile_completion_middleware_redirects_to_profile_completion(): void

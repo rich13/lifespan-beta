@@ -62,7 +62,8 @@ class CompleteProfileController extends Controller
                 'span_id' => $personalSpan->id,
             ]);
 
-            return redirect()->route('home');
+            return redirect()->route('home')
+                ->with('status', 'Welcome to Lifespan! Your profile has been set up.');
         } catch (\Exception $e) {
             Log::error('Failed to create personal span during profile completion', [
                 'user_id' => $user->id,
