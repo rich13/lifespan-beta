@@ -873,6 +873,13 @@ class SpanController extends Controller
                 $this->authorize('view', $subject);
             }
 
+            // Eager load common relationships to prevent N+1 queries
+            $subject->load([
+                'type', // Used in many components
+                'owner', // Used in access checks and displays
+                'updater', // Used in status displays
+            ]);
+
             // Check if this is a person and they have a Desert Island Discs set
             $desertIslandDiscsSet = null;
             if ($subject->type_id === 'person') {

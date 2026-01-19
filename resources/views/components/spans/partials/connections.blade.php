@@ -6,7 +6,11 @@
         $parentConnections = $span->connectionsAsSubjectWithAccess()
             ->whereNotNull('connection_span_id')
             ->whereHas('connectionSpan')
-            ->with(['connectionSpan', 'child', 'type'])
+            ->with([
+                'connectionSpan.type',
+                'child.type',
+                'type'
+            ])
             ->get()
             ->sortBy(function ($connection) {
                 return $connection->getEffectiveSortDate();
@@ -17,7 +21,11 @@
         $childConnections = $span->connectionsAsObjectWithAccess()
             ->whereNotNull('connection_span_id')
             ->whereHas('connectionSpan')
-            ->with(['connectionSpan', 'parent', 'type'])
+            ->with([
+                'connectionSpan.type',
+                'parent.type',
+                'type'
+            ])
             ->get()
             ->sortBy(function ($connection) {
                 return $connection->getEffectiveSortDate();
@@ -28,7 +36,12 @@
     $originalConnection = null;
     if ($span->type_id === 'connection') {
         $originalConnection = \App\Models\Connection::where('connection_span_id', $span->id)
-            ->with(['parent', 'child', 'type', 'connectionSpan'])
+            ->with([
+                'parent.type',
+                'child.type',
+                'type',
+                'connectionSpan.type'
+            ])
             ->first();
     }
 @endphp
