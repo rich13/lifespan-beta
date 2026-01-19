@@ -31,11 +31,11 @@ class RouteServiceProvider extends ServiceProvider
 
         Route::bind('span', function ($value) {
             // First try to find by slug since that's what we use in URLs
-            $span = Span::where('slug', $value)->first();
+            $span = Span::where('slug', $value)->with('type')->first();
             
             // If not found by slug and the value is a valid UUID, try finding by ID
             if (!$span && Str::isUuid($value)) {
-                $span = Span::where('id', $value)->first();
+                $span = Span::where('id', $value)->with('type')->first();
             }
 
             // If no span found, abort with 404
@@ -48,11 +48,11 @@ class RouteServiceProvider extends ServiceProvider
 
         Route::bind('subject', function ($value) {
             // First try to find by slug since that's what we use in URLs
-            $span = Span::where('slug', $value)->first();
+            $span = Span::where('slug', $value)->with('type')->first();
             
             // If not found by slug and the value is a valid UUID, try finding by ID
             if (!$span && Str::isUuid($value)) {
-                $span = Span::where('id', $value)->first();
+                $span = Span::where('id', $value)->with('type')->first();
             }
 
             // If no span found, abort with 404
