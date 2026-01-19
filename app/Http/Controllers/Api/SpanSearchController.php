@@ -75,6 +75,7 @@ class SpanSearchController extends Controller
 
         // Support multiple types (comma-separated) - takes precedence over single type
         $types = $request->get('types');
+        $typeArray = [];
         if ($types) {
             $typeArray = explode(',', $types);
             $spans->whereIn('type_id', $typeArray);
@@ -91,7 +92,7 @@ class SpanSearchController extends Controller
 
         // Add admin_level restriction if specified (for place spans)
         $adminLevel = $request->get('admin_level');
-        if ($adminLevel && ($type === 'place' || ($types && in_array('place', $typeArray ?? [])))) {
+        if ($adminLevel && ($type === 'place' || (!empty($typeArray) && in_array('place', $typeArray)))) {
             $adminLevelInt = (int) $adminLevel;
             
             // Map admin_level to subtype for reverse lookup
@@ -159,9 +160,12 @@ class SpanSearchController extends Controller
             }
         }
 
+        // Get limit from request, default to 10
+        $limit = (int) $request->get('limit', 10);
+
         // Get existing results with type information (including placeholders)
         $existingResults = $spans->with('type')
-            ->limit(20)
+            ->limit($limit)
             ->get()
             ->map(function ($span) {
                 return [
@@ -182,7 +186,7 @@ class SpanSearchController extends Controller
         // All spans must have IDs. If a placeholder span exists, it will be in $existingResults
 
         return response()->json([
-            'spans' => $results->take(20)->values()
+            'spans' => $results->take($limit)->values()
         ]);
     }
 
