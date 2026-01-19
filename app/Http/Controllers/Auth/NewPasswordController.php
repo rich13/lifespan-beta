@@ -10,6 +10,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules;
@@ -47,6 +48,15 @@ class NewPasswordController extends Controller
         $status = Password::reset(
             $request->only('email', 'password', 'password_confirmation', 'token'),
             function ($user) use ($request, &$userToLogin) {
+                // Auto-verify email since user has proven ownership by resetting password
+                if (!$user->hasVerifiedEmail()) {
+                    $user->email_verified_at = now();
+                    Log::info('Email auto-verified after password reset', [
+                        'user_id' => $user->id,
+                        'user_email' => $user->email,
+                    ]);
+                }
+                
                 $user->forceFill([
                     'password' => Hash::make($request->password),
                     'remember_token' => Str::random(60),
@@ -61,18 +71,7 @@ class NewPasswordController extends Controller
 
         // If the password was successfully reset, authenticate the user
         if ($status == Password::PASSWORD_RESET && $userToLogin) {
-            // Verify the user is approved and email is verified (same checks as login)
-            if (!$userToLogin->approved_at) {
-                return redirect()->route('login')
-                    ->withErrors(['email' => 'Your account is pending approval. You will receive an email once your account has been approved.']);
-            }
-            
-            if (!$userToLogin->hasVerifiedEmail()) {
-                return redirect()->route('login')
-                    ->withErrors(['email' => 'Please verify your email address before logging in. Check your inbox for the verification link.']);
-            }
-            
-            // Authenticate the user securely
+            // Always authenticate the user after password reset (they've proven email ownership)
             Auth::login($userToLogin);
             
             // Regenerate session for security
@@ -86,10 +85,41 @@ class NewPasswordController extends Controller
             // Generate session bridge token for handling redeploys
             $this->generateSessionBridgeToken($userToLogin);
             
+            // Send Slack notification for password reset completion
+            try {
+                $slackService = app(\App\Services\SlackNotificationService::class);
+                $slackService->notifyPasswordResetCompleted($userToLogin, $request->ip());
+            } catch (\Exception $e) {
+                Log::error('Failed to send Slack notification for password reset completion', [
+                    'error' => $e->getMessage()
+                ]);
+            }
+            
             // Store email in cookie for future logins (1 year expiration)
             $cookie = cookie('remembered_email', $userToLogin->email, 525600); // 1 year in minutes
             
-            return redirect(RouteServiceProvider::HOME)
+            // Get intended URL, but ignore API/status endpoints
+            $intendedUrl = $request->session()->pull('url.intended', RouteServiceProvider::HOME);
+            
+            // If intended URL is an API endpoint or status endpoint, ignore it
+            if ($intendedUrl && (
+                str_starts_with($intendedUrl, '/admin-mode/') ||
+                str_starts_with($intendedUrl, '/api/') ||
+                str_starts_with($intendedUrl, '/wikipedia/')
+            )) {
+                $intendedUrl = RouteServiceProvider::HOME;
+            }
+            
+            // Check if user is approved - show appropriate message
+            if (!$userToLogin->approved_at) {
+                // User is signed in but not approved - show approval pending message
+                return redirect($intendedUrl)
+                    ->with('status', 'Your password has been reset and your email has been verified. Your account is pending admin approval. You will receive an email once your account has been approved.')
+                    ->with('approval_pending', true)
+                    ->withCookie($cookie);
+            }
+            
+            return redirect($intendedUrl)
                 ->with('status', 'Your password has been reset and you have been signed in.')
                 ->withCookie($cookie);
         }

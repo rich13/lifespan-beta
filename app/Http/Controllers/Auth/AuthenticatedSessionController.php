@@ -38,7 +38,19 @@ class AuthenticatedSessionController extends Controller
         // Generate session bridge token for handling redeploys
         $this->generateSessionBridgeToken($user);
 
-        return redirect()->intended(RouteServiceProvider::HOME);
+        // Get intended URL, but ignore API/status endpoints
+        $intendedUrl = $request->session()->pull('url.intended', RouteServiceProvider::HOME);
+        
+        // If intended URL is an API endpoint or status endpoint, ignore it
+        if ($intendedUrl && (
+            str_starts_with($intendedUrl, '/admin-mode/') ||
+            str_starts_with($intendedUrl, '/api/') ||
+            str_starts_with($intendedUrl, '/wikipedia/')
+        )) {
+            $intendedUrl = RouteServiceProvider::HOME;
+        }
+        
+        return redirect($intendedUrl);
     }
 
     /**

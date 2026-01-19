@@ -36,6 +36,18 @@ class ConfirmablePasswordController extends Controller
 
         $request->session()->put('auth.password_confirmed_at', time());
 
-        return redirect()->intended(RouteServiceProvider::HOME);
+        // Get intended URL, but ignore API/status endpoints
+        $intendedUrl = $request->session()->pull('url.intended', RouteServiceProvider::HOME);
+        
+        // If intended URL is an API endpoint or status endpoint, ignore it
+        if ($intendedUrl && (
+            str_starts_with($intendedUrl, '/admin-mode/') ||
+            str_starts_with($intendedUrl, '/api/') ||
+            str_starts_with($intendedUrl, '/wikipedia/')
+        )) {
+            $intendedUrl = RouteServiceProvider::HOME;
+        }
+        
+        return redirect($intendedUrl);
     }
 }

@@ -15,8 +15,22 @@ class EmailVerificationPromptController extends Controller
      */
     public function __invoke(Request $request): RedirectResponse|View
     {
-        return $request->user()->hasVerifiedEmail()
-                    ? redirect()->intended(RouteServiceProvider::HOME)
-                    : view('auth.verify-email');
+        if ($request->user()->hasVerifiedEmail()) {
+            // Get intended URL, but ignore API/status endpoints
+            $intendedUrl = $request->session()->pull('url.intended', RouteServiceProvider::HOME);
+            
+            // If intended URL is an API endpoint or status endpoint, ignore it
+            if ($intendedUrl && (
+                str_starts_with($intendedUrl, '/admin-mode/') ||
+                str_starts_with($intendedUrl, '/api/') ||
+                str_starts_with($intendedUrl, '/wikipedia/')
+            )) {
+                $intendedUrl = RouteServiceProvider::HOME;
+            }
+            
+            return redirect($intendedUrl);
+        }
+        
+        return view('auth.verify-email');
     }
 }

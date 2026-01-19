@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Providers\RouteServiceProvider;
+use App\Services\SlackNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -42,7 +43,25 @@ class EmailFirstAuthController extends Controller
         $user = User::where('email', $request->email)->first();
 
         if ($user) {
-            // User exists - redirect to password login form
+            // User exists - check approval and verification status before asking for password
+            if (!$user->approved_at) {
+                // User is not approved - show message on email form instead of asking for password
+                return redirect()->route('login')
+                    ->withInput(['email' => $request->email])
+                    ->with('approval_pending', true)
+                    ->withErrors([
+                        'email' => 'Your account is pending admin approval. You will receive an email once your account has been approved.'
+                    ]);
+            }
+            
+            if (!$user->hasVerifiedEmail()) {
+                // User is not verified - still allow password entry but will show verification message
+                // (We check verification again after password entry)
+                return redirect()->route('auth.password')
+                    ->with('email', $request->email);
+            }
+            
+            // User is approved and verified - proceed to password form
             return redirect()->route('auth.password')
                 ->with('email', $request->email);
         } else {
@@ -91,12 +110,26 @@ class EmailFirstAuthController extends Controller
             
             // Check if user is approved
             if (!$user->approved_at) {
-                Auth::logout();
-                $request->session()->invalidate();
-                $request->session()->regenerateToken();
+                $email = $request->email;
                 
-                return back()
-                    ->withInput(['email' => $request->email])
+                // Send Slack notification for blocked sign-in
+                try {
+                    $slackService = app(SlackNotificationService::class);
+                    $slackService->notifySignInBlocked($user, 'Account pending approval', $request->ip());
+                } catch (\Exception $e) {
+                    Log::error('Failed to send Slack notification for blocked sign-in', [
+                        'error' => $e->getMessage()
+                    ]);
+                }
+                
+                // Logout and regenerate session (don't invalidate - we need to preserve flash data)
+                Auth::logout();
+                $request->session()->regenerate();
+                
+                // Redirect to password form with flash data
+                return redirect()->route('auth.password')
+                    ->with('email', $email)
+                    ->with('approval_pending', true)
                     ->withErrors([
                         'email' => 'Your account is pending approval. You will receive an email once your account has been approved.'
                     ]);
@@ -104,12 +137,25 @@ class EmailFirstAuthController extends Controller
             
             // Check if email is verified
             if (!$user->hasVerifiedEmail()) {
-                Auth::logout();
-                $request->session()->invalidate();
-                $request->session()->regenerateToken();
+                $email = $request->email;
                 
-                return back()
-                    ->withInput(['email' => $request->email])
+                // Send Slack notification for blocked sign-in
+                try {
+                    $slackService = app(SlackNotificationService::class);
+                    $slackService->notifySignInBlocked($user, 'Email not verified', $request->ip());
+                } catch (\Exception $e) {
+                    Log::error('Failed to send Slack notification for blocked sign-in', [
+                        'error' => $e->getMessage()
+                    ]);
+                }
+                
+                // Logout and regenerate session (don't invalidate - we need to preserve flash data)
+                Auth::logout();
+                $request->session()->regenerate();
+                
+                // Redirect to password form with flash data
+                return redirect()->route('auth.password')
+                    ->with('email', $email)
                     ->withErrors([
                         'email' => 'Please verify your email address before logging in. Check your inbox for the verification email we sent when you registered.'
                     ]);
@@ -124,10 +170,32 @@ class EmailFirstAuthController extends Controller
             // Generate session bridge token for handling redeploys
             $this->generateSessionBridgeToken($user);
             
+            // Send Slack notification for successful sign-in
+            try {
+                $slackService = app(SlackNotificationService::class);
+                $slackService->notifyUserSignedIn($user, $request->ip());
+            } catch (\Exception $e) {
+                Log::error('Failed to send Slack notification for sign-in', [
+                    'error' => $e->getMessage()
+                ]);
+            }
+            
             // Store email in cookie for future logins (1 year expiration)
             $cookie = cookie('remembered_email', $request->email, 525600); // 1 year in minutes
             
-            return redirect()->intended(RouteServiceProvider::HOME)
+            // Get intended URL, but ignore API/status endpoints
+            $intendedUrl = $request->session()->pull('url.intended', RouteServiceProvider::HOME);
+            
+            // If intended URL is an API endpoint or status endpoint, ignore it
+            if ($intendedUrl && (
+                str_starts_with($intendedUrl, '/admin-mode/') ||
+                str_starts_with($intendedUrl, '/api/') ||
+                str_starts_with($intendedUrl, '/wikipedia/')
+            )) {
+                $intendedUrl = RouteServiceProvider::HOME;
+            }
+            
+            return redirect($intendedUrl)
                 ->withCookie($cookie);
         }
 

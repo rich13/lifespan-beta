@@ -15,14 +15,26 @@ class VerifyEmailController extends Controller
      */
     public function __invoke(EmailVerificationRequest $request): RedirectResponse
     {
+        // Get intended URL, but ignore API/status endpoints
+        $intendedUrl = $request->session()->pull('url.intended', RouteServiceProvider::HOME.'?verified=1');
+        
+        // If intended URL is an API endpoint or status endpoint, ignore it
+        if ($intendedUrl && (
+            str_starts_with($intendedUrl, '/admin-mode/') ||
+            str_starts_with($intendedUrl, '/api/') ||
+            str_starts_with($intendedUrl, '/wikipedia/')
+        )) {
+            $intendedUrl = RouteServiceProvider::HOME.'?verified=1';
+        }
+        
         if ($request->user()->hasVerifiedEmail()) {
-            return redirect()->intended(RouteServiceProvider::HOME.'?verified=1');
+            return redirect($intendedUrl);
         }
 
         if ($request->user()->markEmailAsVerified()) {
             event(new Verified($request->user()));
         }
 
-        return redirect()->intended(RouteServiceProvider::HOME.'?verified=1');
+        return redirect($intendedUrl);
     }
 }
