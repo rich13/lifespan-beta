@@ -396,13 +396,15 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
                     <!-- Guest Content Area -->
                     <div class="row">
                         <div class="col-12 bg-light py-3 px-3">
-                            <div class="header-section mb-4">
-                                @yield('header')
+                        <div class="header-section mb-4">
+                            @yield('header')
+                            @unless(request()->routeIs('password.request') || request()->routeIs('password.reset') || request()->routeIs('password.store') || request()->routeIs('auth.password') || request()->routeIs('auth.password.submit') || request()->routeIs('login') || request()->routeIs('register') || request()->routeIs('register.pending') || request()->routeIs('verification.notice') || request()->routeIs('verification.send'))
                                 <x-flash-messages />
-                            </div>
-                            <div class="guest-content-wrapper">
-                                @yield('content')
-                            </div>
+                            @endunless
+                        </div>
+                        <div class="guest-content-wrapper">
+                            @yield('content')
+                        </div>
                         </div>
                     </div>
                 @else
@@ -445,11 +447,13 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
                         
                         <!-- Page Content -->
                         <div class="py-3 px-3">
-                            <div class="header-section mb-4">
-                                @yield('header')
+                        <div class="header-section mb-4">
+                            @yield('header')
+                            @unless(request()->routeIs('password.request') || request()->routeIs('password.reset') || request()->routeIs('password.store') || request()->routeIs('auth.password') || request()->routeIs('auth.password.submit') || request()->routeIs('login') || request()->routeIs('register') || request()->routeIs('register.pending') || request()->routeIs('verification.notice') || request()->routeIs('verification.send'))
                                 <x-flash-messages />
-                            </div>
-                            @yield('content')
+                            @endunless
+                        </div>
+                        @yield('content')
                         </div>
                     </div>
                 </div>
@@ -468,7 +472,9 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
                     <div class="col-12 bg-light py-3 px-3">
                         <div class="header-section mb-4">
                             @yield('header')
-                            <x-flash-messages />
+                            @unless(request()->routeIs('password.request') || request()->routeIs('password.reset') || request()->routeIs('password.store') || request()->routeIs('auth.password') || request()->routeIs('auth.password.submit') || request()->routeIs('login') || request()->routeIs('register') || request()->routeIs('register.pending') || request()->routeIs('verification.notice') || request()->routeIs('verification.send'))
+                                <x-flash-messages />
+                            @endunless
                         </div>
                         <div class="guest-content-wrapper">
                             @yield('content')

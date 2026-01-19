@@ -5,8 +5,8 @@
     <div class="row justify-content-center">
         <div class="col-md-8 col-lg-6">
             <div class="card">
-                <div class="card-body text-center">
-                    <h2 class="card-title mb-4">Almost there...</h2>
+                <div class="card-body">
+                    <h2 class="card-title mb-4 text-center">Almost there...</h2>
                                                           
                     <div class="alert alert-info mb-4">
                         <h5 class="alert-heading">Verify your email and wait for approval</h5>

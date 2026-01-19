@@ -252,6 +252,11 @@
                 return;
             }
             
+            @if(!$personalSpan)
+                alert('Personal span not available. Please contact support.');
+                return;
+            @endif
+            
             // Show loading state
             btn.prop('disabled', true);
             btn.html('<span class="loading-spinner"></span> Submitting...');
@@ -262,7 +267,7 @@
                 method: 'POST',
                 data: {
                     subject_id: selectedSpan.id,
-                    object_id: '{{ $personalSpan->id }}',
+                    object_id: '{{ $personalSpan?->id ?? '' }}',
                     connection_type_id: connectionType,
                     _token: $('meta[name="csrf-token"]').attr('content')
                 },
@@ -681,9 +686,14 @@
                                 console.log('Completion modal dismissed and flag set');
                                 
                                 // Redirect to user's personal span
-                                const personalSpanUrl = '{{ route("spans.show", auth()->user()->personalSpan) }}';
-                                console.log('Redirecting to personal span:', personalSpanUrl);
-                                window.location.href = personalSpanUrl;
+                                @if($personalSpan)
+                                    const personalSpanUrl = '{{ route("spans.show", $personalSpan) }}';
+                                    console.log('Redirecting to personal span:', personalSpanUrl);
+                                    window.location.href = personalSpanUrl;
+                                @else
+                                    console.error('Personal span not available');
+                                    window.location.href = '/';
+                                @endif
                             });
                             
                             // Add a small delay to ensure everything is ready

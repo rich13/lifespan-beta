@@ -1,3 +1,13 @@
+@php
+    // Only show approval message when user is authenticated but not approved
+    // Auth pages handle this message themselves within their form cards
+    $showApprovalMessage = auth()->check() && !auth()->user()->approved_at;
+@endphp
+
+@if($showApprovalMessage)
+    <x-auth.approval-pending-alert :dismissible="true" />
+@endif
+
 @if(session('status'))
     <div class="alert alert-success alert-dismissible fade show mb-4" role="alert">
         {{ session('status') }}

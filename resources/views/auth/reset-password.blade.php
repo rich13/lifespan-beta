@@ -8,6 +8,12 @@
                 <div class="card-body">
                     <h2 class="card-title text-center mb-4">Reset Password</h2>
                     
+                    @if (session('status'))
+                        <div class="alert alert-success mb-4">
+                            {{ session('status') }}
+                        </div>
+                    @endif
+                    
                     <form method="POST" action="{{ route('password.store') }}">
                         @csrf
 

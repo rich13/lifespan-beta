@@ -8,23 +8,20 @@
                 <div class="card-body">
                     <h2 class="card-title text-center mb-4">Sign In</h2>
                     
-                    @if (session('status'))
-                        <div class="alert alert-success mb-4">
-                            {{ session('status') }}
-                        </div>
-                    @endif
+                    @php
+                        $emailError = $errors->has('email') ? $errors->first('email') : null;
+                        $isApprovalError = $emailError && (str_contains($emailError, 'pending approval') || str_contains($emailError, 'approved'));
+                        $isVerificationError = $emailError && (str_contains($emailError, 'verify') || str_contains($emailError, 'verification'));
+                    @endphp
                     
-                    @if ($errors->has('email'))
-                        <div class="alert alert-warning mb-4">
-                            <strong>Email Verification Required</strong>
-                            <p class="mb-2">{{ $errors->first('email') }}</p>
-                            <form method="POST" action="{{ route('verification.resend') }}" class="d-inline">
-                                @csrf
-                                <input type="hidden" name="email" value="{{ $email }}">
-                                <button type="submit" class="btn btn-sm btn-outline-primary">
-                                    Resend Verification Email
-                                </button>
-                            </form>
+                    @if (session('approval_pending') || $isApprovalError)
+                        <x-auth.approval-pending-alert />
+                    @elseif ($isVerificationError)
+                        <x-auth.verification-required-alert :email="$email" />
+                    @elseif ($errors->has('email') && !$isApprovalError && !$isVerificationError)
+                        <div class="alert alert-danger mb-4">
+                            <strong>Error</strong>
+                            <p class="mb-0">{{ $emailError }}</p>
                         </div>
                     @endif
                     
@@ -37,9 +34,9 @@
                             <input type="email" class="form-control bg-light" 
                                    id="email_display" name="email_display" 
                                    value="{{ $email }}" readonly>
-                            @error('email')
-                                <div class="invalid-feedback d-block">{{ $message }}</div>
-                            @enderror
+                            @if ($errors->has('email') && !$isApprovalError && !$isVerificationError)
+                                <div class="invalid-feedback d-block">{{ $errors->first('email') }}</div>
+                            @endif
                         </div>
                         
                         <div class="mb-3">
