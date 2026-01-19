@@ -491,7 +491,7 @@
     <div class="card-header">
         <h3 class="h6 mb-0">
             <i class="bi bi-arrow-left-right text-primary me-2"></i>
-            At Your Age
+            At Your Age Today
         </h3>
     </div>
     <div class="card-body">
@@ -543,7 +543,16 @@
                                         @endif
                                         <div class="flex-grow-1">
                                     @foreach($comparison['story']['paragraphs'] as $paragraph)
-                                        <p class="mb-2 small">{!! $paragraph !!}</p>
+                                        @php
+                                            $dateText = $comparison['date']->format('j F Y');
+                                            $dateUrl = url('/date/' . $comparison['date']->format('Y-m-d'));
+                                            $linkedParagraph = str_replace(
+                                                $dateText,
+                                                '<a href="' . $dateUrl . '" class="text-decoration-none">' . $dateText . '</a>',
+                                                $paragraph
+                                            );
+                                        @endphp
+                                        <p class="mb-2 small">{!! $linkedParagraph !!}</p>
                                     @endforeach
                                         </div>
                                     </div>

@@ -1,34 +1,23 @@
 @php
-    // First, try to find a person with a significant anniversary (preferably today)
-    // This will check death anniversaries with photos, significance >= 50, within 7 days
-    $featuredPerson = \App\Helpers\AnniversaryHelper::getHighestScoringPerson(
-        \App\Helpers\DateHelper::getCurrentDate(),
-        7, // Within 7 days
-        50 // Minimum significance (5th, 10th, 20th, etc.)
-    );
+    // First, try to find a person with a significant anniversary
+    // Uses the same anniversaries list, just takes the first death anniversary
+    $featuredPerson = \App\Helpers\AnniversaryHelper::getHighestScoringPerson();
     
     // Otherwise, fall back to random selection
     if (!$featuredPerson) {
-        // Find a random person with connections and a photo
+        // Find a random person with connections (no photo requirement)
         $minConnections = 5; // Minimum number of connections required
         
-        // Get people with photos
-        $peopleWithPhotos = \App\Models\Span::where('type_id', 'person')
+        // Get people (no photo requirement)
+        $people = \App\Models\Span::where('type_id', 'person')
             ->where('access_level', 'public')
             ->where('state', 'complete')
-            ->whereHas('connectionsAsObject', function($query) {
-                $query->where('type_id', 'features')
-                      ->whereHas('parent', function($q) {
-                          $q->where('type_id', 'thing')
-                            ->whereJsonContains('metadata->subtype', 'photo');
-                      });
-            })
             ->inRandomOrder()
             ->limit(50) // Limit to 50 candidates for performance
             ->get();
         
         // Filter to only include people with enough connections
-        $qualifiedPeople = $peopleWithPhotos->filter(function($person) use ($minConnections) {
+        $qualifiedPeople = $people->filter(function($person) use ($minConnections) {
             // Count all connections (excluding self-referential and 'contains' connections)
             $connectionCount = \App\Models\Connection::where(function($query) use ($person) {
                 $query->where('parent_id', $person->id)
@@ -101,15 +90,20 @@
     <div class="card-body">
         @if($story && !empty($story['paragraphs']) && !isset($story['error']))
             <div class="story-preview mb-3">
-                @if($photoUrl)
-                    <a href="{{ route('spans.show', $featuredPerson) }}" class="text-decoration-none float-start me-3 mb-2">
+                <a href="{{ route('spans.show', $featuredPerson) }}" class="text-decoration-none float-start me-3 mb-2">
+                    @if($photoUrl)
                         <img src="{{ $photoUrl }}" 
                              alt="{{ $featuredPerson->name }}" 
                              class="rounded"
                              style="width: 120px; height: 120px; object-fit: cover;"
                              loading="lazy">
-                    </a>
-                @endif
+                    @else
+                        <div class="rounded bg-light d-flex align-items-center justify-content-center" 
+                             style="width: 120px; height: 120px;">
+                            <i class="bi bi-image text-muted" style="font-size: 3rem;"></i>
+                        </div>
+                    @endif
+                </a>
                 @php
                     // Get the first paragraph and clean it
                     $firstParagraph = $story['paragraphs'][0];
@@ -121,15 +115,22 @@
                 <p class="small mb-0">{!! $cleanParagraph !!}</p>
                 <div class="clearfix"></div>
             </div>
-        @elseif($photoUrl)
-            {{-- Show photo even if no story --}}
+        @else
+            {{-- Show photo or placeholder even if no story --}}
             <div class="text-center mb-3">
                 <a href="{{ route('spans.show', $featuredPerson) }}" class="text-decoration-none">
-                    <img src="{{ $photoUrl }}" 
-                         alt="{{ $featuredPerson->name }}" 
-                         class="rounded"
-                         style="width: 120px; height: 120px; object-fit: cover;"
-                         loading="lazy">
+                    @if($photoUrl)
+                        <img src="{{ $photoUrl }}" 
+                             alt="{{ $featuredPerson->name }}" 
+                             class="rounded"
+                             style="width: 120px; height: 120px; object-fit: cover;"
+                             loading="lazy">
+                    @else
+                        <div class="rounded bg-light d-flex align-items-center justify-content-center mx-auto" 
+                             style="width: 120px; height: 120px;">
+                            <i class="bi bi-image text-muted" style="font-size: 3rem;"></i>
+                        </div>
+                    @endif
                 </a>
             </div>
         @endif

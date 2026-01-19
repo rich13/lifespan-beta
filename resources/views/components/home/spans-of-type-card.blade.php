@@ -470,6 +470,36 @@
                     $isFilm = $type === 'thing' && $subtype === 'film';
                     $isBand = $type === 'band';
                     $isEvent = $type === 'event';
+
+                    $itemDateHtml = null;
+                    if ($item->start_year) {
+                        if ($item->start_month && $item->start_day) {
+                            $itemDateText = \App\Helpers\DateHelper::formatDate($item->start_year, $item->start_month, $item->start_day);
+                            $itemDateSlug = sprintf('%04d-%02d-%02d', $item->start_year, $item->start_month, $item->start_day);
+                        } elseif ($item->start_month) {
+                            $itemDateText = \Carbon\Carbon::createFromDate($item->start_year, $item->start_month, 1)->format('F Y');
+                            $itemDateSlug = sprintf('%04d-%02d', $item->start_year, $item->start_month);
+                        } else {
+                            $itemDateText = (string) $item->start_year;
+                            $itemDateSlug = sprintf('%04d', $item->start_year);
+                        }
+                        $itemDateHtml = '<a href="' . url('/date/' . $itemDateSlug) . '" class="text-decoration-none">' . $itemDateText . '</a>';
+                    }
+
+                    $relatedItemDateHtml = null;
+                    if ($relatedItem && $relatedItem->start_year) {
+                        if ($relatedItem->start_month && $relatedItem->start_day) {
+                            $relatedItemDateText = \App\Helpers\DateHelper::formatDate($relatedItem->start_year, $relatedItem->start_month, $relatedItem->start_day);
+                            $relatedItemDateSlug = sprintf('%04d-%02d-%02d', $relatedItem->start_year, $relatedItem->start_month, $relatedItem->start_day);
+                        } elseif ($relatedItem->start_month) {
+                            $relatedItemDateText = \Carbon\Carbon::createFromDate($relatedItem->start_year, $relatedItem->start_month, 1)->format('F Y');
+                            $relatedItemDateSlug = sprintf('%04d-%02d', $relatedItem->start_year, $relatedItem->start_month);
+                        } else {
+                            $relatedItemDateText = (string) $relatedItem->start_year;
+                            $relatedItemDateSlug = sprintf('%04d', $relatedItem->start_year);
+                        }
+                        $relatedItemDateHtml = '<a href="' . url('/date/' . $relatedItemDateSlug) . '" class="text-decoration-none">' . $relatedItemDateText . '</a>';
+                    }
                 @endphp
                 
                 <div class="mb-3">
@@ -505,87 +535,87 @@
                                     @if($item->start_year)
                                         @if($userAgeAtStart !== null)
                                             @if($isBook)
-                                                was published in {{ $item->start_year }}, when you were {{ $userAgeAtStart }}.
+                                                was published in {!! $itemDateHtml !!}, when you were {{ $userAgeAtStart }}.
                                             @elseif($isFilm)
-                                                was released in {{ $item->start_year }}, when you were {{ $userAgeAtStart }}.
+                                                was released in {!! $itemDateHtml !!}, when you were {{ $userAgeAtStart }}.
                                             @elseif($isBand)
-                                                formed in {{ $item->start_year }}, when you were {{ $userAgeAtStart }}.
+                                                formed in {!! $itemDateHtml !!}, when you were {{ $userAgeAtStart }}.
                                             @elseif($isEvent && $isSameDayEvent)
-                                                happened in {{ $item->start_year }}, when you were {{ $userAgeAtStart }}.
+                                                happened on {!! $itemDateHtml !!}, when you were {{ $userAgeAtStart }}.
                                             @elseif($isEvent)
-                                                started in {{ $item->start_year }}, when you were {{ $userAgeAtStart }}.
+                                                started in {!! $itemDateHtml !!}, when you were {{ $userAgeAtStart }}.
                                             @else
-                                                started in {{ $item->start_year }}, when you were {{ $userAgeAtStart }}.
+                                                started in {!! $itemDateHtml !!}, when you were {{ $userAgeAtStart }}.
                                             @endif
                                         @elseif($parentAgeAtStart !== null && $parentName)
                                             @if($isBook)
-                                                was published in {{ $item->start_year }}, when your {{ $parentName }}@if($parentPerson) (<a href="{{ route('spans.show', $parentPerson) }}" class="text-decoration-none">{{ $parentPerson->name }}</a>)@endif was {{ $parentAgeAtStart }}.
+                                                was published in {!! $itemDateHtml !!}, when your {{ $parentName }}@if($parentPerson) (<a href="{{ route('spans.show', $parentPerson) }}" class="text-decoration-none">{{ $parentPerson->name }}</a>)@endif was {{ $parentAgeAtStart }}.
                                             @elseif($isFilm)
-                                                was released in {{ $item->start_year }}, when your {{ $parentName }}@if($parentPerson) (<a href="{{ route('spans.show', $parentPerson) }}" class="text-decoration-none">{{ $parentPerson->name }}</a>)@endif was {{ $parentAgeAtStart }}.
+                                                was released in {!! $itemDateHtml !!}, when your {{ $parentName }}@if($parentPerson) (<a href="{{ route('spans.show', $parentPerson) }}" class="text-decoration-none">{{ $parentPerson->name }}</a>)@endif was {{ $parentAgeAtStart }}.
                                             @elseif($isBand)
-                                                formed in {{ $item->start_year }}, when your {{ $parentName }}@if($parentPerson) (<a href="{{ route('spans.show', $parentPerson) }}" class="text-decoration-none">{{ $parentPerson->name }}</a>)@endif was {{ $parentAgeAtStart }}.
+                                                formed in {!! $itemDateHtml !!}, when your {{ $parentName }}@if($parentPerson) (<a href="{{ route('spans.show', $parentPerson) }}" class="text-decoration-none">{{ $parentPerson->name }}</a>)@endif was {{ $parentAgeAtStart }}.
                                             @elseif($isEvent && $isSameDayEvent)
-                                                happened in {{ $item->start_year }}, when your {{ $parentName }}@if($parentPerson) (<a href="{{ route('spans.show', $parentPerson) }}" class="text-decoration-none">{{ $parentPerson->name }}</a>)@endif was {{ $parentAgeAtStart }}.
+                                                happened on {!! $itemDateHtml !!}, when your {{ $parentName }}@if($parentPerson) (<a href="{{ route('spans.show', $parentPerson) }}" class="text-decoration-none">{{ $parentPerson->name }}</a>)@endif was {{ $parentAgeAtStart }}.
                                             @elseif($isEvent)
-                                                started in {{ $item->start_year }}, when your {{ $parentName }}@if($parentPerson) (<a href="{{ route('spans.show', $parentPerson) }}" class="text-decoration-none">{{ $parentPerson->name }}</a>)@endif was {{ $parentAgeAtStart }}.
+                                                started in {!! $itemDateHtml !!}, when your {{ $parentName }}@if($parentPerson) (<a href="{{ route('spans.show', $parentPerson) }}" class="text-decoration-none">{{ $parentPerson->name }}</a>)@endif was {{ $parentAgeAtStart }}.
                                             @else
-                                                started in {{ $item->start_year }}, when your {{ $parentName }}@if($parentPerson) (<a href="{{ route('spans.show', $parentPerson) }}" class="text-decoration-none">{{ $parentPerson->name }}</a>)@endif was {{ $parentAgeAtStart }}.
+                                                started in {!! $itemDateHtml !!}, when your {{ $parentName }}@if($parentPerson) (<a href="{{ route('spans.show', $parentPerson) }}" class="text-decoration-none">{{ $parentPerson->name }}</a>)@endif was {{ $parentAgeAtStart }}.
                                             @endif
                                         @elseif($grandparentAgeAtStart !== null && $grandparentName)
                                             @if($isBook)
-                                                was published in {{ $item->start_year }}, when your {{ $grandparentName }}@if($grandparentPerson) (<a href="{{ route('spans.show', $grandparentPerson) }}" class="text-decoration-none">{{ $grandparentPerson->name }}</a>)@endif was {{ $grandparentAgeAtStart }}.
+                                                was published in {!! $itemDateHtml !!}, when your {{ $grandparentName }}@if($grandparentPerson) (<a href="{{ route('spans.show', $grandparentPerson) }}" class="text-decoration-none">{{ $grandparentPerson->name }}</a>)@endif was {{ $grandparentAgeAtStart }}.
                                             @elseif($isFilm)
-                                                was released in {{ $item->start_year }}, when your {{ $grandparentName }}@if($grandparentPerson) (<a href="{{ route('spans.show', $grandparentPerson) }}" class="text-decoration-none">{{ $grandparentPerson->name }}</a>)@endif was {{ $grandparentAgeAtStart }}.
+                                                was released in {!! $itemDateHtml !!}, when your {{ $grandparentName }}@if($grandparentPerson) (<a href="{{ route('spans.show', $grandparentPerson) }}" class="text-decoration-none">{{ $grandparentPerson->name }}</a>)@endif was {{ $grandparentAgeAtStart }}.
                                             @elseif($isBand)
-                                                formed in {{ $item->start_year }}, when your {{ $grandparentName }}@if($grandparentPerson) (<a href="{{ route('spans.show', $grandparentPerson) }}" class="text-decoration-none">{{ $grandparentPerson->name }}</a>)@endif was {{ $grandparentAgeAtStart }}.
+                                                formed in {!! $itemDateHtml !!}, when your {{ $grandparentName }}@if($grandparentPerson) (<a href="{{ route('spans.show', $grandparentPerson) }}" class="text-decoration-none">{{ $grandparentPerson->name }}</a>)@endif was {{ $grandparentAgeAtStart }}.
                                             @elseif($isEvent && $isSameDayEvent)
-                                                happened in {{ $item->start_year }}, when your {{ $grandparentName }}@if($grandparentPerson) (<a href="{{ route('spans.show', $grandparentPerson) }}" class="text-decoration-none">{{ $grandparentPerson->name }}</a>)@endif was {{ $grandparentAgeAtStart }}.
+                                                happened on {!! $itemDateHtml !!}, when your {{ $grandparentName }}@if($grandparentPerson) (<a href="{{ route('spans.show', $grandparentPerson) }}" class="text-decoration-none">{{ $grandparentPerson->name }}</a>)@endif was {{ $grandparentAgeAtStart }}.
                                             @elseif($isEvent)
-                                                started in {{ $item->start_year }}, when your {{ $grandparentName }}@if($grandparentPerson) (<a href="{{ route('spans.show', $grandparentPerson) }}" class="text-decoration-none">{{ $grandparentPerson->name }}</a>)@endif was {{ $grandparentAgeAtStart }}.
+                                                started in {!! $itemDateHtml !!}, when your {{ $grandparentName }}@if($grandparentPerson) (<a href="{{ route('spans.show', $grandparentPerson) }}" class="text-decoration-none">{{ $grandparentPerson->name }}</a>)@endif was {{ $grandparentAgeAtStart }}.
                                             @else
-                                                started in {{ $item->start_year }}, when your {{ $grandparentName }}@if($grandparentPerson) (<a href="{{ route('spans.show', $grandparentPerson) }}" class="text-decoration-none">{{ $grandparentPerson->name }}</a>)@endif was {{ $grandparentAgeAtStart }}.
+                                                started in {!! $itemDateHtml !!}, when your {{ $grandparentName }}@if($grandparentPerson) (<a href="{{ route('spans.show', $grandparentPerson) }}" class="text-decoration-none">{{ $grandparentPerson->name }}</a>)@endif was {{ $grandparentAgeAtStart }}.
                                             @endif
                                         @elseif($yearsBeforeParent !== null && $parentForFallback)
                                             @if($isBook)
-                                                was published in {{ $item->start_year }}, {{ $yearsBeforeParent }} {{ Str::plural('year', $yearsBeforeParent) }} before your {{ $parentForFallback }} was born.
+                                                was published in {!! $itemDateHtml !!}, {{ $yearsBeforeParent }} {{ Str::plural('year', $yearsBeforeParent) }} before your {{ $parentForFallback }} was born.
                                             @elseif($isFilm)
-                                                was released in {{ $item->start_year }}, {{ $yearsBeforeParent }} {{ Str::plural('year', $yearsBeforeParent) }} before your {{ $parentForFallback }} was born.
+                                                was released in {!! $itemDateHtml !!}, {{ $yearsBeforeParent }} {{ Str::plural('year', $yearsBeforeParent) }} before your {{ $parentForFallback }} was born.
                                             @elseif($isBand)
-                                                formed in {{ $item->start_year }}, {{ $yearsBeforeParent }} {{ Str::plural('year', $yearsBeforeParent) }} before your {{ $parentForFallback }} was born.
+                                                formed in {!! $itemDateHtml !!}, {{ $yearsBeforeParent }} {{ Str::plural('year', $yearsBeforeParent) }} before your {{ $parentForFallback }} was born.
                                             @elseif($isEvent && $isSameDayEvent)
-                                                happened in {{ $item->start_year }}, {{ $yearsBeforeParent }} {{ Str::plural('year', $yearsBeforeParent) }} before your {{ $parentForFallback }} was born.
+                                                happened on {!! $itemDateHtml !!}, {{ $yearsBeforeParent }} {{ Str::plural('year', $yearsBeforeParent) }} before your {{ $parentForFallback }} was born.
                                             @elseif($isEvent)
-                                                started in {{ $item->start_year }}, {{ $yearsBeforeParent }} {{ Str::plural('year', $yearsBeforeParent) }} before your {{ $parentForFallback }} was born.
+                                                started in {!! $itemDateHtml !!}, {{ $yearsBeforeParent }} {{ Str::plural('year', $yearsBeforeParent) }} before your {{ $parentForFallback }} was born.
                                             @else
-                                                started in {{ $item->start_year }}, {{ $yearsBeforeParent }} {{ Str::plural('year', $yearsBeforeParent) }} before your {{ $parentForFallback }} was born.
+                                                started in {!! $itemDateHtml !!}, {{ $yearsBeforeParent }} {{ Str::plural('year', $yearsBeforeParent) }} before your {{ $parentForFallback }} was born.
                                             @endif
                                         @elseif($yearsBeforeUser !== null)
                                             @if($isBook)
-                                                was published in {{ $item->start_year }}, {{ $yearsBeforeUser }} {{ Str::plural('year', $yearsBeforeUser) }} before you were born.
+                                                was published in {!! $itemDateHtml !!}, {{ $yearsBeforeUser }} {{ Str::plural('year', $yearsBeforeUser) }} before you were born.
                                             @elseif($isFilm)
-                                                was released in {{ $item->start_year }}, {{ $yearsBeforeUser }} {{ Str::plural('year', $yearsBeforeUser) }} before you were born.
+                                                was released in {!! $itemDateHtml !!}, {{ $yearsBeforeUser }} {{ Str::plural('year', $yearsBeforeUser) }} before you were born.
                                             @elseif($isBand)
-                                                formed in {{ $item->start_year }}, {{ $yearsBeforeUser }} {{ Str::plural('year', $yearsBeforeUser) }} before you were born.
+                                                formed in {!! $itemDateHtml !!}, {{ $yearsBeforeUser }} {{ Str::plural('year', $yearsBeforeUser) }} before you were born.
                                             @elseif($isEvent && $isSameDayEvent)
-                                                happened in {{ $item->start_year }}, {{ $yearsBeforeUser }} {{ Str::plural('year', $yearsBeforeUser) }} before you were born.
+                                                happened on {!! $itemDateHtml !!}, {{ $yearsBeforeUser }} {{ Str::plural('year', $yearsBeforeUser) }} before you were born.
                                             @elseif($isEvent)
-                                                started in {{ $item->start_year }}, {{ $yearsBeforeUser }} {{ Str::plural('year', $yearsBeforeUser) }} before you were born.
+                                                started in {!! $itemDateHtml !!}, {{ $yearsBeforeUser }} {{ Str::plural('year', $yearsBeforeUser) }} before you were born.
                                             @else
-                                                started in {{ $item->start_year }}, {{ $yearsBeforeUser }} {{ Str::plural('year', $yearsBeforeUser) }} before you were born.
+                                                started in {!! $itemDateHtml !!}, {{ $yearsBeforeUser }} {{ Str::plural('year', $yearsBeforeUser) }} before you were born.
                                             @endif
                                         @else
                                             @if($isBook)
-                                                was published in {{ $item->start_year }}.
+                                                was published in {!! $itemDateHtml !!}.
                                             @elseif($isFilm)
-                                                was released in {{ $item->start_year }}.
+                                                was released in {!! $itemDateHtml !!}.
                                             @elseif($isBand)
-                                                formed in {{ $item->start_year }}.
+                                                formed in {!! $itemDateHtml !!}.
                                             @elseif($isEvent && $isSameDayEvent)
-                                                happened in {{ $item->start_year }}.
+                                                happened on {!! $itemDateHtml !!}.
                                             @elseif($isEvent)
-                                                started in {{ $item->start_year }}.
+                                                started in {!! $itemDateHtml !!}.
                                             @else
-                                                started in {{ $item->start_year }}.
+                                                started in {!! $itemDateHtml !!}.
                                             @endif
                                         @endif
                                     @endif
@@ -600,7 +630,7 @@
                                             <a href="{{ route('spans.show', $relatedItem) }}" class="text-decoration-none">
                                                 {{ $relatedItem->name }}
                                             </a>
-                                            in {{ $relatedItem->start_year }}, when you were {{ $userAgeAtRelatedItem }}.
+                                            in {!! $relatedItemDateHtml !!}, when you were {{ $userAgeAtRelatedItem }}.
                                         @elseif($parentAgeAtRelatedItem !== null && $parentName)
                                             @if($item->start_year && ($userAgeAtStart !== null || $parentAgeAtStart !== null))
                                                 They released 
@@ -610,7 +640,7 @@
                                             <a href="{{ route('spans.show', $relatedItem) }}" class="text-decoration-none">
                                                 {{ $relatedItem->name }}
                                             </a>
-                                            in {{ $relatedItem->start_year }}, when your {{ $parentName }}@if($parentPerson) (<a href="{{ route('spans.show', $parentPerson) }}" class="text-decoration-none">{{ $parentPerson->name }}</a>)@endif was {{ $parentAgeAtRelatedItem }}.
+                                            in {!! $relatedItemDateHtml !!}, when your {{ $parentName }}@if($parentPerson) (<a href="{{ route('spans.show', $parentPerson) }}" class="text-decoration-none">{{ $parentPerson->name }}</a>)@endif was {{ $parentAgeAtRelatedItem }}.
                                         @elseif($grandparentAgeAtRelatedItem !== null && $grandparentNameForRelatedItem)
                                             @if($item->start_year && ($userAgeAtStart !== null || $parentAgeAtStart !== null || $grandparentAgeAtStart !== null))
                                                 They released 
@@ -620,7 +650,7 @@
                                             <a href="{{ route('spans.show', $relatedItem) }}" class="text-decoration-none">
                                                 {{ $relatedItem->name }}
                                             </a>
-                                            in {{ $relatedItem->start_year }}, when your {{ $grandparentNameForRelatedItem }}@if($grandparentPersonForRelatedItem) (<a href="{{ route('spans.show', $grandparentPersonForRelatedItem) }}" class="text-decoration-none">{{ $grandparentPersonForRelatedItem->name }}</a>)@endif was {{ $grandparentAgeAtRelatedItem }}.
+                                            in {!! $relatedItemDateHtml !!}, when your {{ $grandparentNameForRelatedItem }}@if($grandparentPersonForRelatedItem) (<a href="{{ route('spans.show', $grandparentPersonForRelatedItem) }}" class="text-decoration-none">{{ $grandparentPersonForRelatedItem->name }}</a>)@endif was {{ $grandparentAgeAtRelatedItem }}.
                                         @endif
                                     @endif
                                 </p>
