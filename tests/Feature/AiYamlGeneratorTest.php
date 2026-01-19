@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Span;
 use App\Models\User;
+use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
 use App\Services\AiYamlCreatorService;
 
@@ -312,6 +313,10 @@ YAML;
      */
     public function test_generate_organisation_yaml_endpoint()
     {
+        // Mock Log facade to prevent error logs from appearing in test output
+        Log::shouldReceive('error')->withAnyArgs()->andReturnNull();
+        Log::shouldReceive('info')->withAnyArgs()->andReturnNull();
+
         // Create an admin user
         $admin = User::factory()->create(['is_admin' => true]);
         $this->actingAs($admin);
@@ -334,6 +339,10 @@ YAML;
      */
     public function test_improve_organisation_yaml_endpoint()
     {
+        // Mock Log facade to prevent error logs from appearing in test output
+        Log::shouldReceive('error')->withAnyArgs()->andReturnNull();
+        Log::shouldReceive('info')->withAnyArgs()->andReturnNull();
+
         // Create an admin user
         $admin = User::factory()->create(['is_admin' => true]);
         $this->actingAs($admin);

@@ -69,9 +69,11 @@ class SpanViewTest extends TestCase
         $user = User::factory()->create();
         $this->actingAs($user);
 
+        // Create a person span (not place/set/photo which would redirect)
         $span = Span::factory()->create([
             'owner_id' => $user->id,
             'updater_id' => $user->id,
+            'type_id' => 'person',
         ]);
 
         // First request should redirect to slug
@@ -106,9 +108,11 @@ class SpanViewTest extends TestCase
         $user = User::factory()->create();
         $this->actingAs($user);
 
+        // Create a person span (not place/set/photo which would redirect)
         $span = Span::factory()->create([
             'owner_id' => $user->id,
             'updater_id' => $user->id,
+            'type_id' => 'person',
         ]);
 
         // Access via slug directly

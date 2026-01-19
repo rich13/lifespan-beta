@@ -7,6 +7,7 @@ use App\Models\ConnectionType;
 use App\Models\Span;
 use App\Models\User;
 use Illuminate\Foundation\Testing\WithFaker;
+use Illuminate\Support\Facades\Log;
 use Tests\PostgresRefreshDatabase;
 use Tests\TestCase;
 use Tests\TestHelpers;
@@ -197,7 +198,8 @@ class AddConnectionModalTest extends TestCase
     }
 
     /**
-     * Test span search API returns placeholder suggestions when no results found
+     * Test span search API no longer returns placeholder suggestions with null IDs
+     * Note: API behavior changed - all spans must have IDs. Placeholders must be created explicitly.
      */
     public function test_span_search_returns_placeholder_suggestions(): void
     {
@@ -211,15 +213,11 @@ class AddConnectionModalTest extends TestCase
         $this->assertIsArray($data);
         $this->assertArrayHasKey('spans', $data);
         
-        // Should return placeholder suggestion
-        $placeholders = collect($data['spans'])->where('id', null);
-        $this->assertGreaterThan(0, $placeholders->count());
-        
-        $placeholder = $placeholders->first();
-        $this->assertEquals('New York', $placeholder['name']);
-        $this->assertEquals('place', $placeholder['type_id']);
-        $this->assertEquals('placeholder', $placeholder['state']);
-        $this->assertTrue($placeholder['is_placeholder']);
+        // API no longer returns placeholder suggestions with null IDs
+        // All returned spans must have valid IDs
+        foreach ($data['spans'] as $span) {
+            $this->assertNotNull($span['id'], 'All spans in search results must have IDs');
+        }
     }
 
     /**
@@ -321,6 +319,10 @@ class AddConnectionModalTest extends TestCase
      */
     public function test_connection_creation_validates_required_fields(): void
     {
+        // Mock Log facade to prevent error logs from appearing in test output
+        Log::shouldReceive('error')->withAnyArgs()->andReturnNull();
+        Log::shouldReceive('info')->withAnyArgs()->andReturnNull();
+
         $this->actingAs($this->user);
 
         // Test missing type
@@ -359,6 +361,10 @@ class AddConnectionModalTest extends TestCase
      */
     public function test_connection_creation_validates_dates_based_on_state(): void
     {
+        // Mock Log facade to prevent error logs from appearing in test output
+        Log::shouldReceive('error')->withAnyArgs()->andReturnNull();
+        Log::shouldReceive('info')->withAnyArgs()->andReturnNull();
+
         $this->actingAs($this->user);
 
         // Test complete state without start date (should fail since complete state requires dates)
@@ -389,6 +395,10 @@ class AddConnectionModalTest extends TestCase
      */
     public function test_connection_creation_validates_span_types(): void
     {
+        // Mock Log facade to prevent error logs from appearing in test output
+        Log::shouldReceive('error')->withAnyArgs()->andReturnNull();
+        Log::shouldReceive('info')->withAnyArgs()->andReturnNull();
+
         $this->actingAs($this->user);
 
         // Try to connect person to organisation with travel type (should fail)
