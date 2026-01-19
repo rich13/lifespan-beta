@@ -147,14 +147,32 @@
 
     <div class="card mb-4">
         <div class="card-header d-flex justify-content-between align-items-center">
-            <h6 class="card-title mb-0">
-                <i class="bi bi-images me-2"></i>
-                @if($isPhotoSpan)
-                    Related Photos
-                @else
-                    Photos
-                @endif
-            </h6>
+            @php
+                $photosLink = $imageConnections->isNotEmpty() && $imageConnections->count() > 3 
+                    ? route('photos.index', ['features' => $span->id])
+                    : null;
+            @endphp
+            @if($photosLink)
+                <a href="{{ $photosLink }}" class="text-decoration-none">
+                    <h6 class="card-title mb-0">
+                        <i class="bi bi-images me-2"></i>
+                        @if($isPhotoSpan)
+                            Related Photos
+                        @else
+                            Photos
+                        @endif
+                    </h6>
+                </a>
+            @else
+                <h6 class="card-title mb-0">
+                    <i class="bi bi-images me-2"></i>
+                    @if($isPhotoSpan)
+                        Related Photos
+                    @else
+                        Photos
+                    @endif
+                </h6>
+            @endif
             @auth
                 @php
                     $uploadModalId = 'photoUploadModal-' . $span->id;
@@ -184,74 +202,48 @@
             <div class="card-body">
                 @php
                     $totalImageCount = $imageConnections->count();
-                    $displayedImages = $imageConnections->take(6);
+                    $displayedImages = $imageConnections->take(3)->values();
                     $imageCount = $displayedImages->count();
-                    // Determine column classes based on number of images
-                    // Responsive: stack on mobile (xs), scale columns based on image count on larger screens
-                    // 1 image = full width always
-                    // 2 images = 2 columns on sm+ screens
-                    // 3+ images = 3 columns max (responsive: 2 on sm, 3 on md+)
-                    if ($imageCount === 1) {
-                        $colClass = 'col-12';
-                    } elseif ($imageCount === 2) {
-                        // 2 images: stack on mobile, 2 columns on small+ screens
-                        $colClass = 'col-12 col-sm-6';
-                    } else {
-                        // 3+ images: stack on mobile, 2 columns on small, 3 columns on medium+ screens
-                        $colClass = 'col-12 col-sm-6 col-md-4';
-                    }
+                    // Always use 3-column grid (2 on sm, 3 on md+)
+                    $colClass = 'col-12 col-sm-6 col-md-4';
                 @endphp
                 <div class="row g-3">
-                    @foreach($displayedImages as $connection)
+                    @foreach(range(0, 2) as $index)
                         @php
-                            $imageSpan = $connection->parent;
-                            $metadata = $imageSpan->metadata ?? [];
-                            // For single images, prefer larger sizes; for multiple images, use medium
-                            if ($imageCount === 1) {
-                                $imageUrl = $metadata['large_url'] ?? $metadata['original_url'] ?? $metadata['medium_url'] ?? $metadata['thumbnail_url'] ?? null;
-                            } else {
+                            $connection = $displayedImages->get($index);
+                            $hasImage = $connection !== null;
+                            
+                            if ($hasImage) {
+                                $imageSpan = $connection->parent;
+                                $metadata = $imageSpan->metadata ?? [];
                                 $imageUrl = $metadata['medium_url'] ?? $metadata['large_url'] ?? $metadata['thumbnail_url'] ?? null;
+                            } else {
+                                $imageSpan = null;
+                                $imageUrl = null;
                             }
-                            $isSingleImage = $imageCount === 1;
                         @endphp
                         
                         <div class="{{ $colClass }}">
-                            <div class="{{ $isSingleImage ? 'position-relative' : 'card h-100 image-gallery-card position-relative' }}">
-                                @if($imageUrl)
+                            <div class="card h-100 image-gallery-card position-relative">
+                                @if($hasImage && $imageUrl)
                                     <a href="{{ \App\Helpers\RouteHelper::getSpanRoute($imageSpan) }}" 
-                                       class="text-decoration-none{{ $isSingleImage ? ' d-block' : '' }}">
-                                        @if($isSingleImage)
-                                            {{-- Single image: full size with natural aspect ratio --}}
-                                            <img src="{{ $imageUrl }}" 
-                                                 alt="{{ $imageSpan->name }}" 
-                                                 class="img-fluid rounded" 
-                                                 style="width: 100%; height: auto; max-height: 80vh; display: block;"
-                                                 loading="lazy">
-                                        @else
-                                            {{-- Multiple images: fixed height grid --}}
-                                            <img src="{{ $imageUrl }}" 
-                                                 alt="{{ $imageSpan->name }}" 
-                                                 class="card-img-top" 
-                                                 style="height: 200px; object-fit: cover; border-radius: 8px;"
-                                                 loading="lazy">
-                                        @endif
+                                       class="text-decoration-none">
+                                        <img src="{{ $imageUrl }}" 
+                                             alt="{{ $imageSpan->name }}" 
+                                             class="card-img-top" 
+                                             style="height: 200px; object-fit: cover; border-radius: 8px;"
+                                             loading="lazy">
                                     </a>
                                 @else
-                                    @if($isSingleImage)
-                                        <div class="bg-light rounded d-flex align-items-center justify-content-center" 
-                                             style="min-height: 200px;">
-                                            <i class="bi bi-image text-muted" style="font-size: 3rem;"></i>
-                                        </div>
-                                    @else
-                                        <div class="card-img-top bg-light d-flex align-items-center justify-content-center" 
-                                             style="height: 200px;">
-                                            <i class="bi bi-image text-muted" style="font-size: 2rem;"></i>
-                                        </div>
-                                    @endif
+                                    {{-- Empty placeholder --}}
+                                    <div class="card-img-top bg-light d-flex align-items-center justify-content-center" 
+                                         style="height: 200px; border-radius: 8px;">
+                                        <i class="bi bi-image text-muted" style="font-size: 2rem; opacity: 0.3;"></i>
+                                    </div>
                                 @endif
                                 
                                 {{-- Date badge --}}
-                                @if($imageSpan && ($imageSpan->start_year || $imageSpan->end_year))
+                                @if($hasImage && $imageSpan && ($imageSpan->start_year || $imageSpan->end_year))
                                     @php
                                         $dateText = null;
                                         $dateUrl = null;
@@ -274,7 +266,7 @@
                                     @endphp
                                     
                                     @if($dateText)
-                                        <div class="position-absolute {{ $isSingleImage ? 'bottom-0 start-0 m-3' : 'bottom-0 start-50 translate-middle-x mb-2' }}">
+                                        <div class="position-absolute bottom-0 start-50 translate-middle-x mb-2">
                                             <a href="{{ $dateUrl }}" class="badge bg-dark bg-opacity-75 text-white text-decoration-none" 
                                                style="font-size: 0.75rem; backdrop-filter: blur(4px);">
                                                 <i class="bi bi-calendar3 me-1"></i>{{ $dateText }}
@@ -287,15 +279,6 @@
                         </div>
                     @endforeach
                 </div>
-                
-                @if($totalImageCount > 6)
-                    <div class="text-center mt-3">
-                        <a href="{{ route('spans.connections', ['subject' => $span, 'predicate' => 'is-subject-of']) }}" 
-                           class="btn btn-outline-primary btn-sm">
-                            View all {{ $totalImageCount }} photos
-                        </a>
-                    </div>
-                @endif
             </div>
         @endif
     </div>
