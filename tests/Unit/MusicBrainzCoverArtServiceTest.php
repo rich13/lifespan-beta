@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use App\Services\MusicBrainzCoverArtService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
 
 class MusicBrainzCoverArtServiceTest extends TestCase
@@ -62,6 +63,11 @@ class MusicBrainzCoverArtServiceTest extends TestCase
 
     public function test_caching_with_error_response()
     {
+        // Mock Log facade to prevent error logs from appearing in test output
+        Log::shouldReceive('error')->withAnyArgs()->andReturnNull();
+        Log::shouldReceive('info')->withAnyArgs()->andReturnNull();
+        Log::shouldReceive('warning')->withAnyArgs()->andReturnNull();
+        
         // Create a partial mock of the service
         $service = $this->partialMock(MusicBrainzCoverArtService::class);
         $service->shouldAllowMockingProtectedMethods();

@@ -3,7 +3,7 @@
 namespace Tests\Feature\Auth;
 
 use App\Models\User;
-use Illuminate\Auth\Notifications\ResetPassword;
+use App\Notifications\ResetPassword;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Password;
@@ -42,6 +42,10 @@ class PasswordResetTest extends TestCase
         Notification::fake();
         
         $user = User::factory()->create();
+        
+        // Note: Slack notification verification is handled by the global mock in TestCase
+        // The global mock prevents real API calls but doesn't verify calls were made
+        // If we need to verify calls, we'd need to use a spy, but that's not critical for this test
         
         $response = $this->post(route('password.email'), [
             'email' => $user->email,
@@ -210,7 +214,7 @@ class PasswordResetTest extends TestCase
         $this->assertGuest();
     }
 
-    public function test_password_reset_prevents_sign_in_if_account_not_approved(): void
+    public function test_password_reset_signs_in_unapproved_user_and_shows_message(): void
     {
         $user = User::factory()->unapproved()->create([
             'email_verified_at' => now(),
@@ -224,19 +228,22 @@ class PasswordResetTest extends TestCase
             'password_confirmation' => 'new-password',
         ]);
         
-        $response->assertRedirect(route('login'));
-        $response->assertSessionHasErrors('email');
-        $this->assertGuest();
+        // User should be signed in even if not approved (email is auto-verified on password reset)
+        $response->assertRedirect('/');
+        $response->assertSessionHas('approval_pending', true);
+        $response->assertSessionHas('status');
+        $this->assertAuthenticatedAs($user);
         
-        // Verify password was still reset
+        // Verify password was reset
         $user->refresh();
         $this->assertTrue(Hash::check('new-password', $user->password));
     }
 
-    public function test_password_reset_prevents_sign_in_if_email_not_verified(): void
+    public function test_password_reset_auto_verifies_email_and_signs_in_user(): void
     {
         $user = User::factory()->create([
             'email_verified_at' => null,
+            'approved_at' => now(),
         ]);
         $token = Password::broker()->createToken($user);
         
@@ -247,12 +254,15 @@ class PasswordResetTest extends TestCase
             'password_confirmation' => 'new-password',
         ]);
         
-        $response->assertRedirect(route('login'));
-        $response->assertSessionHasErrors('email');
-        $this->assertGuest();
+        // Email should be auto-verified and user should be signed in
+        $response->assertRedirect('/');
+        $this->assertAuthenticatedAs($user);
         
-        // Verify password was still reset
+        // Verify email was auto-verified
         $user->refresh();
+        $this->assertNotNull($user->email_verified_at);
+        
+        // Verify password was reset
         $this->assertTrue(Hash::check('new-password', $user->password));
     }
 
@@ -263,6 +273,9 @@ class PasswordResetTest extends TestCase
             'approved_at' => now(),
         ]);
         $token = Password::broker()->createToken($user);
+        
+        // Note: Slack notification verification is handled by the global mock in TestCase
+        // The global mock prevents real API calls but doesn't verify calls were made
         
         $response = $this->post(route('password.store'), [
             'token' => $token,

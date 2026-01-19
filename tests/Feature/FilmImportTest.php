@@ -10,6 +10,7 @@ use App\Models\SpanType;
 use App\Models\ConnectionType;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class FilmImportTest extends TestCase
 {
@@ -171,12 +172,18 @@ class FilmImportTest extends TestCase
     /** @test */
     public function it_creates_film_with_public_access_level()
     {
-        // Import makes: getFilmDetails (film + director + actor) + Wikipedia extract + createOrUpdatePerson (director + actor again)
+        // Mock Log facade to prevent error logs from appearing in test output
+        Log::shouldReceive('error')->withAnyArgs()->andReturnNull();
+        Log::shouldReceive('warning')->withAnyArgs()->andReturnNull();
+        Log::shouldReceive('info')->withAnyArgs()->andReturnNull();
+
+        // Import makes: getFilmDetails (film + director + actor) + Wikipedia extract (film again) + createOrUpdatePerson (director + actor again)
         Http::fake([
             'https://www.wikidata.org/w/api.php*' => Http::sequence()
                 ->push($this->getFilmEntityResponse(), 200)  // getFilmDetails: film
                 ->push($this->getDirectorEntityResponse(), 200)  // getFilmDetails: director
                 ->push($this->getActorEntityResponse(), 200)  // getFilmDetails: actor
+                ->push($this->getFilmEntityResponse(), 200)  // getWikipediaExtract: film (again, to get sitelinks)
                 ->push($this->getDirectorEntityResponse(), 200)  // createOrUpdatePerson: director
                 ->push($this->getActorEntityResponse(), 200),  // createOrUpdatePerson: actor
             'https://en.wikipedia.org/w/api.php*' => Http::response($this->getWikipediaExtractResponse(), 200)
@@ -204,6 +211,11 @@ class FilmImportTest extends TestCase
     /** @test */
     public function it_creates_director_with_public_access_and_public_figure_subtype()
     {
+        // Mock Log facade to prevent error logs from appearing in test output
+        Log::shouldReceive('error')->withAnyArgs()->andReturnNull();
+        Log::shouldReceive('warning')->withAnyArgs()->andReturnNull();
+        Log::shouldReceive('info')->withAnyArgs()->andReturnNull();
+
         // Import makes: getFilmDetails (film + director + actor) + Wikipedia extract (film again) + createOrUpdatePerson (director + actor again)
         Http::fake([
             'https://www.wikidata.org/w/api.php*' => Http::sequence()
@@ -237,6 +249,11 @@ class FilmImportTest extends TestCase
     /** @test */
     public function it_creates_actor_with_public_access_and_public_figure_subtype()
     {
+        // Mock Log facade to prevent error logs from appearing in test output
+        Log::shouldReceive('error')->withAnyArgs()->andReturnNull();
+        Log::shouldReceive('warning')->withAnyArgs()->andReturnNull();
+        Log::shouldReceive('info')->withAnyArgs()->andReturnNull();
+
         // Import makes: getFilmDetails (film + director + actor) + Wikipedia extract (film again) + createOrUpdatePerson (director + actor again)
         Http::fake([
             'https://www.wikidata.org/w/api.php*' => Http::sequence()
@@ -270,6 +287,11 @@ class FilmImportTest extends TestCase
     /** @test */
     public function it_creates_director_film_connection_with_public_access()
     {
+        // Mock Log facade to prevent error logs from appearing in test output
+        Log::shouldReceive('error')->withAnyArgs()->andReturnNull();
+        Log::shouldReceive('warning')->withAnyArgs()->andReturnNull();
+        Log::shouldReceive('info')->withAnyArgs()->andReturnNull();
+
         // Import makes: getFilmDetails (film + director + actor) + Wikipedia extract (film again) + createOrUpdatePerson (director + actor again)
         Http::fake([
             'https://www.wikidata.org/w/api.php*' => Http::sequence()
@@ -314,6 +336,11 @@ class FilmImportTest extends TestCase
     /** @test */
     public function it_creates_film_actor_connection_with_public_access()
     {
+        // Mock Log facade to prevent error logs from appearing in test output
+        Log::shouldReceive('error')->withAnyArgs()->andReturnNull();
+        Log::shouldReceive('warning')->withAnyArgs()->andReturnNull();
+        Log::shouldReceive('info')->withAnyArgs()->andReturnNull();
+
         // Import makes: getFilmDetails (film + director + actor) + Wikipedia extract (film again) + createOrUpdatePerson (director + actor again)
         Http::fake([
             'https://www.wikidata.org/w/api.php*' => Http::sequence()
@@ -356,42 +383,58 @@ class FilmImportTest extends TestCase
     /** @test */
     public function it_respects_date_precision_for_films()
     {
+        // Mock Log facade to prevent error logs from appearing in test output
+        Log::shouldReceive('error')->withAnyArgs()->andReturnNull();
+        Log::shouldReceive('warning')->withAnyArgs()->andReturnNull();
+        Log::shouldReceive('info')->withAnyArgs()->andReturnNull();
+
         // Mock film with year-only precision
-        Http::fake([
-            'https://www.wikidata.org/w/api.php*' => Http::sequence()
-                ->push([
-                    'entities' => [
-                        'Q12345' => [
-                            'id' => 'Q12345',
-                            'labels' => ['en' => ['value' => 'Test Film']],
-                            'descriptions' => ['en' => ['value' => 'A test film']],
-                            'claims' => [
-                                'P31' => [
-                                    [
-                                        'mainsnak' => [
-                                            'datavalue' => [
-                                                'value' => ['id' => 'Q11424'] // film
-                                            ]
-                                        ]
+        $filmResponse = [
+            'entities' => [
+                'Q12345' => [
+                    'id' => 'Q12345',
+                    'labels' => ['en' => ['value' => 'Test Film']],
+                    'descriptions' => ['en' => ['value' => 'A test film']],
+                    'claims' => [
+                        'P31' => [
+                            [
+                                'mainsnak' => [
+                                    'datavalue' => [
+                                        'value' => ['id' => 'Q11424'] // film
                                     ]
-                                ],
-                                'P577' => [
-                                    [
-                                        'mainsnak' => [
-                                            'datavalue' => [
-                                                'value' => [
-                                                    'time' => '+2020-00-00T00:00:00Z',
-                                                    'precision' => 9 // year precision
-                                                ]
-                                            ]
-                                        ]
-                                    ]
-                                ],
-                                'P57' => [] // no director
+                                ]
                             ]
+                        ],
+                        'P577' => [
+                            [
+                                'mainsnak' => [
+                                    'datavalue' => [
+                                        'value' => [
+                                            'time' => '+2020-00-00T00:00:00Z',
+                                            'precision' => 9 // year precision
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ],
+                        'P57' => [] // no director
+                    ],
+                    'sitelinks' => [
+                        [
+                            'site' => 'enwiki',
+                            'title' => 'Test Film',
+                            'url' => 'https://en.wikipedia.org/wiki/Test_Film'
                         ]
                     ]
-                ], 200)
+                ]
+            ]
+        ];
+
+        Http::fake([
+            'https://www.wikidata.org/w/api.php*' => Http::sequence()
+                ->push($filmResponse, 200)  // getFilmDetails: film
+                ->push($filmResponse, 200),  // getWikipediaExtract: film (again)
+            'https://en.wikipedia.org/w/api.php*' => Http::response($this->getWikipediaExtractResponse(), 200)
         ]);
 
         $response = $this->actingAs($this->adminUser)
@@ -411,8 +454,13 @@ class FilmImportTest extends TestCase
     /** @test */
     public function it_respects_date_precision_for_people()
     {
+        // Mock Log facade to prevent error logs from appearing in test output
+        Log::shouldReceive('error')->withAnyArgs()->andReturnNull();
+        Log::shouldReceive('warning')->withAnyArgs()->andReturnNull();
+        Log::shouldReceive('info')->withAnyArgs()->andReturnNull();
+
         // Mock person with year-only birth date
-        // Import makes: getFilmDetails (film + director) + createOrUpdatePerson (director again)
+        // Import makes: getFilmDetails (film + director) + Wikipedia extract (film again) + createOrUpdatePerson (director again)
         // Note: no actor in this test
         $filmResponse = [
             'entities' => [
@@ -521,6 +569,11 @@ class FilmImportTest extends TestCase
      */
     public function it_updates_existing_film_to_public_access()
     {
+        // Mock Log facade to prevent error logs from appearing in test output
+        Log::shouldReceive('error')->withAnyArgs()->andReturnNull();
+        Log::shouldReceive('warning')->withAnyArgs()->andReturnNull();
+        Log::shouldReceive('info')->withAnyArgs()->andReturnNull();
+
         // Create existing film with private access
         $existingFilm = Span::create([
             'name' => 'Test Film',
@@ -570,6 +623,11 @@ class FilmImportTest extends TestCase
      */
     public function it_updates_existing_person_to_public_access_and_public_figure_subtype()
     {
+        // Mock Log facade to prevent error logs from appearing in test output
+        Log::shouldReceive('error')->withAnyArgs()->andReturnNull();
+        Log::shouldReceive('warning')->withAnyArgs()->andReturnNull();
+        Log::shouldReceive('info')->withAnyArgs()->andReturnNull();
+
         // Create existing person with private access
         $existingPerson = Span::create([
             'name' => 'Test Director',
@@ -584,14 +642,16 @@ class FilmImportTest extends TestCase
             'start_year' => 1980
         ]);
 
-        // Import makes: getFilmDetails (film + director + actor) + createOrUpdatePerson (director + actor again)
+        // Import makes: getFilmDetails (film + director + actor) + getWikipediaExtract (film again) + createOrUpdatePerson (director + actor again)
         Http::fake([
             'https://www.wikidata.org/w/api.php*' => Http::sequence()
-                ->push($this->getFilmEntityResponse(), 200)
-                ->push($this->getDirectorEntityResponse(), 200)
-                ->push($this->getActorEntityResponse(), 200)
-                ->push($this->getDirectorEntityResponse(), 200)
-                ->push($this->getActorEntityResponse(), 200)
+                ->push($this->getFilmEntityResponse(), 200)  // getFilmDetails: film
+                ->push($this->getDirectorEntityResponse(), 200)  // getFilmDetails: director
+                ->push($this->getActorEntityResponse(), 200)  // getFilmDetails: actor
+                ->push($this->getFilmEntityResponse(), 200)  // getWikipediaExtract: film (again, to get sitelinks)
+                ->push($this->getDirectorEntityResponse(), 200)  // createOrUpdatePerson: director
+                ->push($this->getActorEntityResponse(), 200),  // createOrUpdatePerson: actor
+            'https://en.wikipedia.org/w/api.php*' => Http::response($this->getWikipediaExtractResponse(), 200)
         ]);
 
         $response = $this->actingAs($this->adminUser)
@@ -609,7 +669,12 @@ class FilmImportTest extends TestCase
     /** @test */
     public function it_does_not_create_duplicate_connections()
     {
-        // First import: getFilmDetails (film + director + actor) + createOrUpdatePerson (director + actor)
+        // Mock Log facade to prevent error logs from appearing in test output
+        Log::shouldReceive('error')->withAnyArgs()->andReturnNull();
+        Log::shouldReceive('warning')->withAnyArgs()->andReturnNull();
+        Log::shouldReceive('info')->withAnyArgs()->andReturnNull();
+
+        // First import: getFilmDetails (film + director + actor) + Wikipedia extract (film again) + createOrUpdatePerson (director + actor)
         // Second import: same again
         Http::fake([
             'https://www.wikidata.org/w/api.php*' => Http::sequence()
@@ -661,6 +726,11 @@ class FilmImportTest extends TestCase
      */
     public function it_creates_connections_even_when_film_already_exists()
     {
+        // Mock Log facade to prevent error logs from appearing in test output
+        Log::shouldReceive('error')->withAnyArgs()->andReturnNull();
+        Log::shouldReceive('warning')->withAnyArgs()->andReturnNull();
+        Log::shouldReceive('info')->withAnyArgs()->andReturnNull();
+
         // Create existing film
         $existingFilm = Span::create([
             'name' => 'Test Film',
@@ -825,13 +895,6 @@ class FilmImportTest extends TestCase
                                 ]
                             ]
                         ],
-                        'sitelinks' => [
-                            [
-                                'site' => 'enwiki',
-                                'title' => 'Test Film',
-                                'url' => 'https://en.wikipedia.org/wiki/Test_Film'
-                            ]
-                        ],
                         'P57' => [
                             [
                                 'mainsnak' => [
@@ -849,6 +912,13 @@ class FilmImportTest extends TestCase
                                     ]
                                 ]
                             ]
+                        ]
+                    ],
+                    'sitelinks' => [
+                        'enwiki' => [
+                            'site' => 'enwiki',
+                            'title' => 'Test Film',
+                            'url' => 'https://en.wikipedia.org/wiki/Test_Film'
                         ]
                     ]
                 ]

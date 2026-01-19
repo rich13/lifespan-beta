@@ -278,6 +278,10 @@ abstract class TestCase extends BaseTestCase
         // Mock SlackNotificationService to prevent real Slack API calls during tests
         $this->mock(\App\Services\SlackNotificationService::class, function ($mock) {
             $mock->shouldReceive('notifyUserRegistered')->andReturn(null);
+            $mock->shouldReceive('notifyUserSignedIn')->withAnyArgs()->andReturn(null);
+            $mock->shouldReceive('notifyPasswordResetRequested')->withAnyArgs()->andReturn(null);
+            $mock->shouldReceive('notifyPasswordResetCompleted')->withAnyArgs()->andReturn(null);
+            $mock->shouldReceive('notifySignInBlocked')->withAnyArgs()->andReturn(null);
             $mock->shouldReceive('notifySpanCreated')->andReturn(null);
             $mock->shouldReceive('notifySpanUpdated')->andReturn(null);
             // notifyAiYamlGenerated can be called with 3 or 4 parameters (controller sometimes passes usage as 4th param, which service ignores)

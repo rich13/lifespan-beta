@@ -7,10 +7,11 @@ use App\Models\Span;
 use App\Models\User;
 use App\Services\WikipediaSpanMatcherService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestHelpers;
 
 class WikipediaSpanMatcherTest extends TestCase
 {
-    use RefreshDatabase;
+    use RefreshDatabase, TestHelpers;
 
     protected function setUp(): void
     {
@@ -22,7 +23,8 @@ class WikipediaSpanMatcherTest extends TestCase
 
     public function test_finds_multiple_occurrences_of_spans(): void
     {
-        // Create test spans
+        // Create test spans - use simple names but ensure they're owned by this test's user
+        // This ensures access control filters correctly and we find the right spans
         $nirvana = Span::factory()->create([
             'name' => 'Nirvana',
             'type_id' => 'band',
@@ -51,40 +53,50 @@ class WikipediaSpanMatcherTest extends TestCase
         $this->assertNotNull($nirvana->slug, 'Nirvana should have a slug');
         $this->assertNotNull($fooFighters->slug, 'Foo Fighters should have a slug');
         
+        // Act as the test user so access control works correctly
+        $this->actingAs($this->user);
+        
         // Check what the matcher will actually find
         $matcher = new WikipediaSpanMatcherService();
         $matchingSpans = $matcher->findMatchingSpans($text);
         
-        // Find the Foo Fighters span in the matches
+        // Find the spans in the matches - look through all matches to find the ones we created
+        // The matcher might return multiple spans with similar names, so we need to search for ours by ID
+        $foundNirvana = null;
         $foundFooFighters = null;
+        
         foreach ($matchingSpans as $match) {
-            if ($match['entity'] === 'Foo Fighters' && !empty($match['spans'])) {
-                $foundFooFighters = $match['spans'][0];
-                break;
+            if (!empty($match['spans'])) {
+                // Search through all found spans to find the ones we created
+                foreach ($match['spans'] as $span) {
+                    if ($span['id'] === $nirvana->id) {
+                        $foundNirvana = $span;
+                    }
+                    if ($span['id'] === $fooFighters->id) {
+                        $foundFooFighters = $span;
+                    }
+                }
             }
         }
         
-        $this->assertNotNull($foundFooFighters, 'Matcher should find Foo Fighters span');
+        $this->assertNotNull($foundNirvana, 'Matcher should find the Nirvana span we created');
+        $this->assertNotNull($foundFooFighters, 'Matcher should find the Foo Fighters span we created');
+        $this->assertEquals($nirvana->id, $foundNirvana['id'], 'Matcher should find the same Nirvana span we created');
         $this->assertEquals($fooFighters->id, $foundFooFighters['id'], 'Matcher should find the same Foo Fighters span we created');
-        
-        // Use the slug from what the matcher found
-        $matcherFooFightersSlug = $foundFooFighters['slug'] ?? $foundFooFighters['id'];
-        $matcherFooFightersUrl = route('spans.show', $matcherFooFightersSlug);
 
         $result = $matcher->highlightMatches($text);
 
-        // Should find both occurrences of "Nirvana" and both occurrences of "Foo Fighters"
-        // With getRouteKey() using slug, route() now generates slug-based URLs
-        $nirvanaUrl = route('spans.show', $nirvana);
-        $fooFightersUrl = route('spans.show', $fooFighters);
+        // Should find both occurrences of each span name
+        // Use the URLs based on what the matcher actually found
+        $nirvanaUrl = route('spans.show', $foundNirvana['slug'] ?? $foundNirvana['id']);
+        $fooFightersUrl = route('spans.show', $foundFooFighters['slug'] ?? $foundFooFighters['id']);
         
         $this->assertStringContainsString('href="' . $nirvanaUrl . '"', $result);
-        // Use the URL based on what the matcher actually found
-        $this->assertStringContainsString('href="' . $matcherFooFightersUrl . '"', $result);
+        $this->assertStringContainsString('href="' . $fooFightersUrl . '"', $result);
         
         // Count the number of links to each span
         $nirvanaLinks = substr_count($result, 'href="' . $nirvanaUrl . '"');
-        $fooFightersLinks = substr_count($result, 'href="' . $matcherFooFightersUrl . '"');
+        $fooFightersLinks = substr_count($result, 'href="' . $fooFightersUrl . '"');
         
         $this->assertEquals(2, $nirvanaLinks, 'Should find 2 occurrences of Nirvana');
         $this->assertEquals(2, $fooFightersLinks, 'Should find 2 occurrences of Foo Fighters');
@@ -105,6 +117,9 @@ class WikipediaSpanMatcherTest extends TestCase
 
     public function test_handles_quoted_entity_names(): void
     {
+        // Act as the test user so access control works correctly
+        $this->actingAs($this->user);
+        
         // Create a span for an album (using thing type with album subtype)
         $nevermind = Span::factory()->create([
             'name' => 'Nevermind',
@@ -117,11 +132,26 @@ class WikipediaSpanMatcherTest extends TestCase
         $text = 'Nirvana released "Nevermind" in 1991. The album "Nevermind" was a huge success.';
 
         $matcher = new WikipediaSpanMatcherService();
+        $matchingSpans = $matcher->findMatchingSpans($text);
+        
+        // Find the span in the matcher results to get the correct URL
+        $foundNevermind = null;
+        foreach ($matchingSpans as $match) {
+            if (!empty($match['spans'])) {
+                foreach ($match['spans'] as $span) {
+                    if ($span['id'] === $nevermind->id) {
+                        $foundNevermind = $span;
+                        break 2;
+                    }
+                }
+            }
+        }
+        
+        $this->assertNotNull($foundNevermind, 'Matcher should find the Nevermind span we created');
+        
         $result = $matcher->highlightMatches($text);
-
-        // Should find the quoted album name
-        // With getRouteKey() using slug, route() now generates slug-based URLs
-        $nevermindUrl = route('spans.show', $nevermind);
+        
+        $nevermindUrl = route('spans.show', $foundNevermind['slug'] ?? $foundNevermind['id']);
         $this->assertStringContainsString('href="' . $nevermindUrl . '"', $result);
         
         // Count the number of links to the album

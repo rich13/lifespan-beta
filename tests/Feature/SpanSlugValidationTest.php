@@ -137,9 +137,11 @@ class SpanSlugValidationTest extends TestCase
     /** @test */
     public function cannot_update_span_to_reserved_slug()
     {
+        // Use a unique name/slug to avoid conflicts with other tests
+        $uniqueId = \Illuminate\Support\Str::random(8);
         $span = Span::factory()->create([
-            'name' => 'Original Name',
-            'slug' => 'original-name',
+            'name' => 'Original Name ' . $uniqueId,
+            'slug' => 'original-name-' . $uniqueId,
             'owner_id' => $this->user->id,
         ]);
 

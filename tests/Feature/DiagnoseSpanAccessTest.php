@@ -6,10 +6,11 @@ use App\Models\User;
 use App\Models\Span;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
+use Tests\TestHelpers;
 
 class DiagnoseSpanAccessTest extends TestCase
 {
-    use RefreshDatabase;
+    use RefreshDatabase, TestHelpers;
 
     public function test_diagnose_connection_span_access(): void
     {
@@ -31,13 +32,14 @@ class DiagnoseSpanAccessTest extends TestCase
             'name' => "St Saviour's"
         ]);
         
-        // Create a connection span (like "studied at")
+        // Create a connection span (like "studied at") - use unique slug to avoid collisions
+        $uniqueSlug = $this->uniqueSlug('richard-northover-studied-at-st-saviours');
         $connectionSpan = Span::factory()->create([
             'type_id' => 'connection',
             'owner_id' => $user->id,
             'access_level' => 'private',
             'name' => "Richard Northover studied at St Saviour's",
-            'slug' => 'richard-northover-studied-at-st-saviours'
+            'slug' => $uniqueSlug
         ]);
         
         // Create the connection
@@ -50,7 +52,7 @@ class DiagnoseSpanAccessTest extends TestCase
         
         // Test accessing the connection span as the owner
         $response = $this->actingAs($user)
-            ->get('/spans/richard-northover-studied-at-st-saviours');
+            ->get('/spans/' . $uniqueSlug);
         
         echo "Response status: " . $response->status() . PHP_EOL;
         echo "Connection Span Owner ID: " . $connectionSpan->owner_id . PHP_EOL;

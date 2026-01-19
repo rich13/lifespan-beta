@@ -3,6 +3,7 @@
 namespace Tests\Feature\Auth;
 
 use App\Models\User;
+use App\Services\SlackNotificationService;
 use Tests\TestCase;
 
 class EmailFirstAuthTest extends TestCase
@@ -17,7 +18,10 @@ class EmailFirstAuthTest extends TestCase
 
     public function test_existing_user_gets_password_form()
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create([
+            'approved_at' => now(),
+            'email_verified_at' => now(),
+        ]);
 
         $response = $this->post('/auth/email', [
             'email' => $user->email
@@ -25,6 +29,27 @@ class EmailFirstAuthTest extends TestCase
 
         $response->assertRedirect(route('auth.password'));
         $response->assertSessionHas('email', $user->email);
+    }
+
+    public function test_unapproved_user_sees_message_on_email_form(): void
+    {
+        $user = User::factory()->unapproved()->create([
+            'email_verified_at' => now(),
+        ]);
+
+        $response = $this->post('/auth/email', [
+            'email' => $user->email
+        ]);
+
+        // Should redirect back to login with approval pending message
+        $response->assertRedirect(route('login'));
+        $response->assertSessionHas('approval_pending', true);
+        $response->assertSessionHasErrors('email');
+        
+        // Follow redirect to see the message
+        $response = $this->get(route('login'));
+        $response->assertSee('Almost...', false);
+        $response->assertSee('Because this is a closed beta', false);
     }
 
     public function test_new_user_gets_registration_form()
@@ -81,25 +106,31 @@ class EmailFirstAuthTest extends TestCase
     public function test_user_can_login_with_valid_credentials()
     {
         $user = User::factory()->create([
-            'password' => bcrypt('password')
+            'password' => bcrypt('password'),
+            'email_verified_at' => now(),
+            'approved_at' => now(),
         ]);
 
-        $response = $this->post(route('auth.password'), [
+        $this->withSession(['email' => $user->email]);
+        
+        $response = $this->post(route('auth.password.submit'), [
             'email' => $user->email,
             'password' => 'password'
         ]);
 
         $response->assertRedirect('/');
-        $this->assertAuthenticated();
+        $this->assertAuthenticatedAs($user);
     }
 
     public function test_user_cannot_login_with_invalid_credentials()
     {
         $user = User::factory()->create([
-            'password' => bcrypt('password')
+            'password' => bcrypt('password'),
+            'email_verified_at' => now(),
+            'approved_at' => now(),
         ]);
 
-        $response = $this->post(route('auth.password'), [
+        $response = $this->post(route('auth.password.submit'), [
             'email' => $user->email,
             'password' => 'wrong-password'
         ]);
@@ -108,5 +139,151 @@ class EmailFirstAuthTest extends TestCase
         $this->assertGuest();
     }
 
-    // More tests needed...
+    public function test_user_cannot_login_if_not_approved()
+    {
+        $user = User::factory()->unapproved()->create([
+            'password' => bcrypt('password'),
+            'email_verified_at' => now(),
+        ]);
+
+        $this->withSession(['email' => $user->email]);
+        
+        // Verify Slack notification is called for blocked sign-in
+        $slackService = $this->mock(SlackNotificationService::class);
+        $slackService->shouldReceive('notifySignInBlocked')
+            ->once()
+            ->with(\Mockery::on(function ($arg) use ($user) {
+                return $arg->id === $user->id;
+            }), 'Account pending approval', \Mockery::any());
+        
+        $response = $this->post(route('auth.password.submit'), [
+            'email' => $user->email,
+            'password' => 'password'
+        ]);
+
+        $response->assertRedirect(route('auth.password'));
+        $response->assertSessionHas('approval_pending', true);
+        $response->assertSessionHasErrors('email');
+        $this->assertGuest();
+    }
+
+    public function test_user_cannot_login_if_email_not_verified()
+    {
+        $user = User::factory()->unverified()->create([
+            'password' => bcrypt('password'),
+            'approved_at' => now(),
+        ]);
+
+        $this->withSession(['email' => $user->email]);
+        
+        // Verify Slack notification is called for blocked sign-in
+        $slackService = $this->mock(SlackNotificationService::class);
+        $slackService->shouldReceive('notifySignInBlocked')
+            ->once()
+            ->with(\Mockery::on(function ($arg) use ($user) {
+                return $arg->id === $user->id;
+            }), 'Email not verified', \Mockery::any());
+        
+        $response = $this->post(route('auth.password.submit'), [
+            'email' => $user->email,
+            'password' => 'password'
+        ]);
+
+        $response->assertRedirect(route('auth.password'));
+        $response->assertSessionHasErrors('email');
+        $this->assertGuest();
+    }
+
+    public function test_user_cannot_login_if_not_approved_and_not_verified()
+    {
+        $user = User::factory()->unapproved()->unverified()->create([
+            'password' => bcrypt('password'),
+        ]);
+
+        $this->withSession(['email' => $user->email]);
+        
+        $response = $this->post(route('auth.password.submit'), [
+            'email' => $user->email,
+            'password' => 'password'
+        ]);
+
+        // Should fail on approval check first (approval is checked before verification)
+        $response->assertRedirect(route('auth.password'));
+        $response->assertSessionHas('approval_pending', true);
+        $response->assertSessionHasErrors('email');
+        $this->assertGuest();
+    }
+
+    public function test_user_can_login_if_approved_and_verified()
+    {
+        $user = User::factory()->create([
+            'password' => bcrypt('password'),
+            'email_verified_at' => now(),
+            'approved_at' => now(),
+        ]);
+
+        $this->withSession(['email' => $user->email]);
+        
+        // Verify Slack notification is called for successful sign-in
+        $slackService = $this->mock(SlackNotificationService::class);
+        $slackService->shouldReceive('notifyUserSignedIn')
+            ->once()
+            ->with(\Mockery::on(function ($arg) use ($user) {
+                return $arg->id === $user->id;
+            }), \Mockery::any());
+        
+        $response = $this->post(route('auth.password.submit'), [
+            'email' => $user->email,
+            'password' => 'password'
+        ]);
+
+        $response->assertRedirect('/');
+        $this->assertAuthenticatedAs($user);
+    }
+
+    public function test_approval_pending_message_shown_on_password_form()
+    {
+        $user = User::factory()->unapproved()->create([
+            'password' => bcrypt('password'),
+            'email_verified_at' => now(),
+        ]);
+
+        $this->withSession(['email' => $user->email]);
+        
+        $response = $this->post(route('auth.password.submit'), [
+            'email' => $user->email,
+            'password' => 'password'
+        ]);
+
+        $response->assertRedirect(route('auth.password'));
+        $response->assertSessionHas('approval_pending', true);
+        
+        // Follow redirect to see the message
+        $response = $this->get(route('auth.password'));
+        $response->assertSee('Almost...', false);
+        $response->assertSee('Because this is a closed beta', false);
+    }
+
+    public function test_verification_required_message_shown_on_password_form()
+    {
+        $user = User::factory()->unverified()->create([
+            'password' => bcrypt('password'),
+            'approved_at' => now(),
+        ]);
+
+        $this->withSession(['email' => $user->email]);
+        
+        $response = $this->post(route('auth.password.submit'), [
+            'email' => $user->email,
+            'password' => 'password'
+        ]);
+
+        $response->assertRedirect(route('auth.password'));
+        $response->assertSessionHasErrors('email');
+        
+        // Follow redirect to see the message
+        $response = $this->get(route('auth.password'));
+        $response->assertSee('Almost...', false);
+        $response->assertSee('Your email address needs to be verified', false);
+    }
 } 
