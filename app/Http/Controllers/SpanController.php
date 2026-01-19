@@ -4276,6 +4276,7 @@ class SpanController extends Controller
         $diff = [
             'basic_fields' => [],
             'metadata' => [],
+            'sources' => [],
             'connections' => []
         ];
 
