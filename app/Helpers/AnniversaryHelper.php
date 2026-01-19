@@ -55,6 +55,34 @@ class AnniversaryHelper
         $maxDaysUntil = $options['max_days_until'] ?? null;
         $requirePhoto = $options['require_photo'] ?? false;
         
+        // Get family member IDs if user is authenticated
+        $familyMemberIds = collect();
+        $user = auth()->user();
+        if ($user && $user->personalSpan) {
+            $personalSpan = $user->personalSpan;
+            // Get all family members using the same methods as the family card
+            $ancestors = $personalSpan->ancestors(3);
+            $descendants = $personalSpan->descendants(2);
+            $siblings = $personalSpan->siblings();
+            $unclesAndAunts = $personalSpan->unclesAndAunts();
+            $cousins = $personalSpan->cousins();
+            $nephewsAndNieces = $personalSpan->nephewsAndNieces();
+            $extraNephewsAndNieces = $personalSpan->extraNephewsAndNieces();
+            
+            // Collect all family member IDs
+            $familyMemberIds = collect()
+                ->push($personalSpan->id)
+                ->concat($ancestors->pluck('span')->pluck('id'))
+                ->concat($descendants->pluck('span')->pluck('id'))
+                ->concat($siblings->pluck('id'))
+                ->concat($unclesAndAunts->pluck('id'))
+                ->concat($cousins->pluck('id'))
+                ->concat($nephewsAndNieces->pluck('id'))
+                ->concat($extraNephewsAndNieces->pluck('id'))
+                ->unique()
+                ->filter();
+        }
+        
         $significantDates = [];
         
         // Get people with birthdays in the next X days (living people only)
@@ -122,6 +150,7 @@ class AnniversaryHelper
                         
                         if ($minSignificance === null || $significance >= $minSignificance) {
                             if ($maxDaysUntil === null || $daysUntilBirthday <= $maxDaysUntil) {
+                                $isFamilyMember = $familyMemberIds->contains($span->id);
                                 $significantDates[] = [
                                     'span' => $span,
                                     'type' => 'birthday',
@@ -129,7 +158,8 @@ class AnniversaryHelper
                                     'age' => $ageAtNextBirthday,
                                     'years' => $ageAtNextBirthday,
                                     'days_until' => $daysUntilBirthday,
-                                    'significance' => $significance
+                                    'significance' => $significance,
+                                    'is_family_member' => $isFamilyMember
                                 ];
                             }
                         }
@@ -203,13 +233,15 @@ class AnniversaryHelper
                     if ($daysUntilAnniversary <= $daysAhead && $daysUntilAnniversary >= 0) {
                         if ($minSignificance === null || $significance >= $minSignificance) {
                             if ($maxDaysUntil === null || $daysUntilAnniversary <= $maxDaysUntil) {
+                                $isFamilyMember = $familyMemberIds->contains($span->id);
                                 $significantDates[] = [
                                     'span' => $span,
                                     'type' => 'death_anniversary',
                                     'date' => $nextAnniversary,
                                     'years' => $yearsSinceDeath,
                                     'days_until' => $daysUntilAnniversary,
-                                    'significance' => $significance
+                                    'significance' => $significance,
+                                    'is_family_member' => $isFamilyMember
                                 ];
                             }
                         }
@@ -273,13 +305,15 @@ class AnniversaryHelper
                     if ($daysUntilAnniversary <= $daysAhead && $daysUntilAnniversary >= 0) {
                         if ($minSignificance === null || $significance >= $minSignificance) {
                             if ($maxDaysUntil === null || $daysUntilAnniversary <= $maxDaysUntil) {
+                                // Albums are not family members, but we include the flag for consistency
                                 $significantDates[] = [
                                     'span' => $span,
                                     'type' => 'album_anniversary',
                                     'date' => $nextAnniversary,
                                     'years' => $yearsSinceRelease,
                                     'days_until' => $daysUntilAnniversary,
-                                    'significance' => $significance
+                                    'significance' => $significance,
+                                    'is_family_member' => false
                                 ];
                             }
                         }
@@ -290,7 +324,7 @@ class AnniversaryHelper
             }
         }
         
-        // Sort by: 1) Is today (today first), 2) Significance (highest first), 3) Days until (soonest first)
+        // Sort by: 1) Is today (today first), 2) Family member (family first), 3) Significance (highest first), 4) Days until (soonest first)
         usort($significantDates, function($a, $b) {
             // First priority: events happening TODAY (days_until === 0) come first
             $aIsToday = $a['days_until'] === 0;
@@ -299,13 +333,20 @@ class AnniversaryHelper
                 return $bIsToday <=> $aIsToday; // true (1) comes before false (0)
             }
             
-            // Second priority: significance (higher is better)
+            // Second priority: family members come before non-family members
+            $aIsFamily = $a['is_family_member'] ?? false;
+            $bIsFamily = $b['is_family_member'] ?? false;
+            if ($aIsFamily !== $bIsFamily) {
+                return $bIsFamily <=> $aIsFamily; // true (1) comes before false (0)
+            }
+            
+            // Third priority: significance (higher is better)
             $significanceCompare = $b['significance'] <=> $a['significance'];
             if ($significanceCompare !== 0) {
                 return $significanceCompare;
             }
             
-            // Third priority: days until (sooner is better)
+            // Fourth priority: days until (sooner is better)
             return $a['days_until'] <=> $b['days_until'];
         });
         
@@ -314,108 +355,30 @@ class AnniversaryHelper
     
     /**
      * Get the highest-scoring person from upcoming anniversaries
-     * Only returns a person if there's a clear winner
-     * Checks for photos after determining significance (so same list as anniversaries component)
+     * Returns the person with the most significant anniversary
+     * No photo requirement - placeholder will be shown if no photo available
      * 
      * @param Carbon|null $targetDate The target date
      * @param int $maxDaysUntil Maximum days until anniversary (default 7)
      * @param int $minSignificance Minimum significance score (default 50)
-     * @return Span|null The highest-scoring person span with photo, or null if no clear winner found
+     * @return Span|null The highest-scoring person span, or null if no anniversaries found
      */
     public static function getHighestScoringPerson(
         ?Carbon $targetDate = null,
         int $maxDaysUntil = 7,
         int $minSignificance = 50
     ): ?Span {
-        // Get anniversaries WITHOUT photo requirement first (same as anniversaries list)
-        $anniversaries = self::getUpcomingAnniversaries(
-            $targetDate,
-            30, // Look ahead 30 days
-            [
-                'include_birthdays' => false, // Only death anniversaries for featured person
-                'include_death_anniversaries' => true,
-                'include_album_anniversaries' => false,
-                'min_significance' => $minSignificance,
-                'max_days_until' => $maxDaysUntil,
-                'require_photo' => false // Don't filter by photo yet - check later
-            ]
-        );
+        // Use the same call as the anniversaries list component
+        $targetDate = $targetDate ?? DateHelper::getCurrentDate();
+        $anniversaries = self::getUpcomingAnniversaries($targetDate, 60);
         
-        // Filter to only death anniversaries
-        $deathAnniversaries = array_filter($anniversaries, function($event) {
-            return $event['type'] === 'death_anniversary';
-        });
-        
-        if (empty($deathAnniversaries)) {
-            return null;
-        }
-        
-        // Reset array keys
-        $deathAnniversaries = array_values($deathAnniversaries);
-        
-        // Check if there's a clear winner based on the top person
-        // A clear winner means:
-        // 1. Top anniversary is happening TODAY (days_until === 0) with significance >= 50, OR
-        // 2. Top anniversary has significantly higher significance than second (at least 2x), OR
-        // 3. Top anniversary has high significance (>= 100) and second has low (<= 10)
-        
-        $topAnniversary = $deathAnniversaries[0];
-        $hasClearWinner = false;
-        
-        if (count($deathAnniversaries) === 1) {
-            // Only one candidate - automatically a clear winner
-            $hasClearWinner = true;
-        } else {
-            $secondAnniversary = $deathAnniversaries[1];
-            $topSignificance = $topAnniversary['significance'];
-            $secondSignificance = $secondAnniversary['significance'];
-            $topIsToday = $topAnniversary['days_until'] === 0;
-            $secondIsToday = $secondAnniversary['days_until'] === 0;
-            
-            // Clear winner case 1: Top one is happening today with high significance
-            if ($topIsToday && $topSignificance >= 50) {
-                // Only if second is not also today with similar significance
-                if (!$secondIsToday || ($secondIsToday && $topSignificance > $secondSignificance * 1.5)) {
-                    $hasClearWinner = true;
-                }
-            }
-            
-            // Clear winner case 2: Top one is significantly higher (at least 2x the second)
-            if (!$hasClearWinner && $secondSignificance > 0 && ($topSignificance / $secondSignificance) >= 2.0) {
-                $hasClearWinner = true;
-            }
-            
-            // Clear winner case 3: Top one has high significance (>= 100) and second is low (<= 10)
-            if (!$hasClearWinner && $topSignificance >= 100 && $secondSignificance <= 10) {
-                $hasClearWinner = true;
+        // Filter to only death anniversaries and find the first one
+        foreach ($anniversaries as $event) {
+            if ($event['type'] === 'death_anniversary') {
+                return $event['span'];
             }
         }
         
-        // If there's a clear winner, find the highest-scoring person WITH a photo
-        if ($hasClearWinner) {
-            // Check candidates in order of significance until we find one with a photo
-            foreach ($deathAnniversaries as $anniversary) {
-                $span = $anniversary['span'];
-                
-                // Check if this person has a photo
-                $hasPhoto = \App\Models\Connection::where('type_id', 'features')
-                    ->where('child_id', $span->id)
-                    ->whereHas('parent', function($q) {
-                        $q->where('type_id', 'thing')
-                          ->whereJsonContains('metadata->subtype', 'photo');
-                    })
-                    ->exists();
-                
-                if ($hasPhoto) {
-                    return $span;
-                }
-            }
-            
-            // Clear winner found but none have photos - return null (fall back to random)
-            return null;
-        }
-        
-        // No clear winner found
         return null;
     }
 }
