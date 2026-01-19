@@ -186,6 +186,10 @@ Route::middleware('web')->group(function () {
         ->where('date', '[0-9]{4}(-[0-9]{2}(-[0-9]{2})?)?')
         ->name('date.explore');
 
+    // Span connection tooltip data (JSON)
+    Route::get('/api/spans/{span}/connection-to/{other}', [\App\Http\Controllers\Api\SpanConnectionController::class, 'show'])
+        ->name('api.spans.connection');
+
     Route::middleware(['auth', 'verified', 'profile.complete'])->group(function () {
         // Info page with summary and stats
         Route::get('/info', [App\Http\Controllers\InfoController::class, 'index'])->name('info');
@@ -687,6 +691,7 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
             
             // Family route (must come before general span route)
             Route::get('/{span}/family', [FamilyController::class, 'show'])->name('family.show');
+            Route::get('/{span}/family/tree', [FamilyController::class, 'tree'])->name('family.tree');
             
             Route::get('/{subject}', [SpanController::class, 'show'])->name('spans.show');
             
