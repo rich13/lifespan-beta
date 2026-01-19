@@ -148,7 +148,7 @@
 @endsection
 
 @section('content')
-    <div data-span-id="{{ $span->id }}" class="container-fluid">
+    <div data-span-id="{{ $span->id }}" data-span-slug="{{ $span->slug }}" class="container-fluid">
 
         <!-- Timeline Cards -->
         @php
@@ -198,6 +198,8 @@
                 <!-- Related Connections Card - Show other connections between same subject/object (only for connection spans) -->
                 @if($span->type_id === 'connection')
                     <x-spans.cards.related-connections-card :span="$span" />
+                    <!-- Temporal Relations Card - Show other connections to same subject that overlap in time -->
+                    <x-spans.temporal-relations :span="$span" />
                 @endif
                 
                 <!-- Annotations Card - Show notes that annotate this span -->
