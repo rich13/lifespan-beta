@@ -69,6 +69,17 @@
                         </option>
                     </select>
                 </div>
+                <div class="col-md-auto">
+                    <select class="form-select" name="approved" onchange="this.form.submit()">
+                        <option value="">All Approval Status</option>
+                        <option value="1" {{ request('approved') === '1' ? 'selected' : '' }}>
+                            Approved
+                        </option>
+                        <option value="0" {{ request('approved') === '0' ? 'selected' : '' }}>
+                            Pending Approval
+                        </option>
+                    </select>
+                </div>
             </form>
 
             <!-- Users Table -->
@@ -79,7 +90,8 @@
                             <th>Name</th>
                             <th>Email</th>
                             <th>Role</th>
-                            <th>Verification</th>
+                            <th>Email Verified</th>
+                            <th>Approved</th>
                             <th>Joined</th>
                             <th>Spans</th>
                             <th></th>
@@ -103,9 +115,24 @@
                                 </td>
                                 <td>
                                     @if($user->email_verified_at)
-                                        <span class="text-success">Verified</span>
+                                        <span class="badge bg-success">
+                                            <i class="bi bi-check-circle"></i> Verified
+                                        </span>
                                     @else
-                                        <span class="text-danger">Not Verified</span>
+                                        <span class="badge bg-danger">
+                                            <i class="bi bi-x-circle"></i> Not Verified
+                                        </span>
+                                    @endif
+                                </td>
+                                <td>
+                                    @if($user->approved_at)
+                                        <span class="badge bg-success">
+                                            <i class="bi bi-check-circle"></i> Approved
+                                        </span>
+                                    @else
+                                        <span class="badge bg-warning text-dark">
+                                            <i class="bi bi-clock"></i> Pending
+                                        </span>
                                     @endif
                                 </td>
                                 <td>{{ $user->created_at->format('Y-m-d') }}</td>
@@ -115,15 +142,53 @@
                                     </span>
                                 </td>
                                 <td class="text-end">
-                                    <a href="{{ route('admin.users.edit', $user) }}" 
-                                       class="btn btn-sm btn-outline-primary">Edit</a>
-                                    <a href="{{ route('admin.users.show', $user) }}" 
-                                       class="btn btn-sm btn-outline-secondary">View</a>
+                                    <div class="btn-group" role="group">
+                                        @if(!$user->approved_at)
+                                            <form action="{{ route('admin.users.approve', $user) }}" method="POST" class="d-inline">
+                                                @csrf
+                                                <button type="submit" class="btn btn-sm btn-success" title="Approve User">
+                                                    <i class="bi bi-check-circle"></i> Approve
+                                                </button>
+                                            </form>
+                                        @else
+                                            <form action="{{ route('admin.users.unapprove', $user) }}" method="POST" class="d-inline">
+                                                @csrf
+                                                <button type="submit" class="btn btn-sm btn-warning" title="Unapprove User" onclick="return confirm('Are you sure you want to unapprove this user? They will not be able to log in until approved again.');">
+                                                    <i class="bi bi-x-circle"></i> Unapprove
+                                                </button>
+                                            </form>
+                                        @endif
+                                        
+                                        @if(!$user->email_verified_at)
+                                            <form action="{{ route('admin.users.verify', $user) }}" method="POST" class="d-inline">
+                                                @csrf
+                                                <button type="submit" class="btn btn-sm btn-info text-white" title="Verify Email">
+                                                    <i class="bi bi-envelope-check"></i> Verify
+                                                </button>
+                                            </form>
+                                        @else
+                                            <form action="{{ route('admin.users.unverify', $user) }}" method="POST" class="d-inline">
+                                                @csrf
+                                                <button type="submit" class="btn btn-sm btn-secondary" title="Unverify Email" onclick="return confirm('Are you sure you want to unverify this user\'s email?');">
+                                                    <i class="bi bi-envelope-x"></i> Unverify
+                                                </button>
+                                            </form>
+                                        @endif
+                                        
+                                        <a href="{{ route('admin.users.edit', $user) }}" 
+                                           class="btn btn-sm btn-outline-primary" title="Edit User">
+                                            <i class="bi bi-pencil"></i> Edit
+                                        </a>
+                                        <a href="{{ route('admin.users.show', $user) }}" 
+                                           class="btn btn-sm btn-outline-secondary" title="View User">
+                                            <i class="bi bi-eye"></i> View
+                                        </a>
+                                    </div>
                                 </td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="7" class="text-center text-muted py-4">
+                                <td colspan="8" class="text-center text-muted py-4">
                                     No users found matching your criteria
                                 </td>
                             </tr>

@@ -22,13 +22,51 @@ class UserController extends Controller
         $this->middleware(['auth', 'admin']);
     }
 
-    public function index(): View
+    public function index(Request $request): View
     {
-        $users = User::with('personalSpan')
+        $query = User::with('personalSpan')
             ->leftJoin('spans', 'users.personal_span_id', '=', 'spans.id')
-            ->orderBy('spans.name')
-            ->select('users.*')
-            ->paginate(30);
+            ->select('users.*');
+
+        // Filter by email verification status
+        if ($request->filled('verified')) {
+            if ($request->verified === '1') {
+                $query->whereNotNull('users.email_verified_at');
+            } elseif ($request->verified === '0') {
+                $query->whereNull('users.email_verified_at');
+            }
+        }
+
+        // Filter by approval status
+        if ($request->filled('approved')) {
+            if ($request->approved === '1') {
+                $query->whereNotNull('users.approved_at');
+            } elseif ($request->approved === '0') {
+                $query->whereNull('users.approved_at');
+            }
+        }
+
+        // Filter by role
+        if ($request->filled('role')) {
+            if ($request->role === 'admin') {
+                $query->where('users.is_admin', true);
+            } elseif ($request->role === 'user') {
+                $query->where('users.is_admin', false);
+            }
+        }
+
+        // Search by name or email
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function($q) use ($search) {
+                $q->where('users.email', 'like', "%{$search}%")
+                  ->orWhereHas('personalSpan', function($q) use ($search) {
+                      $q->where('name', 'like', "%{$search}%");
+                  });
+            });
+        }
+
+        $users = $query->orderBy('spans.name')->paginate(30);
         $invitationCodes = \App\Models\InvitationCode::orderBy('created_at', 'desc')->get();
         $unusedCodes = $invitationCodes->where('used', false)->count();
         $usedCodes = $invitationCodes->where('used', true)->count();
@@ -54,6 +92,8 @@ class UserController extends Controller
             'password' => 'sometimes|nullable|min:8|confirmed',
             'verify_email' => 'sometimes|boolean',
             'unverify_email' => 'sometimes|boolean',
+            'approve_user' => 'sometimes|boolean',
+            'unapprove_user' => 'sometimes|boolean',
         ]);
 
         // Handle checkbox: when unchecked, it won't be in the request
@@ -69,6 +109,50 @@ class UserController extends Controller
             unset($validated['password']);
         }
 
+        // Handle account approval
+        if ($request->has('approve_user') && $request->approve_user) {
+            // Approve user
+            if (!$user->approved_at) {
+                $user->approved_at = now();
+                $user->save();
+
+                Log::info('User approved by admin via edit page', [
+                    'user_id' => $user->id,
+                    'user_email' => $user->email,
+                    'approved_by' => auth()->id(),
+                ]);
+
+                // Send welcome email to the newly approved user
+                try {
+                    Mail::to($user->email)->send(new WelcomeEmail($user));
+                    
+                    Log::info('Welcome email sent to approved user', [
+                        'user_id' => $user->id,
+                        'user_email' => $user->email,
+                    ]);
+                } catch (\Exception $e) {
+                    Log::error('Failed to send welcome email to approved user', [
+                        'user_id' => $user->id,
+                        'user_email' => $user->email,
+                        'error' => $e->getMessage(),
+                    ]);
+                    // Don't fail the approval if email sending fails
+                }
+            }
+        } elseif ($request->has('unapprove_user') && $request->unapprove_user) {
+            // Unapprove user
+            if ($user->approved_at) {
+                $user->approved_at = null;
+                $user->save();
+
+                Log::info('User unapproved by admin via edit page', [
+                    'user_id' => $user->id,
+                    'user_email' => $user->email,
+                    'unapproved_by' => auth()->id(),
+                ]);
+            }
+        }
+
         // Handle email verification
         if ($request->has('verify_email') && $request->verify_email) {
             // Mark email as verified
@@ -82,8 +166,8 @@ class UserController extends Controller
             $user->save();
         }
 
-        // Remove verification fields from validated array (they're handled above)
-        unset($validated['verify_email'], $validated['unverify_email']);
+        // Remove verification and approval fields from validated array (they're handled above)
+        unset($validated['verify_email'], $validated['unverify_email'], $validated['approve_user'], $validated['unapprove_user']);
 
         $user->update($validated);
         return redirect()->route('admin.users.show', $user)
@@ -93,7 +177,7 @@ class UserController extends Controller
     public function approve(User $user)
     {
         if ($user->approved_at) {
-            return redirect()->route('admin.users.show', $user)
+            return redirect()->route('admin.users.index')
                 ->with('status', 'User is already approved.');
         }
 
@@ -124,8 +208,69 @@ class UserController extends Controller
             // Don't fail the approval if email sending fails
         }
 
-        return redirect()->route('admin.users.show', $user)
+        return redirect()->route('admin.users.index')
             ->with('status', 'User approved successfully. Welcome email sent.');
+    }
+
+    public function unapprove(User $user)
+    {
+        if (!$user->approved_at) {
+            return redirect()->route('admin.users.index')
+                ->with('status', 'User is already not approved.');
+        }
+
+        $user->update([
+            'approved_at' => null,
+        ]);
+
+        Log::info('User unapproved by admin', [
+            'user_id' => $user->id,
+            'user_email' => $user->email,
+            'unapproved_by' => auth()->id(),
+        ]);
+
+        return redirect()->route('admin.users.index')
+            ->with('status', 'User unapproved successfully.');
+    }
+
+    public function verify(User $user)
+    {
+        if ($user->hasVerifiedEmail()) {
+            return redirect()->route('admin.users.index')
+                ->with('status', 'User email is already verified.');
+        }
+
+        $user->markEmailAsVerified();
+        event(new Verified($user));
+
+        Log::info('User email verified by admin', [
+            'user_id' => $user->id,
+            'user_email' => $user->email,
+            'verified_by' => auth()->id(),
+        ]);
+
+        return redirect()->route('admin.users.index')
+            ->with('status', 'User email verified successfully.');
+    }
+
+    public function unverify(User $user)
+    {
+        if (!$user->hasVerifiedEmail()) {
+            return redirect()->route('admin.users.index')
+                ->with('status', 'User email is already not verified.');
+        }
+
+        $user->email_verified_at = null;
+        $user->save();
+
+        Log::info('User email unverified by admin', [
+            'user_id' => $user->id,
+            'user_email' => $user->email,
+            'unverified_by' => auth()->id(),
+        ]);
+
+        return redirect()->route('admin.users.index')
+            ->with('status', 'User email unverified successfully.');
     }
 
     public function generateInvitationCodes(Request $request)

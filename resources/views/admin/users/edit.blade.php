@@ -87,6 +87,40 @@
 
                 <div class="card mb-4">
                     <div class="card-body">
+                        <h2 class="card-title h5">Account Approval</h2>
+                        
+                        @if($user->approved_at)
+                            <p class="text-success mb-3">
+                                Approved on {{ $user->approved_at->format('Y-m-d H:i:s') }}
+                            </p>
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input" 
+                                       id="unapprove_user" name="unapprove_user" value="1">
+                                <label class="form-check-label" for="unapprove_user">
+                                    Unapprove User
+                                </label>
+                            </div>
+                            <small class="form-text text-muted">
+                                Unapproving will prevent the user from logging in until they are approved again.
+                            </small>
+                        @else
+                            <p class="text-warning mb-3">Pending Approval</p>
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input" 
+                                       id="approve_user" name="approve_user" value="1">
+                                <label class="form-check-label" for="approve_user">
+                                    Approve User
+                                </label>
+                            </div>
+                            <small class="form-text text-muted">
+                                Approving will allow the user to log in and will send them a welcome email.
+                            </small>
+                        @endif
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-body">
                         <h2 class="card-title h5">Email Verification</h2>
                         
                         @if($user->email_verified_at)
@@ -202,6 +236,7 @@
                     <ul class="small text-muted mb-0">
                         <li>Password changes will take effect immediately.</li>
                         <li>Email verification status changes will take effect immediately.</li>
+                        <li>Approval status changes will take effect immediately.</li>
                         <li>Admin status changes will take effect on next login.</li>
                         @if($user->is_admin)
                             <li class="text-danger">Admin accounts cannot be deleted.</li>
