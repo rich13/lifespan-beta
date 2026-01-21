@@ -22,78 +22,15 @@
 @endsection
 
 @section('page_tools')
-    @auth
-        @if(auth()->user()->can('update', $photo) || auth()->user()->can('delete', $photo))
-            @can('update', $photo)
-                @if($photo->type && $photo->type->type_id === 'place')
-                    <a href="{{ route('spans.yaml-editor', $photo) }}" class="btn btn-sm btn-outline-primary" 
-                       id="edit-photo-btn" 
-                       data-bs-toggle="tooltip" data-bs-placement="bottom" 
-                       title="Edit photo (⌘E)">
-                        <i class="bi bi-code-square me-1"></i> Edit
-                    </a>
-                @else
-                    <a href="{{ route('spans.spanner', $photo) }}" class="btn btn-sm btn-outline-primary" 
-                       id="edit-photo-btn" 
-                       data-bs-toggle="tooltip" data-bs-placement="bottom" 
-                       title="Edit photo (⌘E)">
-                        <i class="bi bi-wrench me-1"></i> Edit
-                    </a>
-                @endif
-            @endcan
-            @can('delete', $photo)
-                <form id="delete-photo-form" action="{{ route('spans.destroy', $photo) }}" method="POST" class="d-none">
-                    @csrf
-                    @method('DELETE')
-                </form>
-                <a href="#" class="btn btn-sm btn-outline-danger" id="delete-photo-btn">
-                    <i class="bi bi-trash me-1"></i> Delete
-                </a>
-            @endcan
-        @endif
-
-        <a href="{{ route('spans.history', $photo) }}" class="btn btn-sm btn-outline-dark">
-            <i class="bi bi-clock-history me-1"></i> History
-        </a>
-    @endauth
+    <x-spans.span-tools 
+        :span="$photo" 
+        idPrefix="photo" 
+        label="photo" />
 @endsection
 
 @section('content')
 <div class="container-fluid">
     <div class="row">
-        @auth
-            <div class="col-12 d-flex justify-content-end align-items-center mb-3 gap-2">
-                @can('update', $photo)
-                    @if($photo->type && $photo->type->type_id === 'place')
-                        <a href="{{ route('spans.yaml-editor', $photo) }}" class="btn btn-sm btn-outline-primary" 
-                           id="edit-photo-btn" 
-                           data-bs-toggle="tooltip" data-bs-placement="bottom" 
-                           title="Edit photo (⌘E)">
-                            <i class="bi bi-code-square me-1"></i> Edit
-                        </a>
-                    @else
-                        <a href="{{ route('spans.spanner', $photo) }}" class="btn btn-sm btn-outline-primary" 
-                           id="edit-photo-btn" 
-                           data-bs-toggle="tooltip" data-bs-placement="bottom" 
-                           title="Edit photo (⌘E)">
-                            <i class="bi bi-wrench me-1"></i> Edit
-                        </a>
-                    @endif
-                @endcan
-                @can('delete', $photo)
-                    <form id="delete-photo-form" action="{{ route('spans.destroy', $photo) }}" method="POST" class="d-none">
-                        @csrf
-                        @method('DELETE')
-                    </form>
-                    <a href="#" class="btn btn-sm btn-outline-danger" id="delete-photo-btn">
-                        <i class="bi bi-trash me-1"></i> Delete
-                    </a>
-                @endcan
-                <a href="{{ route('spans.history', $photo) }}" class="btn btn-sm btn-outline-dark">
-                    <i class="bi bi-clock-history me-1"></i> History
-                </a>
-            </div>
-        @endauth
         <!-- Main Photo Content -->
         <div class="col-lg-8">
 
@@ -201,34 +138,3 @@
 </div>
 @endsection
 
-@push('scripts')
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Delete confirmation
-    const deleteBtn = document.getElementById('delete-photo-btn');
-    if (deleteBtn) {
-        deleteBtn.addEventListener('click', function(e) {
-            e.preventDefault();
-            if (confirm('Are you sure you want to delete this photo?')) {
-                document.getElementById('delete-photo-form').submit();
-            }
-        });
-    }
-
-    // Edit keyboard shortcut (Cmd+E / Ctrl+E)
-    document.addEventListener('keydown', function(e) {
-        if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
-            e.preventDefault();
-            const editBtn = document.getElementById('edit-photo-btn');
-            if (editBtn) editBtn.click();
-        }
-    });
-
-    // Bootstrap tooltips
-    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-    tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl);
-    });
-});
-</script>
-@endpush

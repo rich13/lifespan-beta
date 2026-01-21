@@ -220,6 +220,18 @@ class Connection extends Model
         Cache::forget("timeline_object_{$spanId}_guest");
         Cache::forget("timeline_during_{$spanId}_guest");
         
+        // Clear web view connection caches
+        Cache::forget("connection_types_{$spanId}");
+        
+        // Get all connection types for this span to clear type-specific caches
+        $connectionTypes = \App\Models\ConnectionType::where(function($query) use ($spanId) {
+            $span = \App\Models\Span::find($spanId);
+            if ($span) {
+                $query->whereJsonContains('allowed_span_types->parent', $span->type_id)
+                      ->orWhereJsonContains('allowed_span_types->child', $span->type_id);
+            }
+        })->pluck('type');
+        
         // Clear caches for all users (we'll use a pattern-based approach)
         // Note: In a production environment, you might want to use Redis SCAN or similar
         // For now, we'll clear the most common user IDs (1-1000)
@@ -227,6 +239,19 @@ class Connection extends Model
             Cache::forget("timeline_{$spanId}_{$userId}");
             Cache::forget("timeline_object_{$spanId}_{$userId}");
             Cache::forget("timeline_during_{$spanId}_{$userId}");
+            Cache::forget("connections_all_{$spanId}_{$userId}");
+            
+            // Clear per-type connection list caches
+            foreach ($connectionTypes as $type) {
+                Cache::forget("connections_list_{$spanId}_{$type}_{$userId}");
+                Cache::forget("connection_count_{$spanId}_{$type}");
+            }
+        }
+        
+        // Also clear for guest
+        Cache::forget("connections_all_{$spanId}_guest");
+        foreach ($connectionTypes as $type) {
+            Cache::forget("connections_list_{$spanId}_{$type}_guest");
         }
         
         // Also clear for the current user if authenticated
@@ -235,6 +260,11 @@ class Connection extends Model
             Cache::forget("timeline_{$spanId}_{$currentUserId}");
             Cache::forget("timeline_object_{$spanId}_{$currentUserId}");
             Cache::forget("timeline_during_{$spanId}_{$currentUserId}");
+            Cache::forget("connections_all_{$spanId}_{$currentUserId}");
+            
+            foreach ($connectionTypes as $type) {
+                Cache::forget("connections_list_{$spanId}_{$type}_{$currentUserId}");
+            }
         }
     }
 

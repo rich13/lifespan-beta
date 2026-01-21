@@ -95,56 +95,19 @@
 @endsection
 
 @section('page_tools')
-
-    @auth
-        @if(auth()->user()->can('update', $span) || auth()->user()->can('delete', $span))
-            @can('update', $span)
-                @if($span->type && $span->type->type_id === 'place')
-                    <a href="{{ route('spans.yaml-editor', $span) }}" class="btn btn-sm btn-outline-primary" 
-                       id="edit-span-btn" 
-                       data-bs-toggle="tooltip" data-bs-placement="bottom" 
-                       title="Edit span (⌘E)">
-                        <i class="bi bi-code-square me-1"></i> Edit
-                    </a>
-                @else
-                    <a href="{{ route('spans.spanner', $span) }}" class="btn btn-sm btn-outline-primary" 
-                       id="edit-span-btn" 
-                       data-bs-toggle="tooltip" data-bs-placement="bottom" 
-                       title="Edit span (⌘E)">
-                        <i class="bi bi-wrench me-1"></i> Edit
-                    </a>
-                @endif
-                <!-- <a href="{{ route('spans.yaml-editor', $span) }}" class="btn btn-sm btn-outline-secondary" 
-                   data-bs-toggle="tooltip" data-bs-placement="bottom" 
-                   title="YAML Editor">
-                    <i class="bi bi-code-square me-1"></i> YAML
-                </a> -->
-            @endcan
-            @can('delete', $span)
-            
-                <form id="delete-span-form" action="{{ route('spans.destroy', $span) }}" method="POST" class="d-none">
-                    @csrf
-                    @method('DELETE')
-                </form>    
-                <a href="#" class="btn btn-sm btn-outline-danger" id="delete-span-btn">
-                    <i class="bi bi-trash me-1"></i> Delete
-                </a>
-                
-            @endcan
-        @endif
-
-        <a href="{{ route('spans.history', $span) }}" class="btn btn-sm btn-outline-dark">
-            <i class="bi bi-clock-history me-1"></i> History
-        </a>
-
+    <x-spans.span-tools 
+        :span="$span" 
+        idPrefix="span" 
+        label="span">
         @if($span->type_id === 'role')
-            <a href="{{ route('new.person-role-org', ['role_id' => $span->id, 'role_name' => $span->name]) }}"
-               class="btn btn-sm btn-outline-success">
-                <i class="bi bi-person-plus-fill me-1"></i> Add to Role
-            </a>
+            <x-slot name="extraButtons">
+                <a href="{{ route('new.person-role-org', ['role_id' => $span->id, 'role_name' => $span->name]) }}"
+                   class="btn btn-sm btn-outline-success">
+                    <i class="bi bi-person-plus-fill me-1"></i> Add to Role
+                </a>
+            </x-slot>
         @endif
-
-    @endauth
+    </x-spans.span-tools>
 @endsection
 
 @section('content')
@@ -388,40 +351,3 @@
         </div>
     </div>
 @endsection
-
-@push('scripts')
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Delete span confirmation
-    const deleteBtn = document.getElementById('delete-span-btn');
-    if (deleteBtn) {
-        deleteBtn.addEventListener('click', function(e) {
-            e.preventDefault();
-            if (confirm('Are you sure you want to delete this span?')) {
-                document.getElementById('delete-span-form').submit();
-            }
-        });
-    }
-    
-    // Edit span keyboard shortcut (Cmd+E or Ctrl+E)
-    document.addEventListener('keydown', function(e) {
-        // Check for Cmd+E (Mac) or Ctrl+E (Windows/Linux)
-        if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
-            e.preventDefault(); // Prevent any potential conflicts
-            
-            // Check if edit button exists and user has permission
-            const editSpanBtn = document.getElementById('edit-span-btn');
-            if (editSpanBtn) {
-                editSpanBtn.click();
-            }
-        }
-    });
-    
-    // Initialize Bootstrap tooltips
-    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-    tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl);
-    });
-});
-</script>
-@endpush 

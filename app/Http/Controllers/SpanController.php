@@ -3708,64 +3708,75 @@ class SpanController extends Controller
 
         // Get all connections of this type involving the subject with access control
         $user = auth()->user();
-        $connections = Connection::where('connections.type_id', $connectionType->type)
-            ->where(function($query) use ($subject) {
-                $query->where('connections.parent_id', $subject->id)
-                      ->orWhere('connections.child_id', $subject->id);
-            })
-            ->where(function($query) use ($user) {
-                if (!$user) {
-                    // Guest users can only see connections involving public spans
-                    $query->whereHas('subject', function($q) {
-                        $q->where('access_level', 'public');
-                    })->whereHas('object', function($q) {
-                        $q->where('access_level', 'public');
-                    });
-                } elseif (!$user->is_admin) {
-                    // Regular users can see connections involving spans they have permission to view
-                    $query->where(function($subQ) use ($user) {
-                        $subQ->whereHas('subject', function($q) use ($user) {
-                            $q->where(function($spanQ) use ($user) {
-                                $spanQ->where('access_level', 'public')
-                                    ->orWhere('owner_id', $user->id)
-                                    ->orWhereHas('spanPermissions', function($permQ) use ($user) {
-                                        $permQ->where('user_id', $user->id)
-                                              ->whereIn('permission_type', ['view', 'edit']);
-                                    })
-                                    ->orWhereHas('spanPermissions', function($permQ) use ($user) {
-                                        $permQ->whereNotNull('group_id')
-                                              ->whereIn('permission_type', ['view', 'edit'])
-                                              ->whereHas('group', function($groupQ) use ($user) {
-                                                  $groupQ->whereHas('users', function($userQ) use ($user) {
-                                                      $userQ->where('user_id', $user->id);
+        $userId = $user?->id ?? 'guest';
+        
+        // Cache key includes user ID for proper access control
+        $cacheKey = "connections_list_{$subject->id}_{$connectionType->type}_{$userId}";
+        
+        $connections = Cache::remember($cacheKey, 300, function () use ($subject, $connectionType, $user) {
+            return Connection::where('connections.type_id', $connectionType->type)
+                ->where(function($query) use ($subject) {
+                    $query->where('connections.parent_id', $subject->id)
+                          ->orWhere('connections.child_id', $subject->id);
+                })
+                ->where(function($query) use ($user) {
+                    if (!$user) {
+                        // Guest users can only see connections involving public spans
+                        $query->whereHas('subject', function($q) {
+                            $q->where('access_level', 'public');
+                        })->whereHas('object', function($q) {
+                            $q->where('access_level', 'public');
+                        });
+                    } elseif (!$user->is_admin) {
+                        // Regular users can see connections involving spans they have permission to view
+                        $query->where(function($subQ) use ($user) {
+                            $subQ->whereHas('subject', function($q) use ($user) {
+                                $q->where(function($spanQ) use ($user) {
+                                    $spanQ->where('access_level', 'public')
+                                        ->orWhere('owner_id', $user->id)
+                                        ->orWhereHas('spanPermissions', function($permQ) use ($user) {
+                                            $permQ->where('user_id', $user->id)
+                                                  ->whereIn('permission_type', ['view', 'edit']);
+                                        })
+                                        ->orWhereHas('spanPermissions', function($permQ) use ($user) {
+                                            $permQ->whereNotNull('group_id')
+                                                  ->whereIn('permission_type', ['view', 'edit'])
+                                                  ->whereHas('group', function($groupQ) use ($user) {
+                                                      $groupQ->whereHas('users', function($userQ) use ($user) {
+                                                          $userQ->where('user_id', $user->id);
+                                                      });
                                                   });
-                                              });
-                                    });
-                            });
-                        })->whereHas('object', function($q) use ($user) {
-                            $q->where(function($spanQ) use ($user) {
-                                $spanQ->where('access_level', 'public')
-                                    ->orWhere('owner_id', $user->id)
-                                    ->orWhereHas('spanPermissions', function($permQ) use ($user) {
-                                        $permQ->where('user_id', $user->id)
-                                              ->whereIn('permission_type', ['view', 'edit']);
-                                    })
-                                    ->orWhereHas('spanPermissions', function($permQ) use ($user) {
-                                        $permQ->whereNotNull('group_id')
-                                              ->whereIn('permission_type', ['view', 'edit'])
-                                              ->whereHas('group', function($groupQ) use ($user) {
-                                                  $groupQ->whereHas('users', function($userQ) use ($user) {
-                                                      $userQ->where('user_id', $user->id);
+                                        });
+                                });
+                            })->whereHas('object', function($q) use ($user) {
+                                $q->where(function($spanQ) use ($user) {
+                                    $spanQ->where('access_level', 'public')
+                                        ->orWhere('owner_id', $user->id)
+                                        ->orWhereHas('spanPermissions', function($permQ) use ($user) {
+                                            $permQ->where('user_id', $user->id)
+                                                  ->whereIn('permission_type', ['view', 'edit']);
+                                        })
+                                        ->orWhereHas('spanPermissions', function($permQ) use ($user) {
+                                            $permQ->whereNotNull('group_id')
+                                                  ->whereIn('permission_type', ['view', 'edit'])
+                                                  ->whereHas('group', function($groupQ) use ($user) {
+                                                      $groupQ->whereHas('users', function($userQ) use ($user) {
+                                                          $userQ->where('user_id', $user->id);
+                                                      });
                                                   });
-                                              });
-                                    });
+                                        });
+                                });
                             });
                         });
-                    });
-                }
-            })
-            ->with(['subject', 'object', 'connectionSpan'])
-            ->get();
+                    }
+                })
+                ->with([
+                    'subject:id,name,type_id,metadata,access_level,owner_id',
+                    'object:id,name,type_id,metadata,access_level,owner_id',
+                    'connectionSpan:id,slug,start_year,start_month,start_day,end_year,end_month,end_day'
+                ])
+                ->get();
+        });
         
         // Transform connections to show the other span and relationship direction
         $connections->transform(function($connection) use ($subject, $connectionType) {
@@ -3809,19 +3820,25 @@ class SpanController extends Controller
             ['path' => request()->url(), 'pageName' => 'page']
         );
 
-        // Get all relevant connection types for this span with connection counts
-        $relevantConnectionTypes = ConnectionType::where(function($query) use ($subject) {
-            $query->whereJsonContains('allowed_span_types->parent', $subject->type_id)
-                  ->orWhereJsonContains('allowed_span_types->child', $subject->type_id);
-        })->orderBy('forward_predicate')->get();
+        // Get all relevant connection types for this span with connection counts (cache separately)
+        $connectionTypesCacheKey = "connection_types_{$subject->id}";
+        $relevantConnectionTypes = Cache::remember($connectionTypesCacheKey, 600, function () use ($subject) {
+            return ConnectionType::where(function($query) use ($subject) {
+                $query->whereJsonContains('allowed_span_types->parent', $subject->type_id)
+                      ->orWhereJsonContains('allowed_span_types->child', $subject->type_id);
+            })->orderBy('forward_predicate')->get();
+        });
 
-        // Add connection counts for each type
+        // Add connection counts for each type (cached per type)
         $relevantConnectionTypes->each(function($type) use ($subject) {
-            $count = Connection::where('connections.type_id', $type->type)
-                ->where(function($query) use ($subject) {
-                    $query->where('connections.parent_id', $subject->id)
-                          ->orWhere('connections.child_id', $subject->id);
-                })->count();
+            $countCacheKey = "connection_count_{$subject->id}_{$type->type}";
+            $count = Cache::remember($countCacheKey, 300, function () use ($subject, $type) {
+                return Connection::where('connections.type_id', $type->type)
+                    ->where(function($query) use ($subject) {
+                        $query->where('connections.parent_id', $subject->id)
+                              ->orWhere('connections.child_id', $subject->id);
+                    })->count();
+            });
             
             $type->connection_count = $count;
         });
@@ -3834,73 +3851,166 @@ class SpanController extends Controller
      */
     public function allConnections(Request $request, Span $subject): View
     {
-        // Get all relevant connection types for this span with connection counts
-        $relevantConnectionTypes = ConnectionType::where(function($query) use ($subject) {
-            $query->whereJsonContains('allowed_span_types->parent', $subject->type_id)
-                  ->orWhereJsonContains('allowed_span_types->child', $subject->type_id);
-        })->orderBy('forward_predicate')->get();
-
-        // Get all connections for this span, grouped by type
-        $allConnections = [];
-        $connectionCounts = [];
+        $user = auth()->user();
+        $userId = $user?->id ?? 'guest';
         
-        foreach ($relevantConnectionTypes as $connectionType) {
-            $connections = Connection::where('type_id', $connectionType->type)
-                ->where(function($query) use ($subject) {
-                    $query->where('parent_id', $subject->id)
-                          ->orWhere('child_id', $subject->id);
-                })
-                ->with(['subject', 'object', 'connectionSpan'])
-                ->get();
+        // Cache key includes user ID for proper access control
+        $cacheKey = "connections_all_{$subject->id}_{$userId}";
+        
+        $cachedData = Cache::remember($cacheKey, 300, function () use ($subject, $user) {
+            // Get all relevant connection types for this span with connection counts
+            $relevantConnectionTypes = ConnectionType::where(function($query) use ($subject) {
+                $query->whereJsonContains('allowed_span_types->parent', $subject->type_id)
+                      ->orWhereJsonContains('allowed_span_types->child', $subject->type_id);
+            })->orderBy('forward_predicate')->get();
 
-            // Transform connections to show the other span and relationship direction
-            $connections->transform(function($connection) use ($subject, $connectionType) {
-                $isParent = $connection->parent_id === $subject->id;
-                $otherSpan = $isParent ? $connection->object : $connection->subject;
-                $predicate = $isParent ? $connectionType->forward_predicate : $connectionType->inverse_predicate;
-                
-                $connection->other_span = $otherSpan;
-                $connection->is_parent = $isParent;
-                $connection->predicate = $predicate;
-                $connection->connection_type = $connectionType;
-                
-                return $connection;
-            });
+            // Collect all connections across all types, then merge and sort chronologically
+            $allConnectionsFlat = collect();
+            $connectionCounts = [];
+            
+            foreach ($relevantConnectionTypes as $connectionType) {
+                // Apply access control similar to listConnections
+                $connections = Connection::where('type_id', $connectionType->type)
+                    ->where(function($query) use ($subject) {
+                        $query->where('parent_id', $subject->id)
+                              ->orWhere('child_id', $subject->id);
+                    })
+                    ->where(function($query) use ($user) {
+                        if (!$user) {
+                            // Guest users can only see connections involving public spans
+                            $query->whereHas('subject', function($q) {
+                                $q->where('access_level', 'public');
+                            })->whereHas('object', function($q) {
+                                $q->where('access_level', 'public');
+                            });
+                        } elseif (!$user->is_admin) {
+                            // Regular users can see connections involving spans they have permission to view
+                            $query->where(function($subQ) use ($user) {
+                                $subQ->whereHas('subject', function($q) use ($user) {
+                                    $q->where(function($spanQ) use ($user) {
+                                        $spanQ->where('access_level', 'public')
+                                            ->orWhere('owner_id', $user->id)
+                                            ->orWhereHas('spanPermissions', function($permQ) use ($user) {
+                                                $permQ->where('user_id', $user->id)
+                                                      ->whereIn('permission_type', ['view', 'edit']);
+                                            })
+                                            ->orWhereHas('spanPermissions', function($permQ) use ($user) {
+                                                $permQ->whereNotNull('group_id')
+                                                      ->whereIn('permission_type', ['view', 'edit'])
+                                                      ->whereHas('group', function($groupQ) use ($user) {
+                                                          $groupQ->whereHas('users', function($userQ) use ($user) {
+                                                              $userQ->where('user_id', $user->id);
+                                                          });
+                                                      });
+                                            });
+                                    });
+                                })->whereHas('object', function($q) use ($user) {
+                                    $q->where(function($spanQ) use ($user) {
+                                        $spanQ->where('access_level', 'public')
+                                            ->orWhere('owner_id', $user->id)
+                                            ->orWhereHas('spanPermissions', function($permQ) use ($user) {
+                                                $permQ->where('user_id', $user->id)
+                                                      ->whereIn('permission_type', ['view', 'edit']);
+                                            })
+                                            ->orWhereHas('spanPermissions', function($permQ) use ($user) {
+                                                $permQ->whereNotNull('group_id')
+                                                      ->whereIn('permission_type', ['view', 'edit'])
+                                                      ->whereHas('group', function($groupQ) use ($user) {
+                                                          $groupQ->whereHas('users', function($userQ) use ($user) {
+                                                              $userQ->where('user_id', $user->id);
+                                                          });
+                                                      });
+                                            });
+                                    });
+                                });
+                            });
+                        }
+                    })
+                    ->with([
+                        'subject:id,name,type_id,metadata,access_level,owner_id',
+                        'object:id,name,type_id,metadata,access_level,owner_id',
+                        'connectionSpan:id,slug,start_year,start_month,start_day,end_year,end_month,end_day'
+                    ])
+                    ->get();
 
-            // Filter out "created" connections to photos
-            $filteredConnections = $connections->filter(function($conn) use ($connectionType, $subject) {
-                if ($connectionType->type === 'created') {
-                    $otherSpan = $conn->parent_id === $subject->id ? $conn->object : $conn->subject;
-                    // Filter out connections to photos (type=thing, subtype=photo)
-                    if ($otherSpan->type_id === 'thing' && 
-                        isset($otherSpan->metadata['subtype']) && 
-                        $otherSpan->metadata['subtype'] === 'photo') {
-                        return false;
+                // Transform connections to show the other span and relationship direction
+                $connections->transform(function($connection) use ($subject, $connectionType) {
+                    $isParent = $connection->parent_id === $subject->id;
+                    $otherSpan = $isParent ? $connection->object : $connection->subject;
+                    $predicate = $isParent ? $connectionType->forward_predicate : $connectionType->inverse_predicate;
+                    
+                    $connection->other_span = $otherSpan;
+                    $connection->is_parent = $isParent;
+                    $connection->predicate = $predicate;
+                    $connection->connection_type = $connectionType;
+                    // Store the connection type ID for color coding
+                    $connection->connection_type_id = $connectionType->type;
+                    
+                    return $connection;
+                });
+
+                // Filter out "created" connections to photos and notes
+                $filteredConnections = $connections->filter(function($conn) use ($connectionType, $subject) {
+                    if ($connectionType->type === 'created') {
+                        $otherSpan = $conn->parent_id === $subject->id ? $conn->object : $conn->subject;
+                        // Filter out connections to photos (type=thing, subtype=photo)
+                        if ($otherSpan->type_id === 'thing' && 
+                            isset($otherSpan->metadata['subtype']) && 
+                            $otherSpan->metadata['subtype'] === 'photo') {
+                            return false;
+                        }
+                        // Filter out connections to notes
+                        if ($otherSpan->type_id === 'note') {
+                            return false;
+                        }
                     }
-                }
-                return true;
-            });
+                    return true;
+                });
 
-            // Sort connections by start year (earliest first)
-            $connectionsWithDates = $filteredConnections->filter(function($conn) {
+                // Store count for this connection type
+                $connectionCounts[$connectionType->type] = $filteredConnections->count();
+                
+                // Add to flat collection for chronological sorting
+                $allConnectionsFlat = $allConnectionsFlat->merge($filteredConnections);
+            }
+
+            // Sort all connections chronologically (across all types) by full start date
+            $connectionsWithDates = $allConnectionsFlat->filter(function($conn) {
                 return $conn->connectionSpan && $conn->connectionSpan->start_year;
             })->sortBy(function($conn) {
-                return $conn->connectionSpan->start_year;
+                $connectionSpan = $conn->connectionSpan;
+                if (!$connectionSpan || !$connectionSpan->start_year) {
+                    return PHP_INT_MAX; // Put connections without dates at the end
+                }
+                
+                // Create a sortable date string (YYYYMMDD format)
+                $year = $connectionSpan->start_year;
+                $month = $connectionSpan->start_month ?? 1;
+                $day = $connectionSpan->start_day ?? 1;
+                
+                return sprintf('%04d%02d%02d', $year, $month, $day);
             });
 
-            $connectionsWithoutDates = $filteredConnections->filter(function($conn) {
+            $connectionsWithoutDates = $allConnectionsFlat->filter(function($conn) {
                 return !$conn->connectionSpan || !$conn->connectionSpan->start_year;
             });
 
-            $sortedConnections = $connectionsWithDates->concat($connectionsWithoutDates);
-            
-            if ($sortedConnections->count() > 0) {
-                $allConnections[$connectionType->type] = $sortedConnections;
-                $connectionCounts[$connectionType->type] = $sortedConnections->count();
-            }
-        }
+            // Final sorted collection: connections with dates (chronological), then without dates
+            $allConnections = $connectionsWithDates->concat($connectionsWithoutDates)->values();
 
-        return view('spans.all-connections', compact('subject', 'allConnections', 'connectionCounts', 'relevantConnectionTypes'));
+            return [
+                'allConnections' => $allConnections, // Now a flat collection sorted chronologically
+                'connectionCounts' => $connectionCounts,
+                'relevantConnectionTypes' => $relevantConnectionTypes
+            ];
+        });
+
+        return view('spans.all-connections', [
+            'subject' => $subject,
+            'allConnections' => $cachedData['allConnections'],
+            'connectionCounts' => $cachedData['connectionCounts'],
+            'relevantConnectionTypes' => $cachedData['relevantConnectionTypes']
+        ]);
     }
 
     /**
