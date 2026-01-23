@@ -306,10 +306,14 @@
                                                             </td>
                                                             <td>
                                                                 @if(($level['has_span'] ?? false) && isset($level['span_id']))
-                                                                    <a href="/places/{{ $level['span_id'] }}" class="text-decoration-none">
+                                                                    @php
+                                                                        $hierarchySpan = \App\Models\Span::find($level['span_id']);
+                                                                    @endphp
+                                                                    @if($hierarchySpan)
+                                                                        <x-span-link :span="$hierarchySpan" class="text-decoration-none" />
+                                                                    @else
                                                                         {{ $level['name'] ?? '—' }}
-                                                                        <i class="bi bi-link-45deg ms-1 text-muted small" title="View place span"></i>
-                                                                    </a>
+                                                                    @endif
                                                                 @else
                                                                     {{ $level['name'] ?? '—' }}
                                                                 @endif

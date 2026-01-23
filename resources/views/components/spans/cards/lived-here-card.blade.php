@@ -199,29 +199,37 @@
                                 <div class="d-flex align-items-center">
                                     <!-- Photo on the left -->
                                     <div class="me-3 flex-shrink-0">
-                                        @if($resident['photo_url'])
-                                            <a href="{{ route('spans.show', $resident['person']) }}">
+                                        @php
+                                            $person = $resident['person'];
+                                            $isAccessible = $person->isAccessibleBy(auth()->user());
+                                        @endphp
+                                        @if($resident['photo_url'] && $isAccessible)
+                                            <a href="{{ route('spans.show', $person) }}">
                                                 <img src="{{ $resident['photo_url'] }}" 
-                                                     alt="{{ $resident['person']->name }}"
+                                                     alt="{{ $person->name }}"
                                                      class="rounded"
                                                      style="width: 50px; height: 50px; object-fit: cover;"
                                                      loading="lazy">
                                             </a>
                                         @else
-                                            <a href="{{ route('spans.show', $resident['person']) }}" 
-                                               class="d-flex align-items-center justify-content-center bg-light rounded text-muted text-decoration-none"
-                                               style="width: 50px; height: 50px;">
-                                                <i class="bi bi-person"></i>
-                                            </a>
+                                            @if($isAccessible)
+                                                <a href="{{ route('spans.show', $person) }}" 
+                                                   class="d-flex align-items-center justify-content-center bg-light rounded text-muted text-decoration-none"
+                                                   style="width: 50px; height: 50px;">
+                                                    <i class="bi bi-person"></i>
+                                                </a>
+                                            @else
+                                                <div class="d-flex align-items-center justify-content-center bg-light rounded text-muted"
+                                                     style="width: 50px; height: 50px;">
+                                                    <i class="bi bi-person"></i>
+                                                </div>
+                                            @endif
                                         @endif
                                     </div>
                                     
                                     <!-- Name and dates on the right -->
                                     <div class="flex-grow-1">
-                                        <a href="{{ route('spans.show', $resident['person']) }}" 
-                                           class="text-decoration-none fw-semibold">
-                                            {{ $resident['person']->name }}
-                                        </a>
+                                        <x-span-link :span="$resident['person']" class="text-decoration-none fw-semibold" />
                                         @if($resident['date_text'])
                                             <div class="text-muted small">
                                                 <i class="bi bi-calendar me-1"></i>{{ $resident['date_text'] }}
@@ -246,37 +254,53 @@
                                 <div class="d-flex align-items-center">
                                     <!-- Photo/Icon on the left -->
                                     <div class="me-3 flex-shrink-0">
-                                        @if($located['photo_url'])
-                                            <a href="{{ route('spans.show', $located['item']) }}">
+                                        @php
+                                            $item = $located['item'];
+                                            $isAccessible = $item->isAccessibleBy(auth()->user());
+                                        @endphp
+                                        @if($located['photo_url'] && $isAccessible)
+                                            <a href="{{ route('spans.show', $item) }}">
                                                 <img src="{{ $located['photo_url'] }}" 
-                                                     alt="{{ $located['item']->name }}"
+                                                     alt="{{ $item->name }}"
                                                      class="rounded"
                                                      style="width: 50px; height: 50px; object-fit: cover;"
                                                      loading="lazy">
                                             </a>
                                         @else
-                                            <a href="{{ route('spans.show', $located['item']) }}" 
-                                               class="d-flex align-items-center justify-content-center bg-light rounded text-muted text-decoration-none"
-                                               style="width: 50px; height: 50px;">
-                                                @if($located['item_type'] === 'organisation')
-                                                    <i class="bi bi-building"></i>
-                                                @elseif($located['item_type'] === 'event')
-                                                    <i class="bi bi-calendar-event"></i>
-                                                @elseif($located['item_type'] === 'thing')
-                                                    <i class="bi bi-box"></i>
-                                                @else
-                                                    <i class="bi bi-geo-alt"></i>
-                                                @endif
-                                            </a>
+                                            @if($isAccessible)
+                                                <a href="{{ route('spans.show', $item) }}" 
+                                                   class="d-flex align-items-center justify-content-center bg-light rounded text-muted text-decoration-none"
+                                                   style="width: 50px; height: 50px;">
+                                                    @if($located['item_type'] === 'organisation')
+                                                        <i class="bi bi-building"></i>
+                                                    @elseif($located['item_type'] === 'event')
+                                                        <i class="bi bi-calendar-event"></i>
+                                                    @elseif($located['item_type'] === 'thing')
+                                                        <i class="bi bi-box"></i>
+                                                    @else
+                                                        <i class="bi bi-geo-alt"></i>
+                                                    @endif
+                                                </a>
+                                            @else
+                                                <div class="d-flex align-items-center justify-content-center bg-light rounded text-muted"
+                                                     style="width: 50px; height: 50px;">
+                                                    @if($located['item_type'] === 'organisation')
+                                                        <i class="bi bi-building"></i>
+                                                    @elseif($located['item_type'] === 'event')
+                                                        <i class="bi bi-calendar-event"></i>
+                                                    @elseif($located['item_type'] === 'thing')
+                                                        <i class="bi bi-box"></i>
+                                                    @else
+                                                        <i class="bi bi-geo-alt"></i>
+                                                    @endif
+                                                </div>
+                                            @endif
                                         @endif
                                     </div>
                                     
                                     <!-- Name and dates on the right -->
                                     <div class="flex-grow-1">
-                                        <a href="{{ route('spans.show', $located['item']) }}" 
-                                           class="text-decoration-none fw-semibold">
-                                            {{ $located['item']->name }}
-                                        </a>
+                                        <x-span-link :span="$located['item']" class="text-decoration-none fw-semibold" />
                                         <div class="text-muted small">
                                             <span class="badge bg-secondary">{{ ucfirst($located['item_type']) }}</span>
                                         </div>
