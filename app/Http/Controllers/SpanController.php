@@ -873,12 +873,42 @@ class SpanController extends Controller
                 $this->authorize('view', $subject);
             }
 
+            // Validate data integrity: if this span is referenced as a connection_span_id, it must be type 'connection'
+            $connectionReference = \App\Models\Connection::where('connection_span_id', $subject->id)->first();
+            if ($connectionReference && $subject->type_id !== 'connection') {
+                Log::channel('spans')->error('Data integrity issue: Span is referenced as connection_span_id but has wrong type_id', [
+                    'span_id' => $subject->id,
+                    'span_name' => $subject->name,
+                    'span_type_id' => $subject->type_id,
+                    'expected_type_id' => 'connection',
+                    'connection_id' => $connectionReference->id
+                ]);
+                // Auto-fix: update the type_id to 'connection'
+                $subject->type_id = 'connection';
+                $subject->save();
+                Log::channel('spans')->info('Auto-fixed span type_id to connection', [
+                    'span_id' => $subject->id,
+                    'span_name' => $subject->name
+                ]);
+            }
+
             // Eager load common relationships to prevent N+1 queries
             $subject->load([
                 'type', // Used in many components
                 'owner', // Used in access checks and displays
                 'updater', // Used in status displays
             ]);
+            
+            // Additional validation: ensure the type relationship is correct
+            if ($subject->type && $subject->type->type_id !== $subject->type_id) {
+                Log::channel('spans')->warning('Type relationship mismatch detected', [
+                    'span_id' => $subject->id,
+                    'span_type_id' => $subject->type_id,
+                    'relationship_type_id' => $subject->type->type_id
+                ]);
+                // Reload the type relationship
+                $subject->load('type');
+            }
 
             // Check if this is a person and they have a Desert Island Discs set
             $desertIslandDiscsSet = null;
@@ -1378,6 +1408,11 @@ class SpanController extends Controller
 
     /**
      * Show the form for editing the specified resource.
+     * 
+     * This method works for both regular spans and connection spans.
+     * Connection spans (type_id = 'connection') are spans that represent relationships
+     * between other spans. The edit view automatically shows connection-specific fields
+     * when editing a connection span via the metadata form component.
      */
     public function edit(Span $span)
     {
@@ -1391,17 +1426,95 @@ class SpanController extends Controller
         $this->authorize('update', $span);
 
         $spanTypes = SpanType::all();
+        
+        // Log what span types we're getting
+        Log::channel('spans')->info('SpanTypes loaded for edit page', [
+            'span_id' => $span->id,
+            'total_span_types_count' => $spanTypes->count(),
+            'span_type_ids' => $spanTypes->pluck('type_id')->toArray(),
+            'has_connection_type' => $spanTypes->contains('type_id', 'connection'),
+            'connection_type_details' => $spanTypes->firstWhere('type_id', 'connection')?->toArray() ?? 'not_found'
+        ]);
+        
         $connectionTypes = ConnectionType::orderBy('forward_predicate')->get();
+        
+        // Get available spans, but ensure we include the current connection's object if it exists
+        // This is important for connection spans where the object might not be in the first 100 results
         $availableSpans = Span::where('id', '!=', $span->id)
             ->with('type')
             ->orderBy('name')
             ->limit(100) // Limit to prevent memory exhaustion
             ->get();
         
+        // If this is a connection span, ensure the connection's object is included in availableSpans
+        if ($span->type_id === 'connection') {
+            $connection = \App\Models\Connection::where('connection_span_id', $span->id)
+                ->with(['object.type'])
+                ->first();
+            
+            if ($connection && $connection->object && !$availableSpans->contains('id', $connection->object->id)) {
+                // Add the object to the collection if it's not already there
+                $availableSpans->push($connection->object);
+            }
+        }
+        
         // Get the current span type, or if type_id is provided in the query, get that type
-        $spanType = request('type_id') 
-            ? SpanType::where('type_id', request('type_id'))->firstOrFail() 
-            : $span->type;
+        // Use the span's type_id directly to ensure we get the correct type, especially for connection spans
+        $requestedTypeId = request('type_id');
+        $actualTypeId = $span->type_id;
+        
+        // Check if this span is referenced as a connection_span_id - if so, it MUST be type 'connection'
+        $isReferencedAsConnection = \App\Models\Connection::where('connection_span_id', $span->id)->exists();
+        
+        // Log detailed information for debugging
+        Log::channel('spans')->info('Loading edit page', [
+            'span_id' => $span->id,
+            'span_name' => $span->name,
+            'span_slug' => $span->slug,
+            'actual_type_id' => $actualTypeId,
+            'requested_type_id' => $requestedTypeId,
+            'is_referenced_as_connection' => $isReferencedAsConnection,
+            'span_type_from_relationship' => $span->type?->type_id ?? 'null',
+            'span_type_from_relationship_name' => $span->type?->name ?? 'null',
+            'span_raw_attributes' => [
+                'type_id' => $span->getRawOriginal('type_id') ?? 'not_set',
+                'name' => $span->getRawOriginal('name') ?? 'not_set'
+            ]
+        ]);
+        
+        // If this span is referenced as a connection but has wrong type_id, log the issue
+        if ($isReferencedAsConnection && $actualTypeId !== 'connection') {
+            Log::channel('spans')->error('DATA INTEGRITY ISSUE: Span is referenced as connection_span_id but type_id is wrong', [
+                'span_id' => $span->id,
+                'span_name' => $span->name,
+                'actual_type_id' => $actualTypeId,
+                'expected_type_id' => 'connection',
+                'connection_count' => \App\Models\Connection::where('connection_span_id', $span->id)->count()
+            ]);
+        }
+        
+        $spanType = $requestedTypeId 
+            ? SpanType::where('type_id', $requestedTypeId)->firstOrFail() 
+            : SpanType::where('type_id', $actualTypeId)->first();
+        
+        // Fallback to the relationship if direct lookup fails (shouldn't happen, but be safe)
+        if (!$spanType) {
+            Log::channel('spans')->warning('SpanType not found by direct lookup, using relationship', [
+                'span_id' => $span->id,
+                'type_id' => $actualTypeId
+            ]);
+            $spanType = $span->type;
+        }
+        
+        // Log what we're actually using
+        if ($spanType) {
+            Log::channel('spans')->info('SpanType determined for edit page', [
+                'span_id' => $span->id,
+                'spanType_type_id' => $spanType->type_id,
+                'spanType_name' => $spanType->name,
+                'matches_actual_type_id' => $spanType->type_id === $actualTypeId
+            ]);
+        }
 
         return view('spans.edit', compact('span', 'spanTypes', 'connectionTypes', 'availableSpans', 'spanType'));
     }
@@ -1483,52 +1596,83 @@ class SpanController extends Controller
             $validated = $validator->validated();
 
             // Handle type transition if type is changing
-            if ($request->has('type_id') && $request->type_id !== $span->type_id) {
-                Log::channel('spans')->info('Starting type transition', [
-                    'span_id' => $span->id,
-                    'old_type' => $span->type_id,
-                    'new_type' => $request->type_id
-                ]);
-
-                $result = $span->transitionToType($request->type_id, $request->metadata);
-                
-                Log::channel('spans')->info('Type transition result', [
-                    'success' => $result['success'],
-                    'messages' => $result['messages'],
-                    'warnings' => $result['warnings']
-                ]);
-                
-                if (!$result['success']) {
+            // Note: Connection spans cannot change type - they must always be 'connection'
+            $requestedTypeId = $request->input('type_id');
+            $currentTypeId = $span->type_id;
+            
+            if ($request->has('type_id') && $requestedTypeId !== null && (string)$requestedTypeId !== (string)$currentTypeId) {
+                // Prevent type changes for connection spans
+                if ($span->type_id === 'connection') {
                     return back()
-                        ->withErrors(['type_id' => $result['messages']])
-                        ->withInput();
+                        ->withInput()
+                        ->withErrors(['type_id' => 'Connection spans cannot be changed to a different type. They must always remain as "connection".']);
                 }
-                
-                // If there are warnings about lost fields, show them to the user
-                if (!empty($result['warnings'])) {
-                    session()->flash('warnings', $result['warnings']);
+
+                // Check if transitionToType method exists (it may not be implemented yet)
+                if (method_exists($span, 'transitionToType')) {
+                    Log::channel('spans')->info('Starting type transition', [
+                        'span_id' => $span->id,
+                        'old_type' => $span->type_id,
+                        'new_type' => $request->type_id
+                    ]);
+
+                    $result = $span->transitionToType($request->type_id, $request->metadata);
+                    
+                    Log::channel('spans')->info('Type transition result', [
+                        'success' => $result['success'],
+                        'messages' => $result['messages'],
+                        'warnings' => $result['warnings']
+                    ]);
+                    
+                    if (!$result['success']) {
+                        return back()
+                            ->withErrors(['type_id' => $result['messages']])
+                            ->withInput();
+                    }
+                    
+                    // If there are warnings about lost fields, show them to the user
+                    if (!empty($result['warnings'])) {
+                        session()->flash('warnings', $result['warnings']);
+                    }
+                    
+                    // Update other fields
+                    $span->fill($request->except(['type_id', 'metadata']));
+                    $span->save();
+                    
+                    Log::channel('spans')->info('Span type transition completed', [
+                        'span_id' => $span->id,
+                        'old_type' => $span->type_id,
+                        'new_type' => $request->type_id,
+                        'warnings' => $result['warnings']
+                    ]);
+                    
+                    return redirect()->route('spans.edit', $span)
+                        ->with('status', $result['messages'][0]);
+                } else {
+                    // Method doesn't exist - for now, just update the type directly
+                    // This is a simplified approach until transitionToType is implemented
+                    Log::channel('spans')->warning('Type transition method not available, updating type directly', [
+                        'span_id' => $span->id,
+                        'old_type' => $span->type_id,
+                        'new_type' => $request->type_id
+                    ]);
+                    
+                    $span->type_id = $request->type_id;
+                    // Continue with normal update flow below
                 }
-                
-                // Update other fields
-                $span->fill($request->except(['type_id', 'metadata']));
-                $span->save();
-                
-                Log::channel('spans')->info('Span type transition completed', [
-                    'span_id' => $span->id,
-                    'old_type' => $span->type_id,
-                    'new_type' => $request->type_id,
-                    'warnings' => $result['warnings']
-                ]);
-                
-                return redirect()->route('spans.edit', $span)
-                    ->with('status', $result['messages'][0]);
             }
 
             // If connection fields are provided, update the connection
             if ($request->has(['subject_id', 'object_id', 'connection_type'])) {
                 // Get the connection where this span is the connection span
                 $connection = Connection::where('connection_span_id', $span->id)->first();
-                if ($connection) {
+                if (!$connection) {
+                    return back()
+                        ->withInput()
+                        ->withErrors(['error' => 'Connection not found. This connection span does not have an associated connection record.']);
+                }
+
+                try {
                     // Update the connection
                     $connection->update([
                         'parent_id' => $validated['subject_id'],
@@ -1536,13 +1680,43 @@ class SpanController extends Controller
                         'type_id' => $validated['connection_type']
                     ]);
 
+                    // Refresh the connection to get updated relationships
+                    $connection->refresh();
+
                     // Get the updated connection type and spans
                     $connectionType = $connection->type;
                     $subject = $connection->subject;
                     $object = $connection->object;
 
+                    if (!$connectionType) {
+                        return back()
+                            ->withInput()
+                            ->withErrors(['connection_type' => 'The selected connection type does not exist.']);
+                    }
+
+                    if (!$subject) {
+                        return back()
+                            ->withInput()
+                            ->withErrors(['subject_id' => 'The selected subject (parent) span does not exist.']);
+                    }
+
+                    if (!$object) {
+                        return back()
+                            ->withInput()
+                            ->withErrors(['object_id' => 'The selected object (child) span does not exist.']);
+                    }
+
                     // Update the span name in SPO format
                     $validated['name'] = "{$subject->name} {$connectionType->forward_predicate} {$object->name}";
+                } catch (\Illuminate\Database\QueryException $e) {
+                    // Handle database constraint violations
+                    $errorCode = $e->getCode();
+                    if ($errorCode == 23505) { // PostgreSQL unique violation
+                        return back()
+                            ->withInput()
+                            ->withErrors(['error' => 'A connection with these properties already exists.']);
+                    }
+                    throw $e; // Re-throw if it's not a constraint violation we can handle
                 }
             }
 
@@ -1562,17 +1736,87 @@ class SpanController extends Controller
             return redirect()->route('spans.show', $span)
                 ->with('status', 'Span updated successfully');
 
-        } catch (\Exception $e) {
-            // Log any errors that occur
-            Log::channel('spans')->error('Error updating span', [
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            // Re-throw validation exceptions so they're handled by Laravel's default handler
+            throw $e;
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            Log::channel('spans')->error('Model not found when updating span', [
                 'span_id' => $span->id,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'error' => $e->getMessage()
             ]);
 
             return back()
                 ->withInput()
-                ->withErrors(['error' => 'An error occurred while saving the span. Please try again.']);
+                ->withErrors(['error' => 'One or more referenced records (spans, connection types, etc.) could not be found. Please refresh the page and try again.']);
+        } catch (\Illuminate\Database\QueryException $e) {
+            // Handle database errors
+            $errorCode = $e->getCode();
+            $errorMessage = $e->getMessage();
+
+            Log::channel('spans')->error('Database error when updating span', [
+                'span_id' => $span->id,
+                'error_code' => $errorCode,
+                'error' => $errorMessage,
+                'sql_state' => $e->errorInfo[0] ?? null,
+                'driver_code' => $e->errorInfo[1] ?? null
+            ]);
+
+            // Provide specific messages for common database errors
+            if (strpos($errorMessage, 'duplicate key') !== false || strpos($errorMessage, 'UNIQUE constraint') !== false) {
+                return back()
+                    ->withInput()
+                    ->withErrors(['error' => 'This record already exists. The name, slug, or another unique field conflicts with an existing record.']);
+            }
+
+            if (strpos($errorMessage, 'foreign key constraint') !== false || strpos($errorMessage, 'FOREIGN KEY constraint') !== false) {
+                return back()
+                    ->withInput()
+                    ->withErrors(['error' => 'Cannot update: this record is referenced by other records. Please check connections and relationships.']);
+            }
+
+            // Generic database error
+            $userMessage = config('app.debug') 
+                ? "Database error: " . $errorMessage
+                : 'A database error occurred while saving. Please check your input and try again.';
+
+            return back()
+                ->withInput()
+                ->withErrors(['error' => $userMessage]);
+        } catch (\Exception $e) {
+            // Log any other errors that occur
+            Log::channel('spans')->error('Error updating span', [
+                'span_id' => $span->id,
+                'span_type' => $span->type_id,
+                'error' => $e->getMessage(),
+                'error_class' => get_class($e),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            // Provide more specific error messages based on the exception type
+            $errorMessage = 'An error occurred while saving the span.';
+            
+            if ($span->type_id === 'connection') {
+                $errorMessage = 'An error occurred while saving the connection. ';
+                
+                if (strpos($e->getMessage(), 'subject') !== false || strpos($e->getMessage(), 'object') !== false) {
+                    $errorMessage .= 'There was a problem with the connection\'s subject or object. Please check that both spans exist.';
+                } elseif (strpos($e->getMessage(), 'connection_type') !== false || strpos($e->getMessage(), 'type') !== false) {
+                    $errorMessage .= 'There was a problem with the connection type. Please verify the connection type is valid.';
+                } else {
+                    $errorMessage .= 'Please check the connection details and try again.';
+                }
+            }
+
+            // In debug mode, show the actual error message
+            if (config('app.debug')) {
+                $errorMessage .= ' Error: ' . $e->getMessage();
+            }
+
+            return back()
+                ->withInput()
+                ->withErrors(['error' => $errorMessage]);
         }
     }
 
@@ -3855,18 +4099,22 @@ class SpanController extends Controller
         $userId = $user?->id ?? 'guest';
         
         // Cache key includes user ID for proper access control
-        $cacheKey = "connections_all_{$subject->id}_{$userId}";
+        // Version 2: excludes features connections
+        $cacheKey = "connections_all_v2_{$subject->id}_{$userId}";
         
         $cachedData = Cache::remember($cacheKey, 300, function () use ($subject, $user) {
             // Get all relevant connection types for this span with connection counts
+            // Exclude "features" connections
             $relevantConnectionTypes = ConnectionType::where(function($query) use ($subject) {
                 $query->whereJsonContains('allowed_span_types->parent', $subject->type_id)
                       ->orWhereJsonContains('allowed_span_types->child', $subject->type_id);
-            })->orderBy('forward_predicate')->get();
+            })->whereNotIn('type', ['features'])
+              ->orderBy('forward_predicate')->get();
 
             // Collect all connections across all types, then merge and sort chronologically
             $allConnectionsFlat = collect();
             $connectionCounts = [];
+            $connectionTypeDirections = []; // Track whether each type has forward/inverse connections
             
             foreach ($relevantConnectionTypes as $connectionType) {
                 // Apply access control similar to listConnections
@@ -3949,8 +4197,13 @@ class SpanController extends Controller
                     return $connection;
                 });
 
-                // Filter out "created" connections to photos and notes
+                // Filter out "created" connections to photos and notes, and "features" connections
                 $filteredConnections = $connections->filter(function($conn) use ($connectionType, $subject) {
+                    // Filter out "features" connections
+                    if ($connectionType->type === 'features') {
+                        return false;
+                    }
+                    
                     if ($connectionType->type === 'created') {
                         $otherSpan = $conn->parent_id === $subject->id ? $conn->object : $conn->subject;
                         // Filter out connections to photos (type=thing, subtype=photo)
@@ -3969,6 +4222,28 @@ class SpanController extends Controller
 
                 // Store count for this connection type
                 $connectionCounts[$connectionType->type] = $filteredConnections->count();
+                
+                // Track connection directions for this type
+                // Only track if there are connections
+                if ($filteredConnections->count() > 0) {
+                    $hasForward = $filteredConnections->contains(function($conn) {
+                        return isset($conn->is_parent) && $conn->is_parent === true;
+                    });
+                    $hasInverse = $filteredConnections->contains(function($conn) {
+                        return isset($conn->is_parent) && $conn->is_parent === false;
+                    });
+                    
+                    // Determine which predicate to show:
+                    // - If there are any forward connections, prefer forward predicate
+                    // - Otherwise, use inverse predicate
+                    $predicate = $hasForward ? $connectionType->forward_predicate : $connectionType->inverse_predicate;
+                    
+                    $connectionTypeDirections[$connectionType->type] = [
+                        'has_forward' => $hasForward,
+                        'has_inverse' => $hasInverse,
+                        'predicate' => $predicate
+                    ];
+                }
                 
                 // Add to flat collection for chronological sorting
                 $allConnectionsFlat = $allConnectionsFlat->merge($filteredConnections);
@@ -4001,7 +4276,8 @@ class SpanController extends Controller
             return [
                 'allConnections' => $allConnections, // Now a flat collection sorted chronologically
                 'connectionCounts' => $connectionCounts,
-                'relevantConnectionTypes' => $relevantConnectionTypes
+                'relevantConnectionTypes' => $relevantConnectionTypes,
+                'connectionTypeDirections' => $connectionTypeDirections
             ];
         });
 
@@ -4009,6 +4285,7 @@ class SpanController extends Controller
             'subject' => $subject,
             'allConnections' => $cachedData['allConnections'],
             'connectionCounts' => $cachedData['connectionCounts'],
+            'connectionTypeDirections' => $cachedData['connectionTypeDirections'],
             'relevantConnectionTypes' => $cachedData['relevantConnectionTypes']
         ]);
     }

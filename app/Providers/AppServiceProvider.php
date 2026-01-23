@@ -73,12 +73,17 @@ class AppServiceProvider extends ServiceProvider
         }
         
         // Make span types available globally for the new span modal
+        // BUT: Don't override spanTypes if it's already set (e.g., in edit views where we need all types including connection)
         View::composer('*', function ($view) {
-            // Exclude connection, note, and set types - these are created through special mechanisms
-            $spanTypes = \App\Models\SpanType::whereNotIn('type_id', ['connection', 'note', 'set'])
-                ->orderBy('name')
-                ->get();
-            $view->with('spanTypes', $spanTypes);
+            // Only set spanTypes if it's not already set by the controller
+            // This allows edit views to include connection, note, and set types
+            if (!$view->offsetExists('spanTypes')) {
+                // Exclude connection, note, and set types - these are created through special mechanisms
+                $spanTypes = \App\Models\SpanType::whereNotIn('type_id', ['connection', 'note', 'set'])
+                    ->orderBy('name')
+                    ->get();
+                $view->with('spanTypes', $spanTypes);
+            }
         });
     }
     
