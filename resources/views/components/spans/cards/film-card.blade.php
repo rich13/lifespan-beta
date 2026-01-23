@@ -116,10 +116,7 @@
                         
                         <!-- Film name and details on the right -->
                         <div class="flex-grow-1">
-                            <a href="{{ route('spans.show', $film) }}" 
-                               class="text-decoration-none fw-semibold">
-                                {{ $film->name }}
-                            </a>
+                            <x-span-link :span="$film" class="text-decoration-none fw-semibold" />
                             @if($releaseDate && $releaseDateLink)
                                 <div class="text-muted small">
                                     <i class="bi bi-calendar me-1"></i>
@@ -131,9 +128,7 @@
                             @if($director)
                                 <div class="text-muted small">
                                     <i class="bi bi-camera-reels me-1"></i>Directed by 
-                                    <a href="{{ route('spans.show', $director) }}" class="text-decoration-none">
-                                        {{ $director->name }}
-                                    </a>
+                                    <x-span-link :span="$director" class="text-decoration-none" />
                                 </div>
                             @endif
                         </div>

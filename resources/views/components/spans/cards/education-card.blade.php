@@ -61,9 +61,7 @@
                     <div class="card-body py-2">
                         <div class="d-flex justify-content-between align-items-start">
                             <div>
-                                <a href="{{ route('spans.show', $connection->connectionSpan) }}" class="text-decoration-none fw-semibold">
-                                    {{ $org->name }}
-                                </a>
+                                <x-span-link :span="$org" class="text-decoration-none fw-semibold" />
                             </div>
                             @if($dateText)
                                 <div class="text-muted small ms-3">

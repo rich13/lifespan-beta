@@ -117,29 +117,37 @@
                     <div class="d-flex align-items-center">
                         <!-- Photo on the left -->
                         <div class="me-3 flex-shrink-0">
-                            @if($student['photo_url'])
-                                    <a href="{{ route('spans.show', $student['person']) }}">
+                            @php
+                                $person = $student['person'];
+                                $isAccessible = $person->isAccessibleBy(auth()->user());
+                            @endphp
+                            @if($student['photo_url'] && $isAccessible)
+                                    <a href="{{ route('spans.show', $person) }}">
                                         <img src="{{ $student['photo_url'] }}" 
-                                             alt="{{ $student['person']->name }}"
+                                             alt="{{ $person->name }}"
                                              class="rounded"
                                              style="width: 50px; height: 50px; object-fit: cover;"
                                              loading="lazy">
                                     </a>
                                 @else
-                                    <a href="{{ route('spans.show', $student['person']) }}" 
-                                       class="d-flex align-items-center justify-content-center bg-light rounded text-muted text-decoration-none"
-                                       style="width: 50px; height: 50px;">
-                                        <i class="bi bi-person"></i>
-                                    </a>
+                                    @if($isAccessible)
+                                        <a href="{{ route('spans.show', $person) }}" 
+                                           class="d-flex align-items-center justify-content-center bg-light rounded text-muted text-decoration-none"
+                                           style="width: 50px; height: 50px;">
+                                            <i class="bi bi-person"></i>
+                                        </a>
+                                    @else
+                                        <div class="d-flex align-items-center justify-content-center bg-light rounded text-muted"
+                                             style="width: 50px; height: 50px;">
+                                            <i class="bi bi-person"></i>
+                                        </div>
+                                    @endif
                                 @endif
                         </div>
                         
                         <!-- Name and dates on the right -->
                         <div class="flex-grow-1">
-                            <a href="{{ route('spans.show', $student['person']) }}" 
-                               class="text-decoration-none fw-semibold">
-                                {{ $student['person']->name }}
-                            </a>
+                            <x-span-link :span="$student['person']" class="text-decoration-none fw-semibold" />
                             @if($student['date_text'])
                                     <div class="text-muted small">
                                         <i class="bi bi-calendar me-1"></i>{{ $student['date_text'] }}

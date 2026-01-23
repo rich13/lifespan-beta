@@ -106,10 +106,7 @@
                         
                         <!-- Book name and details on the right -->
                         <div class="flex-grow-1">
-                            <a href="{{ route('spans.show', $book) }}" 
-                               class="text-decoration-none fw-semibold">
-                                {{ $book->name }}
-                            </a>
+                            <x-span-link :span="$book" class="text-decoration-none fw-semibold" />
                             @if($publicationDate && $publicationDateLink)
                                 <div class="text-muted small">
                                     <i class="bi bi-calendar me-1"></i>

@@ -98,10 +98,7 @@
                     <div class="d-flex align-items-center">
                         <!-- Place name and dates -->
                         <div class="flex-grow-1">
-                            <a href="{{ route('spans.show', $dates ?: $place) }}" 
-                               class="text-decoration-none fw-semibold">
-                                {{ $place->name }}
-                            </a>
+                            <x-span-link :span="$dates ?: $place" class="text-decoration-none fw-semibold" />
                             @if($dateText)
                                 <div class="text-muted small">
                                     <i class="bi bi-calendar me-1"></i>{{ $dateText }}

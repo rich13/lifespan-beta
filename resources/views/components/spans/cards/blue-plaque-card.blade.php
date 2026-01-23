@@ -103,13 +103,7 @@
                         <p class="mb-1">
                             <i class="bi bi-geo-alt me-1"></i>
                             <strong>Location:</strong> 
-                            @if($location)
-                                <a href="{{ route('spans.show', $location) }}" class="text-decoration-none">
-                                    {{ $locationName }}
-                                </a>
-                            @else
-                                {{ $locationName }}
-                            @endif
+                            <x-span-link :span="$location" class="text-decoration-none" />
                         </p>
                     @endif
                     

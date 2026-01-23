@@ -127,17 +127,13 @@
                             <div>
                                 @if($role)
                                     <h6 class="mb-1">
-                                        <a href="{{ route('spans.show', $linkSpan ?: $role) }}" class="text-decoration-none">
-                                            {{ $role->name }}
-                                        </a>
+                                        <x-span-link :span="$linkSpan ?: $role" class="text-decoration-none" />
                                     </h6>
                                 @endif
                                 @if($organisation)
                                     <div class="text-muted small{{ $role ? '' : ' fw-semibold' }}">
                                         <i class="bi bi-building me-1"></i>
-                                        <a href="{{ route('spans.show', $organisation) }}" class="text-decoration-none text-muted">
-                                            {{ $organisation->name }}
-                                        </a>
+                                        <x-span-link :span="$organisation" class="text-decoration-none text-muted" />
                                     </div>
                                 @endif
                             </div>

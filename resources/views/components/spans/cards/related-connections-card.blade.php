@@ -85,10 +85,7 @@
                 <div class="list-group-item px-0 py-2 border-0 border-bottom">
                     <div class="d-flex align-items-center justify-content-between">
                         <div class="flex-grow-1">
-                            <a href="{{ route('spans.show', $connectionSpan) }}" 
-                               class="text-decoration-none fw-semibold">
-                                {{ $connectionSpan->name }}
-                            </a>
+                            <x-span-link :span="$connectionSpan" class="text-decoration-none fw-semibold" />
                             @if($dateText)
                                 <div class="text-muted small">
                                     <i class="bi bi-calendar me-1"></i>{{ $dateText }}

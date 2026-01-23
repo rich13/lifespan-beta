@@ -195,11 +195,7 @@
                             @endphp
                             
                             @if($existingPlace && $existingPlace->id !== $span->id)
-                                <a href="{{ route('spans.show', $existingPlace) }}" 
-                                   class="badge bg-primary text-decoration-none"
-                                   title="Click to view {{ $level['name'] }}">
-                                    {{ $level['name'] }}
-                                </a>
+                                <x-span-link :span="$existingPlace" class="badge bg-primary text-decoration-none" />
                             @elseif($existingPlace && $existingPlace->id === $span->id)
                                 <span class="badge bg-success" title="Current place">
                                     {{ $level['name'] }}
@@ -230,15 +226,28 @@
                                     ? round($distance * 1000) . 'm away' 
                                     : number_format($distance, 1) . 'km away';
                             @endphp
-                            <a href="{{ route('spans.show', $nearbyPlace) }}" 
-                               class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
-                                <div>
-                                    <strong>{{ $nearbyPlace->name }}</strong>
-                                    <br>
-                                    <small class="text-muted">{{ $distanceText }}</small>
+                            @php
+                                $isAccessible = $nearbyPlace->isAccessibleBy(auth()->user());
+                            @endphp
+                            @if($isAccessible)
+                                <a href="{{ route('spans.show', $nearbyPlace) }}" 
+                                   class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>{{ $nearbyPlace->name }}</strong>
+                                        <br>
+                                        <small class="text-muted">{{ $distanceText }}</small>
+                                    </div>
+                                    <i class="bi bi-arrow-right"></i>
+                                </a>
+                            @else
+                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong class="text-muted fst-italic">Private place</strong>
+                                        <br>
+                                        <small class="text-muted">{{ $distanceText }}</small>
+                                    </div>
                                 </div>
-                                <i class="bi bi-arrow-right"></i>
-                            </a>
+                            @endif
                         @endforeach
                     </div>
                 </div>
@@ -255,10 +264,7 @@
                     <div class="d-flex align-items-start mb-3">
                         <div class="flex-grow-1">
                             <h6 class="mb-1">
-                                <a href="{{ route('spans.show', $locationSpan) }}" 
-                                   class="text-decoration-none">
-                                    {{ $locationSpan->name }}
-                                </a>
+                                <x-span-link :span="$locationSpan" class="text-decoration-none" />
                             </h6>
                             
                             @if($connectionSpan && $connectionSpan->start_year)
