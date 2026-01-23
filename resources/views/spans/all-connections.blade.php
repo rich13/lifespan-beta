@@ -28,43 +28,7 @@
     <div class="row">
         <div class="col-12">
 
-            <!-- Connection Type Navigation -->
-            @if($relevantConnectionTypes->count() > 1)
-                <div class="card mb-4">
-                    <div class="card-body">
-                        <h5 class="card-title mb-3">
-                            <i class="bi bi-diagram-3 me-2"></i>
-                            Connection Types
-                        </h5>
-                        <div class="d-flex flex-wrap gap-2 connection-type-filter-buttons">
-                            <a href="{{ route('spans.all-connections', $subject) }}" 
-                               class="btn btn-sm btn-primary"
-                               data-connection-type="all">
-                                All Connections
-                            </a>
-                            @foreach($relevantConnectionTypes as $type)
-                                @php
-                                    $hasConnections = $connectionCounts[$type->type] ?? 0;
-                                    $routePredicate = str_replace(' ', '-', $type->forward_predicate);
-                                    $url = route('spans.connections', ['subject' => $subject, 'predicate' => $routePredicate]);
-                                @endphp
-                                @if($hasConnections > 0)
-                                    <a href="{{ $url }}" 
-                                       class="btn btn-sm btn-secondary"
-                                       data-connection-type="{{ $type->type }}"
-                                       style="background-color: var(--connection-{{ $type->type }}-color, #007bff); border-color: var(--connection-{{ $type->type }}-color, #007bff); color: white;">
-                                        {{ ucfirst($type->forward_predicate) }}
-                                    </a>
-                                @else
-                                    <span class="btn btn-sm btn-outline-secondary disabled" style="opacity: 0.5;">
-                                        {{ ucfirst($type->forward_predicate) }}
-                                    </span>
-                                @endif
-                            @endforeach
-                        </div>
-                    </div>
-                </div>
-            @endif
+            <!-- Connection Type Navigation moved into timeline card header -->
 
             <!-- Comprehensive Gantt Chart -->
             @if($allConnections->count() > 0)
@@ -112,20 +76,57 @@
                 @endphp
                 
                 <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="card-title mb-0">
-                            <i class="bi bi-clock-history me-2"></i>
-                            Complete Life Timeline
-                        </h5>
-                        <div class="btn-group btn-group-sm" role="group" aria-label="Timeline layout">
-                            <input type="radio" class="btn-check" name="all-connections-layout" id="all-connections-layout-expanded" value="expanded" checked>
-                            <label class="btn btn-outline-secondary" for="all-connections-layout-expanded">
-                                Expanded
-                            </label>
-                            <input type="radio" class="btn-check" name="all-connections-layout" id="all-connections-layout-collapsed" value="collapsed">
-                            <label class="btn btn-outline-secondary" for="all-connections-layout-collapsed">
-                                Collapsed
-                            </label>
+                    <div class="card-header">
+                        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2">
+                            <h5 class="card-title mb-0">
+                                <i class="bi bi-clock-history me-2"></i>
+                                Complete Life Timeline
+                            </h5>
+                            <div class="d-flex flex-wrap align-items-center gap-2">
+                                @php
+                                    // Filter to only connection types that have connections
+                                    $typesWithConnections = $relevantConnectionTypes->filter(function($type) use ($connectionCounts) {
+                                        $hasConnections = $connectionCounts[$type->type] ?? 0;
+                                        return $hasConnections > 0;
+                                    });
+                                @endphp
+                                @if($typesWithConnections->count() > 0)
+                                    <div class="btn-group btn-group-sm connection-type-filter-buttons" role="group" aria-label="Connection types">
+                                        <a href="{{ route('spans.all-connections', $subject) }}" 
+                                           class="btn btn-sm btn-primary"
+                                           data-connection-type="all">
+                                            All Connections
+                                        </a>
+                                        @foreach($typesWithConnections as $type)
+                                            @php
+                                                // Use the appropriate predicate based on connection direction
+                                                $directionInfo = $connectionTypeDirections[$type->type] ?? null;
+                                                $predicate = ($directionInfo && isset($directionInfo['predicate'])) 
+                                                    ? $directionInfo['predicate'] 
+                                                    : $type->forward_predicate;
+                                                $routePredicate = str_replace(' ', '-', $predicate);
+                                                $url = route('spans.connections', ['subject' => $subject, 'predicate' => $routePredicate]);
+                                            @endphp
+                                            <a href="{{ $url }}" 
+                                               class="btn btn-sm btn-secondary"
+                                               data-connection-type="{{ $type->type }}"
+                                               style="background-color: var(--connection-{{ $type->type }}-color, #007bff); border-color: var(--connection-{{ $type->type }}-color, #007bff); color: white;">
+                                                {{ ucfirst($predicate) }}
+                                            </a>
+                                        @endforeach
+                                    </div>
+                                @endif
+                                <div class="btn-group btn-group-sm" role="group" aria-label="Timeline layout">
+                                    <input type="radio" class="btn-check" name="all-connections-layout" id="all-connections-layout-expanded" value="expanded" checked>
+                                    <label class="btn btn-outline-secondary" for="all-connections-layout-expanded" title="Expanded">
+                                        <i class="bi bi-arrows-expand"></i>
+                                    </label>
+                                    <input type="radio" class="btn-check" name="all-connections-layout" id="all-connections-layout-collapsed" value="collapsed">
+                                    <label class="btn btn-outline-secondary" for="all-connections-layout-collapsed" title="Collapsed">
+                                        <i class="bi bi-arrows-collapse"></i>
+                                    </label>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <x-spans.shared-timeline
@@ -311,7 +312,13 @@
 
                 if (showAllTypes) {
                     $rows.removeClass('timeline-row--hidden');
-                    $bars.css('opacity', 0.7);
+                    // Set opacity for all bars except life bar
+                    $bars.each(function() {
+                        const $bar = $(this);
+                        if ($bar.data('connection-type') !== 'life') {
+                            $bar.css('opacity', 0.7);
+                        }
+                    });
                     
                     if (layout === 'collapsed') {
                         // Overlay all rows on top of the life row and hide extra backgrounds/labels
@@ -326,13 +333,11 @@
                             // Move all rows to the life row Y (animated)
                             animateRowToY($row, lifeY);
 
-                            // Show only the life row background and label; hide others
+                            // Show only the life row background; hide others
                             if (rowType === 'life') {
                                 $row.find('.timeline-bg').css('opacity', 1);
-                                $row.find('text').first().css('opacity', 1);
                             } else {
                                 $row.find('.timeline-bg').css('opacity', 0);
-                                $row.find('text').first().css('opacity', 0);
                             }
                         });
 
@@ -340,16 +345,20 @@
                         const newHeightCollapsed = marginTop + swimlaneHeight + marginBottom;
                         $timelineContainer.height(newHeightCollapsed);
                         $svg.attr('height', newHeightCollapsed);
+                        // Update viewBox to maintain proper scaling
+                        const currentViewBox = $svg.attr('viewBox') || '0 0 0 0';
+                        const viewBoxParts = currentViewBox.split(' ');
+                        const viewBoxWidth = viewBoxParts[2] || $timelineContainer.width();
+                        $svg.attr('viewBox', `0 0 ${viewBoxWidth} ${newHeightCollapsed}`);
 
                         const axisYCollapsed = marginTop + swimlaneHeight + axisOffsetFromRows;
                         $svg.find('.timeline-axis').attr('transform', 'translate(0,' + axisYCollapsed + ')');
                         $svg.find('.now-line').attr('y2', axisYCollapsed);
                     } else {
-                        // Expanded: show all backgrounds/labels and stack rows
+                        // Expanded: show all backgrounds and stack rows
                         $rows.each(function() {
                             const $row = $(this);
                             $row.find('.timeline-bg').css('opacity', 1);
-                            $row.find('text').first().css('opacity', 1);
                         });
 
                         // Reset stacked positions for all rows (animated)
@@ -367,6 +376,11 @@
                             const newHeightAll = marginTop + (totalVisibleAll * swimlaneHeight) + ((totalVisibleAll - 1) * swimlaneSpacing) + marginBottom;
                             $timelineContainer.height(newHeightAll);
                             $svg.attr('height', newHeightAll);
+                            // Update viewBox to maintain proper scaling
+                            const currentViewBox = $svg.attr('viewBox') || '0 0 0 0';
+                            const viewBoxParts = currentViewBox.split(' ');
+                            const viewBoxWidth = viewBoxParts[2] || $timelineContainer.width();
+                            $svg.attr('viewBox', `0 0 ${viewBoxWidth} ${newHeightAll}`);
 
                             const axisYAll = marginTop + (totalVisibleAll * swimlaneHeight) + ((totalVisibleAll - 1) * swimlaneSpacing) + axisOffsetFromRows;
                             $svg.find('.timeline-axis').attr('transform', 'translate(0,' + axisYAll + ')');
@@ -408,32 +422,34 @@
                         // Move visible rows to the life row Y (animated)
                         animateRowToY($row, lifeY);
 
-                        // Show only the life row background and label; hide others
+                        // Show only the life row background; hide others
                         if (rowType === 'life') {
                             $row.find('.timeline-bg').css('opacity', 1);
-                            $row.find('text').first().css('opacity', 1);
                         } else {
                             $row.find('.timeline-bg').css('opacity', 0);
-                            $row.find('text').first().css('opacity', 0);
                         }
                     });
 
                     const newHeightCollapsed = marginTop + swimlaneHeight + marginBottom;
                     $timelineContainer.height(newHeightCollapsed);
                     $svg.attr('height', newHeightCollapsed);
+                    // Update viewBox to maintain proper scaling
+                    const currentViewBox = $svg.attr('viewBox') || '0 0 0 0';
+                    const viewBoxParts = currentViewBox.split(' ');
+                    const viewBoxWidth = viewBoxParts[2] || $timelineContainer.width();
+                    $svg.attr('viewBox', `0 0 ${viewBoxWidth} ${newHeightCollapsed}`);
 
                     const axisYCollapsed = marginTop + swimlaneHeight + axisOffsetFromRows;
                     $svg.find('.timeline-axis').attr('transform', 'translate(0,' + axisYCollapsed + ')');
                     $svg.find('.now-line').attr('y2', axisYCollapsed);
                 } else {
-                    // Expanded: restore backgrounds/labels and stack visible rows
+                    // Expanded: restore backgrounds and stack visible rows
                     $rows.each(function() {
                         const $row = $(this);
                         if ($row.hasClass('timeline-row--hidden')) {
                             return;
                         }
                         $row.find('.timeline-bg').css('opacity', 1);
-                        $row.find('text').first().css('opacity', 1);
                     });
 
                     // Then re-stack only the visible rows so there are no gaps (animated)
@@ -454,6 +470,11 @@
                         const newHeight = marginTop + (totalVisible * swimlaneHeight) + ((totalVisible - 1) * swimlaneSpacing) + marginBottom;
                         $timelineContainer.height(newHeight);
                         $svg.attr('height', newHeight);
+                        // Update viewBox to maintain proper scaling
+                        const currentViewBox = $svg.attr('viewBox') || '0 0 0 0';
+                        const viewBoxParts = currentViewBox.split(' ');
+                        const viewBoxWidth = viewBoxParts[2] || $timelineContainer.width();
+                        $svg.attr('viewBox', `0 0 ${viewBoxWidth} ${newHeight}`);
 
                         const axisY = marginTop + (totalVisible * swimlaneHeight) + ((totalVisible - 1) * swimlaneSpacing) + axisOffsetFromRows;
                         $svg.find('.timeline-axis').attr('transform', 'translate(0,' + axisY + ')');
@@ -463,10 +484,16 @@
                     }
                 }
 
-                // Emphasise matching bars
+                // Emphasise matching bars (but keep life bar at full opacity)
                 $bars.each(function() {
                     const $bar = $(this);
                     const barType = $bar.data('connection-type');
+
+                    // Life bar always stays at full opacity
+                    if (barType === 'life') {
+                        $bar.css('opacity', 0.9);
+                        return;
+                    }
 
                     if (activeTypes.size === 0) {
                         // No active types – de-emphasise everything

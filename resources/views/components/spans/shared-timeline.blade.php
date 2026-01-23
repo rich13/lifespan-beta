@@ -7,7 +7,7 @@
     'timeRange'          // {start: number, end: number} time range for the timeline
 ])
 
-<div class="card-body" style="padding-left: 20px; overflow-x: auto;">
+<div class="card-body" style="overflow-x: auto;">
     <div id="{{ $containerId }}" style="height: auto; min-height: 200px; width: 100%;">
         <!-- D3 timeline will be rendered here -->
     </div>
@@ -33,8 +33,9 @@
         transition: opacity 200ms ease-in-out;
     }
 
-    .timeline-row text {
-        transition: opacity 200ms ease-in-out;
+    #{{ $containerId }} svg {
+        width: 100%;
+        max-width: 100%;
     }
 </style>
 @endpush
@@ -55,12 +56,10 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
     }
 
-    const width = container.clientWidth;
-    // Set left margin to 200px to ensure labels have enough space
-    const LEFT_MARGIN = 200;
+    // Minimal margins - no labels, so we can use full width
     // Bottom margin needs extra space for axis ticks and labels
-    // Right margin is minimal since we only have labels on the left - just enough to avoid clipping the last tick
-    const margin = { top: 10, right: 2, bottom: 100, left: LEFT_MARGIN };
+    // Right margin is 0 to fill the container completely
+    const margin = { top: 10, right: 0, bottom: 100, left: 10 };
     const swimlaneHeight = 20;
     const swimlaneSpacing = 8;
     const overallSwimlaneY = margin.top + 10;
@@ -80,30 +79,64 @@ document.addEventListener('DOMContentLoaded', function() {
     // Clear container
     container.innerHTML = '';
 
-    // Create SVG
+    // Get container width - SVG will be set to 100% so this is the width we'll use
+    const width = container.offsetWidth || container.getBoundingClientRect().width;
+
+    // Create SVG - set to 100% width so it fills container, use viewBox for scaling
     const svg = d3.select(container)
         .append('svg')
-        .attr('width', width)
-        .attr('height', height);
+        .style('width', '100%')
+        .attr('height', height)
+        .attr('viewBox', `0 0 ${width} ${height}`)
+        .attr('preserveAspectRatio', 'none');
 
-    // Create scales - ensure left margin is applied
-    const scaleStart = margin.left;
-    const scaleEnd = width - margin.right;
+    // Create scales - use full width
     const xScale = d3.scaleLinear()
         .domain([timeRange.start, timeRange.end])
-        .range([scaleStart, scaleEnd]);
+        .range([margin.left, width]);
 
-    // Create axis
+    // Create axis with ticks every year, labels every 5 years
+    const allYears = [];
+    for (let year = timeRange.start; year <= timeRange.end; year++) {
+        allYears.push(year);
+    }
+    
     const xAxis = d3.axisBottom(xScale)
-        .tickFormat(d3.format('d'))
-        .ticks(10);
+        .tickValues(allYears)
+        .tickFormat(function(d) {
+            // Only show labels every 5 years
+            if (d % 5 === 0) {
+                return d3.format('d')(d);
+            }
+            return '';
+        })
+        .tickSize(4); // Default tick size for minor ticks
 
     const axisOffsetFromRows = 20; // Extra gap between last swimlane and axis
 
-    svg.append('g')
+    const axisGroup = svg.append('g')
         .attr('class', 'timeline-axis')
         .attr('transform', `translate(0, ${height - margin.bottom + axisOffsetFromRows})`)
         .call(xAxis);
+    
+    // Style the ticks - major ticks (every 5 years) get larger size and darker color
+    axisGroup.selectAll('.tick')
+        .each(function(d) {
+            const tick = d3.select(this);
+            if (d % 5 === 0) {
+                // Major tick: larger and darker
+                tick.select('line')
+                    .attr('y2', 6)
+                    .attr('stroke', '#666')
+                    .attr('stroke-width', 1);
+            } else {
+                // Minor tick: smaller and lighter
+                tick.select('line')
+                    .attr('y2', 4)
+                    .attr('stroke', '#ccc')
+                    .attr('stroke-width', 0.5);
+            }
+        });
 
     // Add axis label (positioned below the axis ticks)
     svg.append('text')
@@ -192,42 +225,74 @@ document.addEventListener('DOMContentLoaded', function() {
             )
             .attr('transform', `translate(0, ${baseY})`);
 
-        // Add swimlane label - position further left to use more of the available margin
-        rowGroup.append('text')
-            .attr('x', 10)
-            .attr('y', swimlaneHeight / 2)
-            .attr('text-anchor', 'start')
-            .attr('dominant-baseline', 'middle')
-            .style('font-size', '11px')
-            .style('fill', '#666')
-            .style('font-weight', swimlane.type === 'life' ? 'bold' : 'normal')
-            .text(swimlane.label);
-
         // Add swimlane background
         rowGroup.append('rect')
             .attr('class', 'timeline-bg')
-            .attr('x', margin.left)
+            .attr('x', 0)
             .attr('y', 0)
-            .attr('width', width - margin.left - margin.right)
+            .attr('width', width)
             .attr('height', swimlaneHeight)
             .attr('fill', '#f8f9fa')
             .attr('stroke', '#dee2e6')
             .attr('stroke-width', 1);
 
         if (swimlane.type === 'life') {
-            // Add life span bar
+            // Add life span bar - styled like connection bars but in black
             if (subjectStartYear) {
                 const lifeStart = xScale(subjectStartYear);
                 const lifeEnd = subjectEndYear ? xScale(subjectEndYear) : xScale(new Date().getFullYear());
                 
-                rowGroup.append('rect')
+                const lifeBar = rowGroup.append('rect')
+                    .attr('class', 'timeline-bar')
+                    .attr('data-connection-type', 'life')
                     .attr('x', lifeStart)
-                    .attr('y', 0)
-                    .attr('width', lifeEnd - lifeStart)
-                    .attr('height', swimlaneHeight)
-                    .attr('fill', '#e9ecef')
-                    .attr('stroke', '#dee2e6')
-                    .attr('stroke-width', 1);
+                    .attr('y', 2)
+                    .attr('width', Math.max(lifeEnd - lifeStart, 2))
+                    .attr('height', swimlaneHeight - 4)
+                    .attr('fill', '#000000')
+                    .attr('stroke', 'white')
+                    .attr('stroke-width', 1)
+                    .attr('rx', 2)
+                    .attr('ry', 2)
+                    .style('opacity', 0.9)
+                    .style('cursor', 'pointer');
+                
+                // Add tooltip for life span
+                const lifeTooltip = d3.select('body').append('div')
+                    .attr('class', 'tooltip')
+                    .style('position', 'absolute')
+                    .style('background', 'rgba(0,0,0,0.8)')
+                    .style('color', 'white')
+                    .style('padding', '8px')
+                    .style('border-radius', '4px')
+                    .style('font-size', '12px')
+                    .style('pointer-events', 'none')
+                    .style('z-index', '1000')
+                    .style('opacity', 0);
+                
+                const subjectName = swimlane.label || 'Life';
+                const startDateStr = formatDate(subjectStartYear, null, null);
+                const endDateStr = subjectEndYear ? formatDate(subjectEndYear, null, null) : 'ongoing';
+                
+                lifeBar.on('mouseover', function(event) {
+                    lifeBar.style('opacity', 0.8);
+                    lifeTooltip.transition()
+                        .duration(200)
+                        .style('opacity', 1);
+                    
+                    lifeTooltip.html(`
+                        <strong>${subjectName}</strong><br/>
+                        ${startDateStr} - ${endDateStr}
+                    `)
+                    .style('left', (event.pageX + 10) + 'px')
+                    .style('top', (event.pageY - 10) + 'px');
+                })
+                .on('mouseout', function() {
+                    lifeBar.style('opacity', 1);
+                    lifeTooltip.transition()
+                        .duration(500)
+                        .style('opacity', 0);
+                });
             }
         } else {
             // Add individual connection bar
@@ -317,6 +382,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         .style('opacity', 1);
                     
                     const otherSpan = connection.other_span || connection.otherSpan;
+                    const predicate = connection.predicate || '';
                     const startYear = connectionSpan.start_year;
                     const startMonth = connectionSpan.start_month;
                     const startDay = connectionSpan.start_day;
@@ -359,8 +425,11 @@ document.addEventListener('DOMContentLoaded', function() {
                         }
                     }
                     
+                    // Build tooltip text with predicate
+                    const tooltipTitle = predicate ? `${predicate} ${otherSpan.name}` : otherSpan.name;
+                    
                     tooltip.html(`
-                        <strong>${otherSpan.name}</strong><br/>
+                        <strong>${tooltipTitle}</strong><br/>
                         ${startDateStr}${isOngoing ? ' (ongoing)' : ` - ${endDateStr}`}<br/>
                         ${durationStr}
                     `)
@@ -385,9 +454,11 @@ document.addEventListener('DOMContentLoaded', function() {
                         .style('opacity', 1);
                     
                     const otherSpan = connection.other_span || connection.otherSpan;
+                    const predicate = connection.predicate || '';
+                    const tooltipTitle = predicate ? `${predicate} ${otherSpan.name}` : otherSpan.name;
                     
                     tooltip.html(`
-                        <strong>${otherSpan.name}</strong><br/>
+                        <strong>${tooltipTitle}</strong><br/>
                         <em>Dates unknown</em>
                     `)
                     .style('left', (event.pageX + 10) + 'px')
@@ -408,7 +479,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const currentYear = new Date().getFullYear();
     const nowX = xScale(currentYear);
     
-    if (nowX >= margin.left && nowX <= width - margin.right) {
+    if (nowX >= 0 && nowX <= width) {
         // Draw vertical line from top margin to just above the axis
         svg.append('line')
             .attr('class', 'now-line')

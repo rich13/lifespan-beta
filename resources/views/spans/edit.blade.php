@@ -14,6 +14,12 @@
 @endsection
 
 @section('content')
+{{-- 
+    This edit form works for both regular spans and connection spans.
+    Connection spans (type_id = 'connection') are spans that represent relationships
+    between other spans. The metadata form component automatically shows connection-specific
+    fields when editing a connection span.
+--}}
 <form id="span-edit-form" method="POST" action="{{ route('spans.update', $span) }}">
     @csrf
     @method('PUT')

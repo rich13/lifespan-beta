@@ -345,13 +345,9 @@
                 <div class="list-group-item px-0 py-2 border-0 border-bottom" data-relation="{{ $connection->allen_relation }}" data-predicate="{{ $predicate }}">
                     <div class="small text-muted d-flex align-items-center flex-wrap">
                         @if($isPhase)
-                            <a href="{{ route('spans.show', $otherSpan) }}" class="text-decoration-none">
-                                {{ $otherSpan->name }}
-                            </a>
+                            <x-span-link :span="$otherSpan" class="text-decoration-none" />
                         @else
-                            <a href="{{ route('spans.show', $spanForDisplay) }}" class="text-decoration-none">
-                                {{ $subject->name }} {{ $predicate }} {{ $otherSpan->name }}
-                            </a>
+                            <x-span-link :span="$subject" class="text-decoration-none" /> {{ $predicate }} <x-span-link :span="$otherSpan" class="text-decoration-none" />
                         @endif
                         @if($dateText)
                             <span class="ms-2">{{ $dateText }}</span>

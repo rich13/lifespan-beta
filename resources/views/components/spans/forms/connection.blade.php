@@ -26,22 +26,12 @@
             
             $subject = $connection?->subject;
             $object = $connection?->object;
-
-            // Get the allowed span types for the current connection type
-            $allowedObjectTypes = [];
-            if ($connection?->type) {
-                $allowedObjectTypes = $connection->type->allowed_span_types['child'] ?? [];
-            }
-
-            // Filter available spans based on allowed types
-            $filteredSpans = $availableSpans->filter(function($span) use ($allowedObjectTypes) {
-                return $span->type_id !== 'connection' && in_array($span->type_id, $allowedObjectTypes);
-            });
         @endphp
 
         <!-- Hidden fields for form validation -->
         <input type="hidden" name="subject_id" value="{{ $subject?->id }}">
         <input type="hidden" name="connection_type" value="{{ $connection?->type?->type }}">
+        <input type="hidden" name="object_id" id="object_id" value="{{ old('object_id', $object?->id) }}">
 
         <!-- SPO Sentence -->
         <div class="mb-4">
@@ -50,29 +40,31 @@
                 <input type="text" 
                        class="form-control" 
                        value="{{ $subject?->name ?? 'No subject' }}" 
-                       readonly>
+                       readonly
+                       title="The subject (parent) of this connection cannot be changed here. To change it, edit the connection from the subject's page.">
                 
                 <input type="text" 
                        class="form-control" 
                        value="{{ $connection?->type?->forward_predicate ?? 'No predicate' }}" 
-                       readonly>
+                       readonly
+                       title="The connection type (predicate) cannot be changed here. To change it, delete and recreate the connection with a different type.">
 
-                <select class="form-select @error('object_id') is-invalid @enderror" 
-                        id="object_id" 
-                        name="object_id" 
-                        required>
-                    <option value="">Select Object</option>
-                    @foreach($filteredSpans as $availableSpan)
-                        <option value="{{ $availableSpan->id }}" 
-                                {{ old('object_id', $object?->id) == $availableSpan->id ? 'selected' : '' }}>
-                            {{ $availableSpan->name }}
-                            ({{ $availableSpan->type_id }})
-                        </option>
-                    @endforeach
-                </select>
+                <input type="text" 
+                       class="form-control @error('object_id') is-invalid @enderror" 
+                       id="object_name" 
+                       name="object_name" 
+                       value="{{ old('object_name', $object?->name ?? '') }}" 
+                       placeholder="Search for object..."
+                       autocomplete="off"
+                       required>
                 @error('object_id')
                     <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
+            </div>
+            <div class="form-text">
+                <small class="text-muted">
+                    You can change the object (child) of this connection. The subject and connection type are fixed and cannot be changed here.
+                </small>
             </div>
         </div>
 
@@ -93,25 +85,31 @@
 @push('scripts')
 <script>
 $(document).ready(function() {
-    const objectSelect = $('#object_id');
+    const objectInput = $('#object_name');
+    const objectIdInput = $('#object_id');
     const preview = $('#connection-preview');
     
     function updatePreview() {
         const subject = '{{ $subject?->name ?? "" }}';
         const predicate = '{{ $connection?->type?->forward_predicate ?? "" }}';
-        const object = objectSelect.find('option:selected').text().split(' (')[0] || '';
+        const object = objectInput.val() || '';
         
         if (subject && predicate && object) {
             preview.text(`${subject} ${predicate} ${object}`);
         } else {
-            preview.text('Select an object to see preview');
+            preview.text('Enter an object name to see preview');
         }
     }
     
-    objectSelect.on('change', updatePreview);
+    objectInput.on('input', updatePreview);
 
     // Initial preview
     updatePreview();
+    
+    // TODO: Add autocomplete functionality here
+    // The autocomplete should:
+    // 1. Search for spans as the user types
+    // 2. Update both objectInput (name) and objectIdInput (id) when a span is selected
 });
 </script>
 @endpush 
