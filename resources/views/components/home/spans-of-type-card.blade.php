@@ -3,7 +3,7 @@
     'subtype' => null,
     'title' => 'Items',
     'icon' => 'building',
-    'limit' => 5
+    'limit' => 3
 ])
 
 @php
@@ -412,26 +412,21 @@
         
         $processedItems[] = $itemData;
     }
-    
-    // Check if there are more items beyond the limit
-    $countQuery = \App\Models\Span::where('type_id', $type);
-    if ($subtype) {
-        $countQuery->whereJsonContains('metadata->subtype', $subtype);
-    }
-    
-    $hasMoreItems = $countQuery->where(function($query) {
-            $query->where('access_level', 'public')
-                ->orWhere('owner_id', auth()->id());
-        })
-        ->whereNotNull('start_year')
-        ->count() > $limit;
 @endphp
 
 <div class="card mb-3">
     <div class="card-header">
         <h3 class="h6 mb-0">
             <i class="bi bi-{{ $icon }} text-info me-2"></i>
-            {{ $title }}
+            @if($subtype)
+                <a href="{{ route('spans.types.subtypes.show', ['type' => $type, 'subtype' => $subtype]) }}" class="text-decoration-none text-primary">
+                    {{ $title }}
+                </a>
+            @else
+                <a href="{{ route('spans.types.show', ['type' => $type]) }}" class="text-decoration-none text-primary">
+                    {{ $title }}
+                </a>
+            @endif
         </h3>
     </div>
     <div class="card-body">
@@ -665,22 +660,6 @@
                     @endif
                 </div>
                 @endforeach
-            
-            @if($hasMoreItems)
-                <div class="text-center mt-3">
-                    @if($subtype)
-                        <a href="{{ route('spans.types.subtypes.show', ['type' => $type, 'subtype' => $subtype]) }}" class="btn btn-sm btn-outline-info">
-                            <i class="bi bi-arrow-right me-1"></i>
-                            View all {{ strtolower($title) }}
-                        </a>
-                    @else
-                        <a href="{{ route('spans.types.show', ['type' => $type]) }}" class="btn btn-sm btn-outline-info">
-                            <i class="bi bi-arrow-right me-1"></i>
-                            View all {{ strtolower($title) }}
-                        </a>
-                    @endif
-                </div>
-            @endif
         @endif
     </div>
 </div>
