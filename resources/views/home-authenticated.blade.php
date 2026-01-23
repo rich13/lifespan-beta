@@ -572,9 +572,19 @@
             <!-- Random Blue Plaque -->
             <x-home.random-blue-plaque-card />
 
-            <!-- Wikipedia On This Day -->
+            {{-- Wikipedia On This Day - Commented out
             <div class="mb-4">
                 <x-wikipedia-on-this-day />
+            </div>
+            --}}
+
+            <!-- Events Card -->
+            <div class="mb-4">
+                <x-home.spans-of-type-card 
+                    :type="'event'"
+                    :title="'Events'"
+                    :icon="'calendar-event'"
+                />
             </div>
 
             <!-- Welcome Modal Logic -->
@@ -798,15 +808,6 @@
                     :subtype="'film'"
                     :title="'Films'"
                     :icon="'film'"
-                />
-            </div>
-            
-            <!-- Events Card -->
-            <div class="mb-4">
-                <x-home.spans-of-type-card 
-                    :type="'event'"
-                    :title="'Events'"
-                    :icon="'calendar-event'"
                 />
             </div>
         </div>
