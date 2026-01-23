@@ -80,7 +80,7 @@
                         <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2">
                             <h5 class="card-title mb-0">
                                 <i class="bi bi-clock-history me-2"></i>
-                                Complete Life Timeline
+                                Lifespan
                             </h5>
                             <div class="d-flex flex-wrap align-items-center gap-2">
                                 @php
