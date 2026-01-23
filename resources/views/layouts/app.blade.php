@@ -99,6 +99,11 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
                 margin: 0;
                 padding: 0;
                 flex-shrink: 0;
+                position: fixed;
+                top: 0;
+                left: 0;
+                height: 100vh;
+                z-index: 1000;
             }
             
             /* Responsive widths */
@@ -134,11 +139,6 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
                 display: block;
             }
             
-            .sidebar.collapsed .sidebar-footer .p-3 {
-                padding: 0.5rem !important;
-                text-align: center;
-            }
-            
             
             
             .sidebar.collapsed .sidebar-brand span {
@@ -159,9 +159,31 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
             .main-content {
                 transition: none !important;
                 flex: 1;
-                margin: 0;
+                margin-left: var(--sidebar-width-md);
                 padding: 0;
                 min-width: 0;
+                display: flex;
+                flex-direction: column;
+                min-height: 100vh;
+            }
+            
+            @media (min-width: 992px) {
+                .main-content {
+                    margin-left: var(--sidebar-width-lg);
+                }
+                
+                .main-content.collapsed {
+                    margin-left: var(--sidebar-width-collapsed);
+                }
+            }
+            
+            .main-content.collapsed {
+                margin-left: var(--sidebar-width-collapsed);
+            }
+            
+            /* Make page content area grow to push footer to bottom */
+            .main-content > div.py-3.px-3 {
+                flex: 1;
             }
             
             .main-content.animated {
@@ -512,6 +534,9 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
         <!-- About Lifespan Modal -->
         <x-modals.about-lifespan-modal />
         
+        <!-- Footer Modal (generic for About, Privacy, Terms, Contact) -->
+        <x-footer.footer-modal />
+        
         <!-- Global Access Level Modal -->
         <x-modals.access-level-modal />
         
@@ -556,6 +581,7 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
                 if (sidebarCollapsed) {
                     $('#sidebar').addClass('collapsed');
                     $('#sidebar-toggle').addClass('collapsed');
+                    $('#main-content').addClass('collapsed');
                 }
                 
                 // Enable animations after DOM is ready
@@ -575,6 +601,7 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
                     
                     sidebar.toggleClass('collapsed');
                     toggle.toggleClass('collapsed');
+                    $('#main-content').toggleClass('collapsed');
                     
                     // Remove animating class after transition completes
                     setTimeout(function() {
@@ -618,6 +645,61 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
                     });
                     $('[data-bs-toggle="tooltip"]').tooltip();
                 }
+                
+                // Footer modal functionality
+                const modalConfigs = {
+                    'about': {
+                        title: 'About',
+                        icon: '<i class="bi bi-bar-chart-steps me-2"></i>',
+                        contentUrl: '{{ route("footer.content", ["type" => "about"]) }}'
+                    },
+                    'privacy': {
+                        title: 'Privacy',
+                        icon: '<i class="bi bi-shield-lock me-2"></i>',
+                        contentUrl: '{{ route("footer.content", ["type" => "privacy"]) }}'
+                    },
+                    'terms': {
+                        title: 'Terms',
+                        icon: '<i class="bi bi-file-text me-2"></i>',
+                        contentUrl: '{{ route("footer.content", ["type" => "terms"]) }}'
+                    },
+                    'contact': {
+                        title: 'Contact',
+                        icon: '<i class="bi bi-envelope me-2"></i>',
+                        contentUrl: '{{ route("footer.content", ["type" => "contact"]) }}'
+                    }
+                };
+
+                // Handle footer link clicks
+                $('a[data-footer-modal]').on('click', function(e) {
+                    e.preventDefault();
+                    const modalType = $(this).data('footer-modal');
+                    const config = modalConfigs[modalType];
+                    
+                    if (!config) {
+                        console.error('Unknown modal type:', modalType);
+                        return;
+                    }
+
+                    // Update modal title and icon
+                    $('#footerModalTitle').text(config.title);
+                    $('#footerModalIcon').html(config.icon);
+                    
+                    // Load content
+                    $('#footerModalBody').html('<div class="text-center py-4"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div></div>');
+                    
+                    // Show modal first
+                    $('#footerModal').modal('show');
+                    
+                    // Load content via AJAX
+                    $.get(config.contentUrl)
+                        .done(function(data) {
+                            $('#footerModalBody').html(data);
+                        })
+                        .fail(function() {
+                            $('#footerModalBody').html('<div class="alert alert-danger">Failed to load content. Please try again later.</div>');
+                        });
+                });
             });
         </script>
         @endauth
