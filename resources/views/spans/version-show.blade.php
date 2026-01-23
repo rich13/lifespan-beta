@@ -41,12 +41,12 @@
                     <h5 class="mb-0">Version {{ $versionModel->version_number }} Details</h5>
                     <div>
                         @if($previousVersion)
-                            <a href="{{ route('spans.history.version', [$span, $previousVersion->version_number]) }}" class="btn btn-sm btn-outline-secondary">
+                            <a href="{{ route('spans.history', [$span, $previousVersion->version_number]) }}" class="btn btn-sm btn-outline-secondary">
                                 <i class="bi bi-arrow-left"></i> Previous Version
                             </a>
                         @endif
                         @if($versionModel->version_number < $span->getLatestVersion()->version_number)
-                            <a href="{{ route('spans.history.version', [$span, $versionModel->version_number + 1]) }}" class="btn btn-sm btn-outline-secondary">
+                            <a href="{{ route('spans.history', [$span, $versionModel->version_number + 1]) }}" class="btn btn-sm btn-outline-secondary">
                                 Next Version <i class="bi bi-arrow-right"></i>
                             </a>
                         @endif

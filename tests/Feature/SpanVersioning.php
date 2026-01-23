@@ -85,7 +85,7 @@ class SpanVersioning extends \Tests\TestCase
         $span->update(['name' => 'Updated Name']);
 
         $response = $this->actingAs($user)
-            ->get(route('spans.history.version', [$span, 2]));
+            ->get(route('spans.history', [$span, 2]));
 
         $response->assertStatus(200);
         $response->assertSee('Version 2 Details');
@@ -107,7 +107,7 @@ class SpanVersioning extends \Tests\TestCase
         ]);
 
         $response = $this->actingAs($user)
-            ->get(route('spans.history.version', [$span, 2]));
+            ->get(route('spans.history', [$span, 2]));
 
         $response->assertStatus(200);
         $response->assertSee('Changes from Version 1');
@@ -121,7 +121,7 @@ class SpanVersioning extends \Tests\TestCase
         $span = Span::factory()->create(['owner_id' => $user->id]);
 
         $response = $this->actingAs($user)
-            ->get(route('spans.history.version', [$span, 1]));
+            ->get(route('spans.history', [$span, 1]));
 
         $response->assertStatus(200);
         $response->assertSee('This is the initial version');
@@ -133,7 +133,7 @@ class SpanVersioning extends \Tests\TestCase
         $span = Span::factory()->create(['owner_id' => $user->id]);
 
         $response = $this->actingAs($user)
-            ->get(route('spans.history.version', [$span, 999]));
+            ->get(route('spans.history', [$span, 999]));
 
         $response->assertStatus(404);
     }

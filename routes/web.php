@@ -26,6 +26,7 @@ use App\Http\Controllers\AdminModeController;
 use App\Http\Controllers\FriendsController;
 use App\Http\Controllers\NewSpanController;
 use App\Http\Controllers\CollectionsController;
+use App\Http\Controllers\FooterController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
@@ -153,6 +154,11 @@ Route::post('/sentry-test', function() {
 })->name('sentry.test');
 
 Route::middleware('web')->group(function () {
+    // Footer content route (for modal content)
+    Route::get('/footer/content/{type}', [FooterController::class, 'content'])
+        ->where('type', 'about|privacy|terms|contact')
+        ->name('footer.content');
+    
     // Home route - public for guests, but requires profile completion for authenticated users
     // The profile.complete middleware checks Auth::check() first, so guests can still access
     Route::get('/', function () {
@@ -737,8 +743,8 @@ Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])
 
     // Span version history (using /history/:span to avoid conflicts with connection routes)
     Route::middleware('span.access')->group(function () {
-        Route::get('/history/{span}', [\App\Http\Controllers\SpanController::class, 'history'])->name('spans.history');
-        Route::get('/history/{span}/{version}', [\App\Http\Controllers\SpanController::class, 'showVersion'])->name('spans.history.version');
+        Route::get('/history/{span}/{version?}', [\App\Http\Controllers\SpanController::class, 'history'])->name('spans.history');
+        Route::get('/history/{span}/{version}/details', [\App\Http\Controllers\SpanController::class, 'showVersion'])->name('spans.history.version');
     });
 
     // Quick Education creation (scoped feature)

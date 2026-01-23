@@ -209,7 +209,7 @@
                                     </td>
                                     <td>
                                         @if($change['type'] === 'span')
-                                            <a href="{{ route('spans.history.version', [$change['entity'], $change['version_number']]) }}" 
+                                            <a href="{{ route('spans.history', [$change['entity'], $change['version_number']]) }}" 
                                                class="btn btn-sm btn-outline-primary" title="View version">
                                                 <i class="bi bi-eye"></i>
                                             </a>
@@ -219,7 +219,7 @@
                                             </a>
                                         @else
                                             @if($change['entity']->connectionSpan)
-                                                <a href="{{ route('spans.history.version', [$change['entity']->connectionSpan, $change['version_number']]) }}" 
+                                                <a href="{{ route('spans.history', [$change['entity']->connectionSpan, $change['version_number']]) }}" 
                                                    class="btn btn-sm btn-outline-primary" title="View version">
                                                     <i class="bi bi-eye"></i>
                                                 </a>

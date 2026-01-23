@@ -3149,7 +3149,7 @@ class SpanController extends Controller
     /**
      * Display the version history for a span.
      */
-    public function history(Request $request, Span $span): View
+    public function history(Request $request, Span $span, ?int $version = null): View
     {
         $versions = $span->versions()->with('changedBy')->orderByDesc('version_number')->get();
         
@@ -3182,32 +3182,51 @@ class SpanController extends Controller
             ->concat($connectionChanges)
             ->sortByDesc(fn($change) => $change['version']->created_at);
         
-        return view('spans.history', compact('span', 'allChanges', 'versions'));
+        // Handle version selection - default to most recent if not specified
+        $versionModel = null;
+        $previousVersion = null;
+        $changes = [];
+        
+        if ($version !== null) {
+            $versionModel = $span->getVersion($version);
+            if (!$versionModel) {
+                abort(404, 'Version not found');
+            }
+            
+            // Get the previous version for comparison
+            $previousVersion = $span->versions()
+                ->where('version_number', '<', $version)
+                ->orderByDesc('version_number')
+                ->first();
+            
+            if ($previousVersion) {
+                $changes = $versionModel->getDiffFrom($previousVersion);
+            }
+        } else {
+            // Default to most recent version
+            $versionModel = $versions->first();
+            if ($versionModel) {
+                $previousVersion = $span->versions()
+                    ->where('version_number', '<', $versionModel->version_number)
+                    ->orderByDesc('version_number')
+                    ->first();
+                
+                if ($previousVersion) {
+                    $changes = $versionModel->getDiffFrom($previousVersion);
+                }
+            }
+        }
+        
+        return view('spans.history', compact('span', 'allChanges', 'versions', 'versionModel', 'previousVersion', 'changes'));
     }
 
     /**
      * Display a specific version of a span with changes from the previous version.
+     * Redirects to history page with version parameter for unified view.
      */
-    public function showVersion(Request $request, Span $span, int $version): View
+    public function showVersion(Request $request, Span $span, int $version): \Illuminate\Http\RedirectResponse
     {
-        $versionModel = $span->getVersion($version);
-        
-        if (!$versionModel) {
-            abort(404, 'Version not found');
-        }
-
-        // Get the previous version for comparison
-        $previousVersion = $span->versions()
-            ->where('version_number', '<', $version)
-            ->orderByDesc('version_number')
-            ->first();
-
-        $changes = [];
-        if ($previousVersion) {
-            $changes = $versionModel->getDiffFrom($previousVersion);
-        }
-
-        return view('spans.version-show', compact('span', 'versionModel', 'previousVersion', 'changes'));
+        return redirect()->route('spans.history', [$span, $version]);
     }
 
     /**
