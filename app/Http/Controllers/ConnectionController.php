@@ -198,6 +198,9 @@ class ConnectionController extends Controller
                 'type_id' => $validated['type'],
                 'connection_span_id' => $connectionSpan->id
             ]);
+            
+            // Ensure connectionSpan relationship is loaded for validation
+            $connection->setRelation('connectionSpan', $connectionSpan);
 
             // Validate connection constraints
             $constraintResult = $this->constraintService->validateConstraint(

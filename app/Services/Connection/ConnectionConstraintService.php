@@ -71,26 +71,47 @@ class ConnectionConstraintService
             return ConnectionConstraintResult::success();
         }
 
+        // Ensure connectionSpan is loaded
+        if (!$connection->relationLoaded('connectionSpan')) {
+            $connection->load('connectionSpan');
+        }
+        
         // Skip temporal validation for placeholder connections or connections with no dates
-        if ($connection->connectionSpan->state === 'placeholder' || 
-            ($connection->connectionSpan->start_year === null && $connection->connectionSpan->end_year === null)) {
+        $connectionSpan = $connection->connectionSpan;
+        if (!$connectionSpan) {
+            // If connection span doesn't exist, allow it (shouldn't happen, but be defensive)
+            return ConnectionConstraintResult::success();
+        }
+        
+        if ($connectionSpan->state === 'placeholder' || 
+            ($connectionSpan->start_year === null && $connectionSpan->end_year === null)) {
             return ConnectionConstraintResult::success();
         }
 
-        $newRange = TemporalRange::fromSpan($connection->connectionSpan);
+        $newRange = TemporalRange::fromSpan($connectionSpan);
 
         foreach ($existingConnections as $existing) {
+            // Ensure existing connectionSpan is loaded
+            if (!$existing->relationLoaded('connectionSpan')) {
+                $existing->load('connectionSpan');
+            }
+            
+            $existingSpan = $existing->connectionSpan;
+            if (!$existingSpan) {
+                continue;
+            }
+            
             // Skip temporal validation for existing placeholder connections
-            if ($existing->connectionSpan->state === 'placeholder' || 
-                ($existing->connectionSpan->start_year === null && $existing->connectionSpan->end_year === null)) {
+            if ($existingSpan->state === 'placeholder' || 
+                ($existingSpan->start_year === null && $existingSpan->end_year === null)) {
                 continue;
             }
 
-            $existingRange = TemporalRange::fromSpan($existing->connectionSpan);
+            $existingRange = TemporalRange::fromSpan($existingSpan);
             
             if ($this->temporalService->overlaps($newRange, $existingRange)) {
                 // Check if they're just adjacent
-                if ($this->temporalService->areAdjacent($connection->connectionSpan, $existing->connectionSpan)) {
+                if ($this->temporalService->areAdjacent($connectionSpan, $existingSpan)) {
                     continue;
                 }
                 return ConnectionConstraintResult::failure('Connection dates overlap with an existing connection');

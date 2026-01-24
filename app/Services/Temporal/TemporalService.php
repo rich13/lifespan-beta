@@ -51,6 +51,11 @@ class TemporalService
      */
     public function areAdjacent(Span $a, Span $b): bool
     {
+        // Spans without dates cannot be adjacent
+        if ($a->start_year === null || $b->start_year === null) {
+            return false;
+        }
+        
         $rangeA = TemporalRange::fromSpan($a);
         $rangeB = TemporalRange::fromSpan($b);
         return $rangeA->isAdjacent($rangeB);
