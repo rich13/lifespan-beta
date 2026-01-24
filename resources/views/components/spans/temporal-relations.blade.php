@@ -245,7 +245,7 @@
     <div class="card-header">
         <h6 class="card-title mb-0">
             <i class="bi bi-border-style me-2"></i>
-            Temporal Relations <sup>BETA</sup>
+            Time Relationships
         </h6>
     </div>
     <div class="card-body p-2">
@@ -347,7 +347,7 @@
                         @if($isPhase)
                             <x-span-link :span="$otherSpan" class="text-decoration-none" />
                         @else
-                            <x-span-link :span="$subject" class="text-decoration-none" /> {{ $predicate }} <x-span-link :span="$otherSpan" class="text-decoration-none" />
+                            <x-span-link :span="$subject" class="text-decoration-none" /><span class="mx-1">{{ $predicate }}</span><x-span-link :span="$otherSpan" class="text-decoration-none" />
                         @endif
                         @if($dateText)
                             <span class="ms-2">{{ $dateText }}</span>

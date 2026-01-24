@@ -40,7 +40,7 @@
 @endphp
 
 @if($span && $isAccessible)
-    <a href="{{ route('spans.show', $span) }}" class="{{ $class }}">{{ $span->name }}</a>
+    <a href="{{ route('spans.show', $span) }}" class="{{ $class }}">{{ trim($span->name) }}</a>
 @elseif($span)
     <span class="text-muted fst-italic {{ $class }}">{{ $placeholderText }}</span>
 @endif
