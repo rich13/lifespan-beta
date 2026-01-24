@@ -98,25 +98,25 @@
                 <x-icon type="owner" category="status" class="me-1" />{{ $span->owner->name }}
             </button>
 
-            <!-- Created Date -->
-            <button type="button" class="btn btn-sm btn-outline-secondary" disabled
-                    data-bs-toggle="tooltip" 
-                    data-bs-placement="top" 
-                    data-bs-custom-class="tooltip-mini"
-                    data-bs-title="Date this span was created">
-                <x-icon type="created" category="status" class="me-1" />{{ $span->created_at->format('Y-m-d') }}
-            </button>
-
-            <!-- Updated Date (if different from created) -->
-            @if($span->created_at != $span->updated_at)
-                <button type="button" class="btn btn-sm btn-outline-secondary" disabled
-                        data-bs-toggle="tooltip" 
-                        data-bs-placement="top" 
-                        data-bs-custom-class="tooltip-mini"
-                        data-bs-title="Date this span was last updated">
-                    <x-icon type="updated" category="status" class="me-1" />{{ $span->updated_at->format('Y-m-d') }}
-                </button>
-            @endif
+            <!-- Version -->
+            @php
+                // Determine the current version number for this span, falling back to 1 if unavailable
+                $currentVersion = null;
+                if (method_exists($span, 'getLatestVersion')) {
+                    $latestVersion = $span->getLatestVersion();
+                    $currentVersion = $latestVersion ? $latestVersion->version_number : null;
+                }
+            @endphp
+            <a href="{{ route('spans.history', $span) }}" 
+               class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1"
+               data-bs-toggle="tooltip" 
+               data-bs-placement="top" 
+               data-bs-custom-class="tooltip-mini"
+               data-bs-title="View version history">
+                <i class="bi bi-clock-history"></i>
+                <span class="small">Version</span>
+                <span class="badge bg-light text-muted border">{{ $currentVersion ?? 1 }}</span>
+            </a>
 
             <!-- State -->
             <button type="button" 

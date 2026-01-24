@@ -2,7 +2,6 @@
     'span',
     'idPrefix' => 'span', // Used for button IDs: edit-{idPrefix}-btn, delete-{idPrefix}-btn, etc.
     'label' => 'span', // Used in tooltips and delete confirmation: "Edit {label}", "delete this {label}?"
-    'showHistory' => true,
 ])
 
 @auth
@@ -42,23 +41,6 @@
                 <i class="bi bi-trash me-1"></i> Delete
             </a>
         @endcan
-    @endif
-
-    @if($showHistory)
-        @php
-            // Determine the current version number for this span, falling back to 1 if unavailable
-            $currentVersion = null;
-            if (method_exists($span, 'getLatestVersion')) {
-                $latestVersion = $span->getLatestVersion();
-                $currentVersion = $latestVersion ? $latestVersion->version_number : null;
-            }
-        @endphp
-        <a href="{{ route('spans.history', $span) }}" 
-           class="btn btn-sm btn-outline-dark d-inline-flex align-items-center gap-1">
-            <i class="bi bi-clock-history"></i>
-            <span class="small text-muted">Version</span>
-            <span class="badge bg-light text-muted border">{{ $currentVersion ?? 1 }}</span>
-        </a>
     @endif
 
     {{ $extraButtons ?? '' }}
