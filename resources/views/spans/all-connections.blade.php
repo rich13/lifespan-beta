@@ -126,6 +126,21 @@
                                         <i class="bi bi-arrows-collapse"></i>
                                     </label>
                                 </div>
+                                <select class="form-select form-select-sm" id="state-filter" style="width: auto; display: inline-block;" title="Filter by connection state">
+                                    <option value="all">All States</option>
+                                    <option value="placeholder">Placeholders Only</option>
+                                    <option value="draft">Drafts Only</option>
+                                    <option value="complete">Complete Only</option>
+                                </select>
+                                @auth
+                                    @if(auth()->user()->can('update', $subject))
+                                        <button type="button" class="btn btn-sm btn-outline-primary" 
+                                                data-bs-toggle="modal" data-bs-target="#addConnectionModal"
+                                                data-span-id="{{ $subject->id }}" data-span-name="{{ $subject->name }}" data-span-type="{{ $subject->type_id }}">
+                                            <i class="bi bi-plus-lg"></i>
+                                        </button>
+                                    @endif
+                                @endauth
                             </div>
                         </div>
                     </div>
@@ -181,6 +196,14 @@
                     .get()
             );
             let activeTypes = new Set(allTypes); // start with all types active
+            
+            // State filter: 'all' | 'placeholder' | 'draft' | 'complete'
+            let stateFilter = 'all';
+            const $stateFilter = $('#state-filter');
+            
+            if (!$stateFilter.length) {
+                console.warn('State filter dropdown not found');
+            }
 
             if (!$buttons.length || !$timelineContainer.length) {
                 return;
@@ -278,6 +301,14 @@
                     filterTimelineByTypes(layoutMode);
                 }
             });
+            
+            // State filter dropdown change handler
+            if ($stateFilter.length) {
+                $stateFilter.on('change', function() {
+                    stateFilter = $(this).val();
+                    filterTimelineByTypes(layoutMode);
+                });
+            }
 
             function filterTimelineByTypes(layout) {
                 const $rows = $timelineContainer.find('.timeline-row');
@@ -311,7 +342,29 @@
                 const showAllTypes = activeTypes.size === allTypes.size;
 
                 if (showAllTypes) {
-                    $rows.removeClass('timeline-row--hidden');
+                    // Apply state filter even when showing all types
+                    $rows.each(function() {
+                        const $row = $(this);
+                        const rowType = $row.data('connection-type');
+                        const rowState = $row.attr('data-connection-state'); // Use attr() instead of data() to get the actual attribute value
+                        
+                        let stateMatches = true;
+                        if (rowType !== 'life') {
+                            if (stateFilter === 'all') {
+                                stateMatches = true; // Show all
+                            } else {
+                                // Filter to show only the selected state
+                                stateMatches = rowState === stateFilter;
+                            }
+                        }
+                        
+                        if (stateMatches) {
+                            $row.removeClass('timeline-row--hidden');
+                        } else {
+                            $row.addClass('timeline-row--hidden');
+                        }
+                    });
+                    
                     // Set opacity for all bars except life bar
                     $bars.each(function() {
                         const $bar = $(this);
@@ -355,22 +408,29 @@
                         $svg.find('.timeline-axis').attr('transform', 'translate(0,' + axisYCollapsed + ')');
                         $svg.find('.now-line').attr('y2', axisYCollapsed);
                     } else {
-                        // Expanded: show all backgrounds and stack rows
+                        // Expanded: show backgrounds for visible rows only
                         $rows.each(function() {
                             const $row = $(this);
-                            $row.find('.timeline-bg').css('opacity', 1);
+                            if ($row.hasClass('timeline-row--hidden')) {
+                                $row.find('.timeline-bg').css('opacity', 0);
+                            } else {
+                                $row.find('.timeline-bg').css('opacity', 1);
+                            }
                         });
 
-                        // Reset stacked positions for all rows (animated)
+                        // Re-stack only visible rows (animated) - skip hidden rows to remove gaps
                         let visibleIndexAll = 0;
                         $rows.each(function() {
                             const $row = $(this);
+                            if ($row.hasClass('timeline-row--hidden')) {
+                                return; // Skip hidden rows
+                            }
                             const baseY = overallSwimlaneY + (visibleIndexAll * (swimlaneHeight + swimlaneSpacing));
                             visibleIndexAll++;
                             animateRowToY($row, baseY);
                         });
 
-                        // Reposition axis immediately below the last row
+                        // Reposition axis immediately below the last visible row
                         const totalVisibleAll = visibleIndexAll;
                         if (totalVisibleAll > 0) {
                             const newHeightAll = marginTop + (totalVisibleAll * swimlaneHeight) + ((totalVisibleAll - 1) * swimlaneSpacing) + marginBottom;
@@ -397,9 +457,24 @@
                 $rows.each(function() {
                     const $row = $(this);
                     const rowType = $row.data('connection-type');
+                    const rowState = $row.attr('data-connection-state'); // Use attr() instead of data() to get the actual attribute value
 
-                    // Always keep the life row visible; toggle others
-                    if (rowType === 'life' || activeTypes.has(rowType)) {
+                    // Check type filter
+                    const typeMatches = rowType === 'life' || activeTypes.has(rowType);
+                    
+                    // Check state filter
+                    let stateMatches = true;
+                    if (rowType !== 'life') {
+                        if (stateFilter === 'all') {
+                            stateMatches = true; // Show all states
+                        } else {
+                            // Filter to show only the selected state
+                            stateMatches = rowState === stateFilter;
+                        }
+                    }
+
+                    // Row is visible if both type and state filters match
+                    if (typeMatches && stateMatches) {
                         $row.removeClass('timeline-row--hidden');
                     } else {
                         $row.addClass('timeline-row--hidden');

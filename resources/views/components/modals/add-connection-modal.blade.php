@@ -4,7 +4,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="addConnectionModalLabel">
-                    <i class="bi bi-link-45deg me-2"></i>Add Connection
+                    <i class="bi bi-link-45deg me-2"></i><span id="modalTitleText">Add Connection</span>
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
@@ -12,6 +12,7 @@
                 <div id="addConnectionStatus"></div>
                 <form id="addConnectionForm">
                     @csrf
+                    <input type="hidden" id="connectionId" name="connection_id">
                     
                     <!-- Subject, Predicate, Object Row -->
                     <div class="row g-3 mb-4">
@@ -39,6 +40,9 @@
                                    name="object_search" placeholder="Search..." disabled>
                             <input type="hidden" id="connectionObjectId" name="object_id">
                             <input type="hidden" id="allowedSpanTypes" name="allowed_span_types">
+                            <div id="connectionObjectDisplay" class="form-control-plaintext bg-light d-none" style="min-height: 38px;">
+                                <!-- Will be populated when editing -->
+                            </div>
                         </div>
                     </div>
                     
@@ -52,19 +56,6 @@
                     <!-- Search Results (Full Width) -->
                     <div class="mb-3">
                         <div id="searchResults" class="border rounded" style="max-height: 200px; overflow-y: auto;"></div>
-                    </div>
-
-                    <!-- Connection State -->
-                    <div class="mb-3">
-                        <label class="form-label fw-medium">State</label>
-                        <div class="btn-group w-100" role="group" aria-label="Connection State">
-                            <input type="radio" class="btn-check" name="state" id="statePlaceholder" value="placeholder" autocomplete="off" checked>
-                            <label class="btn btn-outline-secondary" for="statePlaceholder">Placeholder</label>
-                            <input type="radio" class="btn-check" name="state" id="stateDraft" value="draft" autocomplete="off">
-                            <label class="btn btn-outline-secondary" for="stateDraft">Draft</label>
-                            <input type="radio" class="btn-check" name="state" id="stateComplete" value="complete" autocomplete="off">
-                            <label class="btn btn-outline-secondary" for="stateComplete">Complete</label>
-                        </div>
                     </div>
 
                     <!-- Start Date -->
@@ -114,12 +105,28 @@
                     </div>
                 </form>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="submit" class="btn btn-primary" id="addConnectionSubmitBtn" form="addConnectionForm">
-                    <span class="spinner-border spinner-border-sm me-1 d-none" id="addConnectionSpinner" role="status" aria-hidden="true"></span>
-                    <i class="bi bi-plus-circle me-1"></i>Create
-                </button>
+            <div class="modal-footer d-flex justify-content-between align-items-center">
+                <!-- Connection State -->
+                <div class="d-flex align-items-center">
+                    <label class="form-label mb-0 me-2 fw-medium">State:</label>
+                    <div class="btn-group" role="group" aria-label="Connection State">
+                        <input type="radio" class="btn-check" name="state" id="statePlaceholder" value="placeholder" autocomplete="off" checked>
+                        <label class="btn btn-outline-secondary btn-sm" for="statePlaceholder">Placeholder</label>
+                        <input type="radio" class="btn-check" name="state" id="stateDraft" value="draft" autocomplete="off">
+                        <label class="btn btn-outline-secondary btn-sm" for="stateDraft">Draft</label>
+                        <input type="radio" class="btn-check" name="state" id="stateComplete" value="complete" autocomplete="off">
+                        <label class="btn btn-outline-secondary btn-sm" for="stateComplete">Complete</label>
+                    </div>
+                </div>
+                <div>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="addConnectionSubmitBtn" form="addConnectionForm">
+                        <span class="spinner-border spinner-border-sm me-1 d-none" id="addConnectionSpinner" role="status" aria-hidden="true"></span>
+                        <i class="bi bi-plus-circle me-1 d-none" id="createIcon"></i>
+                        <i class="bi bi-save me-1 d-none" id="saveIcon"></i>
+                        <span id="submitButtonText">Create</span>
+                    </button>
+                </div>
             </div>
         </div>
     </div>

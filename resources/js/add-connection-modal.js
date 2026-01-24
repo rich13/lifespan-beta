@@ -5,6 +5,8 @@ $(document).ready(function() {
     let connectionTypes = [];
     let searchTimeout = null;
     let isReverseMode = false;
+    let isEditMode = false;
+    let currentConnectionId = null;
 
     // Initialize modal when opened
     $('#addConnectionModal').on('show.bs.modal', function(event) {
@@ -12,24 +14,54 @@ $(document).ready(function() {
         currentSpanId = button.data('span-id');
         currentSpanName = button.data('span-name');
         currentSpanType = button.data('span-type');
+        currentConnectionId = button.data('connection-id') || null;
+        isEditMode = !!currentConnectionId;
         
         // Reset form and state
         $('#addConnectionForm')[0].reset();
-        $('#connectionObject').prop('disabled', true);
-        $('#searchObjectBtn').prop('disabled', true);
+        $('#connectionId').val(currentConnectionId || '');
         $('#connectionObjectId').val('');
         $('#searchResults').empty();
         isReverseMode = false;
         
+        // Update modal title and button
+        if (isEditMode) {
+            $('#modalTitleText').text('Edit Connection');
+            $('#submitButtonText').text('Save');
+            $('#createIcon').addClass('d-none');
+            $('#saveIcon').removeClass('d-none');
+        } else {
+            $('#modalTitleText').text('Add Connection');
+            $('#submitButtonText').text('Create');
+            $('#createIcon').removeClass('d-none');
+            $('#saveIcon').addClass('d-none');
+            // Ensure placeholder state is selected after reset (scope to form to avoid conflicts)
+            $('#addConnectionForm #statePlaceholder').prop('checked', true);
+        }
+        
         // Reset toggle button
         $('#directionLabel').text('Forward');
+        $('#directionToggle').removeClass('btn-outline-primary').addClass('btn-outline-secondary');
         
         // Update subject display
         $('#connectionSubject').text(currentSpanName);
         $('#connectionSubjectType').text(currentSpanType);
         
-        // Load connection types
-        loadConnectionTypes();
+        if (isEditMode) {
+            // Load connection data for editing
+            loadConnectionForEdit(currentConnectionId);
+            } else {
+                // Reset form fields for create mode
+                $('#connectionObject').prop('disabled', true);
+                $('#searchObjectBtn').prop('disabled', true);
+                $('#connectionObjectDisplay').addClass('d-none');
+                $('#connectionObject').removeClass('d-none');
+                $('#connectionPredicate').prop('disabled', false);
+                $('#directionToggle').show();
+                
+                // Load connection types (no need to wait for promise in create mode)
+                loadConnectionTypes();
+            }
     });
 
     // Handle direction toggle
@@ -52,40 +84,114 @@ $(document).ready(function() {
         loadConnectionTypes();
     });
 
+    // Load connection data for editing
+    function loadConnectionForEdit(connectionId) {
+        // First load connection types so we can populate the dropdown
+        loadConnectionTypes().then(function() {
+            // Then load the connection data
+            $.ajax({
+                url: `/spans/api/connections/${connectionId}`,
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json'
+                },
+                success: function(response) {
+                    if (response.success && response.data) {
+                        const conn = response.data;
+                        
+                        // Determine which span is the subject (current span)
+                        const isParent = conn.parent_id === currentSpanId;
+                        const subjectSpan = isParent ? {id: conn.parent_id, name: conn.parent_name, type: conn.parent_type} : {id: conn.child_id, name: conn.child_name, type: conn.child_type};
+                        const objectSpan = isParent ? {id: conn.child_id, name: conn.child_name, type: conn.child_type} : {id: conn.parent_id, name: conn.parent_name, type: conn.parent_type};
+                        
+                        // Set connection type (read-only in edit mode)
+                        $('#connectionPredicate').val(conn.type).prop('disabled', true);
+                        
+                        // Set object span (read-only in edit mode)
+                        $('#connectionObject').addClass('d-none').prop('disabled', true);
+                        $('#connectionObjectDisplay').removeClass('d-none').text(objectSpan.name);
+                        $('#connectionObjectId').val(objectSpan.id);
+                        
+                        // Hide direction toggle in edit mode
+                        $('#directionToggle').hide();
+                        
+                        // Set state
+                        $(`#addConnectionForm input[name="state"][value="${conn.state}"]`).prop('checked', true);
+                        
+                        // Set dates
+                        if (conn.start_year) $('#startYear').val(conn.start_year);
+                        if (conn.start_month) $('#startMonth').val(conn.start_month);
+                        if (conn.start_day) $('#startDay').val(conn.start_day);
+                        if (conn.end_year) $('#endYear').val(conn.end_year);
+                        if (conn.end_month) $('#endMonth').val(conn.end_month);
+                        if (conn.end_day) $('#endDay').val(conn.end_day);
+                        
+                        // Update help text based on state
+                        updateDateHelpText(conn.state, conn.type);
+                    }
+                },
+                error: function(xhr) {
+                    console.error('Error loading connection:', xhr);
+                    showStatus('Error loading connection data', 'danger');
+                }
+            });
+        });
+    }
+    
+    // Update date help text based on state and connection type
+    function updateDateHelpText(state, connectionType) {
+        const startDateHelp = $('#startDateHelp');
+        const connectionTypeObj = connectionTypes.find(t => t.type === connectionType);
+        const isTimeless = connectionTypeObj && connectionTypeObj.constraint_type === 'timeless';
+        
+        if (isTimeless) {
+            startDateHelp.text('Optional - not required for this connection type');
+        } else if (state === 'placeholder') {
+            startDateHelp.text('Optional for placeholder connections');
+        } else {
+            startDateHelp.text('Required for draft and complete connections');
+        }
+    }
+
     // Load connection types from the database
     function loadConnectionTypes() {
-        const params = new URLSearchParams();
-        if (currentSpanType) {
-            params.append('span_type', currentSpanType);
-            params.append('mode', isReverseMode ? 'reverse' : 'forward');
-        }
-        
-        console.log('Loading connection types for span type:', currentSpanType, 'reverse mode:', isReverseMode);
-        
-        $.ajax({
-            url: `/api/connection-types?${params.toString()}`,
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json'
-            },
-            success: function(data) {
-                console.log('Loaded connection types:', data);
-                connectionTypes = data;
-                const dropdown = $('#connectionPredicate');
-                dropdown.empty();
-                dropdown.append('<option value="">Select connection type...</option>');
-                
-                data.forEach(function(type) {
-                    // Use inverse predicate for reverse mode, forward predicate for forward mode
-                    const displayText = isReverseMode ? (type.inverse_predicate || type.type) : (type.forward_predicate || type.type);
-                    dropdown.append(`<option value="${type.type}">${displayText}</option>`);
-                    console.log('Added option:', type.type, '->', displayText, '(mode:', isReverseMode ? 'reverse' : 'forward', ')');
-                });
-            },
-            error: function(xhr) {
-                console.error('Error loading connection types:', xhr);
-                showAlert('Error loading connection types', 'danger');
+        return new Promise(function(resolve, reject) {
+            const params = new URLSearchParams();
+            if (currentSpanType) {
+                params.append('span_type', currentSpanType);
+                params.append('mode', isReverseMode ? 'reverse' : 'forward');
             }
+            
+            console.log('Loading connection types for span type:', currentSpanType, 'reverse mode:', isReverseMode);
+            
+            $.ajax({
+                url: `/api/connection-types?${params.toString()}`,
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json'
+                },
+                success: function(data) {
+                    console.log('Loaded connection types:', data);
+                    connectionTypes = data;
+                    const dropdown = $('#connectionPredicate');
+                    dropdown.empty();
+                    dropdown.append('<option value="">Select connection type...</option>');
+                    
+                    data.forEach(function(type) {
+                        // Use inverse predicate for reverse mode, forward predicate for forward mode
+                        const displayText = isReverseMode ? (type.inverse_predicate || type.type) : (type.forward_predicate || type.type);
+                        dropdown.append(`<option value="${type.type}">${displayText}</option>`);
+                        console.log('Added option:', type.type, '->', displayText, '(mode:', isReverseMode ? 'reverse' : 'forward', ')');
+                    });
+                    
+                    resolve(data);
+                },
+                error: function(xhr) {
+                    console.error('Error loading connection types:', xhr);
+                    showAlert('Error loading connection types', 'danger');
+                    reject(xhr);
+                }
+            });
         });
     }
 
@@ -107,7 +213,7 @@ $(document).ready(function() {
             if (connectionType && connectionType.constraint_type === 'timeless') {
                 startDateHelp.text('Optional - not required for this connection type');
             } else {
-                const selectedState = $('input[name="state"]:checked').val();
+                const selectedState = $('#addConnectionForm input[name="state"]:checked').val();
                 if (selectedState === 'placeholder') {
                     startDateHelp.text('Optional for placeholder connections');
                 } else {
@@ -159,8 +265,8 @@ $(document).ready(function() {
         }, 300);
     });
     
-    // Handle connection state changes
-    $('input[name="state"]').on('change', function() {
+    // Handle connection state changes (scoped to the modal form)
+    $('#addConnectionModal').on('change', 'input[name="state"]', function() {
         const selectedState = $(this).val();
         const startDateRequired = $('#startDateRequired');
         const startDateHelp = $('#startDateHelp');
@@ -414,13 +520,28 @@ $(document).ready(function() {
     $('#addConnectionForm').on('submit', function(e) {
         e.preventDefault();
         
+        // Get state directly from form to ensure we have the current value
+        // Scope to the addConnectionForm to avoid conflicts with other forms on the page
+        const checkedState = $('#addConnectionForm input[name="state"]:checked').val();
+        const currentState = checkedState || 'placeholder';
+        
+        console.log('=== Connection Form Validation Debug ===');
+        console.log('Checked state value (scoped to form):', checkedState);
+        console.log('Current state (with fallback):', currentState);
+        console.log('All state radio values in form:', $('#addConnectionForm input[name="state"]').map(function() {
+            return $(this).val() + ':' + ($(this).is(':checked') ? 'checked' : 'unchecked');
+        }).get());
+        console.log('All state radio values on page:', $('input[name="state"]').map(function() {
+            return $(this).val() + ':' + ($(this).is(':checked') ? 'checked' : 'unchecked') + ' (id: ' + $(this).attr('id') + ')';
+        }).get());
+        
         // Gather form data
         const formData = {
             type: $('#connectionPredicate').val(),
             parent_id: currentSpanId,
             child_id: $('#connectionObjectId').val(),
             direction: isReverseMode ? 'inverse' : 'forward',
-            state: $('input[name="state"]:checked').val(),
+            state: currentState,
             connection_year: $('#startYear').val() ? parseInt($('#startYear').val()) : null,
             connection_month: $('#startMonth').val() ? parseInt($('#startMonth').val()) : null,
             connection_day: $('#startDay').val() ? parseInt($('#startDay').val()) : null,
@@ -428,6 +549,10 @@ $(document).ready(function() {
             connection_end_month: $('#endMonth').val() ? parseInt($('#endMonth').val()) : null,
             connection_end_day: $('#endDay').val() ? parseInt($('#endDay').val()) : null
         };
+        
+        console.log('Form data state:', formData.state);
+        console.log('Form data connection_year:', formData.connection_year);
+        console.log('Form data:', formData);
         
         // Validate required fields
         if (!formData.type) {
@@ -444,14 +569,24 @@ $(document).ready(function() {
         const selectedConnectionType = connectionTypes.find(t => t.type === formData.type);
         const isTimeless = selectedConnectionType && selectedConnectionType.constraint_type === 'timeless';
         
+        console.log('Selected connection type:', selectedConnectionType);
+        console.log('Is timeless:', isTimeless);
+        
         // Date validation depends on connection state and whether it's timeless
         const isPlaceholder = formData.state === 'placeholder';
         
+        console.log('Is placeholder:', isPlaceholder);
+        console.log('Validation check: !isPlaceholder =', !isPlaceholder, ', !isTimeless =', !isTimeless, ', !formData.connection_year =', !formData.connection_year);
+        console.log('Will require start year?', !isPlaceholder && !isTimeless && !formData.connection_year);
+        
         // For non-placeholder, non-timeless connections, require a start year
         if (!isPlaceholder && !isTimeless && !formData.connection_year) {
+            console.log('ERROR: Requiring start year - this should not happen for placeholders!');
             showStatus('Please enter a start year', 'danger');
             return;
         }
+        
+        console.log('Date validation passed - proceeding with form submission');
         
         // Validate date format (only if dates are provided)
         if (formData.connection_year && !validateDate(formData.connection_year, formData.connection_month, formData.connection_day)) {
@@ -468,37 +603,77 @@ $(document).ready(function() {
         $('#addConnectionSpinner').removeClass('d-none');
         $('#addConnectionSubmitBtn').prop('disabled', true);
         $('#addConnectionForm :input').prop('disabled', true);
-        showStatus('Creating connection...', 'info');
+        showStatus(isEditMode ? 'Updating connection...' : 'Creating connection...', 'info');
         
         console.log('Sending form data:', formData);
         
-        // Create connection
-        $.ajax({
-            url: '/api/connections/create',
-            method: 'POST',
-            headers: {
-                'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content'),
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            },
-            data: JSON.stringify(formData),
-            success: function(response) {
-                showStatus('Connection created successfully!', 'success');
-                // Wait a moment, then refresh
-                setTimeout(function() {
-                    window.location.reload();
-                }, 1200);
-            },
-            error: function(xhr) {
-                console.error('Error creating connection:', xhr);
-                const message = xhr.responseJSON?.message || 'Error creating connection';
-                showStatus(message, 'danger');
-                // Re-enable form and hide spinner
-                $('#addConnectionSpinner').addClass('d-none');
-                $('#addConnectionSubmitBtn').prop('disabled', false);
-                $('#addConnectionForm :input').prop('disabled', false);
-            }
-        });
+        if (isEditMode) {
+            // Update connection
+            const updateData = {
+                state: formData.state,
+                start_year: formData.connection_year,
+                start_month: formData.connection_month,
+                start_day: formData.connection_day,
+                end_year: formData.connection_end_year,
+                end_month: formData.connection_end_month,
+                end_day: formData.connection_end_day
+            };
+            
+            $.ajax({
+                url: `/spans/api/connections/${currentConnectionId}/update`,
+                method: 'PUT',
+                headers: {
+                    'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content'),
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                data: JSON.stringify(updateData),
+                success: function(response) {
+                    showStatus('Connection updated successfully!', 'success');
+                    // Wait a moment, then refresh
+                    setTimeout(function() {
+                        window.location.reload();
+                    }, 1200);
+                },
+                error: function(xhr) {
+                    console.error('Error updating connection:', xhr);
+                    const message = xhr.responseJSON?.message || 'Error updating connection';
+                    showStatus(message, 'danger');
+                    // Re-enable form and hide spinner
+                    $('#addConnectionSpinner').addClass('d-none');
+                    $('#addConnectionSubmitBtn').prop('disabled', false);
+                    $('#addConnectionForm :input').prop('disabled', false);
+                }
+            });
+        } else {
+            // Create connection
+            $.ajax({
+                url: '/spans/api/connections/create',
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content'),
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                data: JSON.stringify(formData),
+                success: function(response) {
+                    showStatus('Connection created successfully!', 'success');
+                    // Wait a moment, then refresh
+                    setTimeout(function() {
+                        window.location.reload();
+                    }, 1200);
+                },
+                error: function(xhr) {
+                    console.error('Error creating connection:', xhr);
+                    const message = xhr.responseJSON?.message || 'Error creating connection';
+                    showStatus(message, 'danger');
+                    // Re-enable form and hide spinner
+                    $('#addConnectionSpinner').addClass('d-none');
+                    $('#addConnectionSubmitBtn').prop('disabled', false);
+                    $('#addConnectionForm :input').prop('disabled', false);
+                }
+            });
+        }
     });
 
     // Validate date format (YYYY, YYYY-MM, or YYYY-MM-DD)

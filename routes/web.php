@@ -544,6 +544,119 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                 }
             });
 
+            // Get connection data for editing
+            Route::get('/api/connections/{connection}', function (\App\Models\Connection $connection) {
+                try {
+                    // Check if user can view the connection
+                    if (!$connection->parent->isAccessibleBy(auth()->user()) || !$connection->child->isAccessibleBy(auth()->user())) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'You do not have permission to view this connection.'
+                        ], 403);
+                    }
+
+                    $connectionSpan = $connection->connectionSpan;
+                    
+                    return response()->json([
+                        'success' => true,
+                        'data' => [
+                            'id' => $connection->id,
+                            'type' => $connection->type_id,
+                            'parent_id' => $connection->parent_id,
+                            'parent_name' => $connection->parent->name,
+                            'parent_type' => $connection->parent->type_id,
+                            'child_id' => $connection->child_id,
+                            'child_name' => $connection->child->name,
+                            'child_type' => $connection->child->type_id,
+                            'state' => $connectionSpan ? $connectionSpan->state : 'placeholder',
+                            'start_year' => $connectionSpan ? $connectionSpan->start_year : null,
+                            'start_month' => $connectionSpan ? $connectionSpan->start_month : null,
+                            'start_day' => $connectionSpan ? $connectionSpan->start_day : null,
+                            'end_year' => $connectionSpan ? $connectionSpan->end_year : null,
+                            'end_month' => $connectionSpan ? $connectionSpan->end_month : null,
+                            'end_day' => $connectionSpan ? $connectionSpan->end_day : null,
+                        ]
+                    ]);
+
+                } catch (\Exception $e) {
+                    \Log::error('Error fetching connection', [
+                        'connection_id' => $connection->id,
+                        'error' => $e->getMessage()
+                    ]);
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => $e->getMessage()
+                    ], 500);
+                }
+            });
+
+            // Update connection dates and state endpoint
+            Route::put('/api/connections/{connection}/update', function (Request $request, \App\Models\Connection $connection) {
+                $validated = $request->validate([
+                    'state' => 'required|in:placeholder,draft,complete',
+                    'start_year' => 'nullable|integer|min:1000|max:2100',
+                    'start_month' => 'nullable|integer|min:1|max:12',
+                    'start_day' => 'nullable|integer|min:1|max:31',
+                    'end_year' => 'nullable|integer|min:1000|max:2100',
+                    'end_month' => 'nullable|integer|min:1|max:12',
+                    'end_day' => 'nullable|integer|min:1|max:31'
+                ]);
+
+                try {
+                    // Check if user can edit the connection
+                    if (!$connection->isEditableBy(auth()->user())) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'You do not have permission to edit this connection.'
+                        ], 403);
+                    }
+
+                    // Get the connection span
+                    $connectionSpan = $connection->connectionSpan;
+                    if (!$connectionSpan) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Connection span not found'
+                        ], 404);
+                    }
+
+                    // Update connection span dates and state
+                    $updateData = [
+                        'state' => $validated['state'],
+                        'updater_id' => auth()->id()
+                    ];
+
+                    // Update date fields (set to null if not provided)
+                    $updateData['start_year'] = $validated['start_year'] ?? null;
+                    $updateData['start_month'] = $validated['start_month'] ?? null;
+                    $updateData['start_day'] = $validated['start_day'] ?? null;
+                    $updateData['end_year'] = $validated['end_year'] ?? null;
+                    $updateData['end_month'] = $validated['end_month'] ?? null;
+                    $updateData['end_day'] = $validated['end_day'] ?? null;
+
+                    $connectionSpan->update($updateData);
+
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Connection updated successfully',
+                        'data' => $connection->fresh()
+                    ]);
+
+                } catch (\Exception $e) {
+                    \Log::error('Error updating connection', [
+                        'connection_id' => $connection->id,
+                        'error' => $e->getMessage(),
+                        'trace' => $e->getTraceAsString()
+                    ]);
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => $e->getMessage()
+                    ], 500);
+                }
+            });
+
             // Get notes that fall within a date range
             Route::post('/api/notes-in-date-range', function (Request $request) {
                 $validated = $request->validate([

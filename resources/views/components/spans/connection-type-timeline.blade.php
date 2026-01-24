@@ -112,11 +112,20 @@
 @endphp
 
 <div class="card">
-    <div class="card-header">
+    <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="card-title mb-0">
             <i class="bi bi-clock-history me-2"></i>
             {{ ucfirst($connectionType->forward_predicate) }} Timeline
         </h5>
+        @auth
+            @if(auth()->user()->can('update', $span))
+                <button type="button" class="btn btn-sm btn-outline-primary" 
+                        data-bs-toggle="modal" data-bs-target="#addConnectionModal"
+                        data-span-id="{{ $span->id }}" data-span-name="{{ $span->name }}" data-span-type="{{ $span->type_id }}">
+                    <i class="bi bi-plus-lg"></i>
+                </button>
+            @endif
+        @endauth
     </div>
     <x-spans.shared-timeline
         :subject="$span"
