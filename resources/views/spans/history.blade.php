@@ -22,6 +22,9 @@
 
 @section('content')
 <div class="container-fluid my-4">
+    @if($versions->isNotEmpty())
+        <x-spans.versions-timeline :span="$span" :versions="$versions" :selectedVersion="$versionModel" />
+    @endif
     <div class="row">
         <div class="{{ $versionModel ? 'col-md-8' : 'col-12' }}">
             <div class="card">

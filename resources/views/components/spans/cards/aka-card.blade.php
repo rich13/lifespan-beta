@@ -144,12 +144,6 @@
             @endforeach
         </div>
         
-        @if(count($nameConnections) > 1)
-            <div class="mt-3 text-muted small">
-                <i class="bi bi-info-circle me-1"></i>
-                This {{ $span->type->name ?? 'span' }} has had {{ count($names) }} different names over time.
-            </div>
-        @endif
     </div>
 </div>
 @endif

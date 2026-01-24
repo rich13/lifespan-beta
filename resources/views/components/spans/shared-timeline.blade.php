@@ -4,8 +4,24 @@
     'containerId',       // Unique container ID for this timeline instance
     'subjectStartYear',  // Subject's start year
     'subjectEndYear',    // Subject's end year
-    'timeRange'          // {start: number, end: number} time range for the timeline
+    'timeRange',         // {start: number, end: number} time range for the timeline
+    'showAddButton' => false  // Whether to show the add connection button in the header
 ])
+
+@if($showAddButton && $subject)
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="card-title mb-0">Timeline</h5>
+        @auth
+            @if(auth()->user()->can('update', $subject))
+                <button type="button" class="btn btn-sm btn-outline-primary" 
+                        data-bs-toggle="modal" data-bs-target="#addConnectionModal"
+                        data-span-id="{{ $subject->id }}" data-span-name="{{ $subject->name }}" data-span-type="{{ $subject->type_id }}">
+                    <i class="bi bi-plus-lg"></i>
+                </button>
+            @endif
+        @endauth
+    </div>
+@endif
 
 <div class="card-body" style="overflow-x: auto;">
     <div id="{{ $containerId }}" style="height: auto; min-height: 200px; width: 100%;">
@@ -210,6 +226,107 @@ document.addEventListener('DOMContentLoaded', function() {
         return `${monthNames[month - 1]} ${day}, ${year}`;
     }
 
+    // Helper function to check if a bar's row is visible (not filtered out)
+    function isBarRowVisible(barElement) {
+        // Get the SVG element and find the parent row group
+        const svg = barElement.ownerSVGElement;
+        if (!svg) return true;
+        
+        // Walk up the DOM to find the row group
+        let current = barElement.parentNode;
+        while (current && current !== svg) {
+            if (current.classList && current.classList.contains('timeline-row')) {
+                // Check if the row has the hidden class
+                return !current.classList.contains('timeline-row--hidden');
+            }
+            current = current.parentNode;
+        }
+        
+        // If we can't find the row, assume it's visible
+        return true;
+    }
+    
+    // Track all active tooltips for this timeline instance
+    const activeTooltips = [];
+    
+    // Helper function to hide all other tooltips before showing a new one
+    function hideAllTooltips(exceptTooltip) {
+        activeTooltips.forEach(function(t) {
+            if (t !== exceptTooltip && t.node()) {
+                const opacity = parseFloat(t.style('opacity')) || 0;
+                if (opacity > 0) {
+                    t.transition()
+                        .duration(200)
+                        .style('opacity', 0)
+                        .on('end', function() {
+                            // Disable pointer events when fully hidden
+                            d3.select(this).style('pointer-events', 'none');
+                        });
+                }
+            }
+        });
+    }
+    
+    // Helper function to check if mouse is over any visible tooltip
+    function isMouseOverTooltip(event) {
+        const x = event.pageX;
+        const y = event.pageY;
+        
+        return activeTooltips.some(function(t) {
+            if (!t.node()) return false;
+            const opacity = parseFloat(t.style('opacity')) || 0;
+            // Only consider tooltips that are actually visible
+            if (opacity === 0) return false;
+            
+            // Also check pointer-events to be sure
+            const pointerEvents = t.style('pointer-events');
+            if (pointerEvents === 'none') return false;
+            
+            const rect = t.node().getBoundingClientRect();
+            return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+        });
+    }
+    
+    // Helper function to position tooltip with viewport overflow detection
+    function positionTooltip(tooltip, event, offsetX = 10, offsetY = -10) {
+        const tooltipNode = tooltip.node();
+        if (!tooltipNode) return;
+        
+        const viewportWidth = window.innerWidth;
+        const estimatedTooltipWidth = 250; // Estimate for tooltip width
+        const margin = 10; // Margin from viewport edge
+        
+        // Check if tooltip would overflow on the right
+        const cursorX = event.pageX;
+        const wouldOverflow = (cursorX + offsetX + estimatedTooltipWidth) > (viewportWidth - margin);
+        
+        let finalLeft;
+        if (wouldOverflow) {
+            // Position to the left of cursor
+            // First, set it temporarily to measure actual width
+            tooltip.style('left', (cursorX + offsetX) + 'px')
+                   .style('top', (event.pageY + offsetY) + 'px')
+                   .style('visibility', 'hidden')
+                   .style('opacity', '0');
+            
+            // Force layout to measure
+            tooltipNode.offsetHeight;
+            const actualWidth = tooltipNode.getBoundingClientRect().width || estimatedTooltipWidth;
+            
+            // Calculate position to the left
+            const leftPosition = cursorX - actualWidth - offsetX;
+            finalLeft = Math.max(margin, leftPosition);
+        } else {
+            // Normal position to the right of cursor
+            finalLeft = cursorX + offsetX;
+        }
+        
+        // Set final position
+        tooltip.style('left', finalLeft + 'px')
+               .style('top', (event.pageY + offsetY) + 'px')
+               .style('visibility', 'visible');
+    }
+
     // Render each swimlane
     let rowIndex = 0;
     timelineData.forEach((swimlane) => {
@@ -222,8 +339,38 @@ document.addEventListener('DOMContentLoaded', function() {
             .attr('data-connection-type', swimlane.type === 'life'
                 ? 'life'
                 : (swimlane.connectionType || '')
-            )
-            .attr('transform', `translate(0, ${baseY})`);
+            );
+        
+        // Add connection state attribute for placeholder filtering
+        if (swimlane.type === 'connection' && swimlane.connection) {
+            const connection = swimlane.connection;
+            let state = null;
+            
+            // Try different ways to access the state - same logic as in tooltip
+            let connectionSpanForState = connection.connection_span || connection.connectionSpan;
+            if (connectionSpanForState && connectionSpanForState.data) {
+                connectionSpanForState = connectionSpanForState.data;
+            }
+            
+            if (connectionSpanForState && connectionSpanForState.state) {
+                state = connectionSpanForState.state;
+            } else if (connection.connection_span && connection.connection_span.state) {
+                state = connection.connection_span.state;
+            } else if (connection.connectionSpan && connection.connectionSpan.state) {
+                state = connection.connectionSpan.state;
+            } else if (connection.state) {
+                state = connection.state;
+            }
+            
+            // Default to placeholder if no state found
+            if (!state) {
+                state = 'placeholder';
+            }
+            
+            rowGroup.attr('data-connection-state', state);
+        }
+        
+        rowGroup.attr('transform', `translate(0, ${baseY})`);
 
         // Add swimlane background
         rowGroup.append('rect')
@@ -270,12 +417,29 @@ document.addEventListener('DOMContentLoaded', function() {
                     .style('z-index', '1000')
                     .style('opacity', 0);
                 
+                // Add to active tooltips list
+                activeTooltips.push(lifeTooltip);
+                
                 const subjectName = swimlane.label || 'Life';
                 const startDateStr = formatDate(subjectStartYear, null, null);
                 const endDateStr = subjectEndYear ? formatDate(subjectEndYear, null, null) : 'ongoing';
                 
                 lifeBar.on('mouseover', function(event) {
+                    // Check if the bar's row is visible before showing tooltip
+                    if (!isBarRowVisible(this)) {
+                        return;
+                    }
+                    
+                    // Don't show tooltip if mouse is over another tooltip
+                    if (isMouseOverTooltip(event)) {
+                        return;
+                    }
+                    
+                    // Hide all other tooltips before showing this one
+                    hideAllTooltips(lifeTooltip);
+                    
                     lifeBar.style('opacity', 0.8);
+                    // Life tooltip doesn't need pointer-events (no edit button)
                     lifeTooltip.transition()
                         .duration(200)
                         .style('opacity', 1);
@@ -283,9 +447,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     lifeTooltip.html(`
                         <strong>${subjectName}</strong><br/>
                         ${startDateStr} - ${endDateStr}
-                    `)
-                    .style('left', (event.pageX + 10) + 'px')
-                    .style('top', (event.pageY - 10) + 'px');
+                    `);
+                    
+                    // Position tooltip with overflow detection
+                    positionTooltip(lifeTooltip, event, 10, -10);
                 })
                 .on('mouseout', function() {
                     lifeBar.style('opacity', 1);
@@ -303,7 +468,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (connectionSpan && connectionSpan.data) {
                 connectionSpan = connectionSpan.data;
             }
-                const hasDates = connectionSpan && connectionSpan.start_year;
+            const hasDates = connectionSpan && connectionSpan.start_year;
             
             let barX, barWidth, barColor, barOpacity, isClickable;
             
@@ -370,13 +535,34 @@ document.addEventListener('DOMContentLoaded', function() {
                 .style('padding', '8px')
                 .style('border-radius', '4px')
                 .style('font-size', '12px')
-                .style('pointer-events', 'none')
+                .style('pointer-events', 'none') // Start with none, enable when shown
                 .style('z-index', '1000')
                 .style('opacity', 0);
+            
+            // Add to active tooltips list
+            activeTooltips.push(tooltip);
+            
+            // Track tooltip visibility timeout
+            let tooltipTimeout = null;
 
             if (isClickable) {
                 bar.on('mouseover', function(event) {
+                    // Check if the bar's row is visible before showing tooltip
+                    if (!isBarRowVisible(this)) {
+                        return;
+                    }
+                    
+                    // Don't show tooltip if mouse is over another tooltip
+                    if (isMouseOverTooltip(event)) {
+                        return;
+                    }
+                    
+                    // Hide all other tooltips before showing this one
+                    hideAllTooltips(tooltip);
+                    
                     bar.style('opacity', 0.9);
+                    // Enable pointer events and show tooltip
+                    tooltip.style('pointer-events', 'auto');
                     tooltip.transition()
                         .duration(200)
                         .style('opacity', 1);
@@ -390,15 +576,15 @@ document.addEventListener('DOMContentLoaded', function() {
                     const currentMonth = new Date().getMonth() + 1;
                     const currentDay = new Date().getDate();
                     
-                    // Cap end date at "now" (current date) for display
-                    let endYear = connectionSpan.end_year || currentYear;
-                    let endMonth = connectionSpan.end_month || currentMonth;
-                    let endDay = connectionSpan.end_day || currentDay;
+                    // Get end date values - don't default to current date, use null if missing
+                    let endYear = connectionSpan.end_year || null;
+                    let endMonth = connectionSpan.end_month || null;
+                    let endDay = connectionSpan.end_day || null;
                     
-                    // If end date is in the future, cap it at current date
-                    if (endYear > currentYear || 
-                        (endYear === currentYear && endMonth > currentMonth) ||
-                        (endYear === currentYear && endMonth === currentMonth && endDay > currentDay)) {
+                    // If end date exists and is in the future, cap it at current date
+                    if (endYear && (endYear > currentYear || 
+                        (endYear === currentYear && endMonth && endMonth > currentMonth) ||
+                        (endYear === currentYear && endMonth === currentMonth && endDay && endDay > currentDay))) {
                         endYear = currentYear;
                         endMonth = currentMonth;
                         endDay = currentDay;
@@ -406,41 +592,116 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                     const isOngoing = !connectionSpan.end_year;
                     
-                    // Format dates for display
+                    // Format dates for display - pass null for missing month/day, not current values
                     const startDateStr = formatDate(startYear, startMonth, startDay);
                     const endDateStr = isOngoing ? 'ongoing' : formatDate(endYear, endMonth, endDay);
-                    
-                    // Calculate actual duration
-                    const durationDays = calculateDurationInDays(startYear, startMonth, startDay, endYear, endMonth, endDay);
-                    let durationStr = '';
-                    if (durationDays !== null) {
-                        if (durationDays < 30) {
-                            durationStr = `(${durationDays} ${durationDays === 1 ? 'day' : 'days'})`;
-                        } else if (durationDays < 365) {
-                            const months = Math.round(durationDays / 30);
-                            durationStr = `(~${months} ${months === 1 ? 'month' : 'months'})`;
-                        } else {
-                            const years = (durationDays / 365.25).toFixed(1);
-                            durationStr = `(~${years} ${years === '1.0' ? 'year' : 'years'})`;
-                        }
-                    }
                     
                     // Build tooltip text with predicate
                     const tooltipTitle = predicate ? `${predicate} ${otherSpan.name}` : otherSpan.name;
                     
+                    // Get connection ID if available
+                    const connectionId = connection.id || null;
+                    const subjectSpanId = '{{ $subject->id }}';
+                    const subjectSpanName = '{{ addslashes($subject->name) }}';
+                    const subjectSpanType = '{{ $subject->type_id }}';
+                    const canEdit = {{ auth()->check() && auth()->user()->can('update', $subject) ? 'true' : 'false' }};
+                    
+                    // Get connection state - try multiple ways to access it
+                    let connectionState = 'placeholder'; // default
+                    if (connectionSpan && connectionSpan.state) {
+                        connectionState = connectionSpan.state;
+                    } else if (connection.connection_span && connection.connection_span.state) {
+                        connectionState = connection.connection_span.state;
+                    } else if (connection.connectionSpan && connection.connectionSpan.state) {
+                        connectionState = connection.connectionSpan.state;
+                    } else if (connection.state) {
+                        connectionState = connection.state;
+                    }
+                    const stateLabel = connectionState.charAt(0).toUpperCase() + connectionState.slice(1);
+                    
+                    // Build footer with state and edit button
+                    let footerHtml = '';
+                    if (connectionId && canEdit) {
+                        footerHtml = `
+                            <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.3); display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-size: 11px; opacity: 0.8;"><strong>${stateLabel}</strong></span>
+                                <button type="button" 
+                                        class="btn btn-sm btn-outline-light edit-connection-btn" 
+                                        data-connection-id="${connectionId}"
+                                        data-span-id="${subjectSpanId}"
+                                        data-span-name="${subjectSpanName}"
+                                        data-span-type="${subjectSpanType}"
+                                        style="font-size: 11px; padding: 2px 8px;">
+                                    <i class="bi bi-pencil me-1"></i>Edit
+                                </button>
+                            </div>
+                        `;
+                    } else {
+                        // Show state even if no edit button
+                        footerHtml = `
+                            <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.3);">
+                                <span style="font-size: 11px; opacity: 0.8;"><strong>${stateLabel}</strong></span>
+                            </div>
+                        `;
+                    }
+                    
                     tooltip.html(`
                         <strong>${tooltipTitle}</strong><br/>
-                        ${startDateStr}${isOngoing ? ' (ongoing)' : ` - ${endDateStr}`}<br/>
-                        ${durationStr}
-                    `)
-                    .style('left', (event.pageX + 10) + 'px')
-                    .style('top', (event.pageY - 10) + 'px');
+                        ${startDateStr}${isOngoing ? ' (ongoing)' : ` - ${endDateStr}`}
+                        ${footerHtml}
+                    `);
+                    
+                    // Position tooltip with overflow detection
+                    positionTooltip(tooltip, event, 10, -10);
+                    
+                    // Add click handler for edit button
+                    if (connectionId && canEdit) {
+                        tooltip.select('.edit-connection-btn').on('click', function(e) {
+                            e.stopPropagation(); // Prevent bar click from firing
+                            const btn = d3.select(this);
+                            const connId = btn.attr('data-connection-id');
+                            const spanId = btn.attr('data-span-id');
+                            const spanName = btn.attr('data-span-name');
+                            const spanType = btn.attr('data-span-type');
+                            
+                            // Trigger modal with edit mode
+                            const modalButton = $('<button>')
+                                .attr('type', 'button')
+                                .attr('data-bs-toggle', 'modal')
+                                .attr('data-bs-target', '#addConnectionModal')
+                                .attr('data-span-id', spanId)
+                                .attr('data-span-name', spanName)
+                                .attr('data-span-type', spanType)
+                                .attr('data-connection-id', connId)
+                                .css('display', 'none')
+                                .appendTo('body');
+                            
+                            modalButton.trigger('click');
+                            modalButton.remove();
+                            
+                            // Hide tooltip
+                            tooltip.transition()
+                                .duration(200)
+                                .style('opacity', 0)
+                                .on('end', function() {
+                                    // Disable pointer events when fully hidden
+                                    d3.select(this).style('pointer-events', 'none');
+                                });
+                        });
+                    }
                 })
                 .on('mouseout', function() {
                     bar.style('opacity', barOpacity);
-                    tooltip.transition()
-                        .duration(500)
-                        .style('opacity', 0);
+                    // Delay hiding tooltip to allow mouse to move to tooltip
+                    tooltipTimeout = setTimeout(function() {
+                        tooltip.transition()
+                            .duration(500)
+                            .style('opacity', 0)
+                            .on('end', function() {
+                                // Disable pointer events when fully hidden
+                                d3.select(this).style('pointer-events', 'none');
+                            });
+                    }, 200);
                 })
                 .on('click', function() {
                     const connectionSpanSlug = connectionSpan.slug;
@@ -448,7 +709,22 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
             } else {
                 bar.on('mouseover', function(event) {
+                    // Check if the bar's row is visible before showing tooltip
+                    if (!isBarRowVisible(this)) {
+                        return;
+                    }
+                    
+                    // Don't show tooltip if mouse is over another tooltip
+                    if (isMouseOverTooltip(event)) {
+                        return;
+                    }
+                    
+                    // Hide all other tooltips before showing this one
+                    hideAllTooltips(tooltip);
+                    
                     bar.style('opacity', 0.6);
+                    // Enable pointer events and show tooltip
+                    tooltip.style('pointer-events', 'auto');
                     tooltip.transition()
                         .duration(200)
                         .style('opacity', 1);
@@ -457,20 +733,137 @@ document.addEventListener('DOMContentLoaded', function() {
                     const predicate = connection.predicate || '';
                     const tooltipTitle = predicate ? `${predicate} ${otherSpan.name}` : otherSpan.name;
                     
+                    // Get connection ID if available
+                    const connectionId = connection.id || null;
+                    const subjectSpanId = '{{ $subject->id }}';
+                    const subjectSpanName = '{{ addslashes($subject->name) }}';
+                    const subjectSpanType = '{{ $subject->type_id }}';
+                    const canEdit = {{ auth()->check() && auth()->user()->can('update', $subject) ? 'true' : 'false' }};
+                    
+                    // Get connection state - try multiple ways to access it
+                    // First, get the connectionSpan reference (same way as above)
+                    let connectionSpanForState = connection.connection_span || connection.connectionSpan;
+                    if (connectionSpanForState && connectionSpanForState.data) {
+                        connectionSpanForState = connectionSpanForState.data;
+                    }
+                    
+                    let connectionState = 'placeholder'; // default
+                    if (connectionSpanForState && connectionSpanForState.state) {
+                        connectionState = connectionSpanForState.state;
+                    } else if (connection.connection_span && connection.connection_span.state) {
+                        connectionState = connection.connection_span.state;
+                    } else if (connection.connectionSpan && connection.connectionSpan.state) {
+                        connectionState = connection.connectionSpan.state;
+                    } else if (connection.state) {
+                        connectionState = connection.state;
+                    }
+                    const stateLabel = connectionState.charAt(0).toUpperCase() + connectionState.slice(1);
+                    
+                    // Build footer with state and edit button
+                    let footerHtml = '';
+                    if (connectionId && canEdit) {
+                        footerHtml = `
+                            <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.3); display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-size: 11px; opacity: 0.8;"><strong>${stateLabel}</strong></span>
+                                <button type="button" 
+                                        class="btn btn-sm btn-outline-light edit-connection-btn" 
+                                        data-connection-id="${connectionId}"
+                                        data-span-id="${subjectSpanId}"
+                                        data-span-name="${subjectSpanName}"
+                                        data-span-type="${subjectSpanType}"
+                                        style="font-size: 11px; padding: 2px 8px;">
+                                    <i class="bi bi-pencil me-1"></i>Edit
+                                </button>
+                            </div>
+                        `;
+                    } else {
+                        // Show state even if no edit button
+                        footerHtml = `
+                            <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.3);">
+                                <span style="font-size: 11px; opacity: 0.8;"><strong>${stateLabel}</strong></span>
+                            </div>
+                        `;
+                    }
+                    
                     tooltip.html(`
                         <strong>${tooltipTitle}</strong><br/>
                         <em>Dates unknown</em>
-                    `)
-                    .style('left', (event.pageX + 10) + 'px')
-                    .style('top', (event.pageY - 10) + 'px');
+                        ${footerHtml}
+                    `);
+                    
+                    // Position tooltip with overflow detection
+                    positionTooltip(tooltip, event, 10, -10);
+                    
+                    // Add click handler for edit button
+                    if (connectionId && canEdit) {
+                        tooltip.select('.edit-connection-btn').on('click', function(e) {
+                            e.stopPropagation(); // Prevent bar click from firing
+                            const btn = d3.select(this);
+                            const connId = btn.attr('data-connection-id');
+                            const spanId = btn.attr('data-span-id');
+                            const spanName = btn.attr('data-span-name');
+                            const spanType = btn.attr('data-span-type');
+                            
+                            // Trigger modal with edit mode
+                            const modalButton = $('<button>')
+                                .attr('type', 'button')
+                                .attr('data-bs-toggle', 'modal')
+                                .attr('data-bs-target', '#addConnectionModal')
+                                .attr('data-span-id', spanId)
+                                .attr('data-span-name', spanName)
+                                .attr('data-span-type', spanType)
+                                .attr('data-connection-id', connId)
+                                .css('display', 'none')
+                                .appendTo('body');
+                            
+                            modalButton.trigger('click');
+                            modalButton.remove();
+                            
+                            // Hide tooltip
+                            tooltip.transition()
+                                .duration(200)
+                                .style('opacity', 0)
+                                .on('end', function() {
+                                    // Disable pointer events when fully hidden
+                                    d3.select(this).style('pointer-events', 'none');
+                                });
+                        });
+                    }
                 })
                 .on('mouseout', function() {
                     bar.style('opacity', barOpacity);
-                    tooltip.transition()
-                        .duration(500)
-                        .style('opacity', 0);
+                    // Delay hiding tooltip to allow mouse to move to tooltip
+                    tooltipTimeout = setTimeout(function() {
+                        tooltip.transition()
+                            .duration(500)
+                            .style('opacity', 0)
+                            .on('end', function() {
+                                // Disable pointer events when fully hidden
+                                d3.select(this).style('pointer-events', 'none');
+                            });
+                    }, 200);
                 });
             }
+            
+            // Keep tooltip visible when hovering over it (applies to both clickable and non-clickable bars)
+            tooltip.on('mouseover', function() {
+                if (tooltipTimeout) {
+                    clearTimeout(tooltipTimeout);
+                    tooltipTimeout = null;
+                }
+                tooltip.transition()
+                    .duration(200)
+                    .style('opacity', 1);
+            })
+            .on('mouseout', function() {
+                tooltip.transition()
+                    .duration(500)
+                    .style('opacity', 0)
+                    .on('end', function() {
+                        // Disable pointer events when fully hidden
+                        d3.select(this).style('pointer-events', 'none');
+                    });
+            });
         }
     });
     
