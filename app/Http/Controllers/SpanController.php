@@ -4118,8 +4118,8 @@ class SpanController extends Controller
         $userId = $user?->id ?? 'guest';
         
         // Cache key includes user ID for proper access control
-        // Version 2: excludes features connections
-        $cacheKey = "connections_all_v2_{$subject->id}_{$userId}";
+        // Version 3: includes connectionSpan state field
+        $cacheKey = "connections_all_v3_{$subject->id}_{$userId}";
         
         $cachedData = Cache::remember($cacheKey, 300, function () use ($subject, $user) {
             // Get all relevant connection types for this span with connection counts
@@ -4196,7 +4196,7 @@ class SpanController extends Controller
                     ->with([
                         'subject:id,name,type_id,metadata,access_level,owner_id',
                         'object:id,name,type_id,metadata,access_level,owner_id',
-                        'connectionSpan:id,slug,start_year,start_month,start_day,end_year,end_month,end_day'
+                        'connectionSpan:id,slug,start_year,start_month,start_day,end_year,end_month,end_day,state'
                     ])
                     ->get();
 

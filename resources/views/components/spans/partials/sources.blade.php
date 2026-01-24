@@ -2,59 +2,139 @@
 
 @php
     // Get sources from current span
-    $sources = $span->sources ?? [];
-    $isInherited = false;
-    $subjectSpan = null;
+    $directSources = $span->sources ?? [];
+    $inheritedSourcesBySpan = [];
     
-    // If no sources and this is a connection span, try to inherit from subject
-    if (empty($sources) && $span->type_id === 'connection') {
+    // If this is a connection span, also try to inherit from subject and object
+    if ($span->type_id === 'connection') {
         $connection = \App\Models\Connection::where('connection_span_id', $span->id)
-            ->with(['subject'])
+            ->with(['subject', 'object'])
             ->first();
         
-        if ($connection && $connection->subject) {
-            $subjectSpan = $connection->subject;
-            $subjectSources = $subjectSpan->sources ?? [];
-            if (!empty($subjectSources)) {
-                $sources = $subjectSources;
-                $isInherited = true;
+        if ($connection) {
+            // Get sources from subject span
+            if ($connection->subject) {
+                $subjectSources = $connection->subject->sources ?? [];
+                if (!empty($subjectSources)) {
+                    $inheritedSourcesBySpan[$connection->subject->id] = [
+                        'span' => $connection->subject,
+                        'sources' => $subjectSources
+                    ];
+                }
             }
+            
+            // Get sources from object span
+            if ($connection->object) {
+                $objectSources = $connection->object->sources ?? [];
+                if (!empty($objectSources)) {
+                    $inheritedSourcesBySpan[$connection->object->id] = [
+                        'span' => $connection->object,
+                        'sources' => $objectSources
+                    ];
+                }
+            }
+        }
+    }
+    
+    // Track which URLs we've seen to avoid duplicates
+    $seenUrls = [];
+    $getSourceUrl = function($source) {
+        return is_array($source) && isset($source['url']) ? $source['url'] : (is_string($source) ? $source : null);
+    };
+    
+    // Process direct sources
+    $uniqueDirectSources = [];
+    foreach ($directSources as $source) {
+        $url = $getSourceUrl($source);
+        if ($url && !in_array($url, $seenUrls)) {
+            $uniqueDirectSources[] = $source;
+            $seenUrls[] = $url;
+        } elseif (!$url) {
+            $uniqueDirectSources[] = $source;
+        }
+    }
+    
+    // Process inherited sources, removing duplicates with direct sources
+    $uniqueInheritedSourcesBySpan = [];
+    foreach ($inheritedSourcesBySpan as $spanId => $data) {
+        $uniqueSources = [];
+        foreach ($data['sources'] as $source) {
+            $url = $getSourceUrl($source);
+            if ($url && !in_array($url, $seenUrls)) {
+                $uniqueSources[] = $source;
+                $seenUrls[] = $url;
+            } elseif (!$url) {
+                $uniqueSources[] = $source;
+            }
+        }
+        if (!empty($uniqueSources)) {
+            $uniqueInheritedSourcesBySpan[$spanId] = [
+                'span' => $data['span'],
+                'sources' => $uniqueSources
+            ];
         }
     }
 @endphp
 
-@if(!empty($sources))
+@if(!empty($uniqueDirectSources) || !empty($uniqueInheritedSourcesBySpan))
 <div class="card mb-4">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h6 class="card-title mb-0">
             <i class="bi bi-link-45deg me-2"></i>
             Sources
-            @if($isInherited)
-                <small class="text-muted ms-2">
-                    <i class="bi bi-arrow-down-circle" title="Inherited from {{ $subjectSpan->name }}"></i>
-                    <span class="d-none d-sm-inline">from <a href="{{ route('spans.show', $subjectSpan) }}" class="text-decoration-none">{{ $subjectSpan->name }}</a></span>
-                </small>
-            @endif
         </h6>
     </div>
     <div class="card-body">
-        <div class="d-flex flex-wrap gap-3">
-            @foreach($sources as $source)
-                @if(is_array($source) && isset($source['url']))
-                    <a href="{{ $source['url'] }}" target="_blank" rel="noopener noreferrer" class="text-primary text-decoration-none">
-                        <i class="bi bi-link-45deg"></i>
-                        {{ $source['url'] }}
-                        <i class="bi bi-box-arrow-up-right ms-1 small"></i>
-                    </a>
-                @elseif(is_string($source))
-                    <a href="{{ $source }}" target="_blank" rel="noopener noreferrer" class="text-primary text-decoration-none">
-                        <i class="bi bi-link-45deg"></i>
-                        {{ $source }}
-                        <i class="bi bi-box-arrow-up-right ms-1 small"></i>
-                    </a>
-                @endif
+        @if(!empty($uniqueDirectSources))
+            <div class="mb-3">
+                <h6 class="text-muted small mb-2">Direct Sources</h6>
+                <div class="d-flex flex-wrap gap-3">
+                    @foreach($uniqueDirectSources as $source)
+                        @if(is_array($source) && isset($source['url']))
+                            <a href="{{ $source['url'] }}" target="_blank" rel="noopener noreferrer" class="text-primary text-decoration-none">
+                                <i class="bi bi-link-45deg"></i>
+                                {{ $source['url'] }}
+                                <i class="bi bi-box-arrow-up-right ms-1 small"></i>
+                            </a>
+                        @elseif(is_string($source))
+                            <a href="{{ $source }}" target="_blank" rel="noopener noreferrer" class="text-primary text-decoration-none">
+                                <i class="bi bi-link-45deg"></i>
+                                {{ $source }}
+                                <i class="bi bi-box-arrow-up-right ms-1 small"></i>
+                            </a>
+                        @endif
+                    @endforeach
+                </div>
+            </div>
+        @endif
+        
+        @if(!empty($uniqueInheritedSourcesBySpan))
+            @foreach($uniqueInheritedSourcesBySpan as $spanId => $data)
+                <div class="mb-3 @if(!empty($uniqueDirectSources)) mt-3 pt-3 border-top @endif">
+                    <h6 class="text-muted small mb-2">
+                        <i class="bi bi-arrow-down-circle me-1"></i>
+                        Inherited from <a href="{{ route('spans.show', $data['span']) }}" class="text-decoration-none">{{ $data['span']->name }}</a>
+                    </h6>
+                    <div class="d-flex flex-wrap gap-3">
+                        @foreach($data['sources'] as $source)
+                            @if(is_array($source) && isset($source['url']))
+                                <a href="{{ $source['url'] }}" target="_blank" rel="noopener noreferrer" class="text-primary text-decoration-none">
+                                    <i class="bi bi-link-45deg"></i>
+                                    {{ $source['url'] }}
+                                    <i class="bi bi-box-arrow-up-right ms-1 small"></i>
+                                </a>
+                            @elseif(is_string($source))
+                                <a href="{{ $source }}" target="_blank" rel="noopener noreferrer" class="text-primary text-decoration-none">
+                                    <i class="bi bi-link-45deg"></i>
+                                    {{ $source }}
+                                    <i class="bi bi-box-arrow-up-right ms-1 small"></i>
+                                </a>
+                            @endif
+                        @endforeach
+                    </div>
+                </div>
             @endforeach
-        </div>
+        @endif
     </div>
 </div>
 @endif 
