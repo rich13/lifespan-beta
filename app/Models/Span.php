@@ -273,6 +273,38 @@ class Span extends Model
                 $span->end_day
             );
 
+            // Automatically update state based on date presence
+            // Check if this span type is timeless
+            $spanType = $span->type;
+            $isTimeless = $spanType && ($spanType->metadata['timeless'] ?? false);
+            // Also check if this individual span is marked as timeless
+            $isTimeless = $isTimeless || ($span->metadata['timeless'] ?? false);
+
+            // Only auto-update state for non-timeless spans
+            if (!$isTimeless) {
+                // Check if span has any dates
+                $hasDates = !is_null($span->start_year) || !is_null($span->end_year);
+
+                // Auto-update state based on dates
+                if ($hasDates && $span->state === 'placeholder') {
+                    // Has dates but was placeholder → become draft
+                    $span->state = 'draft';
+                    Log::debug('Auto-updated span state: placeholder → draft (dates added)', [
+                        'span_id' => $span->id,
+                        'span_name' => $span->name,
+                    ]);
+                } elseif (!$hasDates && $span->state === 'draft') {
+                    // No dates but was draft → become placeholder
+                    // Only downgrade draft, never touch complete
+                    $span->state = 'placeholder';
+                    Log::debug('Auto-updated span state: draft → placeholder (dates removed)', [
+                        'span_id' => $span->id,
+                        'span_name' => $span->name,
+                    ]);
+                }
+                // Note: We never auto-downgrade 'complete' state
+            }
+
             // Validate date consistency
             if (!$span->hasValidDateCombination('start')) {
                 throw new \InvalidArgumentException(sprintf(
@@ -373,6 +405,51 @@ class Span extends Model
             $span->clearSetCaches($span);
         });
 
+        // Clear caches before deletion so we can still access relationships
+        static::deleting(function ($span) {
+            $spanId = $span->id;
+            
+            // Get all spans that have connections to/from this span BEFORE deletion
+            // This ensures we can access the connections before they're cascade-deleted
+            $connectedSpanIds = collect();
+            
+            // Spans that this span connects to (as parent/subject)
+            $connectionsAsParent = \App\Models\Connection::where('parent_id', $spanId)
+                ->pluck('child_id')
+                ->filter();
+            $connectedSpanIds = $connectedSpanIds->merge($connectionsAsParent);
+            
+            // Spans that connect to this span (as child/object)
+            $connectionsAsChild = \App\Models\Connection::where('child_id', $spanId)
+                ->pluck('parent_id')
+                ->filter();
+            $connectedSpanIds = $connectedSpanIds->merge($connectionsAsChild);
+            
+            // Clear connection caches for all spans connected to this deleted span
+            // This ensures deleted spans don't appear in connection lists
+            $connectedSpanIds->unique()->each(function ($connectedSpanId) {
+                if ($connectedSpanId) {
+                    // Clear connections_all_v3 cache for guest and all user IDs
+                    Cache::forget("connections_all_v3_{$connectedSpanId}_guest");
+                    Cache::forget("connections_all_{$connectedSpanId}_guest");
+                    Cache::forget("connection_types_{$connectedSpanId}");
+                    
+                    // Clear for user IDs 1-1000
+                    for ($userId = 1; $userId <= 1000; $userId++) {
+                        Cache::forget("connections_all_v3_{$connectedSpanId}_{$userId}");
+                        Cache::forget("connections_all_{$connectedSpanId}_{$userId}");
+                    }
+                    
+                    // Also clear for the current user if authenticated
+                    if (auth()->check()) {
+                        $currentUserId = auth()->id();
+                        Cache::forget("connections_all_v3_{$connectedSpanId}_{$currentUserId}");
+                        Cache::forget("connections_all_{$connectedSpanId}_{$currentUserId}");
+                    }
+                }
+            });
+        });
+        
         static::deleted(function ($span) {
             $span->clearTimelineCaches();
             $span->clearSetCaches($span);

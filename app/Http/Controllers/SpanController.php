@@ -1863,7 +1863,7 @@ class SpanController extends Controller
                 ]);
             }
             
-            return redirect()->route('spans.index')
+            return redirect()->route('home')
                 ->with('status', "Span '{$spanName}' deleted successfully");
                 
         } catch (\Exception $e) {

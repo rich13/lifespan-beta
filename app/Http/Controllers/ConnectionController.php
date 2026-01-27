@@ -353,6 +353,10 @@ class ConnectionController extends Controller
         }
 
         try {
+            // Get the parent span (span A) before deletion for redirect
+            $parentSpan = $connection->subject;
+            $parentSpanUrl = $parentSpan ? route('spans.show', $parentSpan) : '/';
+
             // Log the deletion attempt
             Log::info('Deleting connection', [
                 'connection_id' => $connection->id,
@@ -377,12 +381,13 @@ class ConnectionController extends Controller
             if (request()->expectsJson()) {
                 return response()->json([
                     'success' => true,
-                    'message' => 'Connection deleted successfully'
+                    'message' => 'Connection deleted successfully',
+                    'redirect_url' => $parentSpanUrl
                 ]);
             }
 
-            // For non-AJAX, redirect to home or another safe page
-            return redirect('/')->with('status', 'Connection deleted successfully');
+            // For non-AJAX, redirect to the parent span (span A)
+            return redirect($parentSpanUrl)->with('status', 'Connection deleted successfully');
 
         } catch (\Exception $e) {
             Log::error('Error deleting connection', [
