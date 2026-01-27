@@ -10,16 +10,22 @@
             <i class="bi bi-person-lines-fill me-2"></i>
             Timeline
         </h5>
-        <div class="btn-group btn-group-sm" role="group">
-            <input type="radio" class="btn-check" name="timeline-mode-{{ $span->id }}" id="absolute-mode-{{ $span->id }}" value="absolute" checked>
-            <label class="btn btn-outline-primary" for="absolute-mode-{{ $span->id }}">
-                Absolute
-            </label>
-            
-            <input type="radio" class="btn-check" name="timeline-mode-{{ $span->id }}" id="relative-mode-{{ $span->id }}" value="relative">
-            <label class="btn btn-outline-primary" for="relative-mode-{{ $span->id }}">
-                Relative
-            </label>
+        <div class="d-flex gap-2 align-items-center">
+            <a href="{{ route('spans.all-connections', $span) }}" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-clock-history me-1"></i>
+                Overview
+            </a>
+            <div class="btn-group btn-group-sm" role="group">
+                <input type="radio" class="btn-check" name="timeline-mode-{{ $span->id }}" id="absolute-mode-{{ $span->id }}" value="absolute" checked>
+                <label class="btn btn-outline-primary" for="absolute-mode-{{ $span->id }}">
+                    Absolute
+                </label>
+                
+                <input type="radio" class="btn-check" name="timeline-mode-{{ $span->id }}" id="relative-mode-{{ $span->id }}" value="relative">
+                <label class="btn btn-outline-primary" for="relative-mode-{{ $span->id }}">
+                    Relative
+                </label>
+            </div>
         </div>
     </div>
     <div class="card-body">

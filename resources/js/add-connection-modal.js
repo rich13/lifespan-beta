@@ -535,38 +535,42 @@ $(document).ready(function() {
             return $(this).val() + ':' + ($(this).is(':checked') ? 'checked' : 'unchecked') + ' (id: ' + $(this).attr('id') + ')';
         }).get());
         
-        // Gather form data
+        // Gather form data - map to what the route expects
+        // The route expects: subject_id, object_id, predicate, start_year, etc.
+        // Handle direction: if inverse, swap subject and object
+        const subjectId = isReverseMode ? $('#connectionObjectId').val() : currentSpanId;
+        const objectId = isReverseMode ? currentSpanId : $('#connectionObjectId').val();
+        
         const formData = {
-            type: $('#connectionPredicate').val(),
-            parent_id: currentSpanId,
-            child_id: $('#connectionObjectId').val(),
-            direction: isReverseMode ? 'inverse' : 'forward',
+            subject_id: subjectId,
+            object_id: objectId,
+            predicate: $('#connectionPredicate').val(),
             state: currentState,
-            connection_year: $('#startYear').val() ? parseInt($('#startYear').val()) : null,
-            connection_month: $('#startMonth').val() ? parseInt($('#startMonth').val()) : null,
-            connection_day: $('#startDay').val() ? parseInt($('#startDay').val()) : null,
-            connection_end_year: $('#endYear').val() ? parseInt($('#endYear').val()) : null,
-            connection_end_month: $('#endMonth').val() ? parseInt($('#endMonth').val()) : null,
-            connection_end_day: $('#endDay').val() ? parseInt($('#endDay').val()) : null
+            start_year: $('#startYear').val() ? parseInt($('#startYear').val()) : null,
+            start_month: $('#startMonth').val() ? parseInt($('#startMonth').val()) : null,
+            start_day: $('#startDay').val() ? parseInt($('#startDay').val()) : null,
+            end_year: $('#endYear').val() ? parseInt($('#endYear').val()) : null,
+            end_month: $('#endMonth').val() ? parseInt($('#endMonth').val()) : null,
+            end_day: $('#endDay').val() ? parseInt($('#endDay').val()) : null
         };
         
         console.log('Form data state:', formData.state);
-        console.log('Form data connection_year:', formData.connection_year);
+        console.log('Form data start_year:', formData.start_year);
         console.log('Form data:', formData);
         
         // Validate required fields
-        if (!formData.type) {
+        if (!formData.predicate) {
             showStatus('Please select a connection type', 'danger');
             return;
         }
         
-        if (!formData.child_id) {
+        if (!formData.object_id) {
             showStatus('Please select a span to connect to', 'danger');
             return;
         }
         
         // Get the selected connection type to check if it's timeless
-        const selectedConnectionType = connectionTypes.find(t => t.type === formData.type);
+        const selectedConnectionType = connectionTypes.find(t => t.type === formData.predicate);
         const isTimeless = selectedConnectionType && selectedConnectionType.constraint_type === 'timeless';
         
         console.log('Selected connection type:', selectedConnectionType);
@@ -576,11 +580,11 @@ $(document).ready(function() {
         const isPlaceholder = formData.state === 'placeholder';
         
         console.log('Is placeholder:', isPlaceholder);
-        console.log('Validation check: !isPlaceholder =', !isPlaceholder, ', !isTimeless =', !isTimeless, ', !formData.connection_year =', !formData.connection_year);
-        console.log('Will require start year?', !isPlaceholder && !isTimeless && !formData.connection_year);
+        console.log('Validation check: !isPlaceholder =', !isPlaceholder, ', !isTimeless =', !isTimeless, ', !formData.start_year =', !formData.start_year);
+        console.log('Will require start year?', !isPlaceholder && !isTimeless && !formData.start_year);
         
         // For non-placeholder, non-timeless connections, require a start year
-        if (!isPlaceholder && !isTimeless && !formData.connection_year) {
+        if (!isPlaceholder && !isTimeless && !formData.start_year) {
             console.log('ERROR: Requiring start year - this should not happen for placeholders!');
             showStatus('Please enter a start year', 'danger');
             return;
@@ -589,12 +593,12 @@ $(document).ready(function() {
         console.log('Date validation passed - proceeding with form submission');
         
         // Validate date format (only if dates are provided)
-        if (formData.connection_year && !validateDate(formData.connection_year, formData.connection_month, formData.connection_day)) {
+        if (formData.start_year && !validateDate(formData.start_year, formData.start_month, formData.start_day)) {
             showStatus('Please enter a valid start date', 'danger');
             return;
         }
         
-        if (formData.connection_end_year && !validateDate(formData.connection_end_year, formData.connection_end_month, formData.connection_end_day)) {
+        if (formData.end_year && !validateDate(formData.end_year, formData.end_month, formData.end_day)) {
             showStatus('Please enter a valid end date', 'danger');
             return;
         }
@@ -611,12 +615,12 @@ $(document).ready(function() {
             // Update connection
             const updateData = {
                 state: formData.state,
-                start_year: formData.connection_year,
-                start_month: formData.connection_month,
-                start_day: formData.connection_day,
-                end_year: formData.connection_end_year,
-                end_month: formData.connection_end_month,
-                end_day: formData.connection_end_day
+                start_year: formData.start_year,
+                start_month: formData.start_month,
+                start_day: formData.start_day,
+                end_year: formData.end_year,
+                end_month: formData.end_month,
+                end_day: formData.end_day
             };
             
             $.ajax({

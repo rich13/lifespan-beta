@@ -476,25 +476,11 @@ window.confirmDeleteSpan = function(button) {
         button.style.backgroundColor = '#28a745';
         icon.className = 'bi bi-check';
         
-        // Remove the span from the DOM after a short delay
-        setTimeout(() => {
-            const spanElement = button.closest('.interactive-card-base, .card, .span-item');
-            if (spanElement) {
-                spanElement.style.opacity = '0';
-                spanElement.style.transform = 'scale(0.8)';
-                spanElement.style.transition = 'all 0.3s ease';
-                
-                setTimeout(() => {
-                    spanElement.remove();
-                }, 300);
-            } else {
-                // Fallback: reload the page
-                location.reload();
-            }
-        }, 1000);
-        
         // Show success message
         alert(`Span "${modelName}" deleted successfully!`);
+        
+        // Redirect to home after deletion
+        window.location.href = '/';
     })
     .catch(error => {
         console.error('Error deleting span:', error);
@@ -554,25 +540,12 @@ window.confirmDeleteConnection = function(button) {
         button.style.backgroundColor = '#28a745';
         icon.className = 'bi bi-check';
         
-        // Remove the connection from the DOM after a short delay
-        setTimeout(() => {
-            const connectionElement = button.closest('.interactive-card-base, .card, .connection-item');
-            if (connectionElement) {
-                connectionElement.style.opacity = '0';
-                connectionElement.style.transform = 'scale(0.8)';
-                connectionElement.style.transition = 'all 0.3s ease';
-                
-                setTimeout(() => {
-                    connectionElement.remove();
-                }, 300);
-            } else {
-                // Fallback: reload the page
-                location.reload();
-            }
-        }, 1000);
-        
         // Show success message
         alert(`Connection "${modelName}" deleted successfully!`);
+        
+        // Redirect to the parent span (span A) after deletion
+        const redirectUrl = data.redirect_url || '/';
+        window.location.href = redirectUrl;
     })
     .catch(error => {
         console.error('Error deleting connection:', error);

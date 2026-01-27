@@ -52,7 +52,7 @@ $(document).ready(function() {
 
         return $(`
             <a href="${connectionUrl}" class="text-decoration-none connection-span-link" title="${escapeHtml(connectionName)}">
-                <i class="bi bi-link-45deg"></i>
+                <i class="bi bi-diagram-2"></i>
             </a>
         `);
     };
@@ -113,13 +113,31 @@ $(document).ready(function() {
                 return;
             }
             $wrapper.data('span-connection-hover', true);
+            let wrapperShowTimeout = null;
+            
             $wrapper.on('mouseenter.spanConnection focusin.spanConnection', () => {
                 const $icon = $wrapper.find('.connection-span-link').first();
                 if ($icon.length) {
-                    showWrapperIcon($wrapper, $icon);
+                    // Clear any existing timeout
+                    if (wrapperShowTimeout) {
+                        clearTimeout(wrapperShowTimeout);
+                    }
+                    // Delay showing the icon by 1 second
+                    wrapperShowTimeout = setTimeout(() => {
+                        showWrapperIcon($wrapper, $icon);
+                        wrapperShowTimeout = null;
+                    }, 1000);
                 }
             });
-            $wrapper.on('mouseleave.spanConnection focusout.spanConnection', () => hideWrapperIcon($wrapper));
+            
+            $wrapper.on('mouseleave.spanConnection focusout.spanConnection', () => {
+                // Cancel the timeout if mouse leaves before delay completes
+                if (wrapperShowTimeout) {
+                    clearTimeout(wrapperShowTimeout);
+                    wrapperShowTimeout = null;
+                }
+                hideWrapperIcon($wrapper);
+            });
         };
 
         const initIcon = () => {
@@ -145,14 +163,34 @@ $(document).ready(function() {
                     }
                     $link.data('span-connection-ready', true);
                     bindWrapperHover($wrapper);
-                    showWrapperIcon($wrapper, $iconLink);
+                    // Don't show immediately - wait for hover delay
                 })
                 .always(() => {
                     $link.data('span-connection-loading', false);
                 });
         };
 
-        $link.on('mouseenter.spanConnection focusin.spanConnection', initIcon);
+        let linkHoverTimeout = null;
+        
+        $link.on('mouseenter.spanConnection focusin.spanConnection', () => {
+            // Clear any existing timeout
+            if (linkHoverTimeout) {
+                clearTimeout(linkHoverTimeout);
+            }
+            // Delay calling initIcon by 1 second
+            linkHoverTimeout = setTimeout(() => {
+                initIcon();
+                linkHoverTimeout = null;
+            }, 1000);
+        });
+        
+        $link.on('mouseleave.spanConnection focusout.spanConnection', () => {
+            // Cancel the timeout if mouse leaves before delay completes
+            if (linkHoverTimeout) {
+                clearTimeout(linkHoverTimeout);
+                linkHoverTimeout = null;
+            }
+        });
     });
 
     $('.temporal-relations-tabs').each(function() {

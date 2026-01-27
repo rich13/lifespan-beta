@@ -96,13 +96,22 @@ const SessionBridge = {
     },
 
     /**
+     * Get the base URL for API calls
+     * Uses absolute URL to avoid issues with <base> tags in embedded content
+     * @returns {string} The base URL
+     */
+    getBaseUrl: function() {
+        return window.location.origin;
+    },
+
+    /**
      * Check if the current session is valid
      * @returns {jQuery.ajax} jQuery ajax promise
      */
     checkSession: function() {
         return $.ajax({
             type: 'POST',
-            url: '/api/session-bridge/check',
+            url: this.getBaseUrl() + '/api/session-bridge/check',
             headers: {
                 'X-CSRF-TOKEN': this.getCsrfToken()
             },
@@ -124,7 +133,7 @@ const SessionBridge = {
         
         $.ajax({
             type: 'POST',
-            url: '/api/session-bridge/restore',
+            url: this.getBaseUrl() + '/api/session-bridge/restore',
             data: {
                 token: token
             },
@@ -178,7 +187,7 @@ const SessionBridge = {
     refreshToken: function() {
         $.ajax({
             type: 'POST',
-            url: '/api/session-bridge/refresh',
+            url: this.getBaseUrl() + '/api/session-bridge/refresh',
             headers: {
                 'X-CSRF-TOKEN': this.getCsrfToken()
             },

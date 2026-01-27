@@ -16,6 +16,14 @@ use App\Services\AiYamlCreatorService;
                 <i class="bi bi-plus-circle me-2"></i>Create New Span
             </button>
             
+            @if(request()->routeIs('spans.show') && $span)
+                <a href="{{ route('research.show', $span) }}" 
+                   class="btn btn-info"
+                   data-bs-dismiss="offcanvas">
+                    <i class="bi bi-search me-2"></i>Research This Span
+                </a>
+            @endif
+            
             @if(request()->routeIs('spans.show') && $span && AiYamlCreatorService::supportsAiImprovement($span->type_id))
                 <button type="button" class="btn btn-success" 
                         data-bs-toggle="modal" data-bs-target="#newSpanModal" 
@@ -37,6 +45,14 @@ use App\Services\AiYamlCreatorService;
                         title="Create a new span (⌘K)">
                     <i class="bi bi-plus-circle me-1"></i>New
                 </button>
+                
+                @if(request()->routeIs('spans.show') && $span)
+                    <a href="{{ route('research.show', $span) }}" 
+                       class="btn btn-sm btn-info"
+                       title="Research this span">
+                        <i class="bi bi-search me-1"></i>Research
+                    </a>
+                @endif
                 
                 @if(request()->routeIs('spans.show') && $span && AiYamlCreatorService::supportsAiImprovement($span->type_id))
                     <button type="button" class="btn btn-sm btn-success" 

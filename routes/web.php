@@ -200,6 +200,10 @@ Route::middleware('web')->group(function () {
         // Info page with summary and stats
         Route::get('/info', [App\Http\Controllers\InfoController::class, 'index'])->name('info');
         
+        // Research routes
+        Route::get('/research', [App\Http\Controllers\ResearchController::class, 'index'])->name('research.index');
+        Route::get('/research/{span}', [App\Http\Controllers\ResearchController::class, 'show'])->name('research.show');
+        
         Route::prefix('new')->group(function () {
             Route::get('/span', [NewSpanController::class, 'showSpan'])->name('new.span');
             Route::get('/person-role-org', [NewSpanController::class, 'showPersonRoleOrganisation'])->name('new.person-role-org');
@@ -440,6 +444,7 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                     'subject_id' => 'required|uuid|exists:spans,id',
                     'object_id' => 'required|uuid|exists:spans,id|different:subject_id',
                     'predicate' => 'required|string|exists:connection_types,type',
+                    'direction' => 'nullable|in:forward,inverse', // Optional, defaults to forward
                     'state' => 'required|in:placeholder,draft,complete',
                     'start_year' => 'nullable|integer|min:1000|max:2100',
                     'start_month' => 'nullable|integer|min:1|max:12',
@@ -454,6 +459,13 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                     $subject = \App\Models\Span::findOrFail($validated['subject_id']);
                     $object = \App\Models\Span::findOrFail($validated['object_id']);
                     $connectionType = \App\Models\ConnectionType::findOrFail($validated['predicate']);
+                    
+                    // Determine direction - default to forward if not specified
+                    $direction = $validated['direction'] ?? 'forward';
+                    
+                    // If inverse direction, swap subject and object for validation and creation
+                    $parent = $direction === 'inverse' ? $object : $subject;
+                    $child = $direction === 'inverse' ? $subject : $object;
 
                     // Check if user can access both spans
                     if (!$subject->isAccessibleBy(auth()->user()) || !$object->isAccessibleBy(auth()->user())) {
@@ -463,30 +475,30 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                         ], 403);
                     }
 
-                    // Validate span types
-                    if (!$connectionType->isSpanTypeAllowed($subject->type_id, 'parent')) {
+                    // Validate span types based on the actual parent/child relationship
+                    if (!$connectionType->isSpanTypeAllowed($parent->type_id, 'parent')) {
                         return response()->json([
                             'success' => false,
-                            'message' => "Invalid subject span type. Expected one of: " . 
+                            'message' => "Invalid parent span type. Expected one of: " . 
                                         implode(', ', $connectionType->getAllowedSpanTypes('parent'))
                         ], 422);
                     }
 
-                    if (!$connectionType->isSpanTypeAllowed($object->type_id, 'child')) {
+                    if (!$connectionType->isSpanTypeAllowed($child->type_id, 'child')) {
                         return response()->json([
                             'success' => false,
-                            'message' => "Invalid object span type. Expected one of: " . 
+                            'message' => "Invalid child span type. Expected one of: " . 
                                         implode(', ', $connectionType->getAllowedSpanTypes('child'))
                         ], 422);
                     }
 
-                    // Check for existing connection
-                    $existingConnection = \App\Models\Connection::where(function($query) use ($subject, $object) {
-                        $query->where('parent_id', $subject->id)
-                              ->where('child_id', $object->id);
-                    })->orWhere(function($query) use ($subject, $object) {
-                        $query->where('parent_id', $object->id)
-                              ->where('child_id', $subject->id);
+                    // Check for existing connection (check both directions)
+                    $existingConnection = \App\Models\Connection::where(function($query) use ($parent, $child) {
+                        $query->where('parent_id', $parent->id)
+                              ->where('child_id', $child->id);
+                    })->orWhere(function($query) use ($parent, $child) {
+                        $query->where('parent_id', $child->id)
+                              ->where('child_id', $parent->id);
                     })->where('type_id', $validated['predicate'])
                     ->first();
 
@@ -497,9 +509,14 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                         ], 422);
                     }
 
-                    // Create connection span
+                    // Get the appropriate predicate based on direction
+                    $predicate = $direction === 'inverse' 
+                        ? $connectionType->inverse_predicate 
+                        : $connectionType->forward_predicate;
+
+                    // Create connection span with appropriate predicate
                     $connectionSpanData = [
-                        'name' => "{$subject->name} - {$object->name} {$connectionType->forward_predicate}",
+                        'name' => "{$parent->name} {$predicate} {$child->name}",
                         'type_id' => 'connection',
                         'owner_id' => auth()->id(),
                         'updater_id' => auth()->id(),
@@ -517,10 +534,10 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
 
                     $connectionSpan = \App\Models\Span::create($connectionSpanData);
 
-                    // Create the connection
+                    // Create the connection with parent/child in the correct order
                     $connection = \App\Models\Connection::create([
-                        'parent_id' => $subject->id,
-                        'child_id' => $object->id,
+                        'parent_id' => $parent->id,
+                        'child_id' => $child->id,
                         'type_id' => $validated['predicate'],
                         'connection_span_id' => $connectionSpan->id
                     ]);
@@ -637,10 +654,35 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
 
                     $connectionSpan->update($updateData);
 
+                    // Refresh the connection to get updated relationship data
+                    $connection->refresh();
+                    $connection->load('connectionSpan');
+
+                    // Clear timeline caches for parent, child, and connection spans
+                    // This ensures timelines are refreshed after connection updates
+                    $connection->clearTimelineCaches();
+                    $connection->clearSetCaches();
+
+                    // Also explicitly clear the all-connections cache for both parent and child
+                    // This is the cache used by the /spans/{span}/connections page
+                    $parentId = $connection->parent_id;
+                    $childId = $connection->child_id;
+                    
+                    // Clear for all possible user IDs (including guest and current user)
+                    // We can't iterate through all users, so clear for guest and current user explicitly
+                    Cache::forget("connections_all_v3_{$parentId}_guest");
+                    Cache::forget("connections_all_v3_{$childId}_guest");
+                    
+                    if (auth()->check()) {
+                        $currentUserId = auth()->id();
+                        Cache::forget("connections_all_v3_{$parentId}_{$currentUserId}");
+                        Cache::forget("connections_all_v3_{$childId}_{$currentUserId}");
+                    }
+
                     return response()->json([
                         'success' => true,
                         'message' => 'Connection updated successfully',
-                        'data' => $connection->fresh()
+                        'data' => $connection->fresh(['connectionSpan'])
                     ]);
 
                 } catch (\Exception $e) {
@@ -808,20 +850,7 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
             // Primary route structure - handle both span show and connections
             Route::get('/', [SpanController::class, 'index'])->name('spans.index');
             
-            // Family route (must come before general span route)
-            Route::get('/{span}/family', [FamilyController::class, 'show'])->name('family.show');
-            Route::get('/{span}/family/tree', [FamilyController::class, 'tree'])->name('family.tree');
-            
-            Route::get('/{subject}', [SpanController::class, 'show'])->name('spans.show');
-            
-            // Specific span routes (must come before connection routes to avoid conflicts)
-            Route::get('/{span}/story', [SpanController::class, 'story'])->name('spans.story');
-            
-            // Time travel exit route - clear cookie and return to present
-            Route::get('/{span}/at/exit', [SpanController::class, 'exitTimeTravel'])
-                ->name('spans.at-date-exit');
-            
-            // Global time travel exit route (for header use)
+            // Global time travel routes (must come before span-specific routes to avoid conflicts)
             Route::get('/time-travel/exit', [SpanController::class, 'exitTimeTravelGlobal'])
                 ->name('time-travel.exit');
             
@@ -835,19 +864,33 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
             Route::post('/time-travel/modal', [SpanController::class, 'startTimeTravel'])
                 ->name('time-travel.start');
             
+            // Family route (must come before general span route)
+            Route::get('/{span}/family', [FamilyController::class, 'show'])->name('family.show');
+            Route::get('/{span}/family/tree', [FamilyController::class, 'tree'])->name('family.tree');
+            
+            // Specific span routes (must come before general span route to avoid conflicts)
+            Route::get('/{span}/story', [SpanController::class, 'story'])->name('spans.story');
+            
+            // Time travel exit route - clear cookie and return to present
+            Route::get('/{span}/at/exit', [SpanController::class, 'exitTimeTravel'])
+                ->name('spans.at-date-exit');
+            
             // Time travel route - show span at specific date
             Route::get('/{span}/at/{date}', [SpanController::class, 'showAtDate'])
                 ->where('date', '[0-9]{4}-[0-9]{2}-[0-9]{2}')
                 ->name('spans.at-date');
             
-            // Connection routes
+            // Connection routes (must come before general span route)
             Route::get('/{subject}/connections', [SpanController::class, 'allConnections'])->name('spans.all-connections');
-Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])->name('spans.connections');
+            Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])->name('spans.connections');
             Route::get('/{subject}/{predicate}/{object}', [SpanController::class, 'showConnection'])->name('spans.connection');
             
             // Legacy connection type routes
             Route::get('/{span}/connection_types', [SpanController::class, 'connectionTypes'])->name('spans.connection-types.index');
             Route::get('/{span}/connection_types/{connectionType}', [SpanController::class, 'connectionsByType'])->name('spans.connection-types.show');
+            
+            // General span show route (must come last as catch-all)
+            Route::get('/{subject}', [SpanController::class, 'show'])->name('spans.show');
         });
 
         // New POST route for creating a new span from YAML

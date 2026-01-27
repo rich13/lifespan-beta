@@ -42,7 +42,7 @@
     }
 
     .timeline-bar {
-        transition: opacity 200ms ease-in-out;
+        /* Opacity transitions handled via SVG attributes, not CSS */
     }
 
     .timeline-bg {
@@ -135,21 +135,21 @@ document.addEventListener('DOMContentLoaded', function() {
         .attr('transform', `translate(0, ${height - margin.bottom + axisOffsetFromRows})`)
         .call(xAxis);
     
-    // Style the ticks - major ticks (every 5 years) get larger size and darker color
+    // Style the ticks - major ticks (every 5 years) get larger size, minor ticks same color
     axisGroup.selectAll('.tick')
         .each(function(d) {
             const tick = d3.select(this);
             if (d % 5 === 0) {
-                // Major tick: larger and darker
+                // Major tick: larger
                 tick.select('line')
                     .attr('y2', 6)
                     .attr('stroke', '#666')
                     .attr('stroke-width', 1);
             } else {
-                // Minor tick: smaller and lighter
+                // Minor tick: smaller but same color as major ticks for better visibility
                 tick.select('line')
                     .attr('y2', 4)
-                    .attr('stroke', '#ccc')
+                    .attr('stroke', '#666')
                     .attr('stroke-width', 0.5);
             }
         });
@@ -438,7 +438,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Hide all other tooltips before showing this one
                     hideAllTooltips(lifeTooltip);
                     
-                    lifeBar.style('opacity', 0.8);
+                    lifeBar.attr('fill-opacity', 0.8);
                     // Life tooltip doesn't need pointer-events (no edit button)
                     lifeTooltip.transition()
                         .duration(200)
@@ -453,7 +453,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     positionTooltip(lifeTooltip, event, 10, -10);
                 })
                 .on('mouseout', function() {
-                    lifeBar.style('opacity', 1);
+                    lifeBar.attr('fill-opacity', 1);
                     lifeTooltip.transition()
                         .duration(500)
                         .style('opacity', 0);
@@ -468,11 +468,25 @@ document.addEventListener('DOMContentLoaded', function() {
             if (connectionSpan && connectionSpan.data) {
                 connectionSpan = connectionSpan.data;
             }
+            
+            // Get connection state to determine if it's a placeholder
+            let connectionState = 'placeholder'; // default
+            if (connectionSpan && connectionSpan.state) {
+                connectionState = connectionSpan.state;
+            } else if (connection.connection_span && connection.connection_span.state) {
+                connectionState = connection.connection_span.state;
+            } else if (connection.connectionSpan && connection.connectionSpan.state) {
+                connectionState = connection.connectionSpan.state;
+            } else if (connection.state) {
+                connectionState = connection.state;
+            }
+            
             const hasDates = connectionSpan && connectionSpan.start_year;
+            const isPlaceholder = connectionState === 'placeholder';
             
             let barX, barWidth, barColor, barOpacity, isClickable;
             
-            if (hasDates) {
+            if (hasDates && !isPlaceholder) {
                 const startYear = connectionSpan.start_year;
                 const startMonth = connectionSpan.start_month;
                 const startDay = connectionSpan.start_day;
@@ -504,10 +518,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 barOpacity = 0.7;
                 isClickable = true;
             } else {
+                // Placeholder connections: use connection type color with 25% opacity
                 barX = xScale(timeRange.start);
                 barWidth = xScale(timeRange.end) - xScale(timeRange.start);
-                barColor = '#6c757d';
-                barOpacity = 0.4;
+                barColor = getConnectionColor(swimlane.connectionType);
+                barOpacity = 0.25;
                 isClickable = false;
             }
 
@@ -519,11 +534,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 .attr('width', Math.max(barWidth, 2))
                 .attr('height', swimlaneHeight - 4)
                 .attr('fill', barColor)
+                .attr('fill-opacity', barOpacity)  // Use fill-opacity attribute for better control
                 .attr('stroke', 'white')
                 .attr('stroke-width', 1)
                 .attr('rx', 2)
                 .attr('ry', 2)
-                .style('opacity', barOpacity)
                 .style('cursor', isClickable ? 'pointer' : 'default');
 
             // Add tooltip
@@ -560,7 +575,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Hide all other tooltips before showing this one
                     hideAllTooltips(tooltip);
                     
-                    bar.style('opacity', 0.9);
+                    bar.attr('fill-opacity', 0.9);
                     // Enable pointer events and show tooltip
                     tooltip.style('pointer-events', 'auto');
                     tooltip.transition()
@@ -691,7 +706,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 })
                 .on('mouseout', function() {
-                    bar.style('opacity', barOpacity);
+                    bar.attr('fill-opacity', barOpacity);
                     // Delay hiding tooltip to allow mouse to move to tooltip
                     tooltipTimeout = setTimeout(function() {
                         tooltip.transition()
@@ -722,7 +737,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Hide all other tooltips before showing this one
                     hideAllTooltips(tooltip);
                     
-                    bar.style('opacity', 0.6);
+                    bar.attr('fill-opacity', 0.6);
                     // Enable pointer events and show tooltip
                     tooltip.style('pointer-events', 'auto');
                     tooltip.transition()
@@ -831,7 +846,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 })
                 .on('mouseout', function() {
-                    bar.style('opacity', barOpacity);
+                    bar.attr('fill-opacity', barOpacity);
                     // Delay hiding tooltip to allow mouse to move to tooltip
                     tooltipTimeout = setTimeout(function() {
                         tooltip.transition()

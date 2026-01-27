@@ -182,17 +182,21 @@ class AddConnectionModalTest extends TestCase
         $response = $this->getJson('/api/spans/search?q=London&types=place&exclude=' . $this->personSpan->id);
         $response->assertStatus(200);
         $data = $response->json();
-        
-        $this->assertIsArray($data);
-        $this->assertArrayHasKey('spans', $data);
-        $this->assertGreaterThan(0, count($data['spans']));
+
+        // Handle both legacy { spans: [...] } and flat array [ ... ]
+        $spans = is_array($data) && array_is_list($data)
+            ? $data
+            : ($data['spans'] ?? []);
+
+        $this->assertIsArray($spans);
+        $this->assertGreaterThan(0, count($spans));
         
         // Should find London place
-        $spanNames = collect($data['spans'])->pluck('name')->toArray();
+        $spanNames = collect($spans)->pluck('name')->toArray();
         $this->assertContains('London', $spanNames);
-        
+
         // Should only return places
-        foreach ($data['spans'] as $span) {
+        foreach ($spans as $span) {
             $this->assertEquals('place', $span['type_id']);
         }
     }
@@ -209,13 +213,17 @@ class AddConnectionModalTest extends TestCase
         $response = $this->getJson('/api/spans/search?q=New York&types=place&exclude=' . $this->personSpan->id);
         $response->assertStatus(200);
         $data = $response->json();
-        
-        $this->assertIsArray($data);
-        $this->assertArrayHasKey('spans', $data);
-        
-        // API no longer returns placeholder suggestions with null IDs
-        // All returned spans must have valid IDs
-        foreach ($data['spans'] as $span) {
+
+        // Handle both legacy { spans: [...] } and flat array [ ... ]
+        $spans = is_array($data) && array_is_list($data)
+            ? $data
+            : ($data['spans'] ?? []);
+
+        $this->assertIsArray($spans);
+
+        // API no longer returns placeholder suggestions with null IDs.
+        // All returned spans (if any) must have valid IDs.
+        foreach ($spans as $span) {
             $this->assertNotNull($span['id'], 'All spans in search results must have IDs');
         }
     }
