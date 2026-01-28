@@ -164,6 +164,16 @@ Route::middleware('web')->group(function () {
     Route::get('/', function () {
         return view('home');
     })->middleware('profile.complete')->name('home');
+    
+    // Personal homepage mode
+    Route::get('/me', function () {
+        return view('me');
+    })->middleware('profile.complete')->name('me');
+    
+    // Activity workspace mode
+    Route::get('/activity', function () {
+        return view('activity');
+    })->middleware('profile.complete')->name('activity');
 
         Route::get('/places/{span}/boundary', [\App\Http\Controllers\PlaceBoundaryController::class, 'show'])
             ->name('places.boundary');

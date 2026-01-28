@@ -15,6 +15,30 @@ class TemporalPoint
         private readonly string $precision = self::PRECISION_YEAR
     ) {}
 
+    /**
+     * Create a temporal point from a span, or return null if the span
+     * does not have a year for the requested boundary.
+     *
+     * This is useful for callers that want to treat spans without dates
+     * as placeholders instead of throwing an exception.
+     */
+    public static function fromSpanOrNull(\App\Models\Span $span, bool $isEnd = false): ?self
+    {
+        $year = $isEnd ? $span->end_year : $span->start_year;
+        if ($year === null) {
+            return null;
+        }
+
+        $month = $isEnd ? $span->end_month : $span->start_month;
+        $day = $isEnd ? $span->end_day : $span->start_day;
+
+        // Convert 0 to null for consistency
+        $month = $month === 0 ? null : $month;
+        $day = $day === 0 ? null : $day;
+
+        return self::fromParts($year, $month, $day);
+    }
+
     public static function fromParts(int $year, ?int $month = null, ?int $day = null): self
     {
         $precision = self::PRECISION_YEAR;

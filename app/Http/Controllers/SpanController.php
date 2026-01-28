@@ -3969,6 +3969,9 @@ class SpanController extends Controller
             return redirect()->route('spans.show', $subject);
         }
 
+        // Redirect to all-connections page with hash anchor for the predicate
+        return redirect()->route('spans.all-connections', $subject)->withFragment($predicate);
+
         // Get all connections of this type involving the subject with access control
         $user = auth()->user();
         $userId = $user?->id ?? 'guest';
@@ -4093,7 +4096,9 @@ class SpanController extends Controller
         });
 
         // Add connection counts for each type (cached per type)
-        $relevantConnectionTypes->each(function($type) use ($subject) {
+        $connectionCounts = [];
+        $connectionTypeDirections = [];
+        $relevantConnectionTypes->each(function($type) use ($subject, &$connectionCounts, &$connectionTypeDirections, $user) {
             $countCacheKey = "connection_count_{$subject->id}_{$type->type}";
             $count = Cache::remember($countCacheKey, 300, function () use ($subject, $type) {
                 return Connection::where('connections.type_id', $type->type)
@@ -4104,9 +4109,171 @@ class SpanController extends Controller
             });
             
             $type->connection_count = $count;
+            $connectionCounts[$type->type] = $count;
         });
 
-        return view('spans.connections', compact('subject', 'connectionType', 'connections', 'predicate', 'relevantConnectionTypes'));
+        // Fetch ALL connections for the timeline (same logic as allConnections)
+        $allConnectionsCacheKey = "connections_all_v4_{$subject->id}_{$userId}";
+        $allConnectionsData = Cache::remember($allConnectionsCacheKey, 300, function () use ($subject, $user, $relevantConnectionTypes) {
+            $allConnectionsFlat = collect();
+            $connectionTypeDirections = [];
+            
+            foreach ($relevantConnectionTypes as $connectionType) {
+                if ($connectionType->type === 'features') {
+                    continue; // Exclude features
+                }
+                
+                $connections = Connection::where('type_id', $connectionType->type)
+                    ->where(function($query) use ($subject) {
+                        $query->where('parent_id', $subject->id)
+                              ->orWhere('child_id', $subject->id);
+                    })
+                    ->where(function($query) use ($user) {
+                        if (!$user) {
+                            $query->whereHas('subject', function($q) {
+                                $q->where('access_level', 'public');
+                            })->whereHas('object', function($q) {
+                                $q->where('access_level', 'public');
+                            });
+                        } elseif (!$user->is_admin) {
+                            $query->where(function($subQ) use ($user) {
+                                $subQ->whereHas('subject', function($q) use ($user) {
+                                    $q->where(function($spanQ) use ($user) {
+                                        $spanQ->where('access_level', 'public')
+                                            ->orWhere('owner_id', $user->id)
+                                            ->orWhereHas('spanPermissions', function($permQ) use ($user) {
+                                                $permQ->where('user_id', $user->id)
+                                                      ->whereIn('permission_type', ['view', 'edit']);
+                                            })
+                                            ->orWhereHas('spanPermissions', function($permQ) use ($user) {
+                                                $permQ->whereNotNull('group_id')
+                                                      ->whereIn('permission_type', ['view', 'edit'])
+                                                      ->whereHas('group', function($groupQ) use ($user) {
+                                                          $groupQ->whereHas('users', function($userQ) use ($user) {
+                                                              $userQ->where('user_id', $user->id);
+                                                          });
+                                                      });
+                                            });
+                                    });
+                                })->whereHas('object', function($q) use ($user) {
+                                    $q->where(function($spanQ) use ($user) {
+                                        $spanQ->where('access_level', 'public')
+                                            ->orWhere('owner_id', $user->id)
+                                            ->orWhereHas('spanPermissions', function($permQ) use ($user) {
+                                                $permQ->where('user_id', $user->id)
+                                                      ->whereIn('permission_type', ['view', 'edit']);
+                                            })
+                                            ->orWhereHas('spanPermissions', function($permQ) use ($user) {
+                                                $permQ->whereNotNull('group_id')
+                                                      ->whereIn('permission_type', ['view', 'edit'])
+                                                      ->whereHas('group', function($groupQ) use ($user) {
+                                                          $groupQ->whereHas('users', function($userQ) use ($user) {
+                                                              $userQ->where('user_id', $user->id);
+                                                          });
+                                                      });
+                                            });
+                                    });
+                                });
+                            });
+                        }
+                    })
+                    ->with([
+                        'subject:id,name,type_id,metadata,access_level,owner_id',
+                        'object:id,name,type_id,metadata,access_level,owner_id',
+                        'connectionSpan:id,slug,start_year,start_month,start_day,end_year,end_month,end_day,state'
+                    ])
+                    ->get();
+
+                $connections->transform(function($conn) use ($subject, $connectionType) {
+                    $isParent = $conn->parent_id === $subject->id;
+                    $otherSpan = $isParent ? $conn->object : $conn->subject;
+                    $predicate = $isParent ? $connectionType->forward_predicate : $connectionType->inverse_predicate;
+                    
+                    $conn->other_span = $otherSpan;
+                    $conn->is_parent = $isParent;
+                    $conn->predicate = $predicate;
+                    $conn->connection_type = $connectionType;
+                    $conn->connection_type_id = $connectionType->type;
+                    
+                    return $conn;
+                });
+
+                $filteredConnections = $connections->filter(function($conn) use ($connectionType, $subject) {
+                    if ($connectionType->type === 'features') {
+                        return false;
+                    }
+                    if ($connectionType->type === 'created') {
+                        $otherSpan = $conn->parent_id === $subject->id ? $conn->object : $conn->subject;
+                        if ($otherSpan->type_id === 'thing' && 
+                            isset($otherSpan->metadata['subtype']) && 
+                            $otherSpan->metadata['subtype'] === 'photo') {
+                            return false;
+                        }
+                        if ($otherSpan->type_id === 'note') {
+                            return false;
+                        }
+                    }
+                    return true;
+                });
+
+                if ($filteredConnections->count() > 0) {
+                    $hasForward = $filteredConnections->contains(function($conn) {
+                        return isset($conn->is_parent) && $conn->is_parent === true;
+                    });
+                    $hasInverse = $filteredConnections->contains(function($conn) {
+                        return isset($conn->is_parent) && $conn->is_parent === false;
+                    });
+                    
+                    $predicate = $hasForward ? $connectionType->forward_predicate : $connectionType->inverse_predicate;
+                    
+                    $connectionTypeDirections[$connectionType->type] = [
+                        'has_forward' => $hasForward,
+                        'has_inverse' => $hasInverse,
+                        'predicate' => $predicate
+                    ];
+                }
+                
+                $allConnectionsFlat = $allConnectionsFlat->merge($filteredConnections);
+            }
+
+            $connectionsWithDates = $allConnectionsFlat->filter(function($conn) {
+                return $conn->connectionSpan && $conn->connectionSpan->start_year;
+            })->sortBy(function($conn) {
+                $connectionSpan = $conn->connectionSpan;
+                if (!$connectionSpan || !$connectionSpan->start_year) {
+                    return PHP_INT_MAX;
+                }
+                $year = $connectionSpan->start_year;
+                $month = $connectionSpan->start_month ?? 1;
+                $day = $connectionSpan->start_day ?? 1;
+                return sprintf('%04d%02d%02d', $year, $month, $day);
+            });
+
+            $connectionsWithoutDates = $allConnectionsFlat->filter(function($conn) {
+                return !$conn->connectionSpan || !$conn->connectionSpan->start_year;
+            });
+
+            $allConnections = $connectionsWithDates->concat($connectionsWithoutDates)->values();
+
+            return [
+                'allConnections' => $allConnections,
+                'connectionTypeDirections' => $connectionTypeDirections
+            ];
+        });
+
+        $allConnections = $allConnectionsData['allConnections'];
+        $connectionTypeDirections = array_merge($connectionTypeDirections, $allConnectionsData['connectionTypeDirections']);
+
+        return view('spans.connections', compact(
+            'subject', 
+            'connectionType', 
+            'connections', 
+            'predicate', 
+            'relevantConnectionTypes',
+            'connectionCounts',
+            'connectionTypeDirections',
+            'allConnections'
+        ));
     }
 
     /**
@@ -4118,8 +4285,8 @@ class SpanController extends Controller
         $userId = $user?->id ?? 'guest';
         
         // Cache key includes user ID for proper access control
-        // Version 3: includes connectionSpan state field
-        $cacheKey = "connections_all_v3_{$subject->id}_{$userId}";
+        // Version 4: includes connectionCounts and connectionTypeDirections in return array
+        $cacheKey = "connections_all_v4_{$subject->id}_{$userId}";
         
         $cachedData = Cache::remember($cacheKey, 300, function () use ($subject, $user) {
             // Get all relevant connection types for this span with connection counts
@@ -4303,8 +4470,8 @@ class SpanController extends Controller
         return view('spans.all-connections', [
             'subject' => $subject,
             'allConnections' => $cachedData['allConnections'],
-            'connectionCounts' => $cachedData['connectionCounts'],
-            'connectionTypeDirections' => $cachedData['connectionTypeDirections'],
+            'connectionCounts' => $cachedData['connectionCounts'] ?? [],
+            'connectionTypeDirections' => $cachedData['connectionTypeDirections'] ?? [],
             'relevantConnectionTypes' => $cachedData['relevantConnectionTypes']
         ]);
     }
