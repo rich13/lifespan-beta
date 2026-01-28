@@ -48,9 +48,7 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
         @vite(['resources/scss/app.scss', 'resources/js/app.js', 'resources/js/routes.js'])
         
         <!-- Session Bridge: Enabled for seamless redeploy recovery -->
-
-        <x-google-analytics />
-
+        
         <!-- Page-specific styles -->
         @stack('styles')
         
@@ -334,6 +332,24 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
                 padding-left: 0;
                 padding-right: 0;
             }
+            
+            /* Homepage mode switcher in top nav */
+            .homepage-mode-switcher .btn {
+                border-color: #6c757d;
+                color: #495057;
+                background-color: transparent;
+            }
+            
+            .homepage-mode-switcher .btn:hover {
+                background-color: #e9ecef;
+                color: #212529;
+            }
+            
+            .homepage-mode-switcher .btn.active {
+                background-color: #000;
+                border-color: #000;
+                color: #fff;
+            }
         </style>
         
         <!-- Page-specific scripts -->
@@ -452,6 +468,10 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
 
                             <x-topnav.page-title />
                             
+                            @if(request()->routeIs('home') || request()->routeIs('me') || request()->routeIs('activity'))
+                                <x-home.mode-switcher class="mx-3 d-none d-md-flex" />
+                            @endif
+                            
                             <!-- Page Filters -->
                             <x-topnav.page-filters class="d-none d-md-flex" />
                             <!-- Top Navigation Actions (Search, New, Improve) -->
@@ -548,9 +568,6 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
         
         <!-- Connect Note Modal -->
         <x-modals.connect-note-modal />
-        
-        <!-- Consent Banner -->
-        <x-consent-banner />
         
         <!-- Global Sets Modal -->
         <x-modals.sets-modal />

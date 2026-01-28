@@ -203,8 +203,6 @@
         animate();
     })();
     </script>
-    <x-google-analytics />
-    <x-consent-banner />
     @stack('scripts')
 </body>
 </html> 
