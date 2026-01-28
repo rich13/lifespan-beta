@@ -185,7 +185,8 @@ sources:
             // $this->assertEquals(2020, $mergedData['end_year']);
         }
         
-        $this->assertEquals('complete', $mergedData['state']); // Upgrade to complete due to dates
+        // Spans that gain dates via merge are now treated as draft for review, not auto-complete
+        $this->assertEquals('draft', $mergedData['state']);
         $this->assertArrayHasKey('occupation', $mergedData['metadata']);
         $this->assertContains('AI Generated', $mergedData['sources']);
     }

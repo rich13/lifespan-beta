@@ -16,8 +16,8 @@ class SpanConnectionTypesTest extends TestCase
             'slug' => 'test-person-' . uniqid()
         ]);
         
-        // Use the slug directly to avoid redirect
-        $response = $this->get("/spans/{$span->slug}");
+        // Use route helper and follow redirects so we accept UUID→slug canonicalisation
+        $response = $this->followingRedirects()->get(route('spans.show', ['subject' => $span]));
         
         $response->assertStatus(200);
     }
@@ -33,7 +33,10 @@ class SpanConnectionTypesTest extends TestCase
         $connectionType = ConnectionType::where('forward_predicate', 'lived in')->first();
         $this->assertNotNull($connectionType, 'Connection type with "lived in" predicate should exist');
         
-        $response = $this->get(route('spans.connections', ['subject' => $span, 'predicate' => 'lived-in']));
+        // listConnections now redirects to the all-connections page with a hash anchor
+        $response = $this->followingRedirects()->get(
+            route('spans.connections', ['subject' => $span, 'predicate' => 'lived-in'])
+        );
         
         $response->assertStatus(200);
     }
@@ -69,7 +72,10 @@ class SpanConnectionTypesTest extends TestCase
             'type_id' => $connectionType->type,
         ]);
         
-        $response = $this->get(route('spans.connections', ['subject' => $subject, 'predicate' => 'lived-in']));
+        // listConnections now redirects to the all-connections page with a hash anchor
+        $response = $this->followingRedirects()->get(
+            route('spans.connections', ['subject' => $subject, 'predicate' => 'lived-in'])
+        );
         
         $response->assertStatus(200);
         $response->assertSee($object1->name);
@@ -182,7 +188,10 @@ class SpanConnectionTypesTest extends TestCase
             'slug' => 'test-person-' . uniqid()
         ]);
         
-        $response = $this->actingAs($user)->get(route('spans.connections', ['subject' => $span, 'predicate' => 'lived-in']));
+        // Authenticated owner should be able to reach the connections view (via redirect)
+        $response = $this->actingAs($user)
+            ->followingRedirects()
+            ->get(route('spans.connections', ['subject' => $span, 'predicate' => 'lived-in']));
         
         $response->assertStatus(200);
     }
@@ -198,7 +207,10 @@ class SpanConnectionTypesTest extends TestCase
         $connectionType = ConnectionType::where('forward_predicate', 'lived in')->first();
         $this->assertNotNull($connectionType, 'Connection type with "lived in" predicate should exist');
         
-        $response = $this->get(route('spans.connections', ['subject' => $span, 'predicate' => 'lived-in']));
+        // Hyphenated predicates should still resolve and ultimately render a page
+        $response = $this->followingRedirects()->get(
+            route('spans.connections', ['subject' => $span, 'predicate' => 'lived-in'])
+        );
         
         $response->assertStatus(200);
     }

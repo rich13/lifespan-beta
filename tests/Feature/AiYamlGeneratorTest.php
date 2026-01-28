@@ -427,7 +427,8 @@ YAML;
         $this->assertEquals(1976, $existingSpan->start_year);
         $this->assertEquals(4, $existingSpan->start_month);
         $this->assertEquals(1, $existingSpan->start_day);
-        $this->assertEquals('complete', $existingSpan->state);
+        // Spans with dates are now auto-upgraded from placeholder to draft, not complete
+        $this->assertEquals('draft', $existingSpan->state);
         $this->assertEquals('American multinational technology company that specializes in consumer electronics, computer software, and online services', $existingSpan->description);
         $this->assertEquals('corporation', $existingSpan->metadata['subtype']);
         $this->assertEquals('Technology', $existingSpan->metadata['industry']);
