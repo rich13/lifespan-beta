@@ -6,6 +6,12 @@
         return;
     }
 
+    // Spans without temporal data cannot participate in temporal relations
+    // (they are effectively placeholders with unknown dates)
+    if (!$span->start_year) {
+        return;
+    }
+
     // Find the connection that uses this span as its connection_span_id
     $currentConnection = \App\Models\Connection::where('connection_span_id', $span->id)
         ->with(['subject', 'object', 'type'])

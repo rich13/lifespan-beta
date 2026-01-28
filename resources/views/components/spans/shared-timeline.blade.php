@@ -1,11 +1,12 @@
 @props([
-    'subject',           // The span whose connections are being displayed
-    'timelineData',      // Array of swimlane objects: [{type: 'life'|'connection', label: string, y: number, connection?: object, connectionType?: string}]
-    'containerId',       // Unique container ID for this timeline instance
-    'subjectStartYear',  // Subject's start year
-    'subjectEndYear',    // Subject's end year
-    'timeRange',         // {start: number, end: number} time range for the timeline
-    'showAddButton' => false  // Whether to show the add connection button in the header
+    'subject',              // The span whose connections are being displayed
+    'timelineData',         // Array of swimlane objects: [{type: 'life'|'connection', label: string, y: number, connection?: object, connectionType?: string}]
+    'containerId',          // Unique container ID for this timeline instance
+    'subjectStartYear',     // Subject's start year
+    'subjectEndYear',       // Subject's end year
+    'timeRange',            // {start: number, end: number} time range for the timeline
+    'showAddButton' => false,  // Whether to show the add connection button in the header
+    'connectionType' => null,  // Optional connection type for this timeline instance ('all' for combined views)
 ])
 
 @if($showAddButton && $subject)
@@ -24,7 +25,12 @@
 @endif
 
 <div class="card-body" style="overflow-x: auto;">
-    <div id="{{ $containerId }}" style="height: auto; min-height: 200px; width: 100%;">
+    <div
+        id="{{ $containerId }}"
+        style="height: auto; min-height: 200px; width: 100%;"
+        data-span-id="{{ $subject->id ?? null }}"
+        data-connection-type="{{ $connectionType ?? 'all' }}"
+    >
         <!-- D3 timeline will be rendered here -->
     </div>
 </div>

@@ -134,5 +134,6 @@
         :subjectStartYear="$span->start_year"
         :subjectEndYear="$span->end_year"
         :timeRange="$timeRange"
+        :connectionType="$connectionType->type"
     />
 </div>

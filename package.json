@@ -21,6 +21,7 @@
         "vite": "^5.0.0"
     },
     "dependencies": {
+        "@hotwired/turbo": "^8.0.21",
         "@tiptap/core": "^2.23.1",
         "@tiptap/extension-link": "^2.23.1",
         "@tiptap/extension-mention": "^2.23.1",

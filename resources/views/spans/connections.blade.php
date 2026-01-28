@@ -29,48 +29,16 @@
 <div class="py-4">
     <div class="row">
         <div class="col-12">
-            <!-- Connection Type Navigation -->
-            @if($relevantConnectionTypes->count() > 1)
-                <div class="card mb-4">
-                    <div class="card-body">
-                        <h5 class="card-title mb-3">
-                            <i class="bi bi-diagram-3 me-2"></i>
-                            Connection Types
-                        </h5>
-                        <div class="d-flex flex-wrap gap-2">
-                            <a href="{{ route('spans.all-connections', $subject) }}" 
-                               class="btn btn-sm btn-outline-secondary">
-                                All Connections
-                            </a>
-                            @foreach($relevantConnectionTypes as $type)
-                                @php
-                                    $isCurrent = $type->type === $connectionType->type;
-                                    $hasConnections = $type->connection_count > 0;
-                                    $routePredicate = str_replace(' ', '-', $type->forward_predicate);
-                                    $url = route('spans.connections', ['subject' => $subject, 'predicate' => $routePredicate]);
-                                @endphp
-                                @if($hasConnections)
-                                    <a href="{{ $url }}" 
-                                       class="btn btn-sm {{ $isCurrent ? 'btn-primary' : 'btn-secondary' }}"
-                                       style="{{ !$isCurrent ? 'background-color: var(--connection-' . $type->type . '-color, #007bff); border-color: var(--connection-' . $type->type . '-color, #007bff); color: white;' : '' }}">
-                                        {{ ucfirst($type->forward_predicate) }}
-                                        <span class="badge bg-secondary ms-1">{{ $type->connection_count }}</span>
-                                    </a>
-                                @else
-                                    <span class="btn btn-sm btn-outline-secondary disabled" style="opacity: 0.5;">
-                                        {{ ucfirst($type->forward_predicate) }}
-                                        <span class="badge bg-secondary ms-1">0</span>
-                                    </span>
-                                @endif
-                            @endforeach
-                        </div>
-                    </div>
-                </div>
-            @endif
-
-            <!-- Timeline for this connection type -->
-            @if($connections->count() > 0)
-                <x-spans.connection-type-timeline :span="$subject" :connectionType="$connectionType" :connections="$connections" />
+            @if($allConnections->count() > 0)
+                <x-spans.connections-timeline-card
+                    :subject="$subject"
+                    :connections="$allConnections"
+                    :relevantConnectionTypes="$relevantConnectionTypes"
+                    :connectionCounts="$connectionCounts"
+                    :connectionTypeDirections="$connectionTypeDirections"
+                    :containerId="'connection-timeline-container-' . $subject->id . '-' . $connectionType->type"
+                    :initialConnectionType="$connectionType->type"
+                />
             @endif
             
             <!-- Connections List -->
