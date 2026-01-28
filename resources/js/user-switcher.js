@@ -128,7 +128,6 @@ $(document).ready(function() {
                     }
                     
                     const switchUrl = window.routes.userSwitcher.switch.replace(':userId', user.id);
-                    console.log('Creating switch form for user:', user.email, 'with URL:', switchUrl);
                     
                     const $form = $('<form>', {
                         method: 'POST',
@@ -138,7 +137,6 @@ $(document).ready(function() {
                     
                     // Add CSRF token
                     const csrfToken = $('meta[name="csrf-token"]').attr('content');
-                    console.log('CSRF token:', csrfToken ? 'Found' : 'Not found');
                     
                     $form.append(
                         $('<input>', {
@@ -188,19 +186,16 @@ $(document).ready(function() {
                 // Add search functionality
                 $('#userSearchInput').on('keyup', function() {
                     const searchTerm = $(this).val().toLowerCase();
-                    console.log('Searching for:', searchTerm);
                     
                     $('.user-switch-form button').each(function() {
                         const userEmail = $(this).data('email');
                         const matches = userEmail && userEmail.includes(searchTerm);
-                        console.log('User email:', userEmail, 'matches:', matches);
                         $(this).parent().toggle(matches);
                     });
                 });
                 
                 // Mark as loaded
                 $userSwitcherList.attr('data-loaded', 'true');
-                console.log('User list populated');
             },
             error: function(xhr, status, error) {
                 console.error('Error loading users:', error);

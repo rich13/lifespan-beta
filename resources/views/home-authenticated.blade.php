@@ -641,18 +641,8 @@
                     const welcomeModalKey = `hasSeenWelcomeModal_${userId}`;
                     const hasSeenWelcomeModal = localStorage.getItem(welcomeModalKey) === 'true';
                     const shouldShowWelcomeModal = !hasAnyConnections && !hasSeenWelcomeModal;
-                    
-                    console.log('Welcome modal check:', {
-                        hasAnyConnections: hasAnyConnections,
-                        userId: userId,
-                        welcomeModalKey: welcomeModalKey,
-                        hasSeenWelcomeModal: hasSeenWelcomeModal,
-                        shouldShowWelcomeModal: shouldShowWelcomeModal,
-                        localStorageValue: localStorage.getItem(welcomeModalKey)
-                    });
-                    
+
                     if (shouldShowWelcomeModal) {
-                        console.log('Showing welcome modal');
                         const modalElement = document.getElementById('welcomeModal');
                         if (modalElement) {
                             const modal = new bootstrap.Modal(modalElement);
@@ -660,45 +650,30 @@
                             // Set the flag only when the modal is dismissed
                             modalElement.addEventListener('hidden.bs.modal', function() {
                                 localStorage.setItem(welcomeModalKey, 'true');
-                                console.log('Welcome modal dismissed and flag set');
                             });
                             
                             modal.show();
-                            console.log('Welcome modal shown');
                         }
-                    } else {
-                        console.log('Not showing welcome modal');
                     }
                     
                     // Check if we should show completion modal
                     const shouldShowCompletionModal = {{ $shouldShowCompletionModal ? 'true' : 'false' }};
                     const completionModalKey = `hasSeenCompletionModal_${userId}`;
                     const hasSeenCompletionModal = localStorage.getItem(completionModalKey) === 'true';
-                    
-                    console.log('Completion modal check:', {
-                        shouldShowCompletionModal: shouldShowCompletionModal,
-                        hasSeenCompletionModal: hasSeenCompletionModal,
-                        completionModalKey: completionModalKey
-                    });
-                    
+
                     if (shouldShowCompletionModal && !hasSeenCompletionModal) {
-                        console.log('Showing completion modal');
                         const modalElement = document.getElementById('completionModal');
-                        console.log('Modal element found:', modalElement);
                         
                         if (modalElement) {
                             const modal = new bootstrap.Modal(modalElement);
-                            console.log('Bootstrap modal created:', modal);
                             
                             // Set the flag and redirect when the modal is dismissed
                             modalElement.addEventListener('hidden.bs.modal', function() {
                                 localStorage.setItem(completionModalKey, 'true');
-                                console.log('Completion modal dismissed and flag set');
                                 
                                 // Redirect to user's personal span
                                 @if($personalSpan)
                                     const personalSpanUrl = '{{ route("spans.show", $personalSpan) }}';
-                                    console.log('Redirecting to personal span:', personalSpanUrl);
                                     window.location.href = personalSpanUrl;
                                 @else
                                     console.error('Personal span not available');

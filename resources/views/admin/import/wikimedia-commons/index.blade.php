@@ -276,15 +276,9 @@ function selectImage(image) {
         return;
     }
     
-    console.log('Loading image details for:', image);
-    console.log('Image ID being sent:', image.id);
-    console.log('CSRF token:', csrfToken);
-    
     const requestBody = {
         image_id: String(image.id)
     };
-    
-    console.log('Request body:', requestBody);
     
     fetch('/admin/import/wikimedia-commons/get-image-data', {
         method: 'POST',

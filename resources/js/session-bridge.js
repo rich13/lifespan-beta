@@ -250,7 +250,6 @@ const SessionBridge = {
     storeBridgeTokenFromServer: function(token) {
         if (token) {
             this.setBridgeToken(token);
-            console.log('Bridge token stored from server');
         }
     },
 
@@ -260,7 +259,6 @@ const SessionBridge = {
      */
     logout: function() {
         this.clearBridgeToken();
-        console.log('Bridge token cleared on logout');
     },
 
     /**

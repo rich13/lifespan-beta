@@ -202,7 +202,6 @@ document.addEventListener('DOMContentLoaded', function() {
 function initializeMiniComparisonTimeline_{{ str_replace('-', '_', $span->id) }}() {
     const spanId = '{{ $span->id }}';
     const personalSpanId = '{{ $personalSpan->id }}';
-    console.log('Initializing mini comparison timeline for spans:', spanId, personalSpanId);
     
     // Fetch timeline data for both spans
     Promise.all([
@@ -211,7 +210,6 @@ function initializeMiniComparisonTimeline_{{ str_replace('-', '_', $span->id) }}
     ])
     .then(responses => Promise.all(responses.map(r => r.json())))
     .then(([data1, data2]) => {
-        console.log('Mini timeline API response data:', data1, data2);
         renderMiniComparisonTimeline_{{ str_replace('-', '_', $span->id) }}(data1, data2);
     })
     .catch(error => {

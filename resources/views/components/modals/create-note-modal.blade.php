@@ -5,30 +5,21 @@ window.currentAnnotationSpan = {
     id: null,
     name: null
 };
-console.log('Global currentAnnotationSpan initialized');
 
 // Attach show.bs.modal handler immediately at page load
 // This runs BEFORE the IIFE, so it's ready from the start
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('Attaching show.bs.modal handler');
     const createNoteModal = document.getElementById('createNoteModal');
     if (createNoteModal) {
         createNoteModal.addEventListener('show.bs.modal', function(event) {
-            console.log('Modal show event fired');
-            console.log('Event relatedTarget:', event.relatedTarget);
-            
             // Get the button that triggered the modal
             const triggerButton = event.relatedTarget;
             if (triggerButton) {
                 const spanId = triggerButton.getAttribute('data-span-id');
                 const spanName = triggerButton.getAttribute('data-span-name');
-                console.log('Extracted from trigger button - Span ID:', spanId, 'Span Name:', spanName);
-                
                 // Store globally
                 window.currentAnnotationSpan.id = spanId;
                 window.currentAnnotationSpan.name = spanName;
-                console.log('Stored in window.currentAnnotationSpan:', window.currentAnnotationSpan);
-                
                 // Update modal title
                 const noteAboutSpan = document.getElementById('noteAboutSpan');
                 if (noteAboutSpan && spanName) {
@@ -72,7 +63,6 @@ window.toggleGroupSelection = function() {
 }
 
 window.loadUserGroups = function() {
-    console.log('Loading user groups');
     fetch('/user/groups', {
         method: 'GET',
         headers: {
@@ -82,7 +72,6 @@ window.loadUserGroups = function() {
     })
     .then(response => response.json())
     .then(data => {
-        console.log('Groups loaded:', data);
         if (data.success && data.groups) {
             window.renderGroupCheckboxes(data.groups);
         }
@@ -117,7 +106,6 @@ window.renderGroupCheckboxes = function(groups) {
 }
 
 window.submitCreateNoteForm = function() {
-    console.log('Submitting create note form');
     const form = document.getElementById('createNoteForm');
     const spinner = document.getElementById('createNoteSpinner');
     const submitBtn = document.getElementById('createNoteSubmitBtn');
@@ -127,8 +115,6 @@ window.submitCreateNoteForm = function() {
     
     // Get span_id from global storage
     const spanId = window.currentAnnotationSpan.id;
-    console.log('Span ID from global:', spanId);
-    console.log('Window currentAnnotationSpan:', window.currentAnnotationSpan);
     
     if (!spanId) {
         console.error('No span ID available!');
@@ -140,14 +126,6 @@ window.submitCreateNoteForm = function() {
     const selectedGroups = [];
     document.querySelectorAll('.group-checkbox:checked').forEach(checkbox => {
         selectedGroups.push(checkbox.value);
-    });
-    
-    console.log('Form data:', {
-        span_id: spanId,
-        description: formData.get('description'),
-        note_date: formData.get('note_date'),
-        access_level: formData.get('access_level'),
-        groups: selectedGroups
     });
     
     spinner.classList.remove('d-none');
@@ -173,7 +151,6 @@ window.submitCreateNoteForm = function() {
     })
     .then(response => response.json())
     .then(data => {
-        console.log('Response:', data);
         spinner.classList.add('d-none');
         
         if (data.success) {
@@ -210,7 +187,6 @@ window.submitCreateNoteForm = function() {
         }
     })
     .catch(error => {
-        console.log('Fetch error:', error);
         spinner.classList.add('d-none');
         submitBtn.disabled = false;
         const errorAlert = document.createElement('div');
@@ -315,17 +291,11 @@ window.submitCreateNoteForm = function() {
 <script>
 // Self-executing initialization
 (function() {
-    console.log('Create note modal IIFE running');
-    
     function initializeCreateNoteModal() {
-        console.log('Initializing submit button handler');
-        
         // Handle submit button click directly since button is outside form
         const submitBtn = document.getElementById('createNoteSubmitBtn');
         if (submitBtn) {
-            console.log('Found submit button, attaching click handler');
             submitBtn.addEventListener('click', function(e) {
-                console.log('Submit button clicked!');
                 e.preventDefault();
                 e.stopPropagation();
                 submitCreateNoteForm();

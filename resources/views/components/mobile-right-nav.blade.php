@@ -221,13 +221,8 @@
 
 <script>
 $(document).ready(function() {
-    console.log('Mobile right nav script loaded');
-    
     const searchInput = $('#mobile-global-search');
     const searchContainer = $('#mobileRightNav .global-search-container');
-    
-    console.log('Mobile search input found:', searchInput.length);
-    console.log('Mobile search container found:', searchContainer.length);
     
     let searchTimeout;
     let selectedIndex = -1;
@@ -235,7 +230,6 @@ $(document).ready(function() {
 
     // Get CSRF token from meta tag
     const csrfToken = $('meta[name="csrf-token"]').attr('content');
-    console.log('CSRF token:', csrfToken);
 
     // Create dropdown container
     const dropdown = $('<div class="dropdown-menu w-100 mt-1" id="mobile-global-search-dropdown"></div>');
@@ -244,7 +238,6 @@ $(document).ready(function() {
     // Handle input changes
     searchInput.on('input', function() {
         const query = $(this).val().trim();
-        console.log('Mobile search input:', query);
         
         // Clear previous timeout
         clearTimeout(searchTimeout);
