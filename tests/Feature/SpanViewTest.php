@@ -16,28 +16,15 @@ use Illuminate\Support\Facades\Log;
 class SpanViewTest extends TestCase
 {
 
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        // Create required span type if it doesn't exist
-        if (!DB::table('span_types')->where('type_id', 'event')->exists()) {
-            DB::table('span_types')->insert([
-                'type_id' => 'event',
-                'name' => 'Event',
-                'description' => 'A test event type',
-                'created_at' => now(),
-                'updated_at' => now()
-            ]);
-        }
-    }
+    // Note: Span types are already seeded by MinimalTestSeeder, so no need to check/create them here
 
     /**
      * Test that we can create a span with minimum required fields
      */
     public function test_can_create_minimal_span(): void
     {
-        $user = User::factory()->create();
+        // Use helper to create user without personal span (faster, not needed for this test)
+        $user = $this->createUserWithoutPersonalSpan();
         $this->actingAs($user);
 
         $span = Span::create([
@@ -66,7 +53,8 @@ class SpanViewTest extends TestCase
      */
     public function test_can_view_span_data(): void
     {
-        $user = User::factory()->create();
+        // Use helper to create user without personal span (faster, not needed for this test)
+        $user = $this->createUserWithoutPersonalSpan();
         $this->actingAs($user);
 
         // Create a person span (not place/set/photo which would redirect)
@@ -95,7 +83,8 @@ class SpanViewTest extends TestCase
      */
     public function test_404_for_missing_span(): void
     {
-        $user = User::factory()->create();
+        // Use helper to create user without personal span (faster, not needed for this test)
+        $user = $this->createUserWithoutPersonalSpan();
         $response = $this->actingAs($user)->get('/spans/999');
         $response->assertStatus(404);
     }
@@ -105,7 +94,8 @@ class SpanViewTest extends TestCase
      */
     public function test_span_view_data_is_loaded(): void
     {
-        $user = User::factory()->create();
+        // Use helper to create user without personal span (faster, not needed for this test)
+        $user = $this->createUserWithoutPersonalSpan();
         $this->actingAs($user);
 
         // Create a person span (not place/set/photo which would redirect)
@@ -128,7 +118,8 @@ class SpanViewTest extends TestCase
      */
     public function test_span_creation_page_loads_required_data(): void
     {
-        $user = User::factory()->create();
+        // Use helper to create user without personal span (faster, not needed for this test)
+        $user = $this->createUserWithoutPersonalSpan();
         
         $response = $this->actingAs($user)->get('/spans/create');
         
@@ -147,7 +138,8 @@ class SpanViewTest extends TestCase
      */
     public function test_span_requires_start_year(): void
     {
-        $user = User::factory()->create();
+        // Use helper to create user without personal span (faster, not needed for this test)
+        $user = $this->createUserWithoutPersonalSpan();
         
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('Start year is required');
@@ -164,7 +156,8 @@ class SpanViewTest extends TestCase
      */
     public function test_uuid_redirects_to_slug(): void
     {
-        $user = User::factory()->create();
+        // Use helper to create user without personal span (faster, not needed for this test)
+        $user = $this->createUserWithoutPersonalSpan();
         $span = Span::create([
             'name' => 'Test Span',
             'type_id' => 'event',
@@ -190,7 +183,8 @@ class SpanViewTest extends TestCase
      */
     public function test_slug_access_works_directly(): void
     {
-        $user = User::factory()->create();
+        // Use helper to create user without personal span (faster, not needed for this test)
+        $user = $this->createUserWithoutPersonalSpan();
         $span = Span::create([
             'name' => 'Test Span',
             'type_id' => 'event',
@@ -221,7 +215,8 @@ class SpanViewTest extends TestCase
      */
     public function test_slugs_are_unique(): void
     {
-        $user = User::factory()->create();
+        // Use helper to create user without personal span (faster, not needed for this test)
+        $user = $this->createUserWithoutPersonalSpan();
         
         // Create first span
         $span1 = Span::create([
