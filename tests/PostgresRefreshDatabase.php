@@ -22,17 +22,34 @@ trait PostgresRefreshDatabase
         \DB::disconnect();
         config(['database.default' => 'testing']);
 
-        // Only run migrate:fresh once per test class
+        // Only run migrate:fresh once per test process
         if (!RefreshDatabaseState::$migrated) {
             $this->artisan('migrate:fresh', $this->migrateFreshUsing());
             $this->app[Kernel::class]->setArtisan(null);
             RefreshDatabaseState::$migrated = true;
         }
 
-        // We use a clean isolation approach instead of transactions for Postgres
-        // This is more reliable than transactions which can cause issues with
-        // certain operations in PostgreSQL
-        $this->cleanTestTablesBeforeTest();
+        // Get the current test class name
+        $currentTestClass = get_class($this);
+
+        // Check if this test requires per-test isolation (opt-in via property)
+        $requiresPerTestIsolation = property_exists($this, 'requiresPerTestIsolation') 
+            && $this->requiresPerTestIsolation === true;
+
+        // Only clean tables if:
+        // 1. This is a new test class (different from last cleaned), OR
+        // 2. The test explicitly requires per-test isolation
+        $shouldClean = RefreshDatabaseState::$lastCleanedClass !== $currentTestClass 
+            || $requiresPerTestIsolation;
+
+        if ($shouldClean) {
+            // We use a clean isolation approach instead of transactions for Postgres
+            // This is more reliable than transactions which can cause issues with
+            // certain operations in PostgreSQL
+            $this->cleanTestTablesBeforeTest();
+            RefreshDatabaseState::$lastCleanedClass = $currentTestClass;
+            RefreshDatabaseState::$classSeeded = false; // Reset seeding flag for new class
+        }
 
         $this->afterRefreshingDatabase();
     }
@@ -89,7 +106,7 @@ trait PostgresRefreshDatabase
 }
 
 /**
- * State class to track whether migrations have been run.
+ * State class to track whether migrations have been run and which test class was last cleaned.
  */
 class RefreshDatabaseState
 {
@@ -99,4 +116,19 @@ class RefreshDatabaseState
      * @var bool
      */
     public static $migrated = false;
+
+    /**
+     * The name of the test class that last had its tables cleaned.
+     * Used to determine if we need to clean again for a new test class.
+     *
+     * @var string|null
+     */
+    public static $lastCleanedClass = null;
+
+    /**
+     * Indicates if the current test class has been seeded.
+     *
+     * @var bool
+     */
+    public static $classSeeded = false;
 } 

@@ -79,4 +79,20 @@ class UserFactory extends Factory
             'approved_at' => null,
         ]);
     }
+
+    /**
+     * Create a user without a personal span (for tests that don't need it).
+     * 
+     * This is more efficient than creating a user with a personal span when
+     * the test doesn't need it, as it avoids creating default sets and connections.
+     * 
+     * Usage:
+     *   $user = User::factory()->withoutPersonalSpan()->create();
+     */
+    public function withoutPersonalSpan(): static
+    {
+        return $this->afterCreating(function (User $user) {
+            // Do nothing - skip personal span creation
+        });
+    }
 }

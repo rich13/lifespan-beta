@@ -51,8 +51,22 @@ abstract class TestCase extends BaseTestCase
         // but it's now a no-op (duplicate of 2024_03_21_000000_add_contains_connection_type.php)
         // and is already handled by migrate:fresh, so we don't need to run it manually.
         
-        // Seed common test data
-        $this->seed(\Database\Seeders\TestDatabaseSeeder::class);
+        // Seed test data - only once per test class for performance
+        // Use minimal seeder by default (just span types), full seeder only if needed
+        $useFullSeeder = property_exists($this, 'useFullTestSeeder') 
+            && $this->useFullTestSeeder === true;
+
+        // Only seed if this test class hasn't been seeded yet
+        if (!RefreshDatabaseState::$classSeeded) {
+            if ($useFullSeeder) {
+                // Use full seeder for tests that need production-like data
+                $this->seed(\Database\Seeders\TestDatabaseSeeder::class);
+            } else {
+                // Use minimal seeder for most tests (just span types)
+                $this->seed(\Database\Seeders\MinimalTestSeeder::class);
+            }
+            RefreshDatabaseState::$classSeeded = true;
+        }
         
         // Disable CSRF token verification during tests
         Config::set('session.driver', 'array');
@@ -289,5 +303,22 @@ abstract class TestCase extends BaseTestCase
             $mock->shouldReceive('notifySuspiciousRegistration')->withAnyArgs()->andReturn(null);
             $mock->shouldReceive('notify')->andReturn(null);
         });
+    }
+
+    /**
+     * Create a user without a personal span (for tests that don't need it).
+     * 
+     * This is more efficient than User::factory()->create() when the test
+     * doesn't need the personal span, as it avoids creating default sets
+     * and connections.
+     * 
+     * @param array $attributes Optional attributes to override factory defaults
+     * @return \App\Models\User
+     */
+    protected function createUserWithoutPersonalSpan(array $attributes = []): \App\Models\User
+    {
+        return \App\Models\User::factory()
+            ->withoutPersonalSpan()
+            ->create($attributes);
     }
 }
