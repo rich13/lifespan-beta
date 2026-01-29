@@ -36,6 +36,14 @@ for arg in "$@"; do
             FILTER_VALUE="${arg#--filter=}"
             PEST_ARGS+=("--filter='${FILTER_VALUE}'")
             ;;
+        --profile)
+            # Enable profiling to identify slow tests
+            PEST_ARGS+=("--profile")
+            ;;
+        --parallel)
+            # Enable parallel test execution (requires pest-plugin-parallel)
+            PEST_ARGS+=("--parallel")
+            ;;
         --help|-h)
             # Show help for the script
             echo "Usage: $0 [options]"
@@ -45,6 +53,8 @@ for arg in "$@"; do
             echo "  --filter=<pattern> Filter which tests to run"
             echo "  --group=<name>     Only run tests from the specified group(s)"
             echo "  --stop-on-failure  Stop after first failure"
+            echo "  --profile          Show slowest tests (profiling)"
+            echo "  --parallel         Run tests in parallel (faster, but requires pest-plugin-parallel)"
             echo "  --help, -h         Show this help message"
             echo ""
             echo "All other arguments are passed directly to Pest."
