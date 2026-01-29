@@ -63,6 +63,7 @@ Thumbs.db
 /thinking/
 /uncommitted_tmp
 temp/
+/docs
 
 # New backups directory
 /backups
