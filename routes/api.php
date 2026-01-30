@@ -775,11 +775,13 @@ Route::get('/places', [\App\Http\Controllers\PlacesController::class, 'getPlaces
 Route::get('/places/{span}', [\App\Http\Controllers\PlacesController::class, 'getPlaceDetails'])->name('api.places.details');
 Route::get('/places/{span}/lived-here-card', [\App\Http\Controllers\PlacesController::class, 'getLivedHereCard'])->name('api.places.lived-here-card');
 
-// Timeline APIs - allow unauthenticated access, let the controller handle access control
-Route::get('/spans/{span}', [SpanSearchController::class, 'timeline'])->middleware('timeout.prevention');
-Route::get('/spans/{span}/object-connections', [SpanSearchController::class, 'timelineObjectConnections'])->middleware('timeout.prevention');
-Route::get('/spans/{span}/during-connections', [SpanSearchController::class, 'timelineDuringConnections'])->middleware('timeout.prevention');
-Route::post('/spans/batch-timeline', [SpanSearchController::class, 'batchTimeline'])->middleware('timeout.prevention');
+// Timeline APIs - allow unauthenticated access, let the controller handle access control.
+// Use 'web' middleware so session is always available for same-origin requests (fixes 401/403
+// when user views their own span and Sanctum does not treat the request as stateful).
+Route::get('/spans/{span}', [SpanSearchController::class, 'timeline'])->middleware(['web', 'timeout.prevention']);
+Route::get('/spans/{span}/object-connections', [SpanSearchController::class, 'timelineObjectConnections'])->middleware(['web', 'timeout.prevention']);
+Route::get('/spans/{span}/during-connections', [SpanSearchController::class, 'timelineDuringConnections'])->middleware(['web', 'timeout.prevention']);
+Route::post('/spans/batch-timeline', [SpanSearchController::class, 'batchTimeline'])->middleware(['web', 'timeout.prevention']);
 
 // Temporal relationship API
 Route::get('/spans/{span}/temporal', [SpanSearchController::class, 'temporal']);

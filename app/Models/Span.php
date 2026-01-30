@@ -1886,6 +1886,9 @@ class Span extends Model
      */
     public function clearTimelineCaches(): void
     {
+        // Clear span show page data cache
+        Cache::forget("span_show_data_{$this->id}");
+
         // Clear main timeline cache
         Cache::forget("timeline_{$this->id}_guest");
         Cache::forget("timeline_object_{$this->id}_guest");

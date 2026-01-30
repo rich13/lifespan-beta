@@ -256,6 +256,24 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
             Route::post('/{span}/improve/preview', [SpanController::class, 'previewImprovement'])->name('spans.improve.preview')->middleware('timeout.prevention');
             Route::post('/{span}/improve', [SpanController::class, 'improveWithAi'])->name('spans.improve')->middleware('timeout.prevention');
             Route::put('/{span}', [SpanController::class, 'update'])->name('spans.update');
+            Route::put('/{span}/notes', function (Request $request, \App\Models\Span $span) {
+                $user = auth()->user();
+                if (!$user || !($span->isEditableBy($user) || $user->is_admin || $span->owner_id === $user->id)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized'
+                    ], 403);
+                }
+                $request->validate([
+                    'notes' => 'nullable|string'
+                ]);
+                $span->update(['notes' => $request->notes]);
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Notes updated successfully',
+                    'notes' => $span->notes
+                ]);
+            })->name('spans.notes.update');
             Route::delete('/{span}', [SpanController::class, 'destroy'])->name('spans.destroy');
             Route::get('/{span}/compare', [SpanController::class, 'compare'])->name('spans.compare');
             

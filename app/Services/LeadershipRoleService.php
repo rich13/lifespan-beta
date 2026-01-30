@@ -109,6 +109,138 @@ class LeadershipRoleService
     }
 
     /**
+     * Get all holders of a role whose term overlapped a period, ordered by start of term (earliest first).
+     * Used for year or month precision to show "PM 1 → PM 2" when there was a handover.
+     *
+     * @param string $roleName
+     * @param Carbon $periodStart Start of period (inclusive)
+     * @param Carbon $periodEnd End of period (inclusive)
+     * @return array<int, Span> Ordered list of persons who held the role during the period
+     */
+    public function getRoleHoldersInPeriod(string $roleName, Carbon $periodStart, Carbon $periodEnd): array
+    {
+        $candidates = collect();
+
+        // has_role connections
+        $roleSpan = Span::where('type_id', 'role')
+            ->where('name', $roleName)
+            ->first();
+
+        if ($roleSpan) {
+            $connections = Connection::where('type_id', 'has_role')
+                ->where('child_id', $roleSpan->id)
+                ->whereHas('parent', function ($query) {
+                    $query->where('type_id', 'person');
+                })
+                ->with(['parent', 'connectionSpan'])
+                ->get();
+
+            foreach ($connections as $connection) {
+                if ($this->connectionOverlapsPeriod($connection, $periodStart, $periodEnd)) {
+                    $person = $connection->parent;
+                    if ($person && $person->isAccessibleBy(auth()->user())) {
+                        $start = $this->getConnectionStartDate($connection);
+                        $candidates->push(['person' => $person, 'start' => $start]);
+                    }
+                }
+            }
+        }
+
+        // employment fallback with role in metadata
+        $employmentConnections = Connection::where('type_id', 'employment')
+            ->whereHas('parent', function ($query) {
+                $query->where('type_id', 'person');
+            })
+            ->whereHas('connectionSpan', function ($query) use ($periodEnd) {
+                $query->where(function ($q) use ($periodEnd) {
+                    $q->whereNull('start_year')->orWhere('start_year', '<=', $periodEnd->year);
+                });
+            })
+            ->with(['parent', 'connectionSpan'])
+            ->get();
+
+        foreach ($employmentConnections as $connection) {
+            $metadata = $connection->connectionSpan->metadata ?? [];
+            $connectionRole = $metadata['role'] ?? $metadata['position'] ?? null;
+            if ($connectionRole !== $roleName) {
+                continue;
+            }
+            if (!$this->connectionOverlapsPeriod($connection, $periodStart, $periodEnd)) {
+                continue;
+            }
+            $person = $connection->parent;
+            if ($person && $person->isAccessibleBy(auth()->user())) {
+                $start = $this->getConnectionStartDate($connection);
+                $candidates->push(['person' => $person, 'start' => $start]);
+            }
+        }
+
+        // Sort by start of term, then unique by person (first occurrence = first in office during period)
+        $sorted = $candidates->sortBy('start')->values();
+        $seen = [];
+        $result = [];
+        foreach ($sorted as $item) {
+            $id = $item['person']->id;
+            if (!isset($seen[$id])) {
+                $seen[$id] = true;
+                $result[] = $item['person'];
+            }
+        }
+        return $result;
+    }
+
+    /**
+     * Get leadership (PM and President) for a period. Returns arrays of holders in chronological order.
+     *
+     * @param Carbon $periodStart
+     * @param Carbon $periodEnd
+     * @return array{prime_minister: array<int, Span>, president: array<int, Span>}
+     */
+    public function getLeadershipInPeriod(Carbon $periodStart, Carbon $periodEnd): array
+    {
+        return [
+            'prime_minister' => $this->getRoleHoldersInPeriod('Prime Minister of the United Kingdom', $periodStart, $periodEnd),
+            'president' => $this->getRoleHoldersInPeriod('President of the United States', $periodStart, $periodEnd),
+        ];
+    }
+
+    /**
+     * Check if a connection's term overlaps a period [periodStart, periodEnd].
+     */
+    private function connectionOverlapsPeriod(Connection $connection, Carbon $periodStart, Carbon $periodEnd): bool
+    {
+        $connectionSpan = $connection->connectionSpan;
+        if (!$connectionSpan) {
+            return false;
+        }
+        $startRange = $connectionSpan->getStartDateRange();
+        $endRange = $connectionSpan->getEndDateRange();
+        $connStart = $startRange[0] ?? null;
+        $connEnd = $endRange[1] ?? null;
+        if (!$connStart) {
+            return false;
+        }
+        if ($connStart > $periodEnd) {
+            return false;
+        }
+        if ($connEnd !== null && $connEnd < $periodStart) {
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Get the start date of a connection's term for ordering.
+     */
+    private function getConnectionStartDate(Connection $connection): Carbon
+    {
+        $connectionSpan = $connection->connectionSpan;
+        $startRange = $connectionSpan ? $connectionSpan->getStartDateRange() : [null, null];
+        $start = $startRange[0];
+        return $start ?? Carbon::create(1, 1, 1, 0, 0, 0);
+    }
+
+    /**
      * Check if a connection is active at a specific date
      * Uses the same logic as SpanController::isConnectionOngoingAtDate
      */

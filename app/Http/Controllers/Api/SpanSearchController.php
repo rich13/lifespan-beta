@@ -285,8 +285,8 @@ class SpanSearchController extends Controller
 
         // Cache key includes user ID for proper access control
         $cacheKey = "timeline_{$span->id}_" . ($user?->id ?? 'guest');
-        
-        return Cache::remember($cacheKey, 300, function () use ($span, $user) {
+
+        $data = Cache::remember($cacheKey, 300, function () use ($span, $user) {
             // Get all connections (not just accessible ones) for timeline display
             $connections = $span->connectionsAsSubject()
                 ->with([
@@ -358,6 +358,8 @@ class SpanSearchController extends Controller
                 'connections' => $connections
             ];
         });
+
+        return response()->json($data)->header('Cache-Control', 'private, max-age=300');
     }
 
     /**
@@ -430,8 +432,8 @@ class SpanSearchController extends Controller
 
         // Cache key includes user ID for proper access control
         $cacheKey = "timeline_object_{$span->id}_" . ($user?->id ?? 'guest');
-        
-        return Cache::remember($cacheKey, 300, function () use ($span) {
+
+        $data = Cache::remember($cacheKey, 300, function () use ($span) {
             // Optimized query with eager loading and joins - with access control
             $connections = $span->connectionsAsObjectWithAccess()
                 ->where('type_id', '!=', 'during')
@@ -479,6 +481,8 @@ class SpanSearchController extends Controller
                 'connections' => $connections
             ];
         });
+
+        return response()->json($data)->header('Cache-Control', 'private, max-age=300');
     }
 
     /**
@@ -494,8 +498,8 @@ class SpanSearchController extends Controller
 
         // Cache key includes user ID for proper access control
         $cacheKey = "timeline_during_{$span->id}_" . ($user?->id ?? 'guest');
-        
-        return Cache::remember($cacheKey, 300, function () use ($span) {
+
+        $data = Cache::remember($cacheKey, 300, function () use ($span) {
             // Optimized query with eager loading and joins - with access control
             $connections = $span->connectionsAsObjectWithAccess()
                 ->where('type_id', 'during')
@@ -543,6 +547,8 @@ class SpanSearchController extends Controller
                 'connections' => $connections
             ];
         });
+
+        return response()->json($data)->header('Cache-Control', 'private, max-age=300');
     }
 
     /**

@@ -779,26 +779,19 @@ class SpanController extends Controller
     /**
      * Display the specified span.
      */
-    public function show(Request $request, Span $subject): View|\Illuminate\Http\RedirectResponse
+    public function show(Request $request, Span $subject): View|\Illuminate\Http\RedirectResponse|\Illuminate\Http\Response
     {
         try {
-            // Basic debug info
-            \Illuminate\Support\Facades\Log::info('Span Show Request', [
-                'route_param' => $request->segment(2),
-                'span_id' => $subject->id,
-                'span_type' => $subject->type_id,
-                'is_uuid' => Str::isUuid($request->segment(2)),
-                'slug' => $subject->slug
-            ]);
-            
             // If we're accessing via UUID and a slug exists, redirect to slug URL for consistency
             $routeParam = $request->segment(2); // Get the actual URL segment
-            
+
             if (Str::isUuid($routeParam) && $subject->slug) {
-                \Illuminate\Support\Facades\Log::info('Redirecting to slug URL', [
-                    'from' => $routeParam,
-                    'to' => $subject->slug
-                ]);
+                if (config('app.debug')) {
+                    Log::debug('Span show: redirecting to slug URL', [
+                        'from' => $routeParam,
+                        'to' => $subject->slug
+                    ]);
+                }
                 
                 return redirect()
                     ->route('spans.show', ['subject' => $subject->slug], 301)
@@ -807,11 +800,13 @@ class SpanController extends Controller
 
             // If this is a set span, redirect to the sets route
             if ($subject->type_id === 'set') {
-                \Illuminate\Support\Facades\Log::info('Redirecting set span to sets route', [
-                    'span_id' => $subject->id,
-                    'span_name' => $subject->name,
-                    'subtype' => $subject->subtype
-                ]);
+                if (config('app.debug')) {
+                    Log::debug('Span show: redirecting set to sets route', [
+                        'span_id' => $subject->id,
+                        'span_name' => $subject->name,
+                        'subtype' => $subject->subtype
+                    ]);
+                }
                 
                 return redirect()
                     ->route('sets.show', ['set' => $subject], 301)
@@ -821,10 +816,12 @@ class SpanController extends Controller
             // If this is a photo span, redirect to the photos route
             // Redirect place spans to /places route
             if ($subject->type_id === 'place') {
-                \Illuminate\Support\Facades\Log::info('Redirecting place span to places route', [
-                    'span_id' => $subject->id,
-                    'span_name' => $subject->name
-                ]);
+                if (config('app.debug')) {
+                    Log::debug('Span show: redirecting place to places route', [
+                        'span_id' => $subject->id,
+                        'span_name' => $subject->name
+                    ]);
+                }
 
                 return redirect()
                     ->route('places.show', ['span' => $subject], 301)
@@ -832,11 +829,13 @@ class SpanController extends Controller
             }
 
             if ($subject->type_id === 'thing' && ($subject->metadata['subtype'] ?? null) === 'photo') {
-                \Illuminate\Support\Facades\Log::info('Redirecting photo span to photos route', [
-                    'span_id' => $subject->id,
-                    'span_name' => $subject->name,
-                    'subtype' => $subject->metadata['subtype'] ?? null
-                ]);
+                if (config('app.debug')) {
+                    Log::debug('Span show: redirecting photo to photos route', [
+                        'span_id' => $subject->id,
+                        'span_name' => $subject->name,
+                        'subtype' => $subject->metadata['subtype'] ?? null
+                    ]);
+                }
 
                 return redirect()
                     ->route('photos.show', ['photo' => $subject], 301)
@@ -892,13 +891,30 @@ class SpanController extends Controller
                 ]);
             }
 
-            // Eager load common relationships to prevent N+1 queries
-            $subject->load([
-                'type', // Used in many components
-                'owner', // Used in access checks and displays
-                'updater', // Used in status displays
-            ]);
-            
+            // Cache span show data (eager loads + Desert Island Discs) for 5 minutes
+            $spanShowCacheKey = 'span_show_data_' . $subject->id;
+            $cached = Cache::remember($spanShowCacheKey, 300, function () use ($subject) {
+                $subject->load([
+                    'type',
+                    'owner',
+                    'updater',
+                ]);
+                $desertIslandDiscsSet = null;
+                if ($subject->type_id === 'person') {
+                    try {
+                        $desertIslandDiscsSet = Span::getDesertIslandDiscsSet($subject);
+                    } catch (\Exception $e) {
+                        Log::warning('Failed to get Desert Island Discs set for person', [
+                            'person_id' => $subject->id,
+                            'error' => $e->getMessage()
+                        ]);
+                    }
+                }
+                return ['span' => $subject, 'desertIslandDiscsSet' => $desertIslandDiscsSet];
+            });
+            $subject = $cached['span'];
+            $desertIslandDiscsSet = $cached['desertIslandDiscsSet'];
+
             // Additional validation: ensure the type relationship is correct
             if ($subject->type && $subject->type->type_id !== $subject->type_id) {
                 Log::channel('spans')->warning('Type relationship mismatch detected', [
@@ -910,21 +926,39 @@ class SpanController extends Controller
                 $subject->load('type');
             }
 
-            // Check if this is a person and they have a Desert Island Discs set
-            $desertIslandDiscsSet = null;
-            if ($subject->type_id === 'person') {
-                try {
-                    $desertIslandDiscsSet = Span::getDesertIslandDiscsSet($subject);
-                } catch (\Exception $e) {
-                    // Log the error but don't fail the page
-                    Log::warning('Failed to get Desert Island Discs set for person', [
-                        'person_id' => $subject->id,
-                        'error' => $e->getMessage()
+            $span = $subject; // For view compatibility
+
+            // HTTP conditional requests for guest + public span: return 304 if unchanged
+            if (!Auth::check() && $subject->access_level === 'public' && $subject->updated_at) {
+                $etag = '"' . md5($subject->id . $subject->updated_at->timestamp) . '"';
+                $lastModified = $subject->updated_at->format('D, d M Y H:i:s \G\M\T');
+
+                $requestEtag = trim(str_replace('W/', '', $request->header('If-None-Match', '')), ' "');
+                if ($requestEtag !== '' && $requestEtag === trim($etag, '"')) {
+                    return response('', 304)->withHeaders([
+                        'ETag' => $etag,
+                        'Last-Modified' => $lastModified,
                     ]);
                 }
+
+                $ifModifiedSince = $request->header('If-Modified-Since');
+                if ($ifModifiedSince) {
+                    $since = \Carbon\Carbon::parse($ifModifiedSince);
+                    if ($subject->updated_at->lte($since)) {
+                        return response('', 304)->withHeaders([
+                            'ETag' => $etag,
+                            'Last-Modified' => $lastModified,
+                        ]);
+                    }
+                }
+
+                $response = response()->view('spans.show', compact('span', 'desertIslandDiscsSet'));
+                $response->header('ETag', $etag);
+                $response->header('Last-Modified', $lastModified);
+                $response->header('Cache-Control', 'private, max-age=60');
+                return $response;
             }
 
-            $span = $subject; // For view compatibility
             return view('spans.show', compact('span', 'desertIslandDiscsSet'));
         } catch (AuthorizationException $e) {
             // Return a 403 forbidden view
@@ -2083,13 +2117,83 @@ class SpanController extends Controller
         // Wikipedia data is now loaded asynchronously via AJAX
         $wikipediaData = [];
 
-        // Get leadership roles at this date (only for day precision)
+        // Get leadership roles and display date for the current precision (day, month, or year)
         $leadership = null;
         $displayDate = null;
+        $familyAgesAtDate = collect();
+        $leadershipService = app(\App\Services\LeadershipRoleService::class);
+
         if ($precision === 'day' && $month !== null && $day !== null) {
-            $leadershipService = app(\App\Services\LeadershipRoleService::class);
             $leadership = $leadershipService->getLeadershipAtDate($year, $month, $day);
             $displayDate = $this->formatDateForDisplay($year, $month, $day);
+        } elseif ($precision === 'month' && $month !== null) {
+            $periodStart = \Carbon\Carbon::createFromDate($year, $month, 1)->startOfDay();
+            $periodEnd = \Carbon\Carbon::createFromDate($year, $month, 1)->endOfMonth()->endOfDay();
+            $leadership = $leadershipService->getLeadershipInPeriod($periodStart, $periodEnd);
+            $displayDate = $periodStart->format('F Y');
+        } elseif ($precision === 'year') {
+            $periodStart = \Carbon\Carbon::createFromDate($year, 1, 1)->startOfDay();
+            $periodEnd = \Carbon\Carbon::createFromDate($year, 12, 31)->endOfDay();
+            $leadership = $leadershipService->getLeadershipInPeriod($periodStart, $periodEnd);
+            $displayDate = (string) $year;
+        }
+
+        if ($precision === 'day' && $month !== null && $day !== null) {
+            // Family members alive at this date, grouped as on the span family card (signed-in user only)
+            $user = Auth::user();
+            if ($user && $user->personalSpan) {
+                $personalSpan = $user->personalSpan;
+                $targetDate = \Carbon\Carbon::createFromDate($year, $month, $day)->startOfDay();
+                $addAliveMembersWithAge = function ($spans) use ($targetDate) {
+                    $result = collect();
+                    foreach ($spans as $member) {
+                        if ($member->type_id !== 'person' || $member->start_year === null) {
+                            continue;
+                        }
+                        $birthDate = \Carbon\Carbon::create(
+                            $member->start_year,
+                            $member->start_month ?? 1,
+                            $member->start_day ?? 1
+                        )->startOfDay();
+                        if ($targetDate->lt($birthDate)) {
+                            continue;
+                        }
+                        $endDate = null;
+                        if ($member->end_year !== null) {
+                            $endDate = \Carbon\Carbon::create(
+                                $member->end_year,
+                                $member->end_month ?? 12,
+                                $member->end_day ?? 31
+                            )->startOfDay();
+                        }
+                        if ($endDate !== null && !$targetDate->lte($endDate)) {
+                            continue;
+                        }
+                        $result->push(['span' => $member, 'age' => $birthDate->diffInYears($targetDate)]);
+                    }
+                    return $result->sortByDesc('age')->values();
+                };
+                $ancestors = $personalSpan->ancestors(3);
+                $descendants = $personalSpan->descendants(2);
+                $groups = [
+                    ['title' => 'Great-Grandparents', 'members' => $addAliveMembersWithAge($ancestors->where('generation', 3)->pluck('span'))],
+                    ['title' => 'Grandparents', 'members' => $addAliveMembersWithAge($ancestors->where('generation', 2)->pluck('span'))],
+                    ['title' => 'Parents', 'members' => $addAliveMembersWithAge($ancestors->where('generation', 1)->pluck('span'))],
+                    ['title' => 'Uncles & Aunts', 'members' => $addAliveMembersWithAge($personalSpan->unclesAndAunts())],
+                    ['title' => 'Siblings', 'members' => $addAliveMembersWithAge($personalSpan->siblings())],
+                    ['title' => 'Cousins', 'members' => $addAliveMembersWithAge($personalSpan->cousins())],
+                    ['title' => 'You', 'members' => $addAliveMembersWithAge(collect([$personalSpan]))],
+                    ['title' => 'Children', 'members' => $addAliveMembersWithAge($descendants->where('generation', 1)->pluck('span'))],
+                    ['title' => 'Nephews & Nieces', 'members' => $addAliveMembersWithAge($personalSpan->nephewsAndNieces())],
+                    ['title' => 'Extra Nephews & Nieces', 'members' => $addAliveMembersWithAge($personalSpan->extraNephewsAndNieces())],
+                    ['title' => 'Grandchildren', 'members' => $addAliveMembersWithAge($descendants->where('generation', 2)->pluck('span'))],
+                ];
+                foreach ($groups as $group) {
+                    if ($group['members']->isNotEmpty()) {
+                        $familyAgesAtDate->push($group);
+                    }
+                }
+            }
         }
 
         return view('spans.date-explore', compact(
@@ -2112,7 +2216,8 @@ class SpanController extends Controller
                 'month',
                 'day',
                 'leadership',
-                'displayDate'
+                'displayDate',
+                'familyAgesAtDate'
             ));
     }
 
