@@ -165,6 +165,17 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
                 min-height: 100vh;
             }
             
+            /* Mobile: sidebar is hidden (offcanvas), so no left margin */
+            @media (max-width: 767.98px) {
+                .main-content,
+                .main-content.collapsed {
+                    margin-left: 0 !important;
+                }
+                .sidebar-toggle-btn {
+                    display: none !important;
+                }
+            }
+            
             @media (min-width: 992px) {
                 .main-content {
                     margin-left: var(--sidebar-width-lg);
