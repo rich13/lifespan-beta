@@ -720,5 +720,9 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
             });
         </script>
         @endauth
+        
+        <!-- GoatCounter Analytics (privacy-preserving) -->
+        <script data-goatcounter="https://ls-proto.goatcounter.com/count"
+                async src="//gc.zgo.at/count.js"></script>
     </body>
 </html>

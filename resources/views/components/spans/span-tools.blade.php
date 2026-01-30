@@ -17,7 +17,7 @@
                     <i class="bi bi-code-square me-1"></i> Edit
                 </a>
             @else
-                <a href="{{ route('spans.spanner', $span) }}" 
+                <a href="{{ route('spans.edit', $span) }}" 
                    class="btn btn-sm btn-outline-primary" 
                    id="edit-{{ $idPrefix }}-btn" 
                    data-bs-toggle="tooltip" 

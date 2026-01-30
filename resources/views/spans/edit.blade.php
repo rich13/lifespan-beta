@@ -25,9 +25,8 @@
     @method('PUT')
     
     <div class="row">
-        <div class="col-md-8">
+        <div class="col-md-4">
             <x-spans.forms.basic-info :span="$span" :span-types="$spanTypes" />
-            <x-spans.forms.dates :span="$span" />
             <x-spans.forms.metadata 
                 :span="$span" 
                 :span-type="$spanType" 
@@ -37,13 +36,12 @@
         </div>
 
         <div class="col-md-4">
+            <x-spans.forms.dates :span="$span" />
+        </div>
+
+        <div class="col-md-4">
             <x-spans.forms.status :span="$span" />
             <x-spans.forms.sources :span="$span" />
-            <x-spans.forms.connections 
-                :span="$span" 
-                :connection-types="$connectionTypes" 
-                :available-spans="$availableSpans" 
-            />
         </div>
     </div>
 </form>

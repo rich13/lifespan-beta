@@ -1,48 +1,10 @@
 @extends('layouts.app')
 
 @section('page_title')
-    @php
-        $breadcrumbItems = [
-            [
-                'text' => $year,
-                'url' => route('date.explore', ['date' => $year]),
-                'icon' => 'calendar',
-                'icon_category' => 'action'
-            ]
-        ];
-        
-        if ($precision === 'month' || $precision === 'day') {
-            $breadcrumbItems[] = [
-                'text' => \Carbon\Carbon::createFromDate($year, $month, 1)->format('F'),
-                'url' => route('date.explore', ['date' => $year . '-' . str_pad($month, 2, '0', STR_PAD_LEFT)]),
-                'icon' => 'calendar',
-                'icon_category' => 'action'
-            ];
-        }
-        
-        if ($precision === 'day') {
-            $breadcrumbItems[] = [
-                'text' => \Carbon\Carbon::createFromDate($year, $month, $day)->format('j'),
-                'icon' => 'calendar',
-                'icon_category' => 'action'
-            ];
-        }
-    @endphp
-    
-    <x-breadcrumb :items="$breadcrumbItems" />
+    <x-date-explore-header :year="$year" :month="$month ?? 1" :day="$day ?? 1" :precision="$precision" />
 @endsection
 
-@section('page_filters')
-    <x-spans.filters 
-        :route="route('date.explore', ['date' => $date])"
-        :selected-types="[]"
-        :show-search="false"
-        :show-type-filters="true"
-        :show-permission-mode="false"
-        :show-visibility="false"
-        :show-state="false"
-    />
-@endsection
+
 
 @section('content')
 <div class="container-fluid">
@@ -52,12 +14,17 @@
         :user="auth()->user()"
         :precision="$precision" />
 
-    <!-- Leadership at Date (only for day precision) -->
-    @if($precision === 'day' && $displayDate)
+    <!-- Leadership (year, month, or day) and family (day only) -->
+    @if($displayDate)
         <div class="row mb-4">
-            <div class="col-12">
-                <x-spans.partials.leadership-at-date :leadership="$leadership ?? ['prime_minister' => null, 'president' => null]" :displayDate="$displayDate" />
+            <div class="{{ ($precision === 'day' && Auth::check()) ? 'col-md-6' : 'col-12' }}">
+                <x-spans.partials.leadership-at-date :leadership="$leadership ?? ['prime_minister' => null, 'president' => null]" :displayDate="$displayDate" :precision="$precision" />
             </div>
+            @if($precision === 'day' && Auth::check())
+                <div class="col-md-6">
+                    <x-spans.partials.family-ages-at-date :displayDate="$displayDate" :familyAgesAtDate="$familyAgesAtDate ?? collect()" />
+                </div>
+            @endif
         </div>
     @endif
 

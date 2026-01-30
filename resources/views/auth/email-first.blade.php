@@ -6,7 +6,8 @@
         <div class="col-md-8 col-lg-6">
             <div class="card">
                 <div class="card-body">
-                    <h2 class="card-title text-center mb-4">Welcome</h2>
+                    <h2 class="card-title text-center mb-2">Welcome</h2>
+                    <p class="text-center text-muted small mb-4">Enter your email to sign in or register...</p>
                     
                     @php
                         $emailError = $errors->has('email') ? $errors->first('email') : null;

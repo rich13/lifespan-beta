@@ -19,6 +19,10 @@ if ($isTimeTravel) {
     $containerClass = str_replace('bg-light', 'bg-warning', $containerClass);
     $containerClass = str_replace('bg-secondary', 'bg-warning', $containerClass);
 }
+// Allow date dropdown menus to overflow on date explore page
+if (request()->routeIs('date.explore')) {
+    $containerClass = $containerClass . ' overflow-visible';
+}
 @endphp
 
 <!-- Top Navigation Container -->

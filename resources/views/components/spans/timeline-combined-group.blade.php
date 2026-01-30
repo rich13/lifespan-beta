@@ -96,13 +96,41 @@ function initializeCombinedTimeline_{{ str_replace('-', '_', $span->id) }}() {
     console.log('Initializing combined timeline for span:', spanId);
     console.log('Current user span ID:', currentUserSpanId);
     
+    // Helper: fetch JSON or return safe fallback on error (401/403/network)
+    function fetchJsonOrFallback(url, fallback) {
+        return fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+            .then(function(response) {
+                if (!response.ok) {
+                    return fallback;
+                }
+                return response.json();
+            })
+            .catch(function() {
+                return fallback;
+            });
+    }
+    
+    const spanFallback = { span: { id: spanId, name: @json($span->name ?? 'Unknown'), start_year: null, end_year: null }, connections: [] };
+    const connectionsFallback = { span: { id: spanId, name: @json($span->name ?? 'Unknown'), start_year: null, end_year: null }, connections: [] };
+    
     // Fetch both the current span's timeline and object connections
     Promise.all([
-        fetch(`/api/spans/${spanId}`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }).then(response => response.json()),
-        fetch(`/api/spans/${spanId}/object-connections`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }).then(response => response.json()),
-        fetch(`/api/spans/${spanId}/during-connections`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }).then(response => response.json())
+        fetchJsonOrFallback(`/api/spans/${spanId}`, spanFallback),
+        fetchJsonOrFallback(`/api/spans/${spanId}/object-connections`, connectionsFallback),
+        fetchJsonOrFallback(`/api/spans/${spanId}/during-connections`, connectionsFallback)
     ])
     .then(([currentSpanData, objectConnectionsData, duringConnectionsData]) => {
+        // Ensure we always have arrays (API may return 401/403 with different shape)
+        if (!objectConnectionsData || !Array.isArray(objectConnectionsData.connections)) {
+            objectConnectionsData = connectionsFallback;
+        }
+        if (!duringConnectionsData || !Array.isArray(duringConnectionsData.connections)) {
+            duringConnectionsData = connectionsFallback;
+        }
+        if (!currentSpanData || !currentSpanData.span) {
+            currentSpanData = spanFallback;
+        }
+        
         console.log('All object connections:', objectConnectionsData.connections);
         console.log('Connection details:', objectConnectionsData.connections.map(conn => ({
             type_id: conn.type_id,

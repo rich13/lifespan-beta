@@ -1,5 +1,9 @@
 @props(['showBreadcrumb' => true, 'title' => null])
 
+@php
+    $isDateExplore = request()->routeIs('date.explore');
+@endphp
+
 <!-- Page Title Section -->
 <div class="d-flex align-items-center me-3">
     <div class="d-flex flex-column">
@@ -8,13 +12,20 @@
                 <x-admin-breadcrumb />
             </div>
         @endif
-        
-        <h4 class="mb-0 fw-bold">
-            @if($title)
-                {{ $title }}
-            @else
+
+        @if($isDateExplore)
+            {{-- Date explore uses dropdowns; render outside h4 so clicks work --}}
+            <div class="mb-0 fw-bold date-explore-title-wrapper">
                 @yield('page_title')
-            @endif
-        </h4>
+            </div>
+        @else
+            <h4 class="mb-0 fw-bold">
+                @if($title)
+                    {{ $title }}
+                @else
+                    @yield('page_title')
+                @endif
+            </h4>
+        @endif
     </div>
 </div> 

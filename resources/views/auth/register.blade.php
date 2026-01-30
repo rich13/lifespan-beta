@@ -6,7 +6,10 @@
         <div class="col-md-8 col-lg-6">
             <div class="card">
                 <div class="card-body">
-                    <h2 class="card-title text-center mb-4">Create Account</h2>
+                    <h2 class="card-title text-center mb-2">Create Account</h2>
+                    <p class="text-center text-muted small mb-4">As this is a prototype, you'll need to be approved before you can sign in.</p>
+
+
                     <form method="POST" action="{{ route('register.store') }}">
                         @csrf
                         <input type="hidden" name="email" value="{{ $email ?? old('email') }}">

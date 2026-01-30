@@ -83,10 +83,14 @@
                 <!-- Tab Content -->
                 <div class="tab-content card-body p-0" style="height: calc(100vh - 120px);">
                     <!-- Notes Tab -->
+                    @php
+                        $canEditNotes = auth()->check() && $span->isEditableBy(auth()->user());
+                    @endphp
                     <div class="tab-pane fade {{ $defaultActiveTab === 'notes' ? 'show active' : '' }} h-100" id="notes-pane" role="tabpanel" aria-labelledby="notes-tab">
                         <div class="d-flex justify-content-between align-items-center p-3 border-bottom">
                             <h6 class="mb-0">Notes about {{ $span->name }}</h6>
                             <div class="d-flex gap-2 align-items-center">
+                                @if($canEditNotes)
                                 <button type="button" class="btn btn-sm btn-outline-secondary" id="toggle-notes-mode-btn" title="Toggle between view and edit mode">
                                     <i class="bi bi-pencil" id="toggle-notes-mode-icon"></i>
                                     <span id="toggle-notes-mode-text">Edit</span>
@@ -95,6 +99,7 @@
                                     <i class="bi bi-save me-1"></i>
                                     Save
                                 </button>
+                                @endif
                             </div>
                         </div>
                         <div style="height: calc(100vh - 180px);">
@@ -1128,7 +1133,7 @@ $(document).ready(function() {
         $saveNotesBtn.prop('disabled', true).html('<i class="bi bi-hourglass-split me-1"></i> Saving...');
         
         $.ajax({
-            url: '{{ route("admin.spans.notes.update", $span) }}',
+            url: '{{ route("spans.notes.update", $span) }}',
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',

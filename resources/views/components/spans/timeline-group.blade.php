@@ -121,13 +121,40 @@ function initializeGroupTimeline_{{ str_replace('-', '_', $containerId) }}() {
             return;
         }
 
+        // Helper: fetch JSON or return safe fallback on error (401/403/network)
+        function fetchJsonOrFallback(url, fallback) {
+            return fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+                .then(function(response) {
+                    if (!response.ok) {
+                        return fallback;
+                    }
+                    return response.json();
+                })
+                .catch(function() {
+                    return fallback;
+                });
+        }
+        const spanFallback = { span: { id: spanId, name: @json($span ? $span->name : 'Unknown'), start_year: null, end_year: null }, connections: [] };
+        const connectionsFallback = { span: { id: spanId, name: @json($span ? $span->name : 'Unknown'), start_year: null, end_year: null }, connections: [] };
+        
         // Copy the original initialization logic here
         Promise.all([
-            fetch(`/api/spans/${spanId}`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }).then(response => response.json()),
-            fetch(`/api/spans/${spanId}/object-connections`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }).then(response => response.json()),
-            fetch(`/api/spans/${spanId}/during-connections`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }).then(response => response.json())
+            fetchJsonOrFallback(`/api/spans/${spanId}`, spanFallback),
+            fetchJsonOrFallback(`/api/spans/${spanId}/object-connections`, connectionsFallback),
+            fetchJsonOrFallback(`/api/spans/${spanId}/during-connections`, connectionsFallback)
         ])
         .then(([currentSpanData, objectConnectionsData, duringConnectionsData]) => {
+            // Ensure we always have arrays (API may return 401/403 with different shape)
+            if (!objectConnectionsData || !Array.isArray(objectConnectionsData.connections)) {
+                objectConnectionsData = connectionsFallback;
+            }
+            if (!duringConnectionsData || !Array.isArray(duringConnectionsData.connections)) {
+                duringConnectionsData = connectionsFallback;
+            }
+            if (!currentSpanData || !currentSpanData.span) {
+                currentSpanData = spanFallback;
+            }
+            
             console.log('Fetched data for span:', spanId, {
                 objectConnectionsData: objectConnectionsData,
                 objectConnectionsCount: objectConnectionsData.connections?.length || 0,
