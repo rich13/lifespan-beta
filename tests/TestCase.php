@@ -17,9 +17,23 @@ abstract class TestCase extends BaseTestCase
     use CreatesApplication, PostgresRefreshDatabase;
 
     /**
-     * The name of the test database.
+     * The base name of the test database (without parallel token suffix).
      */
     protected string $testDatabaseName = 'lifespan_beta_testing';
+
+    /**
+     * Get the effective test database name (with parallel token when running in parallel).
+     * Matches Laravel's pattern: {database}_test_{token} so each worker has its own DB.
+     */
+    protected function getTestDatabaseName(): string
+    {
+        $token = $_SERVER['TEST_TOKEN'] ?? getenv('TEST_TOKEN');
+        if (! empty($token) && ! empty($_SERVER['LARAVEL_PARALLEL_TESTING'] ?? getenv('LARAVEL_PARALLEL_TESTING'))) {
+            return $this->testDatabaseName . '_test_' . $token;
+        }
+
+        return $this->testDatabaseName;
+    }
 
     /**
      * Setup the test environment.
@@ -92,11 +106,13 @@ abstract class TestCase extends BaseTestCase
         putenv('APP_ENV=testing');
         $_ENV['APP_ENV'] = 'testing';
         $_SERVER['APP_ENV'] = 'testing';
-        
-        // Ensure DB_DATABASE is set to test database
-        putenv("DB_DATABASE={$this->testDatabaseName}");
-        $_ENV['DB_DATABASE'] = $this->testDatabaseName;
-        $_SERVER['DB_DATABASE'] = $this->testDatabaseName;
+
+        $database = $this->getTestDatabaseName();
+
+        // Ensure DB_DATABASE is set to test database (per-process when running in parallel)
+        putenv("DB_DATABASE={$database}");
+        $_ENV['DB_DATABASE'] = $database;
+        $_SERVER['DB_DATABASE'] = $database;
     }
 
     /**
@@ -106,9 +122,11 @@ abstract class TestCase extends BaseTestCase
     {
         // Set default connection to testing
         Config::set('database.default', 'testing');
-        
-        // Configure testing connection explicitly
-        Config::set('database.connections.testing.database', $this->testDatabaseName);
+
+        $database = $this->getTestDatabaseName();
+
+        // Configure testing connection explicitly (per-process when running in parallel)
+        Config::set('database.connections.testing.database', $database);
         
         // Purge existing connections to ensure we're using the testing connection
         DB::purge();
@@ -132,10 +150,9 @@ abstract class TestCase extends BaseTestCase
             'Tests must run in the testing environment'
         );
 
-        // Check database name - allow for parallel test databases
-        $this->assertStringStartsWith(
-            'lifespan_beta_testing',
-            DB::getDatabaseName(),
+        // Check database name - allow for parallel test databases (lifespan_beta_testing or lifespan_beta_testing_test_N)
+        $this->assertTrue(
+            str_starts_with(DB::getDatabaseName(), 'lifespan_beta_testing'),
             'Tests must use a test database'
         );
 

@@ -25,6 +25,9 @@ fi
 
 # Process arguments and convert common options to Pest equivalents
 PEST_ARGS=()
+USE_TIMING=0
+USE_PARALLEL=0
+PARALLEL_PROCESSES=8
 for arg in "$@"; do
     case "$arg" in
         --verbose)
@@ -37,12 +40,20 @@ for arg in "$@"; do
             PEST_ARGS+=("--filter='${FILTER_VALUE}'")
             ;;
         --profile)
-            # Enable profiling to identify slow tests
-            PEST_ARGS+=("--profile")
+            # Use our timing report instead of Pest/Collision --profile (which can error in Docker/non-TTY)
+            USE_TIMING=1
+            ;;
+        --timing)
+            # Write JUnit XML with per-test times, then print slowest tests after run
+            USE_TIMING=1
             ;;
         --parallel)
-            # Enable parallel test execution (requires pest-plugin-parallel)
+            USE_PARALLEL=1
             PEST_ARGS+=("--parallel")
+            ;;
+        --processes=*)
+            PARALLEL_PROCESSES="${arg#--processes=}"
+            PEST_ARGS+=("$arg")
             ;;
         --help|-h)
             # Show help for the script
@@ -53,11 +64,17 @@ for arg in "$@"; do
             echo "  --filter=<pattern> Filter which tests to run"
             echo "  --group=<name>     Only run tests from the specified group(s)"
             echo "  --stop-on-failure  Stop after first failure"
-            echo "  --profile          Show slowest tests (profiling)"
-            echo "  --parallel         Run tests in parallel (faster, but requires pest-plugin-parallel)"
+            echo "  --profile          Same as --timing: print slowest 30 tests after run (avoids Pest --profile errors in Docker)"
+            echo "  --timing           Log per-test times to JUnit XML and print slowest 30 tests after run"
+            echo "  --parallel         Run tests in parallel (creates per-process DBs; default 8 processes)"
+            echo "  --processes=N      Use N parallel processes (default 8; use with --parallel)"
             echo "  --help, -h         Show this help message"
             echo ""
             echo "All other arguments are passed directly to Pest."
+            echo ""
+            echo "If you see 'No tests found': do not use --dirty, or use --filter only if it matches a test."
+            echo "If you see many more failures than expected (e.g. 40+): run via this script (not 'pest' directly)"
+            echo "  so DB and env are set; or run with --stop-on-failure to see the first failure."
             echo "Run 'docker exec -it lifespan-test bash -c \"cd /var/www && ./vendor/bin/pest --help\"' for full Pest options."
             exit 0
             ;;
@@ -78,10 +95,27 @@ fi
 TEST_RUN_ID=$(date +%s)
 TEST_DATABASE="lifespan_beta_testing"
 
-log_message "Starting Pest test run with ID: $TEST_RUN_ID"
-log_message "Using test database: $TEST_DATABASE"
+# If --timing was requested, add JUnit log so we can report slowest tests after run
+# Use --log-junit=path (single arg) so the path is not mistaken for a test path
+if [ "$USE_TIMING" -eq 1 ]; then
+    PEST_ARGS+=("--log-junit=storage/logs/pest-junit-${TEST_RUN_ID}.xml")
+    log_message "Per-test timing will be written to storage/logs/pest-junit-${TEST_RUN_ID}.xml"
+fi
 
-# Run the tests with database isolation
+# When parallel, ensure --processes is set so worker count matches DB count
+if [ "$USE_PARALLEL" -eq 1 ]; then
+    if ! printf '%s\n' "${PEST_ARGS[@]}" | grep -q '^--processes='; then
+        PEST_ARGS+=("--processes=$PARALLEL_PROCESSES")
+    fi
+fi
+
+log_message "Starting Pest test run with ID: $TEST_RUN_ID"
+if [ "$USE_PARALLEL" -eq 1 ]; then
+    log_message "Parallel mode: using $PARALLEL_PROCESSES per-process databases (lifespan_beta_testing_test_1 ... _${PARALLEL_PROCESSES})"
+else
+    log_message "Using test database: $TEST_DATABASE"
+fi
+
 # Detect TTY: use -it when interactive, -i when headless (CI/automation)
 if [ -t 1 ]; then
     DOCKER_FLAGS="-it"
@@ -89,18 +123,45 @@ else
     DOCKER_FLAGS="-i"
 fi
 
-# Pass arguments as separate parameters to preserve them properly
-docker exec $DOCKER_FLAGS "$CONTAINER_NAME" bash -c "cd /var/www && \
-    XDEBUG_MODE=coverage \
-    php artisan config:clear && \
-    php artisan cache:clear && \
-    export APP_ENV=testing && \
-    export DB_CONNECTION=pgsql && \
-    export DB_DATABASE=$TEST_DATABASE && \
-    php artisan migrate:fresh --env=testing && \
-    php -d memory_limit=1024M ./vendor/bin/pest --compact --colors=always ${PEST_ARGS[@]}"
+# Build the test run command: when parallel, create and migrate per-process DBs then run pest; otherwise migrate once and run pest
+if [ "$USE_PARALLEL" -eq 1 ]; then
+    # Create per-process test DBs and migrate each so workers don't share one DB
+    PARALLEL_SETUP="php scripts/create-parallel-test-databases.php $PARALLEL_PROCESSES && "
+    for i in $(seq 1 "$PARALLEL_PROCESSES"); do
+        PARALLEL_SETUP="${PARALLEL_SETUP}export DB_DATABASE=lifespan_beta_testing_test_$i && php artisan migrate:fresh --env=testing --force && "
+    done
+    PARALLEL_SETUP="${PARALLEL_SETUP}true && "
+    RUN_CMD="cd /var/www && \
+        XDEBUG_MODE=coverage \
+        php artisan config:clear && \
+        php artisan cache:clear && \
+        export APP_ENV=testing && \
+        export DB_CONNECTION=pgsql && \
+        export LARAVEL_PARALLEL_TESTING=1 && \
+        ${PARALLEL_SETUP} \
+        php -d memory_limit=1024M ./vendor/bin/pest --compact --colors=always ${PEST_ARGS[@]}"
+else
+    RUN_CMD="cd /var/www && \
+        XDEBUG_MODE=coverage \
+        php artisan config:clear && \
+        php artisan cache:clear && \
+        export APP_ENV=testing && \
+        export DB_CONNECTION=pgsql && \
+        export DB_DATABASE=$TEST_DATABASE && \
+        php artisan migrate:fresh --env=testing && \
+        php -d memory_limit=1024M ./vendor/bin/pest --compact --colors=always ${PEST_ARGS[@]}"
+fi
+
+docker exec $DOCKER_FLAGS "$CONTAINER_NAME" bash -c "$RUN_CMD"
 
 TEST_EXIT_CODE=$?
+
+# If --timing was used, parse JUnit XML and print slowest tests (even if run failed)
+if [ "$USE_TIMING" -eq 1 ]; then
+    JUNIT_FILE="storage/logs/pest-junit-${TEST_RUN_ID}.xml"
+    log_message "Slowest tests (from $JUNIT_FILE):"
+    docker exec "$CONTAINER_NAME" bash -c "cd /var/www && php scripts/slowest-tests-from-junit.php $JUNIT_FILE 30" 2>/dev/null || true
+fi
 
 if [ $TEST_EXIT_CODE -eq 0 ]; then
     log_success "Pest tests completed successfully!"
