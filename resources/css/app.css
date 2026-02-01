@@ -263,3 +263,28 @@
     flex-shrink: 0;
     padding: 0 2px;
 }
+
+/* Family card: very subtle age badge */
+.family-member-age-badge {
+    font-size: 0.65rem;
+    font-weight: 500;
+    padding: 0.15em 0.5em;
+    background-color: rgba(0, 0, 0, 0.05);
+    border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Family card: consistent row height for photo vs placeholder avatars */
+.family-member-link {
+    min-height: 24px;
+}
+
+.family-member-photo-wrap,
+.family-member-placeholder {
+    line-height: 0;
+    flex-shrink: 0;
+}
+
+.family-member-photo-wrap img {
+    display: block;
+    vertical-align: top;
+}
