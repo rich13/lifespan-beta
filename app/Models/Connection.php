@@ -31,6 +31,11 @@ class Connection extends Model
     use HasFactory, HasUuids, HasRelationshipAccess, Versionable;
 
     /**
+     * When true, skip cache clearing on save/delete (used during bulk import to avoid thousands of cache operations per connection).
+     */
+    public static bool $skipCacheClearingDuringImport = false;
+
+    /**
      * The attributes that are mass assignable.
      *
      * @var array<int, string>
@@ -185,11 +190,17 @@ class Connection extends Model
 
         // Clear timeline caches when connections are created, updated, or deleted
         static::saved(function ($connection) {
+            if (static::$skipCacheClearingDuringImport) {
+                return;
+            }
             $connection->clearTimelineCaches();
             $connection->clearSetCaches();
         });
 
         static::deleted(function ($connection) {
+            if (static::$skipCacheClearingDuringImport) {
+                return;
+            }
             $connection->clearTimelineCaches();
             $connection->clearSetCaches();
         });

@@ -70,85 +70,11 @@
                         @elseif($interactive)
                             <x-spans.display.interactive-card :span="$member" />
                         @else
-                            @php
-                                // Get photo for this person if available
-                                $photoUrl = null;
-                                if ($member->type_id === 'person') {
-                                    $photoConnection = $photoConnections->get($member->id);
-                                    if ($photoConnection && $photoConnection->parent) {
-                                        $metadata = $photoConnection->parent->metadata ?? [];
-                                        $photoUrl = $metadata['thumbnail_url'] 
-                                            ?? $metadata['medium_url'] 
-                                            ?? $metadata['large_url'] 
-                                            ?? null;
-                                        
-                                        // If we have a filename but no URL, use proxy route
-                                        if (!$photoUrl && isset($metadata['filename']) && $metadata['filename']) {
-                                            $photoUrl = route('images.proxy', ['spanId' => $photoConnection->parent->id, 'size' => 'thumbnail']);
-                                        }
-                                    }
-                                }
-                            @endphp
-                            
-                            @php
-                                // Calculate age for living people (complete years, rounded down)
-                                $age = null;
-                                if ($member->type_id === 'person' && $member->start_year) {
-                                    $currentYear = date('Y');
-                                    $isAlive = !$member->end_year || $member->end_year >= $currentYear;
-                                    if ($isAlive) {
-                                        // Use proper date calculation to get complete years (rounded down)
-                                        $birthDate = \Carbon\Carbon::create(
-                                            $member->start_year,
-                                            $member->start_month ?? 1,
-                                            $member->start_day ?? 1
-                                        );
-                                        $today = \Carbon\Carbon::today();
-                                        // Use diff() to get complete years (always rounded down), not diffInYears() which might round
-                                        $diff = $birthDate->diff($today);
-                                        $age = $diff->y; // Complete years (always rounded down)
-                                    }
-                                }
-                                
-                                // Get parents for tooltip with links
-                                $parentSpans = $parentsMap->get($member->id);
-                                $parentsData = null;
-                                if ($parentSpans && $parentSpans->isNotEmpty()) {
-                                    // Build array of parent data for JavaScript
-                                    $parentsData = $parentSpans->map(function($parentSpan) {
-                                        if ($parentSpan) {
-                                            return [
-                                                'name' => $parentSpan->name,
-                                                'url' => route('spans.show', $parentSpan)
-                                            ];
-                                        }
-                                        return null;
-                                    })->filter()->values()->toArray();
-                                }
-                            @endphp
-                            
-                            <a href="{{ route('spans.show', $member) }}" 
-                               class="text-decoration-none d-inline-flex align-items-center gap-1 family-member-link {{ $member->state === 'placeholder' ? 'text-placeholder' : 'text-' . $member->type_id }}"
-                               style="font-size: inherit;"
-                               @if($parentsData && !empty($parentsData))
-                                   data-parents='@json($parentsData)'
-                               @endif>
-                                @if($photoUrl)
-                                    <img src="{{ $photoUrl }}" 
-                                         alt="{{ $member->name }}"
-                                         class="rounded"
-                                         style="width: 24px; height: 24px; object-fit: cover; flex-shrink: 0;"
-                                         loading="lazy">
-                                @else
-                                    <x-icon :span="$member" style="font-size: 0.8rem; width: 0.875rem; height: 0.875rem; flex-shrink: 0;" />
-                                @endif
-                                <span style="font-size: inherit; line-height: 1.3;">
-                                    {{ $member->name }}
-                                    @if($age !== null)
-                                        <span class="text-muted" style="font-size: 0.8em;">({{ $age }})</span>
-                                    @endif
-                                </span>
-                            </a>
+                            @include('components.spans.partials.family-member-link', [
+                                'member' => $member,
+                                'photoConnections' => $photoConnections,
+                                'parentsMap' => $parentsMap,
+                            ])
                         @endif
                     </li>
                 @endforeach

@@ -75,6 +75,14 @@ trait HasFamilyCapabilities
     }
 
     /**
+     * Get step-parents: deduplicated parents of children of this person's parents
+     */
+    public function stepParents(): Collection
+    {
+        return new Collection($this->getFamilyTreeService()->getStepParents($this));
+    }
+
+    /**
      * Get all ancestors up to a certain number of generations
      */
     public function ancestors(int $generations = 2): Collection
@@ -112,6 +120,38 @@ trait HasFamilyCapabilities
     public function nephewsAndNieces(): Collection
     {
         return new Collection($this->getFamilyTreeService()->getNephewsAndNieces($this));
+    }
+
+    /**
+     * Get in-laws & out-laws: people with whom siblings have had children
+     */
+    public function inLawsAndOutLaws(): Collection
+    {
+        return new Collection($this->getFamilyTreeService()->getInLawsAndOutLaws($this));
+    }
+
+    /**
+     * Get extra in-laws & out-laws: people with whom cousins have had children
+     */
+    public function extraInLawsAndOutLaws(): Collection
+    {
+        return new Collection($this->getFamilyTreeService()->getExtraInLawsAndOutLaws($this));
+    }
+
+    /**
+     * Get children-in/out-law: people with whom this person's children have had children
+     */
+    public function childrenInLawsAndOutLaws(): Collection
+    {
+        return new Collection($this->getFamilyTreeService()->getChildrenInLawsAndOutLaws($this));
+    }
+
+    /**
+     * Get grandchildren-in/out-law: people with whom this person's grandchildren have had children
+     */
+    public function grandchildrenInLawsAndOutLaws(): Collection
+    {
+        return new Collection($this->getFamilyTreeService()->getGrandchildrenInLawsAndOutLaws($this));
     }
 
     /**

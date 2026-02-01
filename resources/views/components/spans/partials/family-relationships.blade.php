@@ -3,13 +3,17 @@
 @php
 // Get all family relationships using the span's capabilities
 $ancestors = $span->ancestors(3);
-$descendants = $span->descendants(2);
+$descendants = $span->descendants(3);
 $siblings = $span->siblings();
 $unclesAndAunts = $span->unclesAndAunts();
 $cousins = $span->cousins();
 $nephewsAndNieces = $span->nephewsAndNieces();
 $extraNephewsAndNieces = $span->extraNephewsAndNieces();
-$metadataChildren = $span->metadata['children'] ?? [];
+$stepParents = $span->stepParents();
+$inLawsAndOutLaws = $span->inLawsAndOutLaws();
+$extraInLawsAndOutLaws = $span->extraInLawsAndOutLaws();
+$childrenInLawsAndOutLaws = $span->childrenInLawsAndOutLaws();
+$grandchildrenInLawsAndOutLaws = $span->grandchildrenInLawsAndOutLaws();
 
 // Compute Bootstrap column class
 $colClass = $columns == 3 ? 'col-md-4' : 'col-md-6';
@@ -18,7 +22,8 @@ $colClass = $columns == 3 ? 'col-md-4' : 'col-md-6';
 $hasFamily = $ancestors->isNotEmpty() || $descendants->isNotEmpty() || 
     $siblings->isNotEmpty() || $unclesAndAunts->isNotEmpty() || 
     $cousins->isNotEmpty() || $nephewsAndNieces->isNotEmpty() || 
-    $extraNephewsAndNieces->isNotEmpty() || !empty($metadataChildren);
+    $extraNephewsAndNieces->isNotEmpty() || $stepParents->isNotEmpty() || 
+    $inLawsAndOutLaws->isNotEmpty() || $extraInLawsAndOutLaws->isNotEmpty() || $childrenInLawsAndOutLaws->isNotEmpty() || $grandchildrenInLawsAndOutLaws->isNotEmpty();
 @endphp
 
 @if($hasFamily)
@@ -65,10 +70,25 @@ $hasFamily = $ancestors->isNotEmpty() || $descendants->isNotEmpty() ||
                     :interactive="$interactive"
                     :colClass="$colClass" />
 
+                {{-- Step-parents --}}
+                <x-spans.partials.family-relationship-section 
+                    title="Step-parents" 
+                    :members="$stepParents"
+                    :interactive="$interactive"
+                    :colClass="$colClass" />
+
                 {{-- Uncles & Aunts --}}
                 <x-spans.partials.family-relationship-section 
                     title="Uncles & Aunts" 
                     :members="$unclesAndAunts"
+                    :interactive="$interactive"
+                    :colClass="$colClass" />
+
+                {{-- Partners & Children (grouped by co-parent) --}}
+                @php $children = $descendants->filter(function($item) { return $item['generation'] === 1; })->pluck('span'); @endphp
+                <x-spans.partials.family-relationship-children-grouped 
+                    :span="$span" 
+                    :children="$children"
                     :interactive="$interactive"
                     :colClass="$colClass" />
 
@@ -79,18 +99,24 @@ $hasFamily = $ancestors->isNotEmpty() || $descendants->isNotEmpty() ||
                     :interactive="$interactive"
                     :colClass="$colClass" />
 
+                {{-- In-laws & out-laws (people with whom siblings have had children) --}}
+                <x-spans.partials.family-relationship-section 
+                    title="In-laws & out-laws" 
+                    :members="$inLawsAndOutLaws"
+                    :interactive="$interactive"
+                    :colClass="$colClass" />
+
+                {{-- Extra In-laws & out-laws (people with whom cousins have had children) --}}
+                <x-spans.partials.family-relationship-section 
+                    title="Extra In-laws & out-laws" 
+                    :members="$extraInLawsAndOutLaws"
+                    :interactive="$interactive"
+                    :colClass="$colClass" />
+
                 {{-- Cousins --}}
                 <x-spans.partials.family-relationship-section 
                     title="Cousins" 
                     :members="$cousins"
-                    :interactive="$interactive"
-                    :colClass="$colClass" />
-
-                {{-- Generation -1: Children --}}
-                @php $children = $descendants->filter(function($item) { return $item['generation'] === 1; })->pluck('span'); @endphp
-                <x-spans.partials.family-relationship-section 
-                    title="Children" 
-                    :members="$children"
                     :interactive="$interactive"
                     :colClass="$colClass" />
 
@@ -108,6 +134,13 @@ $hasFamily = $ancestors->isNotEmpty() || $descendants->isNotEmpty() ||
                     :interactive="$interactive"
                     :colClass="$colClass" />
 
+                {{-- Children-in/out-law (people with whom the user's children have had children) --}}
+                <x-spans.partials.family-relationship-section 
+                    title="Children-in/out-law" 
+                    :members="$childrenInLawsAndOutLaws"
+                    :interactive="$interactive"
+                    :colClass="$colClass" />
+
                 {{-- Generation -2: Grandchildren --}}
                 @php $grandchildren = $descendants->filter(function($item) { return $item['generation'] === 2; })->pluck('span'); @endphp
                 <x-spans.partials.family-relationship-section 
@@ -116,15 +149,20 @@ $hasFamily = $ancestors->isNotEmpty() || $descendants->isNotEmpty() ||
                     :interactive="$interactive"
                     :colClass="$colClass" />
 
-                {{-- Legacy Data --}}
-                @if(!empty($metadataChildren))
-                    <x-spans.partials.family-relationship-section 
-                        title="Additional Children (Legacy Data)" 
-                        :members="collect($metadataChildren)" 
-                        :isLegacy="true"
-                        :interactive="$interactive"
-                        :colClass="$colClass" />
-                @endif
+                {{-- Grandchildren-in/out-law (people with whom the user's grandchildren have had children) --}}
+                <x-spans.partials.family-relationship-section 
+                    title="Grandchildren-in/out-law" 
+                    :members="$grandchildrenInLawsAndOutLaws"
+                    :interactive="$interactive"
+                    :colClass="$colClass" />
+
+                {{-- Generation -3: Great-Grandchildren --}}
+                @php $greatGrandchildren = $descendants->filter(function($item) { return $item['generation'] === 3; })->pluck('span'); @endphp
+                <x-spans.partials.family-relationship-section 
+                    title="Great-Grandchildren" 
+                    :members="$greatGrandchildren"
+                    :interactive="$interactive"
+                    :colClass="$colClass" />
             </div>
             
             {{-- Graph View Container (hidden by default) --}}

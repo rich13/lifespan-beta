@@ -105,6 +105,186 @@ class FamilyTreeService
     }
 
     /**
+     * Get step-parents: deduplicated parents of children of the span's parents
+     * (i.e. the other parent of half-siblings, or a parent's partner who has other children).
+     */
+    public function getStepParents(Span $span): Collection
+    {
+        $directParents = $this->getParents($span);
+        $directParentIds = $directParents->pluck('id')->all();
+
+        // Children of each of the span's parents (siblings + half-siblings)
+        $childrenOfMyParents = $directParents->flatMap(function ($parent) {
+            return $this->getChildren($parent);
+        })->unique('id')->values();
+
+        // All parents of those children, excluding the span's direct parents
+        return $childrenOfMyParents->flatMap(function ($child) {
+            return $this->getParents($child);
+        })->reject(function ($parent) use ($directParentIds) {
+            return in_array($parent->id, $directParentIds);
+        })->unique('id')->values();
+    }
+
+    /**
+     * Get in-laws & out-laws: people with whom siblings have had children.
+     * (Deduplicated other parents of nephews/nieces.)
+     */
+    public function getInLawsAndOutLaws(Span $span): Collection
+    {
+        $siblings = $this->getSiblings($span);
+        $siblingIds = $siblings->pluck('id')->all();
+        if (empty($siblingIds)) {
+            return collect();
+        }
+
+        $childIdsOfSiblings = Connection::where('type_id', 'family')
+            ->whereIn('parent_id', $siblingIds)
+            ->pluck('child_id')
+            ->unique()
+            ->values()
+            ->all();
+        if (empty($childIdsOfSiblings)) {
+            return collect();
+        }
+
+        $excludeIds = array_merge($siblingIds, [$span->id]);
+        $otherParentIds = Connection::where('type_id', 'family')
+            ->whereIn('child_id', $childIdsOfSiblings)
+            ->whereNotIn('parent_id', $excludeIds)
+            ->pluck('parent_id')
+            ->unique()
+            ->values()
+            ->all();
+        if (empty($otherParentIds)) {
+            return collect();
+        }
+
+        return Span::whereIn('id', $otherParentIds)->get();
+    }
+
+    /**
+     * Get extra in-laws & out-laws: people with whom cousins have had children.
+     * (Deduplicated other parents of extra nephews/nieces.)
+     */
+    public function getExtraInLawsAndOutLaws(Span $span): Collection
+    {
+        $cousins = $this->getCousins($span);
+        $cousinIds = $cousins->pluck('id')->all();
+        if (empty($cousinIds)) {
+            return collect();
+        }
+
+        $childIdsOfCousins = Connection::where('type_id', 'family')
+            ->whereIn('parent_id', $cousinIds)
+            ->pluck('child_id')
+            ->unique()
+            ->values()
+            ->all();
+        if (empty($childIdsOfCousins)) {
+            return collect();
+        }
+
+        $excludeIds = array_merge($cousinIds, [$span->id]);
+        $otherParentIds = Connection::where('type_id', 'family')
+            ->whereIn('child_id', $childIdsOfCousins)
+            ->whereNotIn('parent_id', $excludeIds)
+            ->pluck('parent_id')
+            ->unique()
+            ->values()
+            ->all();
+        if (empty($otherParentIds)) {
+            return collect();
+        }
+
+        return Span::whereIn('id', $otherParentIds)->get();
+    }
+
+    /**
+     * Get children-in/out-law: people with whom the span's children have had children.
+     * (Deduplicated other parents of grandchildren.)
+     */
+    public function getChildrenInLawsAndOutLaws(Span $span): Collection
+    {
+        $children = $this->getChildren($span);
+        $childIds = $children->pluck('id')->all();
+        if (empty($childIds)) {
+            return collect();
+        }
+
+        $grandchildIds = Connection::where('type_id', 'family')
+            ->whereIn('parent_id', $childIds)
+            ->pluck('child_id')
+            ->unique()
+            ->values()
+            ->all();
+        if (empty($grandchildIds)) {
+            return collect();
+        }
+
+        $excludeIds = array_merge($childIds, [$span->id]);
+        $otherParentIds = Connection::where('type_id', 'family')
+            ->whereIn('child_id', $grandchildIds)
+            ->whereNotIn('parent_id', $excludeIds)
+            ->pluck('parent_id')
+            ->unique()
+            ->values()
+            ->all();
+        if (empty($otherParentIds)) {
+            return collect();
+        }
+
+        return Span::whereIn('id', $otherParentIds)->get();
+    }
+
+    /**
+     * Get grandchildren-in/out-law: people with whom the span's grandchildren have had children.
+     * (Deduplicated other parents of great-grandchildren.)
+     */
+    public function getGrandchildrenInLawsAndOutLaws(Span $span): Collection
+    {
+        $children = $this->getChildren($span);
+        $childIds = $children->pluck('id')->all();
+        if (empty($childIds)) {
+            return collect();
+        }
+
+        $grandchildIds = Connection::where('type_id', 'family')
+            ->whereIn('parent_id', $childIds)
+            ->pluck('child_id')
+            ->unique()
+            ->values()
+            ->all();
+        if (empty($grandchildIds)) {
+            return collect();
+        }
+
+        $greatGrandchildIds = Connection::where('type_id', 'family')
+            ->whereIn('parent_id', $grandchildIds)
+            ->pluck('child_id')
+            ->unique()
+            ->values()
+            ->all();
+        if (empty($greatGrandchildIds)) {
+            return collect();
+        }
+
+        $excludeIds = array_merge($grandchildIds, [$span->id]);
+        $otherParentIds = Connection::where('type_id', 'family')
+            ->whereIn('child_id', $greatGrandchildIds)
+            ->whereNotIn('parent_id', $excludeIds)
+            ->pluck('parent_id')
+            ->unique()
+            ->values()
+            ->all();
+        if (empty($otherParentIds)) {
+            return collect();
+        }
+
+        return Span::whereIn('id', $otherParentIds)->get();
+    }
+
+    /**
      * Recursively traverse and collect ancestors
      */
     protected function traverseAncestors(Span $span, Collection &$ancestors, int $generations, int $currentGen = 1): void
