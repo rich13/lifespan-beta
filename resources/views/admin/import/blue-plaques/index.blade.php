@@ -105,19 +105,25 @@
                                 </div>
                                 <div class="card-body">
                                     <div class="row">
-                                        <div class="col-md-4">
+                                        <div class="col-md-3">
                                             <button type="button" class="btn btn-info w-100 mb-2" id="previewBtn">
                                                 <i class="bi bi-eye me-2"></i>
                                                 Preview Data
                                             </button>
                                         </div>
-                                        <div class="col-md-4">
+                                        <div class="col-md-3">
                                             <button type="button" class="btn btn-success w-100 mb-2" id="importAllBtn">
                                                 <i class="bi bi-play-fill me-2"></i>
                                                 Import All Plaques
                                             </button>
                                         </div>
-                                        <div class="col-md-4">
+                                        <div class="col-md-3">
+                                            <button type="button" class="btn btn-outline-success w-100 mb-2" id="importBackgroundBtn" title="Faster: runs in background, no browser timeout">
+                                                <i class="bi bi-cloud-upload me-2"></i>
+                                                Import in Background
+                                            </button>
+                                        </div>
+                                        <div class="col-md-3">
                                             <button type="button" class="btn btn-primary w-100 mb-2" id="resumeImportBtn" style="display: none;">
                                                 <i class="bi bi-arrow-clockwise me-2"></i>
                                                 Resume Import
@@ -345,7 +351,10 @@ $(document).ready(function() {
     loadImportStatus();
     $('input[name="plaqueType"]').change(function() {
         loadImportStatus();
+        loadStats();
+        $('#importBackgroundBtn').toggle($('input[name="plaqueType"]:checked').val() !== 'custom');
     });
+    $('#importBackgroundBtn').toggle($('input[name="plaqueType"]:checked').val() !== 'custom');
 
     // Preview Data
     $('#previewBtn').click(function() {
@@ -384,6 +393,76 @@ $(document).ready(function() {
         }
         
         startImport(plaqueType, 0);
+    });
+
+    // Import in Background (faster, no browser timeout)
+    $('#importBackgroundBtn').click(function() {
+        if (isProcessing) return;
+
+        const plaqueType = $('input[name="plaqueType"]:checked').val();
+        if (plaqueType === 'custom') {
+            alert('Background import is not available for custom plaque imports.');
+            return;
+        }
+
+        if (!confirm('Start import in background? This is faster and avoids browser timeouts. You can leave this page and check back later.')) {
+            return;
+        }
+
+        $(this).prop('disabled', true).html('<i class="bi bi-hourglass-split me-2"></i>Starting...');
+
+        startBackgroundJobPolling();
+
+        $.post('{{ route("admin.import.blue-plaques.import-background") }}', {
+            plaque_type: plaqueType
+        })
+        .done(function(response) {
+            if (!response.success) {
+                alert(response.message || 'Failed to start import');
+            }
+        })
+        .fail(function(xhr) {
+            if (xhr.status === 0) {
+                alert('Request was interrupted (e.g. page refresh). The import may have started – check the status above.');
+                loadImportStatus();
+            } else {
+                alert('Failed to start import: ' + (xhr.responseJSON?.message || 'Unknown error'));
+            }
+        })
+        .always(function() {
+            $('#importBackgroundBtn').prop('disabled', false).html('<i class="bi bi-cloud-upload me-2"></i>Import in Background');
+        });
+    });
+
+    // Cancel Background Import (delegated - button is dynamically added)
+    $(document).on('click', '#cancelBackgroundBtn', function() {
+        const plaqueType = $('input[name="plaqueType"]:checked').val();
+        if (plaqueType === 'custom') return;
+        if (!confirm('Cancel the background import? It will stop after the current batch.')) return;
+        const $btn = $(this);
+        $btn.prop('disabled', true).html('<i class="bi bi-hourglass-split me-1"></i>Cancelling...');
+
+        // Show optimistic feedback – Cancel POST may block if import is using the worker (sync queue)
+        const $statusArea = $('#importStatusContent');
+        const cancelMsg = '<p class="mb-0 small text-warning"><i class="bi bi-info-circle me-1"></i>Cancel requested – job will stop after the current batch. Polling for status…</p>';
+        $statusArea.find('.alert').first().append(cancelMsg);
+
+        const request = $.post('{{ route("admin.import.blue-plaques.cancel-background") }}', { plaque_type: plaqueType });
+        request.timeout(8000);
+        request.done(function(response) {
+            if (response.success) {
+                loadImportStatus(true);
+            }
+        });
+        request.fail(function(xhr, textStatus) {
+            if (textStatus === 'timeout' || xhr.status === 0) {
+                $statusArea.find('.text-warning').last().html('<i class="bi bi-info-circle me-1"></i>Cancel request sent (server may be busy). Status will update when the job stops. Refresh if needed.');
+                loadImportStatus(true);
+            }
+        });
+        request.always(function() {
+            $btn.prop('disabled', false).html('<i class="bi bi-x-circle me-1"></i>Cancel');
+        });
     });
 
     // Resume Import
@@ -789,18 +868,123 @@ function showPreview(data) {
     $('#previewContent').html(html);
 }
 
-function loadImportStatus() {
+let backgroundJobPollInterval = null;
+
+function startBackgroundJobPolling() {
+    if (backgroundJobPollInterval) clearInterval(backgroundJobPollInterval);
+    loadImportStatus();
+    backgroundJobPollInterval = setInterval(function() {
+        loadImportStatus(true);
+    }, 2000);
+}
+
+function stopBackgroundJobPolling() {
+    if (backgroundJobPollInterval) {
+        clearInterval(backgroundJobPollInterval);
+        backgroundJobPollInterval = null;
+    }
+}
+
+function loadImportStatus(isPolling = false) {
     const plaqueType = $('input[name="plaqueType"]:checked').val();
+    if (isPolling) {
+        console.log('[Plaque Import] Polling status...', { plaqueType });
+    }
     
     $.get('{{ route("admin.import.blue-plaques.status") }}', {
         plaque_type: plaqueType
     })
     .done(function(response) {
+        if (isPolling && response.success) {
+            const jp = response.job_progress || {};
+            console.log('[Plaque Import] Poll result:', {
+                status: response.job_status,
+                processed: jp.processed,
+                total: jp.total,
+                created: jp.created,
+                skipped: jp.skipped,
+                errors: jp.errors,
+                current_plaque: jp.current_plaque
+            });
+        }
         if (response.success) {
+            // Stop polling when background job completes, fails, or is cancelled
+            if (response.background_job && response.job_status) {
+                if (response.job_status === 'completed' || response.job_status === 'failed' || response.job_status === 'cancelled') {
+                    stopBackgroundJobPolling();
+                    if (response.job_status === 'completed' || response.job_status === 'cancelled') {
+                        loadStats();
+                    }
+                }
+                if (response.job_status === 'failed' && response.job_progress?.error) {
+                    $('#importStatusContent').html(`
+                        <div class="alert alert-danger mb-0">
+                            <i class="bi bi-x-circle me-2"></i>
+                            Background import failed: ${response.job_progress.error}
+                        </div>
+                    `);
+                    return;
+                }
+                if (response.job_status === 'cancelled') {
+                    const jp = response.job_progress || {};
+                    $('#importStatusContent').html(`
+                        <div class="alert alert-warning mb-0">
+                            <i class="bi bi-slash-circle me-2"></i>
+                            <strong>Import cancelled.</strong>
+                            <p class="mb-0 mt-2">Stopped at ${jp.processed || 0} of ${jp.total || 0} plaques (Created: ${jp.created || 0}, Skipped: ${jp.skipped || 0}, Errors: ${jp.errors || 0})</p>
+                        </div>
+                    `);
+                    loadStats();
+                    return;
+                }
+            }
+
             const status = response;
             let statusHtml = '';
             
-            if (status.total_imported_plaques > 0) {
+            // Show background job progress
+            if (status.background_job && status.job_progress) {
+                const jp = status.job_progress;
+                const pct = jp.progress_percentage || 0;
+                const statusLabel = status.job_status === 'running' ? '(in progress)' : status.job_status;
+                const alertClass = status.job_status === 'running' ? 'info' : status.job_status === 'completed' ? 'success' : status.job_status === 'cancelled' ? 'warning' : 'warning';
+                const currentPlaque = jp.current_plaque ? `Currently: ${jp.current_plaque}` : '';
+                const lastActivity = jp.last_activity ? (() => {
+                    const d = new Date(jp.last_activity);
+                    const ageSec = Math.round((Date.now() - d) / 1000);
+                    return ageSec > 15 ? `(last update ${ageSec}s ago – progress may be delayed)` : '';
+                })() : '';
+                statusHtml = `
+                    <div class="alert alert-${alertClass} mb-3">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <h5 class="mb-0"><i class="bi bi-cloud-upload me-2"></i>Background Import ${statusLabel}</h5>
+                            ${status.job_status === 'running' ? '<button type="button" class="btn btn-sm btn-outline-danger" id="cancelBackgroundBtn"><i class="bi bi-x-circle me-1"></i>Cancel</button>' : ''}
+                        </div>
+                        <p class="mb-2 mt-2">
+                            <strong>${jp.processed || 0}</strong> of <strong>${jp.total || 0}</strong> plaques
+                            (${pct}% complete)
+                        </p>
+                        ${currentPlaque ? `<p class="mb-1 small text-muted"><em>${currentPlaque}</em> ${lastActivity}</p>` : lastActivity ? `<p class="mb-1 small text-warning">${lastActivity}</p>` : ''}
+                        <p class="mb-0 small">
+                            Created: ${jp.created || 0} | Skipped: ${jp.skipped || 0} | Errors: ${jp.errors || 0}
+                        </p>
+                    </div>
+                    ${(jp.batch_size != null && jp.batch_size > 0) ? `
+                    <p class="mb-1 small text-muted">Current batch: <strong>${jp.batch_progress ?? 0}</strong> of <strong>${jp.batch_size}</strong></p>
+                    <div class="progress mb-2" style="height: 18px;">
+                        <div class="progress-bar progress-bar-striped bg-secondary ${status.job_status === 'running' ? 'progress-bar-animated' : ''}" role="progressbar" style="width: ${Math.min(100, ((jp.batch_progress ?? 0) / jp.batch_size) * 100)}%">
+                            ${jp.batch_progress ?? 0}/${jp.batch_size}
+                        </div>
+                    </div>
+                    ` : ''}
+                    <p class="mb-1 small text-muted">Overall: <strong>${jp.processed || 0}</strong> of <strong>${jp.total || 0}</strong> plaques</p>
+                    <div class="progress mb-3" style="height: 25px;">
+                        <div class="progress-bar progress-bar-striped ${status.job_status === 'running' ? 'progress-bar-animated' : ''}" role="progressbar" style="width: ${pct}%">
+                            ${pct}%
+                        </div>
+                    </div>
+                `;
+            } else if (status.total_imported_plaques > 0) {
                 // Show import progress
                 const progressPercent = status.import_progress_percentage || 0;
                 const remainingPlaques = status.remaining_plaques || 0;
@@ -856,7 +1040,8 @@ function loadImportStatus() {
 }
 
 function loadStats() {
-    $.get('{{ route("admin.import.blue-plaques.stats") }}')
+    const plaqueType = $('input[name="plaqueType"]:checked').val();
+    $.get('{{ route("admin.import.blue-plaques.stats") }}', { plaque_type: plaqueType })
     .done(function(response) {
         if (response.success) {
             const stats = response.stats;

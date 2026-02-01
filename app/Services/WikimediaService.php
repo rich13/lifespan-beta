@@ -234,15 +234,179 @@ class WikimediaService
 
     /**
      * Search for and get description for a span
+     * Uses Wikipedia search first (mirrors Research page flow, handles disambiguation) then falls back to Wikidata
      */
     public function getDescriptionForSpan(\App\Models\Span $span): ?array
     {
-        // Try different search strategies
+        // 1. If span has Wikipedia URL in sources, use that title directly (same as Research page)
+        $wikipediaTitle = $this->extractWikipediaTitleFromSources($span->sources ?? []);
+        if ($wikipediaTitle) {
+            $result = $this->getDescriptionFromWikipediaByTitle($wikipediaTitle, $span);
+            if ($result) {
+                return $result;
+            }
+        }
+
+        // 2. Wikipedia OpenSearch first – handles disambiguation like Research (skips disambiguation pages, tries candidates)
+        $result = $this->getDescriptionFromWikipediaSearch($span);
+        if ($result) {
+            return $result;
+        }
+
+        // 3. Fall back to Wikidata search (original behaviour)
+        return $this->getDescriptionFromWikidataSearch($span);
+    }
+
+    /**
+     * Extract Wikipedia article title from span sources
+     */
+    protected function extractWikipediaTitleFromSources(array $sources): ?string
+    {
+        foreach ($sources as $source) {
+            $url = null;
+            if (is_string($source)) {
+                $url = $source;
+            } elseif (is_array($source) && isset($source['url'])) {
+                $url = $source['url'];
+            }
+            if ($url && str_contains($url, 'wikipedia.org')) {
+                if (preg_match('/wikipedia\.org\/wiki\/([^?#]+)/', $url, $matches)) {
+                    $title = urldecode($matches[1]);
+                    return str_replace('_', ' ', $title);
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Get description from a specific Wikipedia page title (e.g. "James Taylor (musician)")
+     */
+    protected function getDescriptionFromWikipediaByTitle(string $pageTitle, \App\Models\Span $span): ?array
+    {
+        $cacheKey = 'wikipedia_description_by_title:' . md5($pageTitle . '|' . ($span->type_id ?? ''));
+        return Cache::remember($cacheKey, self::CACHE_TTL_WIKIPEDIA_ARTICLE, function () use ($pageTitle, $span) {
+            try {
+                $titleWithUnderscores = str_replace(' ', '_', $pageTitle);
+                $encodedTitle = rawurlencode($titleWithUnderscores);
+                $response = Http::withHeaders(['User-Agent' => config('app.user_agent')])
+                    ->timeout(10)
+                    ->get("https://en.wikipedia.org/api/rest_v1/page/summary/{$encodedTitle}");
+
+                if (!$response->successful()) {
+                    return null;
+                }
+
+                $data = $response->json();
+                $extract = $data['extract'] ?? $data['description'] ?? null;
+                $wikipediaUrl = $data['content_urls']['desktop']['page'] ?? null;
+
+                if (empty($extract) || !$wikipediaUrl) {
+                    return null;
+                }
+
+                $cleanExtract = $this->cleanExtract($extract);
+                if (empty($cleanExtract)) {
+                    return null;
+                }
+
+                $dates = null;
+                if ($span->type_id === 'person') {
+                    $entityId = $this->getWikidataEntityIdFromWikipediaTitle($pageTitle);
+                    if ($entityId) {
+                        $entity = $this->getWikidataEntity($entityId);
+                        $dates = $this->extractDatesFromEntity($entity);
+                    }
+                }
+
+                return [
+                    'description' => $cleanExtract,
+                    'wikipedia_url' => $wikipediaUrl,
+                    'dates' => $dates,
+                ];
+            } catch (\Exception $e) {
+                Log::warning('Failed to get description from Wikipedia by title', [
+                    'page_title' => $pageTitle,
+                    'error' => $e->getMessage(),
+                ]);
+                return null;
+            }
+        });
+    }
+
+    /**
+     * Search Wikipedia via OpenSearch, skip disambiguation pages, try each candidate (mirrors Research page)
+     */
+    protected function getDescriptionFromWikipediaSearch(\App\Models\Span $span): ?array
+    {
+        $searchQueries = [$span->name];
+        if ($span->type_id === 'person') {
+            $searchQueries[] = $span->name . ' person';
+            if ($span->start_year) {
+                $searchQueries[] = $span->name . ' ' . $span->start_year;
+            }
+        } elseif ($span->type_id === 'band') {
+            $searchQueries[] = $span->name . ' band';
+        } elseif ($span->type_id === 'thing' && isset($span->metadata['subtype'])) {
+            $searchQueries[] = $span->name . ' ' . $span->metadata['subtype'];
+        }
+
+        foreach ($searchQueries as $query) {
+            try {
+                $response = Http::withHeaders(['User-Agent' => config('app.user_agent')])
+                    ->timeout(10)
+                    ->get($this->wikipediaUrl, [
+                        'action' => 'opensearch',
+                        'format' => 'json',
+                        'search' => $query,
+                        'limit' => 15,
+                        'namespace' => 0,
+                        'redirects' => 'resolve',
+                    ]);
+
+                if (!$response->successful()) {
+                    continue;
+                }
+
+                $searchData = $response->json();
+                $titles = $searchData[1] ?? [];
+                if (empty($titles)) {
+                    continue;
+                }
+
+                foreach ($titles as $title) {
+                    if (stripos($title, '(disambiguation)') !== false) {
+                        continue;
+                    }
+                    if (stripos($title, 'File:') === 0 || stripos($title, 'Category:') === 0 || stripos($title, 'Template:') === 0) {
+                        continue;
+                    }
+
+                    $result = $this->getDescriptionFromWikipediaByTitle($title, $span);
+                    if ($result) {
+                        return $result;
+                    }
+                }
+            } catch (\Exception $e) {
+                Log::debug('Wikipedia search failed for getDescriptionFromWikipediaSearch', [
+                    'query' => $query,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Original Wikidata-based description lookup (fallback)
+     */
+    protected function getDescriptionFromWikidataSearch(\App\Models\Span $span): ?array
+    {
         $searchQueries = [
             $span->name,
         ];
 
-        // Add more specific queries based on span type
         if ($span->type_id === 'person') {
             $searchQueries[] = $span->name . ' person';
             if ($span->start_year) {

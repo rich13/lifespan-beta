@@ -3,19 +3,19 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\ImportWikipediaPublicFiguresJob;
+use App\Models\ImportProgress;
 use App\Models\Span;
-use App\Services\WikimediaService;
+use App\Services\WikipediaImportService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
 class WikipediaImportController extends Controller
 {
-    protected WikimediaService $wikimediaService;
-
-    public function __construct(WikimediaService $wikimediaService)
-    {
+    public function __construct(
+        private readonly WikipediaImportService $wikipediaImportService
+    ) {
         $this->middleware(['auth', 'admin']);
-        $this->wikimediaService = $wikimediaService;
     }
 
     /**
@@ -30,11 +30,9 @@ class WikipediaImportController extends Controller
             ->where(function($query) {
                 $query->whereNull('description')
                     ->orWhere(function($subQuery) {
-                        // No Wikipedia sources (only if not skipped)
-                        $subQuery->where(function($sourceQuery) {
-                            $sourceQuery->whereNull('sources')
-                                ->orWhereJsonLength('sources', 0);
-                        })->whereRaw("notes NOT LIKE '%[Skipped Wikipedia import%'");
+                        // No Wikipedia source (have sources from elsewhere but not Wikipedia)
+                        $subQuery->whereRaw("sources IS NULL OR sources::text NOT ILIKE '%wikipedia.org%'")
+                            ->whereRaw("notes NOT LIKE '%[Skipped Wikipedia import%'");
                     })
                     ->orWhere(function($subQuery) {
                         // No dates (only if not skipped)
@@ -74,14 +72,28 @@ class WikipediaImportController extends Controller
             ->whereNotNull('description')
             ->count();
 
-        // For now, we'll use a simpler approach for Wikipedia sources count
-        $publicFiguresWithWikipediaSources = 0; // We'll calculate this differently if needed
+        $publicFiguresWithWikipediaSources = Span::where('type_id', 'person')
+            ->whereJsonContains('metadata->subtype', 'public_figure')
+            ->whereNotNull('sources')
+            ->whereRaw("sources::text ILIKE '%wikipedia.org%'")
+            ->count();
+
+        // With description but missing Wikipedia source – these need the source added
+        $withDescriptionMissingWikiSource = Span::where('type_id', 'person')
+            ->whereJsonContains('metadata->subtype', 'public_figure')
+            ->whereNotNull('description')
+            ->where(function ($q) {
+                $q->whereNull('sources')
+                    ->orWhereRaw("sources::text NOT ILIKE '%wikipedia.org%'");
+            })
+            ->count();
 
         return view('admin.import.wikipedia.index', compact(
             'publicFigures',
             'totalPublicFigures',
             'publicFiguresWithDescriptions',
-            'publicFiguresWithWikipediaSources'
+            'publicFiguresWithWikipediaSources',
+            'withDescriptionMissingWikiSource'
         ));
     }
 
@@ -91,219 +103,36 @@ class WikipediaImportController extends Controller
     public function processPerson(Request $request)
     {
         $request->validate([
-            'span_id' => 'required|uuid|exists:spans,id'
+            'span_id' => 'required|uuid|exists:spans,id',
         ]);
 
         $span = Span::findOrFail($request->span_id);
-        
-        // Check if this is a public figure
-        if ($span->type_id !== 'person' || 
-            !isset($span->metadata['subtype']) || 
+
+        if ($span->type_id !== 'person' ||
+            !isset($span->metadata['subtype']) ||
             $span->metadata['subtype'] !== 'public_figure') {
             return response()->json([
                 'success' => false,
-                'message' => 'This span is not a public figure.'
+                'message' => 'This span is not a public figure.',
             ], 400);
         }
 
-        try {
-            // Get description and Wikipedia URL
-            $result = $this->wikimediaService->getDescriptionForSpan($span);
-            
-            if (!$result) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'No suitable description found on Wikipedia for this person.'
-                ], 404);
-            }
+        $result = $this->wikipediaImportService->processSpan($span);
 
-            $description = $result['description'];
-            $wikipediaUrl = $result['wikipedia_url'] ?? null;
-            $dates = $result['dates'] ?? null;
-            
-            // Prepare update data
-            $updateData = ['description' => $description];
-            
-            // Add or improve dates if available
-            if ($dates) {
-                // Check if we can improve start date
-                $startDateImproved = false;
-                if ($dates['start_year']) {
-                    if (!$span->start_year) {
-                        // No start date exists, add it
-                        $updateData['start_year'] = $dates['start_year'];
-                        $updateData['start_month'] = $dates['start_month'];
-                        $updateData['start_day'] = $dates['start_day'];
-                        $updateData['start_precision'] = $dates['start_precision'];
-                        $startDateImproved = true;
-                    } elseif ($this->shouldImproveDate($span, 'start', $dates)) {
-                        // Existing date can be improved
-                        $updateData['start_year'] = $dates['start_year'];
-                        $updateData['start_month'] = $dates['start_month'];
-                        $updateData['start_day'] = $dates['start_day'];
-                        $updateData['start_precision'] = $dates['start_precision'];
-                        $startDateImproved = true;
-                    }
-                }
-                
-                // Check if we can improve end date
-                $endDateImproved = false;
-                if ($dates['end_year']) {
-                    if (!$span->end_year) {
-                        // No end date exists, add it
-                        $updateData['end_year'] = $dates['end_year'];
-                        $updateData['end_month'] = $dates['end_month'];
-                        $updateData['end_day'] = $dates['end_day'];
-                        $updateData['end_precision'] = $dates['end_precision'];
-                        $endDateImproved = true;
-                    } elseif ($this->shouldImproveDate($span, 'end', $dates)) {
-                        // Existing date can be improved
-                        $updateData['end_year'] = $dates['end_year'];
-                        $updateData['end_month'] = $dates['end_month'];
-                        $updateData['end_day'] = $dates['end_day'];
-                        $updateData['end_precision'] = $dates['end_precision'];
-                        $endDateImproved = true;
-                    }
-                }
-            }
-            
-            // Update the span
-            $span->update($updateData);
-            
-            // Add Wikipedia URL to sources if it exists and isn't already there
-            if ($wikipediaUrl) {
-                $currentSources = $span->sources ?? [];
-                
-                // Check if the Wikipedia URL is already in sources
-                $wikipediaUrlExists = false;
-                foreach ($currentSources as $source) {
-                    if (is_string($source) && strpos($source, 'wikipedia.org') !== false) {
-                        $wikipediaUrlExists = true;
-                        break;
-                    } elseif (is_array($source) && isset($source['url']) && strpos($source['url'], 'wikipedia.org') !== false) {
-                        $wikipediaUrlExists = true;
-                        break;
-                    }
-                }
-                
-                // Add the Wikipedia URL if it's not already there
-                if (!$wikipediaUrlExists) {
-                    $currentSources[] = [
-                        'title' => 'Wikipedia',
-                        'url' => $wikipediaUrl,
-                        'type' => 'web',
-                        'added_by' => 'wikipedia_bulk_import'
-                    ];
-                    $span->update(['sources' => $currentSources]);
-                }
-            } else {
-                // We got a description but no Wikipedia URL - add skip note
-                $currentNotes = $span->notes ?? '';
-                $skipNote = "\n\n[Skipped Wikipedia import - no Wikipedia page found]";
-                $span->update(['notes' => $currentNotes . $skipNote]);
-            }
-            
-            // Check what was added or improved
-            $datesAdded = false;
-            $datesImproved = false;
-            $dateNoteAdded = false;
-            if ($dates) {
-                $datesAdded = (!$span->start_year && $dates['start_year']) || (!$span->end_year && $dates['end_year']);
-                $datesImproved = $startDateImproved ?? false || $endDateImproved ?? false;
-                
-                // Check if we have limited precision dates that we can't improve further
-                if (($dates['start_precision'] === 'year' || $dates['start_precision'] === 'month') ||
-                    ($dates['end_precision'] === 'year' || $dates['end_precision'] === 'month')) {
-                    $dateNoteAdded = true;
-                    $currentNotes = $span->notes ?? '';
-                    $dateNote = "\n\n[Wikipedia import complete - dates available with limited precision]";
-                    $span->update(['notes' => $currentNotes . $dateNote]);
-                }
-            }
-
-            Log::info('Wikipedia bulk import processed person', [
-                'span_id' => $span->id,
-                'span_name' => $span->name,
-                'description_added' => !empty($description),
-                'wikipedia_source_added' => !empty($wikipediaUrl),
-                'dates_added' => $datesAdded,
-                'dates_improved' => $datesImproved
-            ]);
-
+        if ($result['success']) {
             return response()->json([
                 'success' => true,
-                'message' => 'Person processed successfully.',
-                'data' => [
-                    'span_id' => $span->id,
-                    'span_name' => $span->name,
-                    'description' => $description,
-                    'wikipedia_url' => $wikipediaUrl,
-                    'description_added' => !empty($description),
-                    'wikipedia_source_added' => !empty($wikipediaUrl),
-                    'dates_added' => $datesAdded,
-                    'dates_improved' => $datesImproved
-                ]
+                'message' => $result['message'],
+                'data' => $result['data'] ?? [],
             ]);
-
-        } catch (\Exception $e) {
-            Log::error('Wikipedia bulk import failed for person', [
-                'span_id' => $span->id,
-                'span_name' => $span->name,
-                'error' => $e->getMessage()
-            ]);
-            
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to process person: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
-     * Check if a date should be improved based on existing data
-     */
-    private function shouldImproveDate(\App\Models\Span $span, string $dateType, array $newDates): bool
-    {
-        $prefix = $dateType === 'start' ? 'start' : 'end';
-        $currentYear = $span->{$prefix . '_year'};
-        $currentMonth = $span->{$prefix . '_month'};
-        $currentDay = $span->{$prefix . '_day'};
-        $currentPrecision = $span->{$prefix . '_precision'};
-        
-        $newYear = $newDates[$prefix . '_year'];
-        $newMonth = $newDates[$prefix . '_month'];
-        $newDay = $newDates[$prefix . '_day'];
-        $newPrecision = $newDates[$prefix . '_precision'];
-
-        // If years don't match, don't improve (different person or data)
-        if ($currentYear !== $newYear) {
-            return false;
         }
 
-        // Check for the 01-01 problem: if current date has month=1 and day=1, it's likely wrong
-        $has01_01Problem = ($currentMonth === 1 && $currentDay === 1);
-        
-        // Check if new data has better precision
-        $currentPrecisionLevel = $this->getPrecisionLevel($currentPrecision);
-        $newPrecisionLevel = $this->getPrecisionLevel($newPrecision);
-        
-        // Improve if:
-        // 1. Current date has 01-01 problem, OR
-        // 2. New data has better precision (more specific)
-        return $has01_01Problem || $newPrecisionLevel > $currentPrecisionLevel;
-    }
+        $status = str_contains($result['message'] ?? '', 'No suitable description') ? 404 : 500;
 
-    /**
-     * Get precision level as integer for comparison
-     */
-    private function getPrecisionLevel(string $precision): int
-    {
-        switch ($precision) {
-            case 'year': return 1;
-            case 'month': return 2;
-            case 'day': return 3;
-            default: return 0;
-        }
+        return response()->json([
+            'success' => false,
+            'message' => $result['message'],
+        ], $status);
     }
 
     /**
@@ -312,30 +141,26 @@ class WikipediaImportController extends Controller
     public function skipPerson(Request $request)
     {
         $request->validate([
-            'span_id' => 'required|uuid|exists:spans,id'
+            'span_id' => 'required|uuid|exists:spans,id',
         ]);
 
         $span = Span::findOrFail($request->span_id);
-        
-        // Check if this is a public figure
-        if ($span->type_id !== 'person' || 
-            !isset($span->metadata['subtype']) || 
+
+        if ($span->type_id !== 'person' ||
+            !isset($span->metadata['subtype']) ||
             $span->metadata['subtype'] !== 'public_figure') {
             return response()->json([
                 'success' => false,
-                'message' => 'This span is not a public figure.'
+                'message' => 'This span is not a public figure.',
             ], 400);
         }
 
-        // Add a note to the span that it was skipped
-        $currentNotes = $span->notes ?? '';
-        $skipNote = "\n\n[Skipped Wikipedia import - not found on Wikipedia]";
-        $span->update(['notes' => $currentNotes . $skipNote]);
+        $this->wikipediaImportService->skipSpan($span);
 
         Log::info('Wikipedia bulk import skipped person', [
             'span_id' => $span->id,
             'span_name' => $span->name,
-            'reason' => 'not_found_on_wikipedia'
+            'reason' => 'not_found_on_wikipedia',
         ]);
 
         return response()->json([
@@ -343,8 +168,95 @@ class WikipediaImportController extends Controller
             'message' => 'Person skipped successfully.',
             'data' => [
                 'span_id' => $span->id,
-                'span_name' => $span->name
-            ]
+                'span_name' => $span->name,
+            ],
+        ]);
+    }
+
+    /**
+     * Start Wikipedia public figures import as a background job
+     */
+    public function startBackgroundImport(Request $request)
+    {
+        $retrySkipped = filter_var($request->input('retry_skipped', false), FILTER_VALIDATE_BOOLEAN);
+
+        ImportProgress::where('import_type', 'wikipedia_public_figures')
+            ->where('user_id', auth()->id())
+            ->delete();
+
+        ImportWikipediaPublicFiguresJob::dispatch((string) auth()->id(), $retrySkipped);
+
+        return response()->json([
+            'success' => true,
+            'message' => $retrySkipped
+                ? 'Import started (retrying previously skipped). Progress will update as public figures are processed.'
+                : 'Import started in background. Progress will update as public figures are processed.',
+        ]);
+    }
+
+    /**
+     * Cancel the background Wikipedia import
+     */
+    public function cancelBackgroundImport(Request $request)
+    {
+        $progress = ImportProgress::forWikipediaPublicFigures((string) auth()->id());
+        if ($progress) {
+            $progress->mergeProgress([
+                'cancel_requested' => true,
+                'status' => 'cancelled',
+                'cancelled_at' => now()->toIso8601String(),
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Import cancelled. If it was running, it will stop after the current person.',
+        ]);
+    }
+
+    /**
+     * Get background import status
+     */
+    public function getBackgroundStatus(Request $request)
+    {
+        $progress = ImportProgress::forWikipediaPublicFigures((string) auth()->id());
+        if ($progress && in_array($progress->status, ['running', 'completed', 'failed', 'cancelled'])) {
+            $jobProgress = $progress->toJobProgressArray();
+
+            $withDescriptionMissingWikiSource = Span::where('type_id', 'person')
+                ->whereJsonContains('metadata->subtype', 'public_figure')
+                ->whereNotNull('description')
+                ->where(function ($q) {
+                    $q->whereNull('sources')
+                        ->orWhereRaw("sources::text NOT ILIKE '%wikipedia.org%'");
+                })
+                ->count();
+
+            $previouslySkippedNeedWikiSource = Span::where('type_id', 'person')
+                ->whereJsonContains('metadata->subtype', 'public_figure')
+                ->whereNotNull('description')
+                ->where(function ($q) {
+                    $q->whereNull('sources')
+                        ->orWhereRaw("sources::text NOT ILIKE '%wikipedia.org%'");
+                })
+                ->whereRaw("notes LIKE '%[Skipped Wikipedia import%'")
+                ->count();
+
+            return response()->json([
+                'success' => true,
+                'background_job' => true,
+                'job_status' => $progress->status,
+                'job_progress' => $jobProgress,
+                'stats' => [
+                    'total_need_wiki_source' => $withDescriptionMissingWikiSource,
+                    'previously_skipped' => $previouslySkippedNeedWikiSource,
+                ],
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'background_job' => false,
         ]);
     }
 
@@ -364,11 +276,28 @@ class WikipediaImportController extends Controller
 
         $publicFiguresWithWikipediaSources = Span::where('type_id', 'person')
             ->whereJsonContains('metadata->subtype', 'public_figure')
-            ->whereJsonContains('sources', ['url' => ['like' => '%wikipedia.org%']])
+            ->whereNotNull('sources')
+            ->whereRaw("sources::text ILIKE '%wikipedia.org%'")
             ->count();
 
-        // For now, we'll use a simpler approach for Wikipedia sources count
-        $publicFiguresWithWikipediaSources = 0; // We'll calculate this differently if needed
+        $withDescriptionMissingWikiSource = Span::where('type_id', 'person')
+            ->whereJsonContains('metadata->subtype', 'public_figure')
+            ->whereNotNull('description')
+            ->where(function ($q) {
+                $q->whereNull('sources')
+                    ->orWhereRaw("sources::text NOT ILIKE '%wikipedia.org%'");
+            })
+            ->count();
+
+        $previouslySkippedNeedWikiSource = Span::where('type_id', 'person')
+            ->whereJsonContains('metadata->subtype', 'public_figure')
+            ->whereNotNull('description')
+            ->where(function ($q) {
+                $q->whereNull('sources')
+                    ->orWhereRaw("sources::text NOT ILIKE '%wikipedia.org%'");
+            })
+            ->whereRaw("notes LIKE '%[Skipped Wikipedia import%'")
+            ->count();
 
         return response()->json([
             'success' => true,
@@ -377,7 +306,8 @@ class WikipediaImportController extends Controller
                 'with_descriptions' => $publicFiguresWithDescriptions,
                 'with_wikipedia_sources' => $publicFiguresWithWikipediaSources,
                 'without_descriptions' => $totalPublicFigures - $publicFiguresWithDescriptions,
-                'without_wikipedia_sources' => $totalPublicFigures - $publicFiguresWithWikipediaSources
+                'with_description_missing_wiki_source' => $withDescriptionMissingWikiSource,
+                'previously_skipped_need_wiki_source' => $previouslySkippedNeedWikiSource,
             ]
         ]);
     }

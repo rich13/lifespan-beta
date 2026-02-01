@@ -8,6 +8,7 @@ services:
     working_dir: /var/www
     volumes:
       - ./:/var/www
+      - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "5173:5173"
     networks:
@@ -30,6 +31,7 @@ services:
       - DB_DATABASE=lifespan_beta
       - DB_USERNAME=lifespan_user
       - DB_PASSWORD=lifespan_password
+      - QUEUE_CONNECTION=database
       - SESSION_DRIVER=file
       - SESSION_LIFETIME=525600
       - DOCKER_CONTAINER=true
@@ -108,6 +110,62 @@ services:
       db:
         condition: service_healthy
     restart: unless-stopped
+
+  queue:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lifespan-queue
+    restart: unless-stopped
+    working_dir: /var/www
+    volumes:
+      - ./:/var/www
+    networks:
+      - lifespan-network
+    entrypoint: ["/var/www/docker/queue-entrypoint.sh"]
+    environment:
+      - APP_ENV=local
+      - APP_DEBUG=true
+      - DB_CONNECTION=pgsql
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_DATABASE=lifespan_beta
+      - DB_USERNAME=lifespan_user
+      - DB_PASSWORD=lifespan_password
+      - QUEUE_CONNECTION=database
+      - CACHE_DRIVER=file
+      - SESSION_DRIVER=file
+    depends_on:
+      db:
+        condition: service_healthy
+
+  queue2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lifespan-queue-2
+    restart: unless-stopped
+    working_dir: /var/www
+    volumes:
+      - ./:/var/www
+    networks:
+      - lifespan-network
+    entrypoint: ["/var/www/docker/queue-entrypoint.sh"]
+    environment:
+      - APP_ENV=local
+      - APP_DEBUG=true
+      - DB_CONNECTION=pgsql
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_DATABASE=lifespan_beta
+      - DB_USERNAME=lifespan_user
+      - DB_PASSWORD=lifespan_password
+      - QUEUE_CONNECTION=database
+      - CACHE_DRIVER=file
+      - SESSION_DRIVER=file
+    depends_on:
+      db:
+        condition: service_healthy
 
   mailpit:
     image: axllent/mailpit:latest

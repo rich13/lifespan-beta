@@ -132,6 +132,28 @@ return [
             ],
         ],
 
+        // Separate connection for import progress - commits immediately so status polling can see updates
+        // even when the import job is inside a long-running transaction
+        'pgsql_progress' => [
+            'driver' => 'pgsql',
+            'url' => env('DATABASE_URL'),
+            'host' => $dbConfig['host'] ?? env('DB_HOST', '127.0.0.1'),
+            'port' => $dbConfig['port'] ?? env('DB_PORT', '5432'),
+            'database' => $dbConfig['database'] ?? env('DB_DATABASE', 'forge'),
+            'username' => $dbConfig['username'] ?? env('DB_USERNAME', 'forge'),
+            'password' => $dbConfig['password'] ?? env('DB_PASSWORD', ''),
+            'charset' => 'utf8',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'search_path' => 'public',
+            'sslmode' => 'prefer',
+            'options' => [
+                PDO::ATTR_PERSISTENT => false,
+                PDO::ATTR_TIMEOUT => 5,
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            ],
+        ],
+
         'testing' => [
             'driver' => 'pgsql',
             'url' => env('DATABASE_URL'),

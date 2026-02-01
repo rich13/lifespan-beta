@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\ImportBluePlaquesJob;
 use App\Services\BluePlaqueService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -38,8 +39,7 @@ class BluePlaqueImportController extends Controller
             $config = BluePlaqueService::getConfigForType($request->plaque_type);
             $service = new BluePlaqueService($config);
             
-            $csvData = $service->downloadData();
-            $plaques = $service->parseCsvData($csvData);
+            $plaques = $service->getParsedPlaques();
             
             // Filter by plaque type if needed
             if ($request->plaque_type === 'london_green') {
@@ -108,8 +108,7 @@ class BluePlaqueImportController extends Controller
             $config = BluePlaqueService::getConfigForType($request->plaque_type);
             $service = new BluePlaqueService($config);
             
-            $csvData = $service->downloadData();
-            $plaques = $service->parseCsvData($csvData);
+            $plaques = $service->getParsedPlaques();
             
             // Filter by plaque type if needed
             if ($request->plaque_type === 'london_green') {
@@ -160,8 +159,7 @@ class BluePlaqueImportController extends Controller
             $config = BluePlaqueService::getConfigForType($request->plaque_type);
             $service = new BluePlaqueService($config);
             
-            $csvData = $service->downloadData();
-            $plaques = $service->parseCsvData($csvData);
+            $plaques = $service->getParsedPlaques();
             
             // Filter by plaque type if needed
             if ($request->plaque_type === 'london_green') {
@@ -311,8 +309,7 @@ class BluePlaqueImportController extends Controller
             $config = BluePlaqueService::getConfigForType($request->plaque_type);
             $service = new BluePlaqueService($config);
             
-            $csvData = $service->downloadData();
-            $allPlaques = $service->parseCsvData($csvData);
+            $allPlaques = $service->getParsedPlaques();
             
             // Filter by plaque type if needed
             if ($request->plaque_type === 'london_green') {
@@ -330,7 +327,7 @@ class BluePlaqueImportController extends Controller
             $batchPlaques = array_slice($allPlaques, $offset, $batchSize);
             
             // Process the batch
-            $results = $service->processBatch($batchPlaques, count($batchPlaques));
+            $results = $service->processBatch($batchPlaques, count($batchPlaques), auth()->user());
             
             $isLastBatch = ($offset + $batchSize) >= $totalPlaques;
             
@@ -419,8 +416,7 @@ class BluePlaqueImportController extends Controller
             $config = BluePlaqueService::getConfigForType($request->plaque_type);
             $service = new BluePlaqueService($config);
             
-            $csvData = $service->downloadData();
-            $plaques = $service->parseCsvData($csvData);
+            $plaques = $service->getParsedPlaques();
             
             // Filter by plaque type if needed
             if ($request->plaque_type === 'london_green') {
@@ -433,7 +429,7 @@ class BluePlaqueImportController extends Controller
             $totalPlaques = count($plaques);
             
             // Process all plaques
-            $results = $service->processBatch($plaques, $totalPlaques);
+            $results = $service->processBatch($plaques, $totalPlaques, auth()->user());
             
             return response()->json([
                 'success' => true,
@@ -515,6 +511,65 @@ class BluePlaqueImportController extends Controller
     }
     
     /**
+     * Start blue plaque import as a background job (faster, no HTTP timeouts)
+     */
+    public function startBackgroundImport(Request $request)
+    {
+        $request->validate([
+            'plaque_type' => 'required|string|in:london_blue,london_green',
+        ]);
+
+        $config = BluePlaqueService::getConfigForType($request->plaque_type);
+        if (($config['csv_url'] ?? null) === null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Background import is not available for custom plaque imports',
+            ], 400);
+        }
+
+        // Clear any previous import progress (job will create fresh row)
+        \App\Models\ImportProgress::where('import_type', 'blue_plaques')
+            ->where('plaque_type', $request->plaque_type)
+            ->where('user_id', auth()->id())
+            ->delete();
+
+        ImportBluePlaquesJob::dispatch(
+            $request->plaque_type,
+            (string) auth()->id(),
+            25
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Import started in background. Progress will update as plaques are processed.',
+        ]);
+    }
+
+    /**
+     * Cancel a background import (or clear stale "in progress" state).
+     */
+    public function cancelBackgroundImport(Request $request)
+    {
+        $request->validate([
+            'plaque_type' => 'required|string|in:london_blue,london_green',
+        ]);
+
+        $progress = \App\Models\ImportProgress::forBluePlaques($request->plaque_type, (string) auth()->id());
+        if ($progress) {
+            $progress->mergeProgress([
+                'cancel_requested' => true,
+                'status' => 'cancelled',
+                'cancelled_at' => now()->toIso8601String(),
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Import cancelled. If it was running, it will stop after the current batch.',
+        ]);
+    }
+
+    /**
      * Get current import status
      */
     public function status(Request $request)
@@ -525,6 +580,26 @@ class BluePlaqueImportController extends Controller
         
         try {
             $config = BluePlaqueService::getConfigForType($request->plaque_type);
+
+            // Check for background job progress from database (shared across all workers)
+            $progress = \App\Models\ImportProgress::forBluePlaques($request->plaque_type, (string) auth()->id());
+            if ($progress && in_array($progress->status, ['running', 'completed', 'failed', 'cancelled'])) {
+                $jobProgress = $progress->toJobProgressArray();
+                $total = $progress->total_items;
+                $processed = $progress->processed_items;
+                return response()->json([
+                    'success' => true,
+                    'background_job' => true,
+                    'job_status' => $progress->status,
+                    'is_importing' => $progress->status === 'running',
+                    'total_imported_plaques' => $processed,
+                    'total_available_plaques' => $total,
+                    'import_progress_percentage' => $jobProgress['progress_percentage'] ?? 0,
+                    'remaining_plaques' => max(0, $total - $processed),
+                    'first_unimported_index' => $processed,
+                    'job_progress' => $jobProgress,
+                ]);
+            }
             
             // Check if there are any recent import activities
             $recentImports = \App\Models\Span::where('metadata->data_source', $config['data_source'])
@@ -559,8 +634,7 @@ class BluePlaqueImportController extends Controller
             
             try {
                 $service = new BluePlaqueService($config);
-                $csvData = $service->downloadData();
-                $allPlaques = $service->parseCsvData($csvData);
+                $allPlaques = $service->getParsedPlaques();
                 
                 // Filter by plaque type if needed
                 if ($request->plaque_type === 'london_green') {
@@ -616,21 +690,27 @@ class BluePlaqueImportController extends Controller
      */
     public function stats(Request $request)
     {
-        $plaqueType = $request->get('plaque_type', 'london_blue');
-        $config = BluePlaqueService::getConfigForType($plaqueType);
+        $importType = $request->get('plaque_type', 'london_blue');
+        $config = BluePlaqueService::getConfigForType($importType);
         
+        $dataSource = $config['data_source'];
+        $subtype = $config['plaque_type'];
         $stats = [
-            'total_plaques' => \App\Models\Span::where('metadata->subtype', $config['plaque_type'])->count(),
+            'total_plaques' => \App\Models\Span::where('type_id', 'thing')
+                ->whereRaw("metadata->>'data_source' = ? and metadata->>'subtype' = ?", [$dataSource, $subtype])
+                ->count(),
             'total_people' => \App\Models\Span::where('type_id', 'person')
-                ->where('metadata->data_source', $config['data_source'])
+                ->whereRaw("metadata->>'data_source' = ?", [$dataSource])
                 ->count(),
             'total_locations' => \App\Models\Span::where('type_id', 'place')
-                ->where('metadata->data_source', $config['data_source'])
+                ->whereRaw("metadata->>'data_source' = ?", [$dataSource])
                 ->count(),
-            'total_connections' => \App\Models\Connection::whereHas('parent', function($q) use ($config) {
-                $q->where('metadata->subtype', $config['plaque_type']);
-            })->orWhereHas('child', function($q) use ($config) {
-                $q->where('metadata->subtype', $config['plaque_type']);
+            'total_connections' => \App\Models\Connection::whereHas('parent', function($q) use ($dataSource, $subtype) {
+                $q->where('type_id', 'thing')
+                    ->whereRaw("metadata->>'data_source' = ? and metadata->>'subtype' = ?", [$dataSource, $subtype]);
+            })->orWhereHas('child', function($q) use ($dataSource, $subtype) {
+                $q->where('type_id', 'thing')
+                    ->whereRaw("metadata->>'data_source' = ? and metadata->>'subtype' = ?", [$dataSource, $subtype]);
             })->count(),
             'plaque_type' => $config['plaque_type'],
             'data_source' => $config['data_source']

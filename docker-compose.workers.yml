@@ -1,0 +1,37 @@
+# DEPRECATED: Workers are now included in the default docker-compose.yml.
+# This file is kept for reference. Use: docker compose up
+#
+# Workers run by default. Manage them at Admin → Workers (/admin/workers).
+
+services:
+  app:
+    environment:
+      - QUEUE_CONNECTION=database
+
+  queue:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lifespan-queue
+    restart: unless-stopped
+    working_dir: /var/www
+    volumes:
+      - ./:/var/www
+    networks:
+      - lifespan-network
+    entrypoint: ["/var/www/docker/queue-entrypoint.sh"]
+    environment:
+      - APP_ENV=local
+      - APP_DEBUG=true
+      - DB_CONNECTION=pgsql
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_DATABASE=lifespan_beta
+      - DB_USERNAME=lifespan_user
+      - DB_PASSWORD=lifespan_password
+      - QUEUE_CONNECTION=database
+      - CACHE_DRIVER=file
+      - SESSION_DRIVER=file
+    depends_on:
+      db:
+        condition: service_healthy

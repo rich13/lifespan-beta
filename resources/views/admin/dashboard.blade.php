@@ -542,6 +542,22 @@
                     <div class="card h-100">
                         <div class="card-body">
                             <div class="d-flex align-items-center mb-3">
+                                <i class="bi bi-cpu fs-2 text-primary me-3"></i>
+                                <div>
+                                    <h5 class="card-title mb-1">Queue Workers</h5>
+                                    <p class="card-text text-muted">Monitor and control background workers</p>
+                                </div>
+                            </div>
+                            <a href="{{ route('admin.workers.index') }}" class="btn btn-outline-primary btn-sm w-100">
+                                <i class="bi bi-arrow-right"></i> Workers
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-3">
                                 <i class="bi bi-tools fs-2 text-secondary me-3"></i>
                                 <div>
                                     <h5 class="card-title mb-1">Admin Tools</h5>

@@ -2,8 +2,10 @@
 
 namespace App\Services;
 
-use App\Models\Span;
 use App\Models\Connection;
+use App\Models\Span;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -12,6 +14,31 @@ class BluePlaqueService
 {
     protected array $config;
     private static array $processedPlaques = [];
+
+    /** @var array<string, string> external_id => span_id */
+    private array $plaqueLookup = [];
+
+    /** @var array<string, string> name => span_id */
+    private array $personLookup = [];
+
+    /** @var array<string, string> address => span_id */
+    private array $locationLookup = [];
+
+    private bool $debug = false;
+
+    private $progressHeartbeat = null;
+
+    public function setDebug(bool $debug): void
+    {
+        $this->debug = $debug;
+    }
+
+    private function debugLog(string $step, array $context = []): void
+    {
+        if ($this->debug) {
+            Log::info("DEBUG {$step}", array_merge($context, ['ts' => microtime(true)]));
+        }
+    }
     
     public function __construct(array $config = [])
     {
@@ -70,6 +97,67 @@ class BluePlaqueService
         Log::info('Batch cleanup completed');
     }
     
+    /**
+     * Get the OpenPlaques source URL - direct plaque link when we have an ID, otherwise homepage
+     */
+    private function getOpenPlaquesSourceUrl(mixed $plaqueId): string
+    {
+        if (!empty($plaqueId) && $plaqueId !== 'unknown' && is_numeric($plaqueId)) {
+            $id = (int) $plaqueId;
+            if ($id > 0) {
+                return 'https://openplaques.org/plaques/' . $id;
+            }
+        }
+
+        return 'https://openplaques.org/';
+    }
+
+    /**
+     * Update the span's Open Plaques source URL if it points to the generic homepage instead of the direct plaque link
+     */
+    private function updateSourceUrlIfNeeded(Span $span, mixed $plaqueId): void
+    {
+        $directUrl = $this->getOpenPlaquesSourceUrl($plaqueId);
+        if ($directUrl === 'https://openplaques.org/') {
+            return; // No direct URL available for this plaque ID, nothing to update
+        }
+
+        $sources = $span->sources ?? [];
+        $updated = false;
+
+        foreach ($sources as $index => $source) {
+            if (!is_array($source) || ($source['url'] ?? null) !== 'https://openplaques.org/') {
+                continue;
+            }
+            $sources[$index]['url'] = $directUrl;
+            $updated = true;
+        }
+
+        if ($updated) {
+            DB::table('spans')
+                ->where('id', $span->id)
+                ->update(['sources' => json_encode($sources)]);
+        }
+    }
+
+    /**
+     * Get parsed plaques, from cache when available (1 hour TTL).
+     * Skips cache for custom imports (no csv_url).
+     */
+    public function getParsedPlaques(): array
+    {
+        $csvUrl = $this->config['csv_url'] ?? null;
+        if (!$csvUrl) {
+            throw new \Exception('No CSV URL configured (custom imports use uploaded data)');
+        }
+
+        $cacheKey = 'blue_plaques_parsed_' . md5($csvUrl);
+
+        return Cache::remember($cacheKey, 3600, function () {
+            return $this->parseCsvData($this->downloadData());
+        });
+    }
+
     /**
      * Download the plaque CSV data
      */
@@ -265,11 +353,32 @@ class BluePlaqueService
     
     /**
      * Process a batch of plaques
+     *
+     * @param  array  $plaques  Plaque data to process
+     * @param  int  $batchSize  Batch size (for logging)
+     * @param  \App\Models\User|null  $user  User to attribute ownership to (required for CLI)
+     * @param  bool  $skipCleanup  Skip DB disconnect (use when caller manages transactions)
+     * @param  int|null  $batchOffset  Offset for debug logging
+     * @param  bool  $skipSourceUrlUpdate  Skip updating source URLs on existing plaques (avoids lock contention in bulk CLI import)
+     * @param  int|null  $totalPlaques  Total plaques in full import (for progress percentage when using onProgress)
+     * @param  callable|null  $onProgress  Called after each plaque with progress data for live updates
+     * @param  callable|null  $progressHeartbeat  Optional callback to touch progress cache during long operations (e.g. after each connection)
      */
-    public function processBatch(array $plaques, int $batchSize = 1): array // Reduced default batch size to prevent PHP timeout
+    public function processBatch(array $plaques, int $batchSize = 1, $user = null, bool $skipCleanup = false, ?int $batchOffset = null, bool $skipSourceUrlUpdate = false, ?int $totalPlaques = null, ?callable $onProgress = null, ?callable $progressHeartbeat = null): array
     {
+        $this->debugLog('processBatch.start', ['batch_offset' => $batchOffset, 'count' => count($plaques)]);
+
         // Reset processed plaques tracking for new batch
         self::$processedPlaques = [];
+
+        // Pre-load lookup maps to reduce DB queries
+        $this->debugLog('loadLookupMaps.before');
+        $this->loadLookupMaps();
+        $this->debugLog('loadLookupMaps.after', [
+            'plaques' => count($this->plaqueLookup),
+            'persons' => count($this->personLookup),
+            'locations' => count($this->locationLookup),
+        ]);
         
         $results = [
             'processed' => 0,
@@ -282,79 +391,115 @@ class BluePlaqueService
         ];
         
         $startTime = now();
-        
-        foreach ($plaques as $index => $plaque) {
-            $plaqueId = $plaque[$this->config['field_mapping']['id']] ?? $plaque['id'] ?? 'unknown';
-            $plaqueName = $plaque[$this->config['field_mapping']['title']] ?? 'Unknown Plaque';
-            $personName = $plaque[$this->config['field_mapping']['person_name']] ?? 'N/A';
-            $locationName = $plaque[$this->config['field_mapping']['address']] ?? 'N/A';
-            
-            // Reduced logging to minimize overhead
-            if ($index % 5 === 0) { // Only log every 5th plaque
-                Log::info('Processing plaque in batch', [
-                    'batch_index' => $index,
-                    'plaque_id' => $plaqueId,
-                    'plaque_name' => $plaqueName,
-                    'data_source' => $this->config['data_source']
-                ]);
-            }
-            
-            // Update current item being processed
-            $results['current_item'] = [
-                'plaque_name' => $plaqueName,
-                'person_name' => $personName,
-                'location_name' => $locationName,
-                'status' => 'Processing...'
-            ];
-            
-            // Add to activity log
-            $results['activity_log'][] = [
-                'timestamp' => now()->format('H:i:s'),
-                'message' => "Processing plaque: {$plaqueName}"
-            ];
-            
-            try {
-                $result = $this->processPlaque($plaque);
-                $results['processed']++;
-                
-                if ($result['success']) {
-                    // Check if this was a skipped plaque (already exists)
-                    if (isset($result['details']['skipped']) && $result['details']['skipped']) {
-                        $results['skipped']++;
-                        $results['activity_log'][] = [
-                            'timestamp' => now()->format('H:i:s'),
-                            'message' => "⏭️ Skipped existing plaque: {$plaqueName}"
-                        ];
-                    } else {
-                        // New plaque processed
-                        $results['created']++;
-                        $results['activity_log'][] = [
-                            'timestamp' => now()->format('H:i:s'),
-                            'message' => "✅ Created new plaque: {$plaqueName}"
-                        ];
-                    }
-                    $results['details'][] = $result['details'];
-                } else {
-                    $results['errors'][] = $result['message'];
-                    $results['activity_log'][] = [
-                        'timestamp' => now()->format('H:i:s'),
-                        'message' => "❌ Error processing plaque: {$plaqueName} - {$result['message']}"
-                    ];
+        $this->progressHeartbeat = $progressHeartbeat;
+
+        DB::transaction(function () use ($plaques, $user, &$results, $batchOffset, $skipSourceUrlUpdate, $totalPlaques, $onProgress) {
+            foreach ($plaques as $index => $plaque) {
+                $plaqueId = $plaque[$this->config['field_mapping']['id']] ?? $plaque['id'] ?? 'unknown';
+                $plaqueName = $plaque[$this->config['field_mapping']['title']] ?? 'Unknown Plaque';
+                $this->debugLog('processPlaque.before', ['index' => $index, 'plaque_id' => $plaqueId, 'batch_offset' => $batchOffset]);
+                $personName = $plaque[$this->config['field_mapping']['person_name']] ?? 'N/A';
+                $locationName = $plaque[$this->config['field_mapping']['address']] ?? 'N/A';
+
+                // Reduced logging to minimize overhead
+                if ($index % 5 === 0) { // Only log every 5th plaque
+                    Log::info('Processing plaque in batch', [
+                        'batch_index' => $index,
+                        'plaque_id' => $plaqueId,
+                        'plaque_name' => $plaqueName,
+                        'data_source' => $this->config['data_source']
+                    ]);
                 }
-            } catch (\Exception $e) {
-                $results['errors'][] = "Error processing plaque {$plaqueId}: " . $e->getMessage();
+
+                // Update current item being processed
+                $results['current_item'] = [
+                    'plaque_name' => $plaqueName,
+                    'person_name' => $personName,
+                    'location_name' => $locationName,
+                    'status' => 'Processing...'
+                ];
+
+                if ($onProgress && $totalPlaques !== null && $batchOffset !== null) {
+                    $processedSoFar = $batchOffset + $index;
+                    $onProgress([
+                        'processed' => $processedSoFar,
+                        'total' => $totalPlaques,
+                        'created' => $results['created'],
+                        'skipped' => $results['skipped'],
+                        'errors_count' => count($results['errors']),
+                        'current_plaque' => "Working on: {$plaqueName}",
+                        'progress_percentage' => min(100, round(($processedSoFar / $totalPlaques) * 100, 1)),
+                        'batch_progress' => $index,
+                        'batch_size' => count($plaques),
+                    ]);
+                }
+
+                // Add to activity log
                 $results['activity_log'][] = [
                     'timestamp' => now()->format('H:i:s'),
-                    'message' => "❌ Exception processing plaque: {$plaqueName} - " . $e->getMessage()
+                    'message' => "Processing plaque: {$plaqueName}"
                 ];
+
+                try {
+                    $result = $this->processPlaque($plaque, $user, $skipSourceUrlUpdate);
+                    $results['processed']++;
+
+                    if ($result['success']) {
+                        // Check if this was a skipped plaque (already exists)
+                        if (isset($result['details']['skipped']) && $result['details']['skipped']) {
+                            $results['skipped']++;
+                            $results['activity_log'][] = [
+                                'timestamp' => now()->format('H:i:s'),
+                                'message' => "⏭️ Skipped existing plaque: {$plaqueName}"
+                            ];
+                        } else {
+                            // New plaque processed
+                            $results['created']++;
+                            $results['activity_log'][] = [
+                                'timestamp' => now()->format('H:i:s'),
+                                'message' => "✅ Created new plaque: {$plaqueName}"
+                            ];
+                        }
+                        $results['details'][] = $result['details'];
+                    } else {
+                        $results['errors'][] = $result['message'];
+                        $results['activity_log'][] = [
+                            'timestamp' => now()->format('H:i:s'),
+                            'message' => "❌ Error processing plaque: {$plaqueName} - {$result['message']}"
+                        ];
+                    }
+                } catch (\Exception $e) {
+                    $results['errors'][] = "Error processing plaque {$plaqueId}: " . $e->getMessage();
+                    $results['activity_log'][] = [
+                        'timestamp' => now()->format('H:i:s'),
+                        'message' => "❌ Exception processing plaque: {$plaqueName} - " . $e->getMessage()
+                    ];
+                }
+
+                if ($onProgress && $totalPlaques !== null && $batchOffset !== null) {
+                    $processed = $batchOffset + $results['processed'];
+                    $onProgress([
+                        'processed' => $processed,
+                        'total' => $totalPlaques,
+                        'created' => $results['created'],
+                        'skipped' => $results['skipped'],
+                        'errors_count' => count($results['errors']),
+                        'current_plaque' => $plaqueName,
+                        'progress_percentage' => min(100, round(($processed / $totalPlaques) * 100, 1)),
+                        'batch_progress' => $index + 1,
+                        'batch_size' => count($plaques),
+                    ]);
+                }
+
+                // Keep only last 20 activity log entries
+                if (count($results['activity_log']) > 20) {
+                    $results['activity_log'] = array_slice($results['activity_log'], -20);
+                }
             }
-            
-            // Keep only last 20 activity log entries
-            if (count($results['activity_log']) > 20) {
-                $results['activity_log'] = array_slice($results['activity_log'], -20);
-            }
-        }
-        
+        });
+
+        $this->progressHeartbeat = null;
+
         // Clear current item when done
         $results['current_item'] = null;
         
@@ -365,12 +510,45 @@ class BluePlaqueService
             'message' => "Batch completed in {$duration}s - Processed: {$results['processed']}, Created: {$results['created']}, Skipped: {$results['skipped']}, Errors: " . count($results['errors'])
         ];
         
-        // Clean up after batch processing
-        $this->cleanupAfterBatch();
+        // Clean up after batch processing (skip when caller manages transactions, e.g. CLI)
+        if (!$skipCleanup) {
+            $this->cleanupAfterBatch();
+        }
         
         return $results;
     }
     
+    /**
+     * Pre-load lookup maps for plaques, persons and locations to reduce per-plaque DB queries
+     */
+    private function loadLookupMaps(): void
+    {
+        $dataSource = $this->config['data_source'];
+
+        $this->debugLog('loadLookupMaps.plaques_query');
+        $plaques = Span::query()
+            ->whereRaw(
+                "metadata->>'data_source' = ? and metadata->>'subtype' = ?",
+                [$dataSource, $this->config['plaque_type']]
+            )
+            ->get(['id', 'metadata']);
+        foreach ($plaques as $span) {
+            $extId = $span->metadata['external_id'] ?? null;
+            if ($extId !== null) {
+                $this->plaqueLookup[(string) $extId] = $span->id;
+            }
+        }
+        $this->debugLog('loadLookupMaps.plaques_done', ['count' => count($this->plaqueLookup)]);
+
+        $this->debugLog('loadLookupMaps.persons_query');
+        $this->personLookup = Span::where('type_id', 'person')->pluck('id', 'name')->all();
+        $this->debugLog('loadLookupMaps.persons_done', ['count' => count($this->personLookup)]);
+
+        $this->debugLog('loadLookupMaps.locations_query');
+        $this->locationLookup = Span::where('type_id', 'place')->pluck('id', 'name')->all();
+        $this->debugLog('loadLookupMaps.locations_done', ['count' => count($this->locationLookup)]);
+    }
+
     /**
      * Check if the plaque was newly created (not existing)
      * This is a simplified approach - we'll assume if the plaque was processed successfully,
@@ -815,10 +993,10 @@ class BluePlaqueService
         
         // Check for external ID conflicts
         if (!empty($span['metadata']['external_id'])) {
-            $existing = Span::where('metadata->external_id', $span['metadata']['external_id'])
-                ->where('metadata->data_source', $this->config['data_source'])
-                ->first();
-                
+            $existing = $this->findSpanByDataSourceAndExternalId(
+                $this->config['data_source'],
+                $span['metadata']['external_id']
+            );
             if ($existing) {
                 $validation['warnings'][] = 'External ID already exists in database';
             }
@@ -841,8 +1019,10 @@ class BluePlaqueService
     
     /**
      * Process a single plaque
+     *
+     * @param  bool  $skipSourceUrlUpdate  Skip updating source URLs on existing plaques (avoids lock contention in bulk import)
      */
-    public function processPlaque(array $plaque, $user = null): array
+    public function processPlaque(array $plaque, $user = null, bool $skipSourceUrlUpdate = false): array
     {
         try {
             $plaqueId = $plaque[$this->config['field_mapping']['id']] ?? 'unknown';
@@ -852,13 +1032,22 @@ class BluePlaqueService
                 'plaque_id' => $plaqueId,
                 'title' => $plaqueTitle
             ]);
-            
-            // Quick check: Has this plaque already been imported in a previous session?
-            $existingPlaque = Span::where('metadata->data_source', $this->config['data_source'])
-                ->where('metadata->external_id', $plaqueId)
-                ->first();
+
+            $this->debugLog('processPlaque.existing_check.before', ['plaque_id' => $plaqueId]);
+            // Quick check: Has this plaque already been imported? Use preloaded lookup first to
+            // avoid slow JSONB queries on large tables (can hang at batch boundaries).
+            $existingId = $this->plaqueLookup[(string) $plaqueId] ?? null;
+            $this->debugLog('processPlaque.existing_check.lookup_done', ['in_lookup' => $existingId !== null]);
+            $existingPlaque = $existingId ? Span::find($existingId) : $this->findSpanByDataSourceAndExternalId($this->config['data_source'], $plaqueId);
+            $this->debugLog('processPlaque.existing_check.after', ['found' => $existingPlaque !== null]);
                 
             if ($existingPlaque) {
+                if (!$skipSourceUrlUpdate) {
+                    $this->debugLog('processPlaque.update_source.before', ['span_id' => $existingPlaque->id]);
+                    $this->updateSourceUrlIfNeeded($existingPlaque, $plaqueId);
+                    $this->debugLog('processPlaque.update_source.after');
+                }
+
                 Log::info('Plaque already exists in database, skipping', [
                     'plaque_id' => $plaqueId,
                     'title' => $plaqueTitle,
@@ -897,7 +1086,9 @@ class BluePlaqueService
             $connections = [];
             
             // Create or find the plaque span
+            $this->debugLog('processPlaque.createPlaqueSpan.before');
             $plaqueSpan = $this->createPlaqueSpan($plaque, $user);
+            $this->debugLog('processPlaque.createPlaqueSpan.after', ['span_id' => $plaqueSpan->id ?? null]);
             // Reduced logging to minimize overhead
             // Log::info('Plaque span created/found', ['plaque_id' => $plaqueSpan->id]);
             $spans['plaque'] = $plaqueSpan;
@@ -944,7 +1135,7 @@ class BluePlaqueService
             
             // Plaque -> Person connection (plaque is about the person)
             if ($personSpan && $plaqueSpan) {
-                $plaquePersonConnection = $this->createConnection($plaqueSpan, $personSpan, $this->config['connection_types']['person_to_plaque']);
+                $plaquePersonConnection = $this->createConnection($plaqueSpan, $personSpan, $this->config['connection_types']['person_to_plaque'], $user);
                 if ($plaquePersonConnection) {
                     $connections[] = $plaquePersonConnection;
                     Log::info('Plaque -> Person connection created');
@@ -953,7 +1144,7 @@ class BluePlaqueService
             
             // Plaque -> Location connection (plaque is located at the location)
             if ($locationSpan && $plaqueSpan) {
-                $plaqueLocationConnection = $this->createConnection($plaqueSpan, $locationSpan, $this->config['connection_types']['plaque_to_location']);
+                $plaqueLocationConnection = $this->createConnection($plaqueSpan, $locationSpan, $this->config['connection_types']['plaque_to_location'], $user);
                 if ($plaqueLocationConnection) {
                     $connections[] = $plaqueLocationConnection;
                     Log::info('Plaque -> Location connection created');
@@ -962,7 +1153,7 @@ class BluePlaqueService
             
             // Photo -> Plaque connection
             if ($photoSpan && $plaqueSpan) {
-                $photoPlaqueConnection = $this->createConnection($photoSpan, $plaqueSpan, 'features');
+                $photoPlaqueConnection = $this->createConnection($photoSpan, $plaqueSpan, 'features', $user);
                 if ($photoPlaqueConnection) {
                     $connections[] = $photoPlaqueConnection;
                     Log::info('Photo -> Plaque connection created');
@@ -971,7 +1162,7 @@ class BluePlaqueService
             
             // Person Photo -> Person connection
             if ($personPhotoSpan && $personSpan) {
-                $personPhotoConnection = $this->createConnection($personPhotoSpan, $personSpan, 'features');
+                $personPhotoConnection = $this->createConnection($personPhotoSpan, $personSpan, 'features', $user);
                 if ($personPhotoConnection) {
                     $connections[] = $personPhotoConnection;
                     Log::info('Person Photo -> Person connection created');
@@ -1025,6 +1216,37 @@ class BluePlaqueService
             ];
         }
     }
+
+    /**
+     * Generate a unique slug for a span (required when event dispatcher is disabled during bulk import).
+     */
+    private function generateUniqueSlug(string $name): string
+    {
+        $baseSlug = Str::slug($name);
+        $reservedNames = app(\App\Services\RouteReservationService::class)->getReservedRouteNames();
+        $slug = $baseSlug;
+        $counter = 1;
+        while (
+            Span::where('slug', $slug)->exists() ||
+            in_array(strtolower($slug), array_map('strtolower', $reservedNames))
+        ) {
+            $slug = $baseSlug . '-' . $counter++;
+        }
+        return $slug;
+    }
+
+    /**
+     * Find a span by data_source and external_id in metadata (PostgreSQL-safe with bound parameters).
+     */
+    private function findSpanByDataSourceAndExternalId(string $dataSource, string|int $externalId): ?Span
+    {
+        return Span::query()
+            ->whereRaw(
+                "metadata->>'data_source' = ? and metadata->>'external_id' = ?",
+                [$dataSource, (string) $externalId]
+            )
+            ->first();
+    }
     
     /**
      * Create the plaque span
@@ -1032,19 +1254,29 @@ class BluePlaqueService
     private function createPlaqueSpan(array $plaque, $user = null): Span
     {
         $plaqueId = $plaque[$this->config['field_mapping']['id']] ?? $plaque['id'];
-        
-        // Check if plaque already exists
-        $existing = Span::where('metadata->data_source', $this->config['data_source'])
-            ->where('metadata->external_id', $plaqueId)
-            ->first();
-        
+
+        // Check lookup map first
+        $existingId = $this->plaqueLookup[(string) $plaqueId] ?? null;
+        if ($existingId) {
+            return Span::find($existingId);
+        }
+
+        // Check if plaque already exists in DB (use raw JSON query with bindings for PostgreSQL)
+        $existing = $this->findSpanByDataSourceAndExternalId($this->config['data_source'], $plaqueId);
+
         if ($existing) {
+            $this->plaqueLookup[(string) $plaqueId] = $existing->id;
+
             return $existing;
         }
         
         // Get erected year and determine if we have proper dates
         $erectedYear = $plaque[$this->config['field_mapping']['erected']] ?? null;
-        $hasProperDates = $erectedYear !== null && $erectedYear !== '' && is_numeric($erectedYear);
+        // Convert empty string to null for database compatibility
+        if ($erectedYear === '' || $erectedYear === '0') {
+            $erectedYear = null;
+        }
+        $hasProperDates = $erectedYear !== null && is_numeric($erectedYear);
         $state = $hasProperDates ? 'complete' : 'placeholder';
         
         // Log the data for debugging
@@ -1056,8 +1288,10 @@ class BluePlaqueService
             'state' => $state
         ]);
         
-        return Span::create([
-            'name' => $plaque[$this->config['field_mapping']['title']] ?? 'Unknown Plaque',
+        $plaqueName = $plaque[$this->config['field_mapping']['title']] ?? 'Unknown Plaque';
+        $span = Span::create([
+            'name' => $plaqueName,
+            'slug' => $this->generateUniqueSlug($plaqueName),
             'type_id' => 'thing',
             'description' => $plaque[$this->config['field_mapping']['inscription']] ?? '',
             'start_year' => $erectedYear,
@@ -1083,7 +1317,7 @@ class BluePlaqueService
                 [
                     'type' => 'open_data',
                     'name' => 'Open Plaques',
-                    'url' => 'https://openplaques.org/',
+                    'url' => $this->getOpenPlaquesSourceUrl($plaqueId),
                     'identifier' => $plaqueId
                 ]
             ],
@@ -1092,6 +1326,9 @@ class BluePlaqueService
             'access_level' => 'public',
             'state' => $state
         ]);
+        $this->plaqueLookup[(string) $plaqueId] = $span->id;
+
+        return $span;
     }
     
     /**
@@ -1104,14 +1341,21 @@ class BluePlaqueService
         if (empty($personName)) {
             return null;
         }
+
+        // Check lookup map first
+        $existingId = $this->personLookup[$personName] ?? null;
+        if ($existingId) {
+            return Span::find($existingId);
+        }
         
-        // Try to find existing person by exact name match first
+        // Try to find existing person by exact name match
         $existing = Span::where('name', $personName)
             ->where('type_id', 'person')
             ->first();
         
         if ($existing) {
-            Log::info('Found existing person span', ['person_id' => $existing->id, 'name' => $personName]);
+            $this->personLookup[$personName] = $existing->id;
+
             return $existing;
         }
         
@@ -1121,7 +1365,8 @@ class BluePlaqueService
             ->first();
         
         if ($existing) {
-            Log::info('Found existing person span (fuzzy match)', ['person_id' => $existing->id, 'name' => $existing->name, 'search_name' => $personName]);
+            $this->personLookup[$personName] = $existing->id;
+
             return $existing;
         }
         
@@ -1129,13 +1374,29 @@ class BluePlaqueService
         $birthYear = $plaque[$this->config['field_mapping']['person_born']] ?? null;
         $deathYear = $plaque[$this->config['field_mapping']['person_died']] ?? null;
         
+        // Convert empty strings to null for database compatibility
+        if ($birthYear === '' || $birthYear === '0') {
+            $birthYear = null;
+        }
+        if ($deathYear === '' || $deathYear === '0') {
+            $deathYear = null;
+        }
+        
         // Determine if we have proper dates (need at least birth year)
-        $hasProperDates = $birthYear !== null && $birthYear !== '' && is_numeric($birthYear);
+        $hasProperDates = $birthYear !== null && is_numeric($birthYear);
         $state = $hasProperDates ? 'complete' : 'placeholder';
+
+        // Span validation requires start_year when state is not placeholder. If we only have death year
+        // (no birth year), we must set both to null and stay placeholder - otherwise the Span model
+        // auto-transitions to draft and then fails validation on null start_year.
+        if ($birthYear === null && $deathYear !== null) {
+            $deathYear = null;
+        }
         
         // Create new person span
-        return Span::create([
+        $span = Span::create([
             'name' => $personName, // This is already correct - using just the name
+            'slug' => $this->generateUniqueSlug($personName),
             'type_id' => 'person',
             'description' => '', // Person spans don't need description from inscription
             'start_year' => $birthYear,
@@ -1154,7 +1415,7 @@ class BluePlaqueService
                 [
                     'type' => 'open_data',
                     'name' => 'Open Plaques',
-                    'url' => 'https://openplaques.org/',
+                    'url' => $this->getOpenPlaquesSourceUrl($plaque[$this->config['field_mapping']['id']] ?? null),
                     'identifier' => $plaque[$this->config['field_mapping']['id']] ?? 'unknown'
                 ]
             ],
@@ -1163,8 +1424,11 @@ class BluePlaqueService
             'access_level' => 'public',
             'state' => $state
         ]);
+        $this->personLookup[$personName] = $span->id;
+
+        return $span;
     }
-    
+
     /**
      * Create or find location span
      */
@@ -1174,30 +1438,39 @@ class BluePlaqueService
         if (empty($address)) {
             return null;
         }
-        
-        // Try to find existing location by exact name match first
+
+        // Check lookup map first
+        $existingId = $this->locationLookup[$address] ?? null;
+        if ($existingId) {
+            return Span::find($existingId);
+        }
+
+        // Try to find existing location by exact name match
         $existing = Span::where('name', $address)
             ->where('type_id', 'place')
             ->first();
-        
+
         if ($existing) {
-            Log::info('Found existing location span', ['location_id' => $existing->id, 'name' => $address]);
+            $this->locationLookup[$address] = $existing->id;
+
             return $existing;
         }
-        
+
         // Try fuzzy match as fallback
         $existing = Span::where('name', 'like', "%{$address}%")
             ->where('type_id', 'place')
             ->first();
-        
+
         if ($existing) {
-            Log::info('Found existing location span (fuzzy match)', ['location_id' => $existing->id, 'name' => $existing->name, 'search_name' => $address]);
+            $this->locationLookup[$address] = $existing->id;
+
             return $existing;
         }
-        
+
         // Create new location span
-        return Span::create([
+        $span = Span::create([
             'name' => $address, // This is already correct - using just the address
+            'slug' => $this->generateUniqueSlug($address),
             'type_id' => 'place',
             'description' => "Location of " . ($plaque[$this->config['field_mapping']['title']] ?? 'blue plaque'),
             'metadata' => [
@@ -1212,7 +1485,7 @@ class BluePlaqueService
                 [
                     'type' => 'open_data',
                     'name' => 'Open Plaques',
-                    'url' => 'https://openplaques.org/',
+                    'url' => $this->getOpenPlaquesSourceUrl($plaque[$this->config['field_mapping']['id']] ?? null),
                     'identifier' => $plaque[$this->config['field_mapping']['id']] ?? 'unknown'
                 ]
             ],
@@ -1221,8 +1494,11 @@ class BluePlaqueService
             'access_level' => 'public',
             'state' => 'complete'
         ]);
+        $this->locationLookup[$address] = $span->id;
+
+        return $span;
     }
-    
+
     /**
      * Create photo span for plaque image
      */
@@ -1247,9 +1523,14 @@ class BluePlaqueService
         }
         
         $erectedYear = $plaque[$this->config['field_mapping']['erected']] ?? null;
+        // Convert empty string to null for database compatibility
+        if ($erectedYear === '' || $erectedYear === '0') {
+            $erectedYear = null;
+        }
         
         return Span::create([
             'name' => $photoName,
+            'slug' => $this->generateUniqueSlug($photoName),
             'type_id' => 'thing',
             'description' => "Photograph of " . ($plaque[$this->config['field_mapping']['title']] ?? 'Unknown Plaque'),
             'start_year' => $erectedYear,
@@ -1317,8 +1598,20 @@ class BluePlaqueService
         $birthYear = $plaque[$this->config['field_mapping']['person_born']] ?? null;
         $deathYear = $plaque[$this->config['field_mapping']['person_died']] ?? null;
         
+        // Convert empty strings to null for database compatibility
+        if ($birthYear === '' || $birthYear === '0') {
+            $birthYear = null;
+        }
+        if ($deathYear === '' || $deathYear === '0') {
+            $deathYear = null;
+        }
+        if ($birthYear === null && $deathYear !== null) {
+            $deathYear = null;
+        }
+        
         return Span::create([
             'name' => $photoName,
+            'slug' => $this->generateUniqueSlug($photoName),
             'type_id' => 'thing',
             'description' => "Photograph of {$personName}",
             'start_year' => $birthYear,
@@ -1363,7 +1656,7 @@ class BluePlaqueService
     /**
      * Create a connection between spans
      */
-    private function createConnection(Span $parent, Span $child, string $type): ?Connection
+    private function createConnection(Span $parent, Span $child, string $type, $user = null): ?Connection
     {
         // Reduced logging to minimize overhead
         // Log::info('Creating connection', [
@@ -1380,17 +1673,25 @@ class BluePlaqueService
             ->where('type_id', $type)
             ->first();
         
+        $ownerId = $user ? $user->id : auth()->id();
+        if (!$ownerId) {
+            Log::error('Cannot create connection: no owner (user required for CLI import)');
+            return null;
+        }
+
         if (!$existing) {
             try {
                 // Create a span to represent the connection itself
+                $connectionName = "Connection: {$parent->name} → {$child->name}";
                 $connectionSpan = Span::create([
-                    'name' => "Connection: {$parent->name} → {$child->name}",
+                    'name' => $connectionName,
+                    'slug' => $this->generateUniqueSlug($connectionName),
                     'type_id' => 'connection',
                     'description' => "Connection of type '{$type}' between {$parent->name} and {$child->name}",
                     'state' => 'placeholder', // Connections are typically placeholders unless they have specific dates
                     'access_level' => 'public',
-                    'owner_id' => auth()->id(),
-                    'updater_id' => auth()->id(),
+                    'owner_id' => $ownerId,
+                    'updater_id' => $ownerId,
                     'metadata' => [
                         'connection_type' => $type,
                         'parent_span_id' => $parent->id,
@@ -1413,6 +1714,10 @@ class BluePlaqueService
                     'connection_id' => $connection->id,
                     'connection_span_id' => $connectionSpan->id
                 ]);
+
+                if (is_callable($this->progressHeartbeat)) {
+                    ($this->progressHeartbeat)();
+                }
                 
                 return $connection;
             } catch (\Exception $e) {

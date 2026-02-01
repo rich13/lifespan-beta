@@ -1106,6 +1106,19 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
             Route::get('/', [DashboardController::class, 'index'])
                 ->name('dashboard');
 
+            // Workers (queue health & control)
+            Route::prefix('workers')->name('workers.')->group(function () {
+                Route::get('/', [App\Http\Controllers\Admin\WorkersController::class, 'index'])->name('index');
+                Route::get('/stats', [App\Http\Controllers\Admin\WorkersController::class, 'stats'])->name('stats');
+                Route::post('/restart', [App\Http\Controllers\Admin\WorkersController::class, 'restart'])->name('restart');
+                Route::post('/retry-all-failed', [App\Http\Controllers\Admin\WorkersController::class, 'retryAllFailed'])->name('retry-all-failed');
+                Route::post('/clear-queue', [App\Http\Controllers\Admin\WorkersController::class, 'clearQueue'])->name('clear-queue');
+                Route::post('/stop-queue', [App\Http\Controllers\Admin\WorkersController::class, 'stopQueue'])->name('stop-queue');
+                Route::post('/start-queue', [App\Http\Controllers\Admin\WorkersController::class, 'startQueue'])->name('start-queue');
+                Route::post('/flush-failed', [App\Http\Controllers\Admin\WorkersController::class, 'flushFailed'])->name('flush-failed');
+                Route::post('/failed/{uuid}/retry', [App\Http\Controllers\Admin\WorkersController::class, 'retryFailedJob'])->name('retry-failed');
+            });
+
             // Metrics routes
             Route::prefix('metrics')->name('metrics.')->group(function () {
     Route::get('/', [App\Http\Controllers\Admin\MetricsController::class, 'index'])->name('index');
@@ -1277,6 +1290,10 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                         ->name('process-batch');
                     Route::post('/process-all', [App\Http\Controllers\Admin\BluePlaqueImportController::class, 'processAll'])
                         ->name('process-all');
+                    Route::post('/import-background', [App\Http\Controllers\Admin\BluePlaqueImportController::class, 'startBackgroundImport'])
+                        ->name('import-background');
+                    Route::post('/cancel-background', [App\Http\Controllers\Admin\BluePlaqueImportController::class, 'cancelBackgroundImport'])
+                        ->name('cancel-background');
                     Route::get('/status', [App\Http\Controllers\Admin\BluePlaqueImportController::class, 'status'])
                         ->name('status');
                     Route::get('/stats', [App\Http\Controllers\Admin\BluePlaqueImportController::class, 'stats'])
@@ -1305,6 +1322,12 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                         ->name('skip-person');
                     Route::get('/stats', [App\Http\Controllers\Admin\WikipediaImportController::class, 'getStats'])
                         ->name('stats');
+                    Route::post('/import-background', [App\Http\Controllers\Admin\WikipediaImportController::class, 'startBackgroundImport'])
+                        ->name('import-background');
+                    Route::post('/cancel-background', [App\Http\Controllers\Admin\WikipediaImportController::class, 'cancelBackgroundImport'])
+                        ->name('cancel-background');
+                    Route::get('/background-status', [App\Http\Controllers\Admin\WikipediaImportController::class, 'getBackgroundStatus'])
+                        ->name('background-status');
                 });
                 
                 // Additional Wikimedia Commons routes

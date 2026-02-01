@@ -70,6 +70,11 @@ if [ -f /var/www/.env ]; then
     
     # Update DOCKER_CONTAINER variable
     grep -q "DOCKER_CONTAINER=" /var/www/.env && sed -i "s/DOCKER_CONTAINER=.*/DOCKER_CONTAINER=true/" /var/www/.env || echo "DOCKER_CONTAINER=true" >> /var/www/.env
+
+    # Update QUEUE_CONNECTION from container env (e.g. docker-compose sets database for background jobs)
+    if [ -n "${QUEUE_CONNECTION}" ]; then
+        grep -q "QUEUE_CONNECTION=" /var/www/.env && sed -i "s/^QUEUE_CONNECTION=.*/QUEUE_CONNECTION=${QUEUE_CONNECTION}/" /var/www/.env || echo "QUEUE_CONNECTION=${QUEUE_CONNECTION}" >> /var/www/.env
+    fi
     
     # Log the environment for debugging
     log "Using environment variables:"
@@ -99,7 +104,7 @@ DB_PASSWORD=${DB_PASSWORD}
 BROADCAST_DRIVER=log
 CACHE_DRIVER=file
 FILESYSTEM_DISK=local
-QUEUE_CONNECTION=sync
+QUEUE_CONNECTION=${QUEUE_CONNECTION:-sync}
 SESSION_DRIVER=${SESSION_DRIVER}
 SESSION_LIFETIME=${SESSION_LIFETIME}
 

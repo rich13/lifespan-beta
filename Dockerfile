@@ -116,6 +116,9 @@ RUN chmod +x /usr/local/bin/entrypoint.sh \
     /usr/local/bin/fix-db-connection.php \
     /usr/local/bin/set-session-config.php
 
+# Queue worker entrypoint (for local dev with workers)
+RUN [ -f /var/www/docker/queue-entrypoint.sh ] && chmod +x /var/www/docker/queue-entrypoint.sh || true
+
 # Set appropriate permissions for supervisor directories
 RUN mkdir -p /var/log/supervisor && \
     chmod -R 755 /var/log/supervisor && \
