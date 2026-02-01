@@ -243,4 +243,268 @@ class ImageGalleryComponentTest extends TestCase
         $response->assertStatus(200);
         $response->assertDontSee('Private photo of John');
     }
+
+    public function test_connection_span_shows_temporally_related_photos(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        // Create person (subject) and organisation
+        $person = Span::create([
+            'name' => 'Richard Northover',
+            'type_id' => 'person',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+            'access_level' => 'public',
+            'start_year' => 1970,
+        ]);
+
+        $organisation = Span::create([
+            'name' => 'Alleyns',
+            'type_id' => 'organisation',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+            'access_level' => 'public',
+            'start_year' => 1850,
+        ]);
+
+        // Create connection span: Richard studied at Alleyns 1985-1990
+        $connectionSpan = Span::create([
+            'name' => 'Richard Northover studied at Alleyns',
+            'type_id' => 'connection',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+            'access_level' => 'public',
+            'start_year' => 1985,
+            'end_year' => 1990,
+        ]);
+
+        // Create education connection (parent=person, child=org)
+        if (!DB::table('connection_types')->where('type', 'education')->exists()) {
+            DB::table('connection_types')->insert([
+                'type' => 'education',
+                'forward_predicate' => 'studied at',
+                'forward_description' => 'Studied at',
+                'inverse_predicate' => 'educated',
+                'inverse_description' => 'Educated',
+                'constraint_type' => 'non_overlapping',
+                'allowed_span_types' => json_encode(['parent' => ['person'], 'child' => ['organisation']]),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        Connection::create([
+            'parent_id' => $person->id,
+            'child_id' => $organisation->id,
+            'type_id' => 'education',
+            'connection_span_id' => $connectionSpan->id,
+        ]);
+
+        // Photo featuring Richard, dated 1987 (within 1985-1990), no connection_span_id
+        $photoInRange = Span::create([
+            'name' => 'Richard at school 1987',
+            'type_id' => 'thing',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+            'access_level' => 'public',
+            'start_year' => 1987,
+            'metadata' => ['subtype' => 'photo', 'medium_url' => 'https://example.com/richard-1987.jpg'],
+        ]);
+
+        $featuresConnectionSpan = Span::create([
+            'name' => 'Photo features Richard',
+            'type_id' => 'connection',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+            'access_level' => 'public',
+            'metadata' => ['connection_type' => 'features', 'timeless' => true],
+        ]);
+
+        Connection::create([
+            'parent_id' => $photoInRange->id,
+            'child_id' => $person->id,
+            'type_id' => 'features',
+            'connection_span_id' => $featuresConnectionSpan->id,
+        ]);
+
+        $response = $this->get("/spans/{$connectionSpan->slug}");
+        $response->assertStatus(200);
+        $response->assertSee('Richard at school 1987');
+    }
+
+    public function test_connection_span_excludes_photos_outside_date_range(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        $person = Span::create([
+            'name' => 'Richard Northover',
+            'type_id' => 'person',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+            'access_level' => 'public',
+            'start_year' => 1970,
+        ]);
+
+        $organisation = Span::create([
+            'name' => 'Alleyns',
+            'type_id' => 'organisation',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+            'access_level' => 'public',
+            'start_year' => 1850,
+        ]);
+
+        $connectionSpan = Span::create([
+            'name' => 'Richard Northover studied at Alleyns',
+            'type_id' => 'connection',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+            'access_level' => 'public',
+            'start_year' => 1985,
+            'end_year' => 1990,
+        ]);
+
+        if (!DB::table('connection_types')->where('type', 'education')->exists()) {
+            DB::table('connection_types')->insert([
+                'type' => 'education',
+                'forward_predicate' => 'studied at',
+                'forward_description' => 'Studied at',
+                'inverse_predicate' => 'educated',
+                'inverse_description' => 'Educated',
+                'constraint_type' => 'non_overlapping',
+                'allowed_span_types' => json_encode(['parent' => ['person'], 'child' => ['organisation']]),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        Connection::create([
+            'parent_id' => $person->id,
+            'child_id' => $organisation->id,
+            'type_id' => 'education',
+            'connection_span_id' => $connectionSpan->id,
+        ]);
+
+        // Photo featuring Richard, dated 1995 (outside 1985-1990)
+        $photoOutOfRange = Span::create([
+            'name' => 'Richard in 1995',
+            'type_id' => 'thing',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+            'access_level' => 'public',
+            'start_year' => 1995,
+            'metadata' => ['subtype' => 'photo', 'medium_url' => 'https://example.com/richard-1995.jpg'],
+        ]);
+
+        $featuresConnectionSpan = Span::create([
+            'name' => 'Photo features Richard',
+            'type_id' => 'connection',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+            'access_level' => 'public',
+            'metadata' => ['connection_type' => 'features', 'timeless' => true],
+        ]);
+
+        Connection::create([
+            'parent_id' => $photoOutOfRange->id,
+            'child_id' => $person->id,
+            'type_id' => 'features',
+            'connection_span_id' => $featuresConnectionSpan->id,
+        ]);
+
+        $response = $this->get("/spans/{$connectionSpan->slug}");
+        $response->assertStatus(200);
+        $response->assertDontSee('Richard in 1995');
+    }
+
+    public function test_connection_span_deduplicates_when_same_photo_matches_multiple_paths(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        $person = Span::create([
+            'name' => 'Richard Northover',
+            'type_id' => 'person',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+            'access_level' => 'public',
+            'start_year' => 1970,
+        ]);
+
+        $organisation = Span::create([
+            'name' => 'Alleyns',
+            'type_id' => 'organisation',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+            'access_level' => 'public',
+            'start_year' => 1850,
+        ]);
+
+        $connectionSpan = Span::create([
+            'name' => 'Richard Northover studied at Alleyns',
+            'type_id' => 'connection',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+            'access_level' => 'public',
+            'start_year' => 1985,
+            'end_year' => 1990,
+        ]);
+
+        if (!DB::table('connection_types')->where('type', 'education')->exists()) {
+            DB::table('connection_types')->insert([
+                'type' => 'education',
+                'forward_predicate' => 'studied at',
+                'forward_description' => 'Studied at',
+                'inverse_predicate' => 'educated',
+                'inverse_description' => 'Educated',
+                'constraint_type' => 'non_overlapping',
+                'allowed_span_types' => json_encode(['parent' => ['person'], 'child' => ['organisation']]),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        Connection::create([
+            'parent_id' => $person->id,
+            'child_id' => $organisation->id,
+            'type_id' => 'education',
+            'connection_span_id' => $connectionSpan->id,
+        ]);
+
+        // One photo in range - ensures deduplication works when merging collections
+        $photo = Span::create([
+            'name' => 'Richard at Alleyns graduation',
+            'type_id' => 'thing',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+            'access_level' => 'public',
+            'start_year' => 1988,
+            'metadata' => ['subtype' => 'photo', 'medium_url' => 'https://example.com/graduation.jpg'],
+        ]);
+
+        $featuresSpan = Span::create([
+            'name' => 'Photo features Richard',
+            'type_id' => 'connection',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+            'access_level' => 'public',
+            'metadata' => ['connection_type' => 'features', 'timeless' => true],
+        ]);
+
+        Connection::create([
+            'parent_id' => $photo->id,
+            'child_id' => $person->id,
+            'type_id' => 'features',
+            'connection_span_id' => $featuresSpan->id,
+        ]);
+
+        $response = $this->get("/spans/{$connectionSpan->slug}");
+        $response->assertStatus(200);
+        $response->assertSee('Richard at Alleyns graduation');
+        // Should appear exactly once (no duplicate from merge)
+        $body = $response->getContent();
+        $this->assertEquals(1, substr_count($body, 'Richard at Alleyns graduation'));
+    }
 }

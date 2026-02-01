@@ -3,11 +3,17 @@
 namespace App\Http\Controllers;
 
 use App\Models\Span;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class PhotoController extends Controller
 {
+    private const PHOTOS_PER_PAGE = 24;
+
+    /** Max photos to load via infinite scroll before showing "Load more" (keeps DOM manageable) */
+    private const INFINITE_SCROLL_MAX = 300;
+
     /**
      * Create a new controller instance.
      */
@@ -19,7 +25,7 @@ class PhotoController extends Controller
     /**
      * Display a listing of photo spans.
      */
-    public function index(Request $request): View
+    public function index(Request $request): View|JsonResponse
     {
         $query = Span::where('type_id', 'thing')
             // Use direct JSON equality; subtype is stored as a string, not an array
@@ -70,10 +76,18 @@ class PhotoController extends Controller
         }
         // If 'all', use the access control filters already applied above
 
-        // Apply search filter
+        // Apply search filter: photo title or names of spans the photo features
         if ($request->filled('search')) {
             $search = $request->search;
-            $query->where('name', 'ilike', "%{$search}%");
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'ilike', "%{$search}%")
+                    ->orWhereHas('connectionsAsSubject', function ($connQ) use ($search) {
+                        $connQ->where('type_id', 'features')
+                            ->whereHas('child', function ($childQ) use ($search) {
+                                $childQ->where('name', 'ilike', "%{$search}%");
+                            });
+                    });
+            });
         }
 
         // Apply access level filter
@@ -108,10 +122,31 @@ class PhotoController extends Controller
             ->orderBy('start_month', 'desc')
             ->orderBy('start_day', 'desc')
             ->orderBy('name') // Secondary sort by name for photos without dates
-            ->paginate(24);
+            ->paginate(self::PHOTOS_PER_PAGE);
 
         // Determine if user can see my photos tab
         $showMyPhotosTab = $user && $user->personalSpan;
+
+        // Return partial HTML for infinite scroll AJAX requests
+        if ($request->boolean('partial') && $request->ajax()) {
+            $loadedCount = $photos->currentPage() * self::PHOTOS_PER_PAGE;
+            $hitMax = $loadedCount >= self::INFINITE_SCROLL_MAX;
+            $paginatorHasMore = $photos->hasMorePages();
+            $hasMore = $paginatorHasMore && !$hitMax;
+            $nextPageUrl = $paginatorHasMore
+                ? $photos->appends($request->query())->nextPageUrl() . '&partial=1'
+                : null;
+
+            $html = view('photos.partials.photo-cards', ['photos' => $photos])->render();
+
+            return response()->json([
+                'html' => $html,
+                'hasMorePages' => $hasMore,
+                'nextPageUrl' => $nextPageUrl,
+                'hitMax' => $hitMax,
+                'total' => $photos->total(),
+            ]);
+        }
 
         return view('photos.index', compact('photos', 'showMyPhotosTab', 'photosFilter'));
     }

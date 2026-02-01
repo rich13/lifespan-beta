@@ -20,45 +20,53 @@
             <!-- Filters -->
             <div class="card mb-3">
                 <div class="card-body">
-                    <form method="GET" action="{{ route('photos.index') }}" id="photos-filter-form" class="row g-3">
+                    <form method="GET" action="{{ route('photos.index') }}" id="photos-filter-form" class="photos-filter-row">
                         @if(request('features'))
                             <input type="hidden" name="features" value="{{ request('features') }}">
                         @endif
-                        <div class="col-md-6 col-lg-3">
+                        <div class="photos-filter-col">
                             <label for="search" class="form-label">Search</label>
                             <input type="text" class="form-control" id="search" name="search"
                                    value="{{ request('search') }}" placeholder="Search photos...">
                         </div>
-                        <div class="col-md-6 col-lg-2">
-                            <label for="state" class="form-label">State</label>
-                            <select class="form-select" id="state" name="state">
-                                <option value="">All States</option>
-                                <option value="placeholder" {{ request('state') === 'placeholder' ? 'selected' : '' }}>Placeholder</option>
-                                <option value="draft" {{ request('state') === 'draft' ? 'selected' : '' }}>Draft</option>
-                                <option value="complete" {{ request('state') === 'complete' ? 'selected' : '' }}>Complete</option>
-                            </select>
+                        <div class="photos-filter-col">
+                            <div class="btn-group photos-filter-btn-group" role="group" aria-label="Filter by state">
+                                <input type="radio" class="btn-check photos-filter-radio" name="state" id="state_all" value="" {{ request('state') === '' || !request()->has('state') ? 'checked' : '' }} autocomplete="off">
+                                <label class="btn btn-outline-secondary" for="state_all">All</label>
+                                <input type="radio" class="btn-check photos-filter-radio" name="state" id="state_placeholder" value="placeholder" {{ request('state') === 'placeholder' ? 'checked' : '' }} autocomplete="off">
+                                <label class="btn btn-outline-secondary" for="state_placeholder">Placeholder</label>
+                                <input type="radio" class="btn-check photos-filter-radio" name="state" id="state_draft" value="draft" {{ request('state') === 'draft' ? 'checked' : '' }} autocomplete="off">
+                                <label class="btn btn-outline-secondary" for="state_draft">Draft</label>
+                                <input type="radio" class="btn-check photos-filter-radio" name="state" id="state_complete" value="complete" {{ request('state') === 'complete' ? 'checked' : '' }} autocomplete="off">
+                                <label class="btn btn-outline-secondary" for="state_complete">Complete</label>
+                            </div>
                         </div>
                         @if($showMyPhotosTab)
-                            <div class="col-md-6 col-lg-2">
-                                <label for="photos_filter" class="form-label">Scope</label>
-                                <select class="form-select photos-filter-dropdown" id="photos_filter" name="photos_filter">
-                                    <option value="my" {{ ($photosFilter ?? 'my') === 'my' ? 'selected' : '' }}>My Photos</option>
-                                    <option value="public" {{ ($photosFilter ?? 'my') === 'public' ? 'selected' : '' }}>Public</option>
-                                    <option value="all" {{ ($photosFilter ?? 'my') === 'all' ? 'selected' : '' }}>All Photos</option>
-                                </select>
+                            <div class="photos-filter-col">
+                                <div class="btn-group photos-filter-btn-group" role="group" aria-label="Filter by scope">
+                                    <input type="radio" class="btn-check photos-filter-radio" name="photos_filter" id="photos_filter_my" value="my" {{ ($photosFilter ?? 'my') === 'my' ? 'checked' : '' }} autocomplete="off">
+                                    <label class="btn btn-outline-secondary" for="photos_filter_my">My Photos</label>
+                                    <input type="radio" class="btn-check photos-filter-radio" name="photos_filter" id="photos_filter_public" value="public" {{ ($photosFilter ?? 'my') === 'public' ? 'checked' : '' }} autocomplete="off">
+                                    <label class="btn btn-outline-secondary" for="photos_filter_public">Public</label>
+                                    <input type="radio" class="btn-check photos-filter-radio" name="photos_filter" id="photos_filter_all" value="all" {{ ($photosFilter ?? 'my') === 'all' ? 'checked' : '' }} autocomplete="off">
+                                    <label class="btn btn-outline-secondary" for="photos_filter_all">All</label>
+                                </div>
                             </div>
                         @endif
-                        <div class="col-md-6 col-lg-2">
-                            <label for="access_level" class="form-label">Access</label>
-                            <select class="form-select photos-filter-dropdown" id="access_level" name="access_level">
-                                <option value="" {{ (strtolower((string) request('access_level')) === '') ? 'selected' : '' }}>All</option>
-                                <option value="public" {{ request('access_level') === 'public' ? 'selected' : '' }}>Public</option>
-                                <option value="shared" {{ request('access_level') === 'shared' ? 'selected' : '' }}>Shared</option>
-                                <option value="private" {{ request('access_level') === 'private' ? 'selected' : '' }}>Private</option>
-                            </select>
+                        <div class="photos-filter-col">
+                            <div class="btn-group photos-filter-btn-group" role="group" aria-label="Filter by access">
+                                <input type="radio" class="btn-check photos-filter-radio" name="access_level" id="access_level_all" value="" {{ (strtolower((string) request('access_level')) === '') ? 'checked' : '' }} autocomplete="off">
+                                <label class="btn btn-outline-secondary" for="access_level_all">All</label>
+                                <input type="radio" class="btn-check photos-filter-radio" name="access_level" id="access_level_public" value="public" {{ request('access_level') === 'public' ? 'checked' : '' }} autocomplete="off">
+                                <label class="btn btn-outline-secondary" for="access_level_public">Public</label>
+                                <input type="radio" class="btn-check photos-filter-radio" name="access_level" id="access_level_shared" value="shared" {{ request('access_level') === 'shared' ? 'checked' : '' }} autocomplete="off">
+                                <label class="btn btn-outline-secondary" for="access_level_shared">Shared</label>
+                                <input type="radio" class="btn-check photos-filter-radio" name="access_level" id="access_level_private" value="private" {{ request('access_level') === 'private' ? 'checked' : '' }} autocomplete="off">
+                                <label class="btn btn-outline-secondary" for="access_level_private">Private</label>
+                            </div>
                         </div>
                         @if(request('features'))
-                            <div class="col-12">
+                            <div class="photos-filter-features-col">
                                 <div class="alert alert-info alert-sm py-2 mb-0">
                                     <small>
                                         <i class="bi bi-info-circle me-1"></i>
@@ -78,129 +86,36 @@
                                 </div>
                             </div>
                         @endif
-                        <div class="col-md-12 col-lg-2">
-                            <label class="form-label">&nbsp;</label>
-                            <div class="d-grid">
-                                <button type="submit" class="btn btn-outline-primary">
-                                    <i class="bi bi-search me-1"></i>Filter
-                                </button>
-                            </div>
-                        </div>
                     </form>
                 </div>
             </div>
 
-            <!-- Photos Grid -->
+            <!-- Photos Grid - variable width by aspect ratio, fixed height, no cropping -->
             @if($photos->count() > 0)
-                <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-5 row-cols-xl-6 row-cols-xxl-8">
+                <div class="photos-grid" id="photos-grid">
                     @foreach($photos as $photo)
-                        <div class="col mb-4">
-                            <div class="card h-100 photo-card">
-                                <div class="card-img-top-container photo-card-image-wrap" style="height: 200px; overflow: hidden;">
-                                    @php
-                                        $meta = $photo->metadata ?? [];
-                                        $imgSrc = $meta['thumbnail_url']
-                                            ?? $meta['medium_url']
-                                            ?? null;
-
-                                        if (!$imgSrc && isset($meta['filename']) && $meta['filename']) {
-                                            // Use proxy route if we have a stored filename
-                                            $imgSrc = route('images.proxy', ['spanId' => $photo->id, 'size' => 'thumbnail']);
-                                        }
-
-                                        if (!$imgSrc && isset($meta['image_url']) && $meta['image_url']) {
-                                            // Legacy direct URL fallback
-                                            $imgSrc = $meta['image_url'];
-                                        }
-                                    @endphp
-
-                                    @if($imgSrc)
-                                        <a href="{{ route('photos.show', $photo) }}" class="d-block h-100">
-                                            <img src="{{ $imgSrc }}"
-                                                 alt="{{ $photo->name }}"
-                                                 class="card-img-top photo-card-img"
-                                                 style="width: 100%; height: 100%; object-fit: cover;"
-                                                 loading="lazy">
-                                        </a>
-                                    @else
-                                        <div class="d-flex align-items-center justify-content-center h-100 text-muted">
-                                            <div class="text-center">
-                                                <i class="bi bi-image fs-1 mb-2"></i>
-                                                <div>No Image</div>
-                                            </div>
-                                        </div>
-                                    @endif
-
-                                    <div class="photo-card-overlay">
-                                        <div class="photo-card-overlay-tl">
-                                            <a href="{{ route('photos.show', $photo) }}" class="badge bg-dark text-decoration-none photo-card-badge-title" title="{{ $photo->name }}">
-                                                {{ Str::limit($photo->name, 30) }}
-                                            </a>
-                                        </div>
-                                        <div class="photo-card-overlay-tr">
-                                            @if($photo->start_year)
-                                                <span class="badge bg-dark bg-opacity-75 text-white">
-                                                    <i class="bi bi-calendar me-1"></i>{{ $photo->start_year }}
-                                                </span>
-                                            @endif
-                                        </div>
-                                        <div class="photo-card-overlay-bl d-flex flex-wrap gap-1 align-items-center">
-                                            <span class="badge bg-{{ $photo->state === 'complete' ? 'success' : ($photo->state === 'draft' ? 'warning' : 'secondary') }}">
-                                                {{ ucfirst($photo->state) }}
-                                            </span>
-                                            @php
-                                                $level = strtolower(trim($photo->access_level ?? 'public'));
-                                                $levelClass = match ($level) {
-                                                    'public' => 'primary',
-                                                    'private' => 'danger',
-                                                    'shared' => 'info',
-                                                    default => 'secondary',
-                                                };
-                                                $label = $level ? ucfirst($level) : 'Public';
-                                                $canChangeAccess = auth()->check() && ($photo->isEditableBy(auth()->user()) || auth()->user()->is_admin || $photo->owner_id === auth()->id());
-                                            @endphp
-                                            @if($canChangeAccess)
-                                                <button type="button"
-                                                        class="badge bg-{{ $levelClass }} border-0"
-                                                        title="Change access level"
-                                                        data-model-id="{{ $photo->id }}"
-                                                        data-model-class="App\\Models\\Span"
-                                                        data-current-level="{{ $level }}"
-                                                        onclick="openAccessLevelModal(this)">
-                                                    {{ $label }}
-                                                </button>
-                                            @else
-                                                <span class="badge bg-{{ $levelClass }}">
-                                                    {{ $label }}
-                                                </span>
-                                            @endif
-                                        </div>
-                                        <div class="photo-card-overlay-br d-flex flex-wrap gap-1 align-items-center justify-content-end">
-                                            @php
-                                                $features = $photo->connectionsAsSubject()
-                                                    ->whereHas('type', function($q){ $q->where('type','features'); })
-                                                    ->with('child')
-                                                    ->get();
-                                            @endphp
-                                            @foreach($features->take(6) as $conn)
-                                                <a href="{{ route('spans.show', $conn->child) }}" class="badge bg-secondary text-decoration-none">
-                                                    <i class="bi bi-person me-1"></i>{{ Str::limit($conn->child->name, 15) }}
-                                                </a>
-                                            @endforeach
-                                            @if($features->count() > 6)
-                                                <span class="badge bg-light text-dark">+{{ $features->count() - 6 }}</span>
-                                            @endif
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        @include('photos.partials.photo-card', ['photo' => $photo])
                     @endforeach
                 </div>
+                <!-- /photos-grid -->
 
-                <!-- Pagination -->
-                <div class="mt-4">
-                    <x-pagination :paginator="$photos->appends(request()->query())" />
+                <!-- Infinite scroll sentinel + loading / load-more -->
+                <div id="photos-infinite-scroll-sentinel" class="photos-infinite-scroll-sentinel {{ !$photos->hasMorePages() ? 'd-none' : '' }}"
+                     data-next-url="{{ $photos->hasMorePages() ? $photos->appends(request()->query())->nextPageUrl() . '&partial=1' : '' }}"
+                     data-total="{{ $photos->total() }}">
+                </div>
+                <div id="photos-infinite-scroll-loading" class="photos-infinite-scroll-loading text-center py-4 d-none">
+                    <div class="spinner-border text-secondary" role="status">
+                        <span class="visually-hidden">Loading more photos…</span>
+                    </div>
+                </div>
+                <div id="photos-infinite-scroll-load-more" class="photos-infinite-scroll-load-more text-center py-4 d-none">
+                    <button type="button" class="btn btn-outline-primary" id="photos-load-more-btn">
+                        Load more photos
+                    </button>
+                </div>
+                <div id="photos-infinite-scroll-end" class="photos-infinite-scroll-end text-center py-4 text-muted small {{ !$photos->hasMorePages() ? '' : 'd-none' }}">
+                    Showing all {{ $photos->total() }} photos
                 </div>
             @else
                 <div class="text-center py-5">
@@ -229,8 +144,42 @@
 
 @push('styles')
 <style>
+.photos-filter-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 1rem;
+}
+.photos-filter-col {
+    flex: 1 1 0;
+    min-width: 180px;
+}
+.photos-filter-features-col {
+    flex-basis: 100%;
+    width: 100%;
+}
+#photos-filter-form .photos-filter-btn-group {
+    flex-wrap: wrap;
+}
+#photos-filter-form .photos-filter-btn-group .btn {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+/* Grid: variable width per aspect ratio, fixed height, no cropping */
+.photos-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.photo-card-wrapper {
+    flex: 0 0 auto;
+    width: fit-content;
+}
+
 .photo-card {
     transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    width: fit-content;
 }
 
 .photo-card:hover {
@@ -242,10 +191,36 @@
     position: relative;
     border-radius: 0.375rem 0.375rem 0 0;
     background-color: #f8f9fa;
+    height: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.photo-card-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
 }
 
 .photo-card-img {
     display: block;
+    height: 200px;
+    width: auto;
+    max-width: 100%;
+    object-fit: contain;
+}
+
+.photo-card-no-image {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 200px;
+    min-width: 150px;
+    color: var(--bs-secondary);
+    text-align: center;
 }
 
 .photo-card-overlay {
@@ -292,15 +267,151 @@
 .photo-card-badge-title {
     max-width: 100%;
 }
+
+.photos-infinite-scroll-sentinel {
+    height: 1px;
+    width: 100%;
+    visibility: hidden;
+    pointer-events: none;
+}
 </style>
 @endpush
 
 @push('scripts')
 <script>
-(function () {
-    $('#photos-filter-form').on('change', '.photos-filter-dropdown', function () {
-        $(this).closest('form').submit();
+$(function () {
+    // --- Infinite scroll ---
+    var $grid = $('#photos-grid');
+    var $sentinel = $('#photos-infinite-scroll-sentinel');
+    var $loading = $('#photos-infinite-scroll-loading');
+    var $loadMore = $('#photos-infinite-scroll-load-more');
+    var $loadMoreBtn = $('#photos-load-more-btn');
+    var $end = $('#photos-infinite-scroll-end');
+    var isLoading = false;
+
+    function loadNextPage() {
+        var nextUrl = $sentinel.data('next-url');
+        if (!nextUrl || isLoading) return;
+        isLoading = true;
+        $loading.removeClass('d-none');
+        $sentinel.addClass('d-none');
+
+        $.ajax({
+            url: nextUrl,
+            type: 'GET',
+            dataType: 'json',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            success: function (data) {
+                $grid.append(data.html);
+                $sentinel.data('next-url', data.nextPageUrl || '');
+                if (!data.hasMorePages) {
+                    $sentinel.addClass('d-none');
+                    if (data.hitMax && data.total) {
+                        $loadMore.removeClass('d-none');
+                    } else {
+                        $end.removeClass('d-none');
+                        if (data.total) {
+                            $end.text('Showing all ' + data.total + ' photos');
+                        }
+                    }
+                } else {
+                    $sentinel.removeClass('d-none');
+                }
+            },
+            error: function () {
+                $sentinel.removeClass('d-none');
+                $sentinel.data('next-url', nextUrl);
+            },
+            complete: function () {
+                isLoading = false;
+                $loading.addClass('d-none');
+            }
+        });
+    }
+
+    if ($sentinel.length && $grid.length) {
+        if (typeof IntersectionObserver !== 'undefined') {
+            var observer = new IntersectionObserver(function (entries) {
+                entries.forEach(function (entry) {
+                    if (entry.isIntersecting) loadNextPage();
+                });
+            }, { rootMargin: '200px', threshold: 0 });
+            observer.observe($sentinel[0]);
+        }
+        $loadMoreBtn.on('click', function () {
+            $loadMore.addClass('d-none');
+            $sentinel.removeClass('d-none');
+            loadNextPage();
+        });
+    }
+
+    // --- Filter form ---
+    var $form = $('#photos-filter-form');
+    console.log('[photos-filter] Form element:', $form.length ? $form[0] : 'not found');
+    if (!$form.length) return;
+    var baseUrl = $form.attr('action') || '{{ route("photos.index") }}';
+    console.log('[photos-filter] baseUrl:', baseUrl);
+    var $labels = $form.find('.photos-filter-btn-group label[for]');
+    console.log('[photos-filter] Filter labels found:', $labels.length, $labels);
+
+    function buildFilterUrl(updatedParamName, updatedParamValue) {
+        var params = new URLSearchParams(window.location.search);
+        params.delete('page');
+        if (updatedParamValue === '' || updatedParamValue === null || updatedParamValue === undefined) {
+            params.delete(updatedParamName);
+        } else {
+            params.set(updatedParamName, updatedParamValue);
+        }
+        var search = $form.find('#search').val();
+        if (search && search.trim() !== '') {
+            params.set('search', search.trim());
+        } else {
+            params.delete('search');
+        }
+        var query = params.toString();
+        return baseUrl + (query ? '?' + query : '');
+    }
+
+    $form.on('click', '.photos-filter-btn-group label[for]', function (e) {
+        console.log('[photos-filter] Label clicked', this, 'for=', $(this).attr('for'));
+        e.preventDefault();
+        var forId = $(this).attr('for');
+        var $radio = $form.find('#' + forId);
+        console.log('[photos-filter] Radio for "' + forId + '":', $radio.length, 'element:', $radio[0], 'has class photos-filter-radio:', $radio.hasClass('photos-filter-radio'));
+        if (!$radio.length || !$radio.hasClass('photos-filter-radio')) {
+            console.log('[photos-filter] Early return: radio not found or wrong class');
+            return;
+        }
+        var name = $radio.attr('name');
+        var value = $radio.attr('value') || '';
+        var url = buildFilterUrl(name, value);
+        console.log('[photos-filter] Navigating: name=', name, 'value=', value, 'url=', url);
+        window.location = url;
     });
-})();
+
+    $form.on('submit', function (e) {
+        e.preventDefault();
+        var params = new URLSearchParams(window.location.search);
+        params.delete('page');
+        var search = $form.find('#search').val();
+        if (search && search.trim() !== '') {
+            params.set('search', search.trim());
+        } else {
+            params.delete('search');
+        }
+        $form.find('.photos-filter-radio:checked').each(function () {
+            var name = $(this).attr('name');
+            var val = $(this).val();
+            if (val !== '') {
+                params.set(name, val);
+            } else {
+                params.delete(name);
+            }
+        });
+        var query = params.toString();
+        window.location = baseUrl + (query ? '?' + query : '');
+        return false;
+    });
+});
 </script>
 @endpush
