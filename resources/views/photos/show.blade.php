@@ -74,47 +74,10 @@
             
             @if($hasLocationConnections)
                 <x-spans.cards.unified-location-card :span="$photo" />
-            @else
-                <!-- Technical Details (fallback when no location)
-                <div class="card mb-4">
-                    <div class="card-header">
-                        <h5 class="card-title mb-0">
-                            <i class="bi bi-gear me-2"></i>Technical Details
-                        </h5>
-                    </div>
-                    <div class="card-body">
-                        <dl class="row mb-0">
-                            @if($photo->metadata['data_source'] ?? null)
-                                <dt class="col-sm-5">Data Source:</dt>
-                                <dd class="col-sm-7">{{ $photo->metadata['data_source'] }}</dd>
-                            @endif
-                            
-                            @if($photo->metadata['external_id'] ?? null)
-                                <dt class="col-sm-5">External ID:</dt>
-                                <dd class="col-sm-7">{{ $photo->metadata['external_id'] }}</dd>
-                            @endif
-                            
-                            @if($photo->metadata['requires_attribution'] ?? null)
-                                <dt class="col-sm-5">Attribution:</dt>
-                                <dd class="col-sm-7">
-                                    <span class="badge bg-{{ $photo->metadata['requires_attribution'] ? 'warning' : 'success' }}">
-                                        {{ $photo->metadata['requires_attribution'] ? 'Required' : 'Not Required' }}
-                                    </span>
-                                </dd>
-                            @endif
-                            
-                            @if($photo->metadata['license_url'] ?? null)
-                                <dt class="col-sm-5">License URL:</dt>
-                                <dd class="col-sm-7">
-                                    <a href="{{ $photo->metadata['license_url'] }}" target="_blank" class="btn btn-sm btn-outline-primary">
-                                        View License
-                                    </a>
-                                </dd>
-                            @endif
-                        </dl>
-                    </div>
-                </div>-->
             @endif
+
+            <!-- Licence & sources -->
+            <x-photos.licence-and-sources-card :photo="$photo" />
 
             <!-- EXIF Data Card -->
             <x-photos.exif-data-card :photo="$photo" />

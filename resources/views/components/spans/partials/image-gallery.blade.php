@@ -122,7 +122,7 @@
     } else {
         // Get images connected to this span via features connections
         // The span is the object (child) in features connections, so we use connectionsAsObjectWithAccess
-        $imageConnections = $span->connectionsAsObjectWithAccess()
+        $directConnections = $span->connectionsAsObjectWithAccess()
             ->where('type_id', 'features')
             ->whereNotNull('connection_span_id')
             ->whereHas('connectionSpan')
@@ -132,17 +132,46 @@
                       ->whereJsonContains('metadata->subtype', 'photo');
             })
             ->with(['connectionSpan', 'parent', 'type'])
-            ->get()
+            ->get();
+
+        // For connection spans with dates: also find photos that feature the subject and fall within the date range
+        $temporalConnections = collect();
+        if ($span->type_id === 'connection' && $span->start_year) {
+            $temporalPhotoService = app(\App\Services\TemporalPhotoService::class);
+            $subject = $temporalPhotoService->getSubjectForConnectionSpan($span);
+            if ($subject) {
+                $temporalConnections = $temporalPhotoService->getTemporallyRelatedPhotos($span, $subject);
+            }
+        }
+
+        // Merge and deduplicate by photo (parent) ID, then sort by date
+        $imageConnections = $directConnections->concat($temporalConnections)
+            ->unique(fn ($c) => $c->parent_id)
+            ->values()
             ->sortBy(function ($connection) {
                 $imageSpan = $connection->parent;
-                // Sort by the image span's start date (the date displayed on the image)
                 return [
                     $imageSpan->start_year ?? PHP_INT_MAX,
                     $imageSpan->start_month ?? PHP_INT_MAX,
                     $imageSpan->start_day ?? PHP_INT_MAX
                 ];
-            });
+            })
+            ->values();
     }
+
+    $anyPhotoHasLicenceInfo = $imageConnections->isNotEmpty() && $imageConnections->contains(function ($connection) {
+        $photo = $connection->parent;
+        if (!$photo) {
+            return false;
+        }
+        $meta = $photo->metadata ?? [];
+        $hasMeta = !empty($meta['license']) || !empty($meta['license_url']) || array_key_exists('requires_attribution', $meta)
+            || !empty($meta['author']) || !empty($meta['source']) || !empty($meta['data_source'])
+            || !empty($meta['external_id']);
+        $hasSources = !empty($photo->sources);
+
+        return $hasMeta || $hasSources;
+    });
 @endphp
 
     <div class="card mb-4">
@@ -279,6 +308,11 @@
                         </div>
                     @endforeach
                 </div>
+            </div>
+        @endif
+        @if($imageConnections->isNotEmpty() && $anyPhotoHasLicenceInfo)
+            <div class="card-footer text-muted small py-2">
+                <i class="bi bi-info-circle me-1"></i>Photo licences and attribution are shown on each photo's page.
             </div>
         @endif
     </div>
