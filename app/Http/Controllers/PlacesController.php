@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Span;
 use App\Models\Connection;
 use App\Services\PlaceBoundaryService;
+use App\Services\PlaceLocationService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\View\View;
@@ -14,9 +15,12 @@ class PlacesController extends Controller
 {
     protected PlaceBoundaryService $boundaryService;
 
-    public function __construct(PlaceBoundaryService $boundaryService)
+    protected PlaceLocationService $locationService;
+
+    public function __construct(PlaceBoundaryService $boundaryService, PlaceLocationService $locationService)
     {
         $this->boundaryService = $boundaryService;
+        $this->locationService = $locationService;
     }
 
     /**
@@ -28,7 +32,10 @@ class PlacesController extends Controller
         return view('places.show', [
             'span' => null,
             'coordinates' => null,
-            'hierarchyWithSpans' => []
+            'hierarchyWithSpans' => [],
+            'placeRelationSummary' => null,
+            'geodataLevel' => null,
+            'duplicateNominatimPlaces' => collect([]),
         ]);
     }
 
@@ -73,7 +80,18 @@ class PlacesController extends Controller
         $locationHierarchy = $span->getLocationHierarchy();
         $hierarchyWithSpans = $this->findMatchingSpansForHierarchy($locationHierarchy);
 
-        return view('places.show', compact('span', 'coordinates', 'hierarchyWithSpans'));
+        // Place relations from geodata (contains, contained by, near) when traits are available
+        $placeRelationSummary = null;
+        if ($span->hasUsableGeodata()) {
+            $placeRelationSummary = $this->locationService->getPlaceRelationSummary($span);
+        }
+
+        $geodataLevel = $span->getGeodataLevel();
+
+        // Other place spans that share the same Nominatim/OSM identity (for duplicate warning)
+        $duplicateNominatimPlaces = $this->locationService->getOtherPlacesWithSameNominatimIdentity($span);
+
+        return view('places.show', compact('span', 'coordinates', 'hierarchyWithSpans', 'placeRelationSummary', 'geodataLevel', 'duplicateNominatimPlaces'));
     }
     
     /**

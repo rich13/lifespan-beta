@@ -305,9 +305,12 @@ Route::middleware('auth')->group(function () {
         ]);
         
         try {
+            // Large polygons (e.g. USA) can exhaust default memory when decoding Nominatim response
+            @ini_set('memory_limit', '512M');
+
             $osmService = app(\App\Services\OSMGeocodingService::class);
             $geocodingWorkflow = app(\App\Services\PlaceGeocodingWorkflowService::class);
-            
+
             // Use reverse geocoding to get full Nominatim result
             // We'll use the coordinates and OSM type/ID to get the complete data
             $lat = (float)$request->get('lat');
@@ -316,7 +319,7 @@ Route::middleware('auth')->group(function () {
             $osmId = $request->get('osm_id');
             
             // Lookup the full Nominatim result using OSM type and ID
-            $nominatimResult = $osmService->lookupByOsmId($osmType, (int)$osmId);
+            $nominatimResult = $osmService->lookupByOsmId($osmType, (int)$osmId, true);
             
             if (!$nominatimResult) {
                 // If lookup fails, try reverse geocode as fallback
@@ -424,7 +427,7 @@ Route::middleware(['auth', 'admin'])->group(function () {
             $osmId = $request->get('osm_id');
             
             // Lookup the full Nominatim result using OSM type and ID
-            $nominatimResult = $osmService->lookupByOsmId($osmType, (int)$osmId);
+            $nominatimResult = $osmService->lookupByOsmId($osmType, (int)$osmId, true);
             
             if (!$nominatimResult) {
                 // If lookup fails, try reverse geocode as fallback
@@ -1075,3 +1078,245 @@ Route::middleware('auth')->post('/spans/{span}/fetch-wikimedia-description', fun
         ], 500);
     }
 });
+
+// Create place from photo coordinates and link to photo
+Route::middleware('auth')->post('/photos/{photo}/create-place-from-coordinates', function (Request $request, \App\Models\Span $photo) {
+    // Ensure this is a photo span
+    if ($photo->type_id !== 'thing' || ($photo->metadata['subtype'] ?? null) !== 'photo') {
+        return response()->json([
+            'success' => false,
+            'message' => 'Invalid photo span'
+        ], 400);
+    }
+    
+    // Check if user can edit the photo
+    if (!$photo->isEditableBy(auth()->user())) {
+        return response()->json([
+            'success' => false,
+            'message' => 'You do not have permission to edit this photo.'
+        ], 403);
+    }
+    
+    // Get coordinates from photo metadata
+    $coordinates = $photo->metadata['coordinates'] ?? null;
+    if (!$coordinates) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Photo has no coordinates'
+        ], 400);
+    }
+    
+    // Parse coordinates
+    if (!preg_match('/^(-?[\d.]+)\s*,\s*(-?[\d.]+)$/', trim($coordinates), $matches)) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Invalid coordinate format'
+        ], 400);
+    }
+    
+    $latitude = (float) $matches[1];
+    $longitude = (float) $matches[2];
+    
+    try {
+        // Get the OSM geocoding service
+        $osmService = app(\App\Services\OSMGeocodingService::class);
+        
+        // Reverse geocode to get place data
+        $reverseData = $osmService->reverseGeocode($latitude, $longitude);
+        
+        if (!$reverseData || !$reverseData['display_name']) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Could not geocode coordinates'
+            ], 400);
+        }
+        
+        // Extract a reasonable name for the place (must not be empty - Span validation requires it)
+        $address = $reverseData['address'] ?? [];
+        $displayName = $reverseData['display_name'] ?? '';
+        
+        $placeName = null;
+        $candidates = [
+            $reverseData['name'] ?? null,
+            $address['building'] ?? null,
+            $address['house_name'] ?? null,
+            $address['amenity'] ?? null,
+            $address['tourism'] ?? null,
+            $address['shop'] ?? null,
+            $address['road'] ?? null,
+            $address['neighbourhood'] ?? null,
+            $address['suburb'] ?? null,
+            $address['city_district'] ?? null,
+            $address['village'] ?? null,
+            $address['town'] ?? null,
+            $address['city'] ?? null,
+            $address['municipality'] ?? null,
+            $address['county'] ?? null,
+        ];
+        
+        foreach ($candidates as $c) {
+            if (!empty(trim((string) $c))) {
+                $placeName = trim($c);
+                break;
+            }
+        }
+        
+        // Fall back to display_name (shortened) or a generic label
+        if (empty($placeName)) {
+            $placeName = !empty($displayName)
+                ? \Illuminate\Support\Str::limit($displayName, 100)
+                : 'Unknown Location';
+        }
+        
+        // Check if a place with the same OSM ID already exists
+        $osmType = $reverseData['osm_type'] ?? null;
+        $osmId = $reverseData['osm_id'] ?? null;
+        
+        $existingPlace = null;
+        if ($osmType && $osmId) {
+            $existingPlace = \App\Models\Span::where('type_id', 'place')
+                ->whereRaw("metadata->'osm_data'->>'osm_type' = ?", [$osmType])
+                ->whereRaw("metadata->'osm_data'->>'osm_id' = ?", [(string)$osmId])
+                ->first();
+        }
+        
+        if ($existingPlace) {
+            // Place already exists, just create the connection
+            $place = $existingPlace;
+            $wasExisting = true;
+        } else {
+            // Create new place span
+            $place = \App\Models\Span::create([
+                'name' => $placeName,
+                'type_id' => 'place',
+                'state' => 'placeholder', // Will be updated by geocoding
+                'access_level' => 'public',
+                'owner_id' => auth()->id(),
+                'metadata' => [
+                    'coordinates' => [
+                        'latitude' => $latitude,
+                        'longitude' => $longitude,
+                    ],
+                ],
+            ]);
+            
+            // Run the geocoding workflow to set all OSM data, hierarchy, etc.
+            $geocodingService = app(\App\Services\PlaceGeocodingWorkflowService::class);
+            $geocodingService->resolvePlace($place);
+            
+            // Refresh the place to get updated data
+            $place->refresh();
+            
+            $wasExisting = false;
+        }
+        
+        // Check if connection already exists
+        $existingConnection = \App\Models\Connection::where('parent_id', $photo->id)
+            ->where('child_id', $place->id)
+            ->where('type_id', 'located')
+            ->first();
+        
+        if ($existingConnection) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This photo is already linked to ' . $place->name
+            ], 400);
+        }
+        
+        // Create located connection from photo to place (uses ConnectionImporter to create required connection span)
+        $connectionImporter = new \App\Services\Import\Connections\ConnectionImporter(auth()->user());
+        $connection = $connectionImporter->createConnection($photo, $place, 'located');
+        
+        return response()->json([
+            'success' => true,
+            'message' => $wasExisting 
+                ? 'Linked photo to existing place: ' . $place->name
+                : 'Created place and linked photo: ' . $place->name,
+            'place' => [
+                'id' => $place->id,
+                'name' => $place->name,
+                'slug' => $place->slug,
+                'url' => route('spans.show', $place),
+            ],
+            'was_existing' => $wasExisting,
+        ]);
+        
+    } catch (\Exception $e) {
+        \Illuminate\Support\Facades\Log::error('Failed to create place from photo coordinates', [
+            'photo_id' => $photo->id,
+            'coordinates' => $coordinates,
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+        
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to create place: ' . $e->getMessage()
+        ], 500);
+    }
+})->name('api.photos.create-place-from-coordinates');
+
+// Link existing place to photo (located connection)
+Route::middleware('auth')->post('/photos/{photo}/link-place/{place}', function (Request $request, \App\Models\Span $photo, \App\Models\Span $place) {
+    // Ensure this is a photo span
+    if ($photo->type_id !== 'thing' || ($photo->metadata['subtype'] ?? null) !== 'photo') {
+        return response()->json([
+            'success' => false,
+            'message' => 'Invalid photo span'
+        ], 400);
+    }
+
+    // Ensure place is a place span
+    if ($place->type_id !== 'place') {
+        return response()->json([
+            'success' => false,
+            'message' => 'Invalid place span'
+        ], 400);
+    }
+
+    if (!$photo->isEditableBy(auth()->user())) {
+        return response()->json([
+            'success' => false,
+            'message' => 'You do not have permission to edit this photo.'
+        ], 403);
+    }
+
+    $existingConnection = \App\Models\Connection::where('parent_id', $photo->id)
+        ->where('child_id', $place->id)
+        ->where('type_id', 'located')
+        ->first();
+
+    if ($existingConnection) {
+        return response()->json([
+            'success' => false,
+            'message' => 'This photo is already linked to ' . $place->name
+        ], 400);
+    }
+
+    try {
+        $connectionImporter = new \App\Services\Import\Connections\ConnectionImporter(auth()->user());
+        $connectionImporter->createConnection($photo, $place, 'located');
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Linked photo to ' . $place->name,
+            'place' => [
+                'id' => $place->id,
+                'name' => $place->name,
+                'slug' => $place->slug,
+                'url' => route('spans.show', $place),
+            ],
+        ]);
+    } catch (\Exception $e) {
+        \Illuminate\Support\Facades\Log::error('Failed to link place to photo', [
+            'photo_id' => $photo->id,
+            'place_id' => $place->id,
+            'error' => $e->getMessage(),
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to link place: ' . $e->getMessage()
+        ], 500);
+    }
+})->name('api.photos.link-place');

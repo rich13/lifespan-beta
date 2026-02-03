@@ -62,6 +62,13 @@ return [
         'api_key' => env('GUARDIAN_API_KEY', '09621a6e-033b-43be-87b2-4b5f0b27055e'),
     ],
 
+    'osm_import_data_path' => env('OSM_IMPORT_DATA_PATH', 'osm/london-major-locations.json'),
+
+    // Use local Nominatim when running in Docker (docker-compose nominatim service).
+    // Set NOMINATIM_BASE_URL in .env to override (e.g. from host use http://localhost:7001).
+    'nominatim_base_url' => env('NOMINATIM_BASE_URL')
+        ?: (env('DOCKER_CONTAINER') ? 'http://nominatim:8080' : 'https://nominatim.openstreetmap.org'),
+
     'mailersend' => [
         'api_key' => env('MAILERSEND_API_KEY'),
     ],

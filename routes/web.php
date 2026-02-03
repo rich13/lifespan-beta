@@ -700,11 +700,15 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                     // We can't iterate through all users, so clear for guest and current user explicitly
                     Cache::forget("connections_all_v3_{$parentId}_guest");
                     Cache::forget("connections_all_v3_{$childId}_guest");
+                    Cache::forget("connections_all_v4_{$parentId}_guest");
+                    Cache::forget("connections_all_v4_{$childId}_guest");
                     
                     if (auth()->check()) {
                         $currentUserId = auth()->id();
                         Cache::forget("connections_all_v3_{$parentId}_{$currentUserId}");
                         Cache::forget("connections_all_v3_{$childId}_{$currentUserId}");
+                        Cache::forget("connections_all_v4_{$parentId}_{$currentUserId}");
+                        Cache::forget("connections_all_v4_{$childId}_{$currentUserId}");
                     }
 
                     return response()->json([
@@ -947,7 +951,28 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
         Route::middleware('span.access')->group(function () {
             // Primary route structure - handle both photo show and connections
             Route::get('/', [PhotoController::class, 'index'])->name('photos.index');
-            
+            // Photos from a specific date (YYYY or YYYY-MM or YYYY-MM-DD) – must be before /{photo}
+            $datePattern = '[0-9]{4}(-[0-9]{2}){0,2}';
+            Route::get('/from/{fromDate}/to/{toDate}', [PhotoController::class, 'indexFromTo'])
+                ->where(['fromDate' => $datePattern, 'toDate' => $datePattern])
+                ->name('photos.from.to');
+            Route::get('/from/{date}', [PhotoController::class, 'indexFrom'])
+                ->where('date', $datePattern)
+                ->name('photos.from');
+            // Photos during a span's date range (span start/end as from/to)
+            // Use plain slug strings to allow graceful handling of non-existent spans (show empty results instead of 404)
+            Route::get('/during/{slug}', [PhotoController::class, 'indexDuring'])->name('photos.during');
+            // Photos featuring a specific span (must be before /{photo} so "of" is not captured as photo slug)
+            Route::get('/of/{slug}/from/{fromDate}/to/{toDate}', [PhotoController::class, 'indexOfFromTo'])
+                ->where(['fromDate' => $datePattern, 'toDate' => $datePattern])
+                ->name('photos.of.from.to');
+            Route::get('/of/{slug}/from/{date}', [PhotoController::class, 'indexOfFrom'])
+                ->where('date', $datePattern)
+                ->name('photos.of.from');
+            // Photos featuring a span during another span's date range
+            Route::get('/of/{slug}/during/{duringSlug}', [PhotoController::class, 'indexOfDuring'])->name('photos.of.during');
+            Route::get('/of/{slug}', [PhotoController::class, 'indexOf'])->name('photos.of');
+
             Route::get('/{photo}', [PhotoController::class, 'show'])->name('photos.show');
             
             // Specific photo routes
@@ -1280,6 +1305,8 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                         ->name('index');
                     Route::post('/preview', [App\Http\Controllers\Admin\BluePlaqueImportController::class, 'preview'])
                         ->name('preview');
+                    Route::post('/search-person', [App\Http\Controllers\Admin\BluePlaqueImportController::class, 'searchPerson'])
+                        ->name('search-person');
                     Route::post('/validate-single', [App\Http\Controllers\Admin\BluePlaqueImportController::class, 'validateSingle'])
                         ->name('validate-single');
                     Route::post('/process-single', [App\Http\Controllers\Admin\BluePlaqueImportController::class, 'processSingle'])
@@ -1348,6 +1375,22 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                 Route::get('/progress/{importId}', [ImportController::class, 'progress'])
                     ->name('progress');
             });
+
+            // OSM place data import (configurable region; default config is London)
+            Route::get('/osmdata', [App\Http\Controllers\Admin\OsmDataController::class, 'index'])
+                ->name('osmdata.index');
+            Route::post('/osmdata/preview', [App\Http\Controllers\Admin\OsmDataController::class, 'preview'])
+                ->name('osmdata.preview');
+            Route::post('/osmdata/import', [App\Http\Controllers\Admin\OsmDataController::class, 'import'])
+                ->name('osmdata.import');
+            Route::post('/osmdata/generate-json', [App\Http\Controllers\Admin\OsmDataController::class, 'generateJson'])
+                ->name('osmdata.generate-json');
+            Route::post('/osmdata/find-span', [App\Http\Controllers\Admin\OsmDataController::class, 'findSpan'])
+                ->name('osmdata.find-span');
+            Route::post('/osmdata/search-json', [App\Http\Controllers\Admin\OsmDataController::class, 'searchJsonFeatures'])
+                ->name('osmdata.search-json');
+            Route::post('/osmdata/update-span-from-json', [App\Http\Controllers\Admin\OsmDataController::class, 'updateSpanFromJson'])
+                ->name('osmdata.update-span-from-json');
 
             // Span Types Management
             Route::resource('span-types', SpanTypeController::class);
@@ -1655,11 +1698,81 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                     ]);
                     
                     return response()->json([
-                        'success' => false, 
-                        'message' => 'An error occurred while fetching OSM data'
+                        'success' => false,
+                        'message' => 'An error occurred while fetching OSM data: ' . $e->getMessage()
                     ], 500);
                 }
             })->name('places.fetch-osm-data');
+
+            // Update place from a chosen Nominatim result (re-geocode disambiguation)
+            Route::post('/places/{span}/update-from-nominatim', function (Request $request, \App\Models\Span $span) {
+                $user = auth()->user();
+                if (!$user || !$user->getEffectiveAdminStatus()) {
+                    return response()->json(['success' => false, 'message' => 'Unauthorized - admin access required'], 403);
+                }
+                if ($span->type_id !== 'place') {
+                    return response()->json(['success' => false, 'message' => 'Span is not a place'], 400);
+                }
+                $request->validate([
+                    'lat' => 'required|numeric',
+                    'lng' => 'required|numeric',
+                    'osm_type' => 'required|string',
+                    'osm_id' => 'required|string',
+                    'display_name' => 'required|string',
+                    'place_type' => 'nullable|string',
+                ]);
+                try {
+                    $osmService = app(\App\Services\OSMGeocodingService::class);
+                    $geocodingWorkflow = app(\App\Services\PlaceGeocodingWorkflowService::class);
+                    $lat = (float) $request->get('lat');
+                    $lng = (float) $request->get('lng');
+                    $osmType = $request->get('osm_type');
+                    $osmId = $request->get('osm_id');
+                    $nominatimResult = $osmService->lookupByOsmId($osmType, (int) $osmId, true);
+                    if (!$nominatimResult) {
+                        $reverseResult = \Illuminate\Support\Facades\Http::withHeaders([
+                            'User-Agent' => config('app.user_agent'),
+                            'Accept-Language' => 'en'
+                        ])->get('https://nominatim.openstreetmap.org/reverse', [
+                            'lat' => $lat, 'lon' => $lng, 'format' => 'json',
+                            'addressdetails' => 1, 'extratags' => 1, 'namedetails' => 1
+                        ]);
+                        if ($reverseResult->successful()) {
+                            $reverseData = $reverseResult->json();
+                            if (($reverseData['osm_type'] ?? '') === $osmType && (string) ($reverseData['osm_id'] ?? '') === (string) $osmId) {
+                                $nominatimResult = $reverseData;
+                            }
+                        }
+                    }
+                    if (!$nominatimResult) {
+                        $nominatimResult = [
+                            'place_id' => null, 'osm_type' => $osmType, 'osm_id' => (int) $osmId,
+                            'lat' => (string) $lat, 'lon' => (string) $lng,
+                            'display_name' => $request->get('display_name'),
+                            'type' => $request->get('place_type', ''),
+                            'name' => explode(',', $request->get('display_name'))[0] ?? '',
+                            'address' => [],
+                        ];
+                    }
+                    $reflection = new \ReflectionClass($osmService);
+                    $formatMethod = $reflection->getMethod('formatOsmData');
+                    $formatMethod->setAccessible(true);
+                    $osmData = $formatMethod->invoke($osmService, $nominatimResult);
+                    $success = $geocodingWorkflow->resolveWithMatch($span, $osmData);
+                    if ($success) {
+                        $span = $span->fresh();
+                        return response()->json([
+                            'success' => true,
+                            'message' => 'Place updated from selected result.',
+                            'redirect_url' => route('places.show', $span->id),
+                        ]);
+                    }
+                    return response()->json(['success' => false, 'message' => 'Failed to update span metadata'], 500);
+                } catch (\Exception $e) {
+                    Log::error('Error updating span from Nominatim', ['span_id' => $span->id, 'error' => $e->getMessage()]);
+                    return response()->json(['success' => false, 'message' => 'An error occurred: ' . $e->getMessage()], 500);
+                }
+            })->name('places.update-from-nominatim');
 
             // User Management
             Route::get('/users', [UserController::class, 'index'])
@@ -1755,6 +1868,10 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                     ->name('find-similar-spans');
                 Route::post('/merge-spans', [App\Http\Controllers\Admin\MergeController::class, 'mergeSpans'])
                     ->name('merge-spans');
+                Route::post('/bulk-delete-zero-connection-duplicates', [App\Http\Controllers\Admin\MergeController::class, 'bulkDeleteZeroConnectionDuplicates'])
+                    ->name('bulk-delete-zero-connection-duplicates');
+                Route::get('/bulk-delete-zero-connection-progress', [App\Http\Controllers\Admin\MergeController::class, 'bulkDeleteZeroConnectionProgress'])
+                    ->name('bulk-delete-zero-connection-progress');
                 Route::get('/span-details', [App\Http\Controllers\Admin\MergeController::class, 'getSpanDetails'])
                     ->name('span-details');
             });
