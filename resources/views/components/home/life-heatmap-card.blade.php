@@ -322,11 +322,11 @@
                     <p class="text-muted small mb-0">No connection data available yet. Add connections with dates to see your life activity heatmap.</p>
                 @else
                     <p class="small text-muted mb-3">
-                        Connections throughout your life. Each square represents a {{ $useMonths ? 'month' : 'week' }}, coloured by the number of active connection spans.
+                        FYI: each square represents a {{ $useMonths ? 'month' : 'week' }}, coloured by the number of active connection spans.
                     </p>
                     
                     <div class="life-heatmap-container">
-                        <div class="life-heatmap-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(8px, 1fr)); gap: 3px; max-width: 100%;">
+                        <div class="life-heatmap-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(13px, 1fr)); gap: 3px; max-width: 100%;">
                             @foreach($periodsData as $period)
                             @php
                                 $color = $getColorForCount($period['count']);

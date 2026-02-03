@@ -38,22 +38,22 @@
                             We could not find your personal span. Please complete your profile or contact support.
                         </p>
                     @endif
+                    <div class="alert alert-info mt-3 mb-0">
+                        <h4 class="h6 fw-semibold mb-2">About this...</h4>
+                        <p class="small mb-2">
+                            This page will pull together everything about your own span, and help you to work on it.
+                        </p>
+                        <p class="small mb-0">
+                            You might be able to use it to spot gaps, get suggestions for what to add, and maybe some other things.
+                        </p>
+                    </div>
                 </div>
             </div>
         </div>
 
         <div class="col-md-6 mb-4">
-            <div class="card h-100">
-                <div class="card-header">
-                    <h3 class="h6 mb-0">
-                        <i class="bi bi-calendar-event me-2"></i>
-                        Upcoming anniversaries
-                    </h3>
-                </div>
-                <div class="card-body">
-                    <x-upcoming-anniversaries />
-                </div>
-            </div>
+            <x-home.lifespan-summary-card />
+            <x-home.life-heatmap-card />
         </div>
     </div>
 </div>
