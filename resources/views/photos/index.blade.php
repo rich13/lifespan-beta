@@ -1,3 +1,8 @@
+@php
+    $featuresSpanForForm = request('features') ? \App\Models\Span::find(request('features')) : null;
+    // Always submit search/filters to main photos index URL (not /photos/of/slug) so URLs stay /photos/?search=...
+    $photosFormAction = route('photos.index');
+@endphp
 @extends('layouts.app')
 
 @section('page_title')
@@ -11,84 +16,66 @@
     ]" />
 @endsection
 
+@section('page_tools')
+    <form method="GET" action="{{ $photosFormAction }}" id="photos-filter-form" class="photos-topnav-filters d-flex flex-wrap align-items-center gap-2">
+        <input type="text" class="form-control form-control-sm photos-topnav-search" id="search" name="search"
+               value="{{ request('search') }}" placeholder="Search photos…" style="width: 140px;">
+        <div class="btn-group btn-group-sm photos-filter-btn-group" role="group" aria-label="Filter by state">
+            <input type="radio" class="btn-check photos-filter-radio" name="state" id="state_all" value="" {{ request('state') === '' || !request()->has('state') ? 'checked' : '' }} autocomplete="off">
+            <label class="btn btn-outline-secondary" for="state_all">All</label>
+            <input type="radio" class="btn-check photos-filter-radio" name="state" id="state_placeholder" value="placeholder" {{ request('state') === 'placeholder' ? 'checked' : '' }} autocomplete="off">
+            <label class="btn btn-outline-secondary" for="state_placeholder">Placeholder</label>
+            <input type="radio" class="btn-check photos-filter-radio" name="state" id="state_draft" value="draft" {{ request('state') === 'draft' ? 'checked' : '' }} autocomplete="off">
+            <label class="btn btn-outline-secondary" for="state_draft">Draft</label>
+            <input type="radio" class="btn-check photos-filter-radio" name="state" id="state_complete" value="complete" {{ request('state') === 'complete' ? 'checked' : '' }} autocomplete="off">
+            <label class="btn btn-outline-secondary" for="state_complete">Complete</label>
+        </div>
+        @if($showMyPhotosTab)
+            <div class="btn-group btn-group-sm photos-filter-btn-group" role="group" aria-label="Filter by scope">
+                <input type="radio" class="btn-check photos-filter-radio" name="photos_filter" id="photos_filter_my" value="my" {{ ($photosFilter ?? 'all') === 'my' ? 'checked' : '' }} autocomplete="off">
+                <label class="btn btn-outline-secondary" for="photos_filter_my">My</label>
+                <input type="radio" class="btn-check photos-filter-radio" name="photos_filter" id="photos_filter_public" value="public" {{ ($photosFilter ?? 'all') === 'public' ? 'checked' : '' }} autocomplete="off">
+                <label class="btn btn-outline-secondary" for="photos_filter_public">Public</label>
+                <input type="radio" class="btn-check photos-filter-radio" name="photos_filter" id="photos_filter_all" value="all" {{ ($photosFilter ?? 'all') === 'all' ? 'checked' : '' }} autocomplete="off">
+                <label class="btn btn-outline-secondary" for="photos_filter_all">All</label>
+            </div>
+        @endif
+        <div class="btn-group btn-group-sm photos-filter-btn-group" role="group" aria-label="Filter by access">
+            <input type="radio" class="btn-check photos-filter-radio" name="access_level" id="access_level_all" value="" {{ (strtolower((string) request('access_level')) === '') ? 'checked' : '' }} autocomplete="off">
+            <label class="btn btn-outline-secondary" for="access_level_all">All</label>
+            <input type="radio" class="btn-check photos-filter-radio" name="access_level" id="access_level_public" value="public" {{ request('access_level') === 'public' ? 'checked' : '' }} autocomplete="off">
+            <label class="btn btn-outline-secondary" for="access_level_public">Public</label>
+            <input type="radio" class="btn-check photos-filter-radio" name="access_level" id="access_level_shared" value="shared" {{ request('access_level') === 'shared' ? 'checked' : '' }} autocomplete="off">
+            <label class="btn btn-outline-secondary" for="access_level_shared">Shared</label>
+            <input type="radio" class="btn-check photos-filter-radio" name="access_level" id="access_level_private" value="private" {{ request('access_level') === 'private' ? 'checked' : '' }} autocomplete="off">
+            <label class="btn btn-outline-secondary" for="access_level_private">Private</label>
+        </div>
+        @if(request('features') && $featuresSpanForForm)
+            <a href="{{ route('photos.index', request()->except('features')) }}" class="btn btn-sm btn-outline-info text-nowrap">
+                <i class="bi bi-x-circle me-1"></i>Clear “{{ Str::limit($featuresSpanForForm->name, 12) }}”
+            </a>
+        @endif
+        @if(request('from_date') || request('to_date'))
+            @php
+                $clearDateUrl = $featuresSpanForForm ? route('photos.of', $featuresSpanForForm) : route('photos.index');
+            @endphp
+            <a href="{{ $clearDateUrl }}" class="btn btn-sm btn-outline-secondary text-nowrap" title="Clear date filter">
+                <i class="bi bi-calendar-x me-1"></i>
+                @if(request('from_date') && request('to_date'))
+                    {{ request('from_date') }}–{{ request('to_date') }}
+                @else
+                    from {{ request('from_date') ?? request('to_date') }}
+                @endif
+            </a>
+        @endif
+    </form>
+@endsection
+
 @section('content')
 <div class="container-fluid">
     <div class="row">
         <div class="col-12">
             <div class="mb-4"></div>
-
-            <!-- Filters -->
-            <div class="card mb-3">
-                <div class="card-body">
-                    <form method="GET" action="{{ route('photos.index') }}" id="photos-filter-form" class="photos-filter-row">
-                        @if(request('features'))
-                            <input type="hidden" name="features" value="{{ request('features') }}">
-                        @endif
-                        <div class="photos-filter-col">
-                            <label for="search" class="form-label">Search</label>
-                            <input type="text" class="form-control" id="search" name="search"
-                                   value="{{ request('search') }}" placeholder="Search photos...">
-                        </div>
-                        <div class="photos-filter-col">
-                            <div class="btn-group photos-filter-btn-group" role="group" aria-label="Filter by state">
-                                <input type="radio" class="btn-check photos-filter-radio" name="state" id="state_all" value="" {{ request('state') === '' || !request()->has('state') ? 'checked' : '' }} autocomplete="off">
-                                <label class="btn btn-outline-secondary" for="state_all">All</label>
-                                <input type="radio" class="btn-check photos-filter-radio" name="state" id="state_placeholder" value="placeholder" {{ request('state') === 'placeholder' ? 'checked' : '' }} autocomplete="off">
-                                <label class="btn btn-outline-secondary" for="state_placeholder">Placeholder</label>
-                                <input type="radio" class="btn-check photos-filter-radio" name="state" id="state_draft" value="draft" {{ request('state') === 'draft' ? 'checked' : '' }} autocomplete="off">
-                                <label class="btn btn-outline-secondary" for="state_draft">Draft</label>
-                                <input type="radio" class="btn-check photos-filter-radio" name="state" id="state_complete" value="complete" {{ request('state') === 'complete' ? 'checked' : '' }} autocomplete="off">
-                                <label class="btn btn-outline-secondary" for="state_complete">Complete</label>
-                            </div>
-                        </div>
-                        @if($showMyPhotosTab)
-                            <div class="photos-filter-col">
-                                <div class="btn-group photos-filter-btn-group" role="group" aria-label="Filter by scope">
-                                    <input type="radio" class="btn-check photos-filter-radio" name="photos_filter" id="photos_filter_my" value="my" {{ ($photosFilter ?? 'my') === 'my' ? 'checked' : '' }} autocomplete="off">
-                                    <label class="btn btn-outline-secondary" for="photos_filter_my">My Photos</label>
-                                    <input type="radio" class="btn-check photos-filter-radio" name="photos_filter" id="photos_filter_public" value="public" {{ ($photosFilter ?? 'my') === 'public' ? 'checked' : '' }} autocomplete="off">
-                                    <label class="btn btn-outline-secondary" for="photos_filter_public">Public</label>
-                                    <input type="radio" class="btn-check photos-filter-radio" name="photos_filter" id="photos_filter_all" value="all" {{ ($photosFilter ?? 'my') === 'all' ? 'checked' : '' }} autocomplete="off">
-                                    <label class="btn btn-outline-secondary" for="photos_filter_all">All</label>
-                                </div>
-                            </div>
-                        @endif
-                        <div class="photos-filter-col">
-                            <div class="btn-group photos-filter-btn-group" role="group" aria-label="Filter by access">
-                                <input type="radio" class="btn-check photos-filter-radio" name="access_level" id="access_level_all" value="" {{ (strtolower((string) request('access_level')) === '') ? 'checked' : '' }} autocomplete="off">
-                                <label class="btn btn-outline-secondary" for="access_level_all">All</label>
-                                <input type="radio" class="btn-check photos-filter-radio" name="access_level" id="access_level_public" value="public" {{ request('access_level') === 'public' ? 'checked' : '' }} autocomplete="off">
-                                <label class="btn btn-outline-secondary" for="access_level_public">Public</label>
-                                <input type="radio" class="btn-check photos-filter-radio" name="access_level" id="access_level_shared" value="shared" {{ request('access_level') === 'shared' ? 'checked' : '' }} autocomplete="off">
-                                <label class="btn btn-outline-secondary" for="access_level_shared">Shared</label>
-                                <input type="radio" class="btn-check photos-filter-radio" name="access_level" id="access_level_private" value="private" {{ request('access_level') === 'private' ? 'checked' : '' }} autocomplete="off">
-                                <label class="btn btn-outline-secondary" for="access_level_private">Private</label>
-                            </div>
-                        </div>
-                        @if(request('features'))
-                            <div class="photos-filter-features-col">
-                                <div class="alert alert-info alert-sm py-2 mb-0">
-                                    <small>
-                                        <i class="bi bi-info-circle me-1"></i>
-                                        Showing photos featuring:
-                                        @php
-                                            $featuresSpan = \App\Models\Span::find(request('features'));
-                                        @endphp
-                                        @if($featuresSpan)
-                                            <strong>{{ $featuresSpan->name }}</strong>
-                                            <a href="{{ route('photos.index', request()->except('features')) }}" class="ms-2 text-decoration-none">
-                                                <i class="bi bi-x-circle"></i> Clear filter
-                                            </a>
-                                        @else
-                                            <strong>Unknown</strong>
-                                        @endif
-                                    </small>
-                                </div>
-                            </div>
-                        @endif
-                    </form>
-                </div>
-            </div>
 
             <!-- Photos Grid - variable width by aspect ratio, fixed height, no cropping -->
             @if($photos->count() > 0)
@@ -122,7 +109,7 @@
                     <i class="bi bi-images fs-1 text-muted mb-3"></i>
                     <h4 class="text-muted">No photos found</h4>
                     <p class="text-muted">
-                        @if(request()->hasAny(['search', 'access_level', 'state', 'photos_filter']))
+                        @if(request()->hasAny(['search', 'access_level', 'state', 'photos_filter', 'features', 'from_date', 'to_date']))
                             Try adjusting your filters or 
                             <a href="{{ route('photos.index') }}">clear all filters</a>.
                         @else
@@ -144,26 +131,13 @@
 
 @push('styles')
 <style>
-.photos-filter-row {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    gap: 1rem;
+/* Photos filter form in topnav tools area */
+.photos-topnav-filters .photos-filter-btn-group .btn {
+    padding: 0.2rem 0.5rem;
+    font-size: 0.8rem;
 }
-.photos-filter-col {
-    flex: 1 1 0;
-    min-width: 180px;
-}
-.photos-filter-features-col {
-    flex-basis: 100%;
-    width: 100%;
-}
-#photos-filter-form .photos-filter-btn-group {
-    flex-wrap: wrap;
-}
-#photos-filter-form .photos-filter-btn-group .btn {
-    flex: 1 1 auto;
-    min-width: 0;
+.photos-topnav-filters .photos-filter-btn-group label.btn {
+    white-space: nowrap;
 }
 /* Grid: variable width per aspect ratio, fixed height, no cropping */
 .photos-grid {
@@ -191,7 +165,7 @@
     position: relative;
     border-radius: 0.375rem 0.375rem 0 0;
     background-color: #f8f9fa;
-    height: 200px;
+    height: 300px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -206,7 +180,7 @@
 
 .photo-card-img {
     display: block;
-    height: 200px;
+    height: 300px;
     width: auto;
     max-width: 100%;
     object-fit: contain;
@@ -217,8 +191,8 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    height: 200px;
-    min-width: 150px;
+    height: 300px;
+    min-width: 225px;
     color: var(--bs-secondary);
     text-align: center;
 }
@@ -349,7 +323,7 @@ $(function () {
     var $form = $('#photos-filter-form');
     console.log('[photos-filter] Form element:', $form.length ? $form[0] : 'not found');
     if (!$form.length) return;
-    var baseUrl = $form.attr('action') || '{{ route("photos.index") }}';
+    var baseUrl = $form.attr('action') || '{{ $photosFormAction }}';
     console.log('[photos-filter] baseUrl:', baseUrl);
     var $labels = $form.find('.photos-filter-btn-group label[for]');
     console.log('[photos-filter] Filter labels found:', $labels.length, $labels);

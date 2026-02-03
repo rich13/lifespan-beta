@@ -76,13 +76,21 @@
                 </div>
                 <div class="photo-card-overlay-br d-flex flex-wrap gap-1 align-items-center justify-content-end">
                     @php
-                        $features = $photo->connectionsAsSubject()
-                            ->whereHas('type', function($q){ $q->where('type','features'); })
-                            ->with('child')
-                            ->get();
+                        // Use already eager-loaded connections to avoid N+1 queries
+                        $allConnections = $photo->connectionsAsSubject;
+                        $locations = $allConnections->filter(fn($c) => $c->type_id === 'located');
+                        $features = $allConnections->filter(fn($c) => $c->type_id === 'features');
                     @endphp
+                    @foreach($locations->take(2) as $conn)
+                        <a href="{{ route('photos.of', $conn->child) }}" class="badge bg-info text-decoration-none">
+                            <i class="bi bi-geo-alt me-1"></i>{{ Str::limit($conn->child->name, 15) }}
+                        </a>
+                    @endforeach
+                    @if($locations->count() > 2)
+                        <span class="badge bg-info">+{{ $locations->count() - 2 }}</span>
+                    @endif
                     @foreach($features->take(6) as $conn)
-                        <a href="{{ route('spans.show', $conn->child) }}" class="badge bg-secondary text-decoration-none">
+                        <a href="{{ route('photos.of', $conn->child) }}" class="badge bg-secondary text-decoration-none">
                             <i class="bi bi-person me-1"></i>{{ Str::limit($conn->child->name, 15) }}
                         </a>
                     @endforeach

@@ -105,7 +105,8 @@ class FlickrImportControllerTest extends TestCase
 
     public function test_reimport_updates_existing_photos()
     {
-        // Create an existing photo span
+        // Create an existing photo span (explicit end_year=null to avoid factory's random
+        // end dates violating check_span_temporal_constraint when start_year is overridden)
         $existingPhoto = Span::factory()->create([
             'name' => 'Old Title',
             'type_id' => 'thing',
@@ -114,6 +115,10 @@ class FlickrImportControllerTest extends TestCase
             'start_year' => 2022,
             'start_month' => 1,
             'start_day' => 1,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
+            'end_precision' => null,
             'metadata' => [
                 'subtype' => 'photo',
                 'flickr_id' => '123456789',

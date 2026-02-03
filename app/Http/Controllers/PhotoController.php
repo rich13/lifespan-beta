@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Span;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -31,6 +32,22 @@ class PhotoController extends Controller
             // Use direct JSON equality; subtype is stored as a string, not an array
             ->where('metadata->subtype', 'photo');
 
+        // Force empty results when span doesn't exist (graceful 404 handling)
+        if ($request->has('_no_results')) {
+            $query->whereRaw('1 = 0');
+        }
+
+        // Exclude photos of plaques by default (photos that feature a plaque span)
+        if (!$request->boolean('include_plaques')) {
+            $query->whereDoesntHave('connectionsAsSubject', function ($q) {
+                $q->where('type_id', 'features')
+                    ->whereHas('child', function ($childQ) {
+                        $childQ->where('type_id', 'thing')
+                            ->where('metadata->subtype', 'plaque');
+                    });
+            });
+        }
+
         // Apply access control (mirror Span::applyAccessControl logic for listing)
         $user = auth()->user();
         if (!$user) {
@@ -58,8 +75,8 @@ class PhotoController extends Controller
         }
 
         // Apply "photos_filter" - show my photos, public (not my) photos, or all accessible photos
-        // Default to "my" if user is authenticated, otherwise "public"
-        $photosFilter = $request->filled('photos_filter') ? $request->photos_filter : ($user ? 'my' : 'public');
+        // Default to "all" (show all accessible photos)
+        $photosFilter = $request->filled('photos_filter') ? $request->photos_filter : 'all';
         
         if ($photosFilter === 'my' && $user && $user->personalSpan) {
             // Show only photos created by current user
@@ -76,13 +93,13 @@ class PhotoController extends Controller
         }
         // If 'all', use the access control filters already applied above
 
-        // Apply search filter: photo title or names of spans the photo features
+        // Apply search filter: photo title or names of spans the photo features or is located in
         if ($request->filled('search')) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'ilike', "%{$search}%")
                     ->orWhereHas('connectionsAsSubject', function ($connQ) use ($search) {
-                        $connQ->where('type_id', 'features')
+                        $connQ->whereIn('type_id', ['features', 'located'])
                             ->whereHas('child', function ($childQ) use ($search) {
                                 $childQ->where('name', 'ilike', "%{$search}%");
                             });
@@ -100,19 +117,46 @@ class PhotoController extends Controller
             $query->where('state', $request->state);
         }
 
-        // Apply features filter (photos featuring a specific person/span)
+        // Apply features filter (photos featuring a specific person/span or located in a place)
         if ($request->filled('features')) {
             $featuresSpanId = $request->features;
             $query->whereHas('connectionsAsSubject', function ($q) use ($featuresSpanId) {
-                $q->where('type_id', 'features')
+                $q->whereIn('type_id', ['features', 'located'])
                   ->where('child_id', $featuresSpanId);
             });
+        }
+
+        // Apply from_date / to_date filter (YYYY or YYYY-MM or YYYY-MM-DD)
+        if ($request->filled('from_date') && $request->filled('to_date')) {
+            // Date range: photo start date within [from_date start of period, to_date end of period]
+            $fromStart = $this->parseDateStartOfPeriod($request->from_date);
+            $toEnd = $this->parseDateEndOfPeriod($request->to_date);
+            if ($fromStart && $toEnd) {
+                $query->whereRaw(
+                    '(start_year, COALESCE(start_month, 1), COALESCE(start_day, 1)) >= (?, ?, ?)',
+                    [$fromStart->year, $fromStart->month, $fromStart->day]
+                )->whereRaw(
+                    '(start_year, COALESCE(start_month, 1), COALESCE(start_day, 1)) <= (?, ?, ?)',
+                    [$toEnd->year, $toEnd->month, $toEnd->day]
+                );
+            }
+        } elseif ($request->filled('from_date')) {
+            // Single from_date: exact match (photos starting on that date)
+            $fromDate = $request->from_date;
+            $parts = explode('-', $fromDate);
+            $query->where('start_year', (int) $parts[0]);
+            if (isset($parts[1])) {
+                $query->where('start_month', (int) $parts[1]);
+            }
+            if (isset($parts[2])) {
+                $query->where('start_day', (int) $parts[2]);
+            }
         }
 
         $photos = $query
             ->with(['connectionsAsSubject' => function ($q) {
                 $q->whereHas('type', function ($t) {
-                    $t->where('type', 'features');
+                    $t->whereIn('type', ['features', 'located']);
                 })->with('child');
             }])
             ->with(['connectionsAsObject' => function ($q) {
@@ -149,6 +193,160 @@ class PhotoController extends Controller
         }
 
         return view('photos.index', compact('photos', 'showMyPhotosTab', 'photosFilter'));
+    }
+
+    /**
+     * Display photos in a date range (pretty URL: /photos/from/:from/to/:to).
+     * Dates may be YYYY, YYYY-MM, or YYYY-MM-DD.
+     */
+    public function indexFromTo(string $fromDate, string $toDate): View|JsonResponse
+    {
+        request()->merge([
+            'from_date' => $fromDate,
+            'to_date' => $toDate,
+        ]);
+
+        return $this->index(request());
+    }
+
+    /**
+     * Display photos from a specific date (pretty URL: /photos/from/:date).
+     * Date may be YYYY, YYYY-MM, or YYYY-MM-DD.
+     */
+    public function indexFrom(string $date): View|JsonResponse
+    {
+        request()->merge(['from_date' => $date]);
+
+        return $this->index(request());
+    }
+
+    /**
+     * Display photos during a span's date range (pretty URL: /photos/during/:slug).
+     * Uses the span's start date as from_date and end date as to_date (if present).
+     * If the span doesn't exist, shows empty results instead of 404.
+     */
+    public function indexDuring(string $slug): View|JsonResponse
+    {
+        $span = Span::where('slug', $slug)->first();
+
+        // If span doesn't exist, just show empty results
+        if (!$span) {
+            request()->merge(['_no_results' => true]);
+            return $this->index(request());
+        }
+
+        if (!$span->start_year) {
+            return redirect()->route('photos.index')
+                ->with('status', 'That span has no start date, so "during" filtering is not possible.');
+        }
+
+        $merge = ['from_date' => $span->start_date_link];
+        $merge['to_date'] = $span->end_year
+            ? $span->end_date_link
+            : Carbon::today()->format('Y-m-d');
+        request()->merge($merge);
+
+        return $this->index(request());
+    }
+
+    /**
+     * Display photos featuring the given span in a date range (pretty URL: /photos/of/:slug/from/:from/to/:to).
+     * Dates may be YYYY, YYYY-MM, or YYYY-MM-DD.
+     * If the span doesn't exist, shows empty results instead of 404.
+     */
+    public function indexOfFromTo(string $slug, string $fromDate, string $toDate): View|JsonResponse
+    {
+        $span = Span::where('slug', $slug)->first();
+
+        // If span doesn't exist, just show empty results
+        if (!$span) {
+            request()->merge(['_no_results' => true]);
+            return $this->index(request());
+        }
+
+        request()->merge([
+            'features' => $span->id,
+            'from_date' => $fromDate,
+            'to_date' => $toDate,
+        ]);
+
+        return $this->index(request());
+    }
+
+    /**
+     * Display photos featuring the given span from a specific date (pretty URL: /photos/of/:slug/from/:date).
+     * Date may be YYYY, YYYY-MM, or YYYY-MM-DD.
+     * If the span doesn't exist, shows empty results instead of 404.
+     */
+    public function indexOfFrom(string $slug, string $date): View|JsonResponse
+    {
+        $span = Span::where('slug', $slug)->first();
+
+        // If span doesn't exist, just show empty results
+        if (!$span) {
+            request()->merge(['_no_results' => true]);
+            return $this->index(request());
+        }
+
+        request()->merge([
+            'features' => $span->id,
+            'from_date' => $date,
+        ]);
+
+        return $this->index(request());
+    }
+
+    /**
+     * Display photos featuring the given span (pretty URL: /photos/of/:slug).
+     * If the span doesn't exist, shows empty results instead of 404.
+     */
+    public function indexOf(string $slug): View|JsonResponse
+    {
+        $span = Span::where('slug', $slug)->first();
+
+        // If span doesn't exist, just show empty results
+        if (!$span) {
+            request()->merge(['_no_results' => true]);
+            return $this->index(request());
+        }
+
+        request()->merge(['features' => $span->id]);
+
+        return $this->index(request());
+    }
+
+    /**
+     * Display photos featuring the given span during another span's date range
+     * (pretty URL: /photos/of/:slug/during/:duringSlug).
+     * Combines the "features" filter with the "during" span's start/end dates.
+     * If either span doesn't exist, shows empty results instead of 404.
+     */
+    public function indexOfDuring(string $slug, string $duringSlug): View|JsonResponse
+    {
+        $span = Span::where('slug', $slug)->first();
+        $duringSpan = Span::where('slug', $duringSlug)->first();
+
+        // If either span doesn't exist, just show empty results
+        if (!$span || !$duringSpan) {
+            request()->merge(['_no_results' => true]);
+            return $this->index(request());
+        }
+
+        if (!$duringSpan->start_year) {
+            return redirect()->route('photos.of', $span->slug)
+                ->with('status', 'That span has no start date, so "during" filtering is not possible.');
+        }
+
+        $merge = [
+            'features' => $span->id,
+            'from_date' => $duringSpan->start_date_link,
+        ];
+        $merge['to_date'] = $duringSpan->end_year
+            ? $duringSpan->end_date_link
+            : Carbon::today()->format('Y-m-d');
+        request()->merge($merge);
+
+        return $this->index(request());
     }
 
     /**
@@ -389,5 +587,45 @@ class PhotoController extends Controller
         // Delegate to SpanController for the actual time travel logic
         $spanController = new SpanController();
         return $spanController->showAtDate($request, $photo, $date);
+    }
+
+    /**
+     * Parse a date string (YYYY, YYYY-MM, or YYYY-MM-DD) to the start of that period.
+     */
+    private function parseDateStartOfPeriod(string $date): ?Carbon
+    {
+        try {
+            $parts = explode('-', $date);
+            $year = (int) $parts[0];
+            $month = isset($parts[1]) ? (int) $parts[1] : 1;
+            $day = isset($parts[2]) ? (int) $parts[2] : 1;
+
+            return Carbon::createFromDate($year, $month, $day)->startOfDay();
+        } catch (\Exception $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Parse a date string (YYYY, YYYY-MM, or YYYY-MM-DD) to the end of that period.
+     */
+    private function parseDateEndOfPeriod(string $date): ?Carbon
+    {
+        try {
+            $parts = explode('-', $date);
+            $year = (int) $parts[0];
+            if (!isset($parts[1])) {
+                return Carbon::createFromDate($year, 12, 31)->endOfDay();
+            }
+            $month = (int) $parts[1];
+            if (!isset($parts[2])) {
+                return Carbon::createFromDate($year, $month, 1)->endOfMonth()->endOfDay();
+            }
+            $day = (int) $parts[2];
+
+            return Carbon::createFromDate($year, $month, $day)->endOfDay();
+        } catch (\Exception $e) {
+            return null;
+        }
     }
 }

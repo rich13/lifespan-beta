@@ -41,11 +41,29 @@
             
             @if($imageUrl)
                 <div class="card mb-4">
-                    <div class="card-body p-0">
+                    <div class="card-body p-0 position-relative">
                         <img src="{{ $imageUrl }}" 
                              alt="{{ $photo->name }}" 
                              class="img-fluid w-100"
                              style="max-height: 600px; object-fit: contain;">
+                        @php
+                            $featuredConnections = $photo->connectionsAsSubject()
+                                ->whereHas('type', function ($q) { $q->where('type', 'features'); })
+                                ->with('child')
+                                ->get();
+                        @endphp
+                        @if($featuredConnections->isNotEmpty())
+                            <div class="position-absolute bottom-0 end-0 p-2 d-flex flex-wrap gap-1 align-items-center justify-content-end photo-show-featured-badges">
+                                @foreach($featuredConnections->take(6) as $conn)
+                                    <a href="{{ route('photos.of', $conn->child) }}" class="badge bg-secondary text-decoration-none">
+                                        <i class="bi bi-person me-1"></i>{{ Str::limit($conn->child->name, 15) }}
+                                    </a>
+                                @endforeach
+                                @if($featuredConnections->count() > 6)
+                                    <span class="badge bg-light text-dark">+{{ $featuredConnections->count() - 6 }}</span>
+                                @endif
+                            </div>
+                        @endif
                     </div>
                 </div>
             @else
@@ -100,4 +118,13 @@
     </div>
 </div>
 @endsection
+
+@push('styles')
+<style>
+.photo-show-featured-badges {
+    background: linear-gradient(to top, rgba(0,0,0,0.5), transparent);
+    pointer-events: auto;
+}
+</style>
+@endpush
 
