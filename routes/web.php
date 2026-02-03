@@ -181,6 +181,9 @@ Route::middleware('web')->group(function () {
 
     // Places routes (index must come before show to avoid conflicts)
     Route::get('/places', [\App\Http\Controllers\PlacesController::class, 'index'])->name('places.index');
+    // Geo edit (must come before /places/{span} so {span}/geo is matched)
+    Route::get('/places/{span}/geo', [\App\Http\Controllers\PlaceGeoController::class, 'edit'])->name('places.geo.edit');
+    Route::put('/places/{span}/geo', [\App\Http\Controllers\PlaceGeoController::class, 'update'])->name('places.geo.update');
     // Route model binding handles both UUIDs and slugs via RouteServiceProvider
     Route::get('/places/{span}', [\App\Http\Controllers\PlacesController::class, 'show'])
         ->name('places.show');

@@ -28,7 +28,13 @@
         <x-spans.span-tools 
             :span="$span" 
             idPrefix="span" 
-            label="place" />
+            label="place">
+            <x-slot:extraButtons>
+                <a href="{{ route('places.geo.edit', $span) }}" class="btn btn-sm btn-outline-secondary ms-1" title="View or edit geo data (OSM/coordinates JSON)">
+                    <i class="bi bi-code-slash me-1"></i> Geo data
+                </a>
+            </x-slot:extraButtons>
+        </x-spans.span-tools>
     @endif
 @endsection
 
