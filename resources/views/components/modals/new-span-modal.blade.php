@@ -1,5 +1,5 @@
-<!-- New Span Modal -->
-<div class="modal fade" id="newSpanModal" tabindex="-1" aria-labelledby="newSpanModalLabel" aria-hidden="true">
+<!-- New Span Modal - subtype options loaded via AJAX to avoid decoding all type metadata on every page -->
+<div class="modal fade" id="newSpanModal" tabindex="-1" aria-labelledby="newSpanModalLabel" aria-hidden="true" data-subtype-options-url="{{ route('spans.types.subtype-options', ['type' => '__TYPE__']) }}">
     <div class="modal-dialog modal-md">
         <div class="modal-content">
             <div class="modal-header border-bottom">
@@ -348,9 +348,7 @@ $(document).ready(function() {
                 <select class="form-select" id="modal_type_id" name="type_id" required>
                     <option value="">Choose a type...</option>
                     @foreach($spanTypes as $type)
-                        <option value="{{ $type->type_id }}" data-subtypes='@json($type->getSubtypeOptions())'>
-                            {{ ucfirst($type->name) }}
-                        </option>
+                        <option value="{{ $type->type_id }}">{{ ucfirst($type->name) }}</option>
                     @endforeach
                 </select>
                 <div class="invalid-feedback" id="type_id-error"></div>
@@ -783,26 +781,30 @@ $(document).ready(function() {
                 });
             }
             
-            // Handle type selection to show/hide subtype dropdown
+            // Handle type selection: fetch subtype options via AJAX (avoids loading type metadata on every page)
             $('#modal_type_id').on('change', function() {
-                const selectedOption = $(this).find(':selected');
-                const subtypes = selectedOption.data('subtypes');
+                const typeId = $(this).val();
                 const subtypeContainer = $('#subtype-container');
                 const subtypeSelect = $('#modal_subtype');
-                
-                // Clear previous subtype options
                 subtypeSelect.empty();
                 subtypeSelect.append('<option value="">None (optional)</option>');
-                
-                // Show subtype dropdown if this type has subtypes
-                if (subtypes && subtypes.length > 0) {
-                    subtypes.forEach(function(subtype) {
-                        subtypeSelect.append(`<option value="${subtype}">${subtype.charAt(0).toUpperCase() + subtype.slice(1)}</option>`);
-                    });
-                    subtypeContainer.show();
-                } else {
-                    subtypeContainer.hide();
+                subtypeContainer.hide();
+                if (!typeId) {
+                    return;
                 }
+                const url = $('#newSpanModal').data('subtype-options-url').replace('__TYPE__', encodeURIComponent(typeId));
+                $.get(url)
+                    .done(function(subtypes) {
+                        if (subtypes && subtypes.length > 0) {
+                            subtypes.forEach(function(subtype) {
+                                subtypeSelect.append('<option value="' + subtype + '">' + (subtype.charAt(0).toUpperCase() + subtype.slice(1)) + '</option>');
+                            });
+                            subtypeContainer.show();
+                        }
+                    })
+                    .fail(function() {
+                        // No subtypes or 404 - leave container hidden
+                    });
             });
             
             // Step 1: Next button

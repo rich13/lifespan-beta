@@ -234,6 +234,7 @@ Route::middleware('web')->group(function () {
             // Types route (public)
             Route::get('/types', [SpanController::class, 'types'])->name('spans.types');
             Route::get('/types/{type}', [SpanController::class, 'showType'])->name('spans.types.show');
+            Route::get('/types/{type}/subtype-options', [SpanController::class, 'subtypeOptions'])->name('spans.types.subtype-options');
             Route::get('/types/{type}/subtypes', [SpanController::class, 'showSubtypes'])->name('spans.types.subtypes');
             Route::get('/types/{type}/subtypes/{subtype}', [SpanController::class, 'showTypeSubtype'])->name('spans.types.subtypes.show');
             
