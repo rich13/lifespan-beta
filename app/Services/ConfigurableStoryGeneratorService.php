@@ -1282,141 +1282,38 @@ class ConfigurableStoryGeneratorService
         if ($bestScore >= 1 && $bestMatch && $bestMatch->child->type_id === 'place') {
             $placeSpan = $bestMatch->child;
             $displayName = $this->getDisplayPlaceName($placeSpan);
-            return $this->makeSpanLink($displayName, $placeSpan);
+            $linkSpan = $placeSpan->getNearestCitySpan() ?? $placeSpan;
+            return $this->makeSpanLink($displayName, $linkSpan);
         }
         
         return null;
     }
     
     /**
-     * Get a display name for a place span, using a higher-level place from hierarchy when available.
-     * This provides a cleaner, more readable name for stories (e.g., "London" instead of 
-     * "Brantwood Road, London Borough of Lambeth") while maintaining the connection to the 
-     * original specific place span.
-     * 
-     * Priority order for hierarchy lookup:
-     * 1. City (admin_level 8, any type)
-     * 2. Major city (admin_level 6-7, any type)
-     * 3. State/Province (admin_level 4, type 'state')
-     * 4. Country (admin_level 2, type 'country')
-     * 
-     * Falls back to the place span's name if no hierarchy data is available.
-     * 
+     * Normalise city names for comparison/deduplication (strip "City of", "Greater " prefixes).
+     */
+    protected function normalizeCityName(?string $name): string
+    {
+        $name = trim($name ?? '');
+        if (stripos($name, 'City of ') === 0) {
+            $name = substr($name, 8);
+        }
+        if (stripos($name, 'Greater ') === 0) {
+            $name = substr($name, 8);
+        }
+        return trim($name);
+    }
+
+    /**
+     * Get a display name for a place span, using the nearest city (same approach as place relations card).
+     * Delegates to getNearestCityName() so a road in Lambeth resolves to "London".
+     *
      * @param Span $placeSpan The place span to get display name for
      * @return string The display name to use in stories
      */
     protected function getDisplayPlaceName(Span $placeSpan): string
     {
-        // Check if the place has geospatial capabilities
-        if (!$placeSpan->hasCapability('geospatial')) {
-            \Log::debug('getDisplayPlaceName: Place does not have geospatial capability', [
-                'place_id' => $placeSpan->id,
-                'place_name' => $placeSpan->name
-            ]);
-            return $placeSpan->name;
-        }
-        
-        $hierarchy = $placeSpan->getLocationHierarchy();
-        if (empty($hierarchy)) {
-            \Log::debug('getDisplayPlaceName: Hierarchy is empty', [
-                'place_id' => $placeSpan->id,
-                'place_name' => $placeSpan->name
-            ]);
-            return $placeSpan->name;
-        }
-        
-        \Log::debug('getDisplayPlaceName: Checking hierarchy', [
-            'place_id' => $placeSpan->id,
-            'place_name' => $placeSpan->name,
-            'hierarchy_count' => count($hierarchy),
-            'hierarchy' => $hierarchy
-        ]);
-        
-        // Priority order: city (admin_level 8) > major city (admin_level 6-7) > state (admin_level 4) > country (admin_level 2)
-        // For cities, we accept any type (city, administrative, etc.) since OSM uses different types
-        // Also check for common city names that might be at different admin levels
-        $priorities = [
-            ['admin_level' => 8], // City level - accept any type
-            ['admin_level' => 7], // Major city level - accept any type
-            ['admin_level' => 6], // Major city level - accept any type
-            ['admin_level' => 4, 'type' => 'state'],
-            ['admin_level' => 2, 'type' => 'country'],
-        ];
-        
-        // Also look for common major city names regardless of admin_level
-        // This helps when admin_levels might not be set correctly or cities are named differently
-        $majorCityNames = ['London', 'Greater London', 'Manchester', 'Birmingham', 'Liverpool', 'Leeds', 'Glasgow', 'Edinburgh', 
-                          'Bristol', 'Cardiff', 'Belfast', 'Newcastle', 'Sheffield', 'Nottingham', 'Leicester',
-                          'Cape Town', 'City of Edinburgh'];
-        
-        // Normalize city names for comparison (remove "City of" prefix, etc.)
-        $normalizeCityName = function($name) {
-            $name = trim($name);
-            // Remove "City of" prefix
-            if (stripos($name, 'City of ') === 0) {
-                $name = substr($name, 8);
-            }
-            // Remove "Greater " prefix
-            if (stripos($name, 'Greater ') === 0) {
-                $name = substr($name, 8);
-            }
-            return trim($name);
-        };
-        
-        foreach ($priorities as $priority) {
-            foreach ($hierarchy as $level) {
-                $adminLevel = $level['admin_level'] ?? null;
-                $type = $level['type'] ?? '';
-                $name = $level['name'] ?? null;
-                
-                // Skip the current place itself
-                if ($level['is_current'] ?? false) {
-                    continue;
-                }
-                
-                // Skip roads
-                if ($type === 'road') {
-                    continue;
-                }
-                
-                // Check if this level matches our priority
-                $matchesAdminLevel = $adminLevel === $priority['admin_level'];
-                $matchesType = !isset($priority['type']) || $type === $priority['type'];
-                
-                if ($matchesAdminLevel && $matchesType && $name) {
-                    \Log::debug('getDisplayPlaceName: Found match', [
-                        'place_id' => $placeSpan->id,
-                        'original_name' => $placeSpan->name,
-                        'display_name' => $name,
-                        'admin_level' => $adminLevel,
-                        'type' => $type
-                    ]);
-                    return $name;
-                }
-                
-                // Also check if this is a known major city name (regardless of admin_level)
-                // Normalize both the hierarchy name and the major city names for comparison
-                $normalizedName = $normalizeCityName($name);
-                foreach ($majorCityNames as $majorCity) {
-                    $normalizedMajorCity = $normalizeCityName($majorCity);
-                    if ($normalizedName && strcasecmp($normalizedName, $normalizedMajorCity) === 0) {
-                        // Return the original name from hierarchy (not the normalized version)
-                        \Log::debug('getDisplayPlaceName: Found major city by name', [
-                            'place_id' => $placeSpan->id,
-                            'original_name' => $placeSpan->name,
-                            'display_name' => $name,
-                            'admin_level' => $adminLevel,
-                            'type' => $type,
-                            'matched_city' => $majorCity
-                        ]);
-                        return $name;
-                    }
-                }
-            }
-        }
-        
-        // Fallback to the original place name if no suitable hierarchy level found
-        return $placeSpan->name;
+        return $placeSpan->getNearestCityName();
     }
 
     /**
@@ -1588,18 +1485,32 @@ class ConfigurableStoryGeneratorService
     protected function getResidencePlaces(Span $person): string
     {
         $residences = $this->getResidences($person);
-        $placeLinks = $residences->map(function ($residence) {
+        $seenKeys = [];
+        $uniqueCities = [];
+
+        foreach ($residences as $residence) {
             $placeSpan = $residence['place_span'];
-            
+
             if ($placeSpan) {
                 $displayName = $this->getDisplayPlaceName($placeSpan);
-                return $this->makeSpanLink($displayName, $placeSpan);
+                $linkSpan = $placeSpan->getNearestCitySpan() ?? $placeSpan;
+                $linkOrText = $this->makeSpanLink($displayName, $linkSpan);
+            } else {
+                $displayName = $residence['place'];
+                $linkOrText = e($displayName);
             }
-            
-            // Fallback if no place span
-            return e($residence['place']);
-        })->unique()->values()->toArray();
-        return $this->formatList($placeLinks);
+
+            $key = strtolower($this->normalizeCityName($displayName ?: $residence['place']));
+            if ($key === '') {
+                $key = strtolower(trim($residence['place'] ?? ''));
+            }
+            if ($key !== '' && !isset($seenKeys[$key])) {
+                $seenKeys[$key] = true;
+                $uniqueCities[] = $linkOrText;
+            }
+        }
+
+        return $this->formatList($uniqueCities);
     }
 
     protected function getLongestResidenceData(Span $person, string $field): ?string
@@ -1686,7 +1597,10 @@ class ConfigurableStoryGeneratorService
         }
         
         return match ($field) {
-            'place' => $this->makeSpanLink($longest['place'], $longest['place_span']),
+            'place' => $this->makeSpanLink(
+                $this->getDisplayPlaceName($longest['place_span']),
+                $longest['place_span']->getNearestCitySpan() ?? $longest['place_span']
+            ),
             'duration' => $this->formatDuration($maxYears),
             default => null,
         };
@@ -2317,6 +2231,11 @@ class ConfigurableStoryGeneratorService
      */
     protected function generateFallbackSentence(Span $span): string
     {
+        // Photo (thing with subtype photo): custom fallback
+        if ($span->type_id === 'thing' && ($span->metadata['subtype'] ?? null) === 'photo') {
+            return $this->generatePhotoFallbackSentence($span);
+        }
+
         $name = $this->makeSpanLink($span->name, $span);
         $spanType = $this->getHumanReadableSpanType($span->type_id);
         $tense = $span->is_ongoing ? 'is' : 'was';
@@ -2333,27 +2252,83 @@ class ConfigurableStoryGeneratorService
         $hasStartDate = $span->start_year !== null;
         $hasEndDate = $span->end_year !== null;
         
+        $closing = "That's all for now.";
+        if ($span->type_id === 'place') {
+            $nearestCity = $span->getNearestCityName();
+            $normalizedCity = strtolower($this->normalizeCityName($nearestCity));
+            $normalizedPlaceName = strtolower($this->normalizeCityName($span->name));
+            if ($normalizedCity !== '' && $normalizedCity !== $normalizedPlaceName) {
+                $citySpan = $span->getNearestCitySpan();
+                $closing = "It's in " . ($citySpan
+                    ? $this->makeSpanLink($nearestCity, $citySpan)
+                    : e($nearestCity)) . ".";
+            }
+        }
+
         if ($hasStartDate && $hasEndDate) {
             // Both start and end dates
             $startDate = $this->formatHumanReadableDate($span->start_year, $span->start_month, $span->start_day);
             $endDate = $this->formatHumanReadableDate($span->end_year, $span->end_month, $span->end_day);
             $startPreposition = $this->getGenericDatePreposition($span->start_year, $span->start_month, $span->start_day);
             $endPreposition = $this->getGenericDatePreposition($span->end_year, $span->end_month, $span->end_day);
-            return "{$name} {$tense} {$article} {$subtypeText}{$spanType}. It started {$startPreposition} {$startDate} and ended {$endPreposition} {$endDate}. That's all for now.";
+            return "{$name} {$tense} {$article} {$subtypeText}{$spanType}. It started {$startPreposition} {$startDate} and ended {$endPreposition} {$endDate}. {$closing}";
         } elseif ($hasStartDate) {
             // Only start date
             $startDate = $this->formatHumanReadableDate($span->start_year, $span->start_month, $span->start_day);
             $startPreposition = $this->getGenericDatePreposition($span->start_year, $span->start_month, $span->start_day);
-            return "{$name} {$tense} {$article} {$subtypeText}{$spanType}. It started {$startPreposition} {$startDate}. That's all for now.";
+            return "{$name} {$tense} {$article} {$subtypeText}{$spanType}. It started {$startPreposition} {$startDate}. {$closing}";
         } elseif ($hasEndDate) {
             // Only end date
             $endDate = $this->formatHumanReadableDate($span->end_year, $span->end_month, $span->end_day);
             $endPreposition = $this->getGenericDatePreposition($span->end_year, $span->end_month, $span->end_day);
-            return "{$name} {$tense} {$article} {$subtypeText}{$spanType}. It ended {$endPreposition} {$endDate}. That's all for now.";
+            return "{$name} {$tense} {$article} {$subtypeText}{$spanType}. It ended {$endPreposition} {$endDate}. {$closing}";
         } else {
             // No dates
-            return "{$name} {$tense} {$article} {$subtypeText}{$spanType}. That's all for now.";
+            return "{$name} {$tense} {$article} {$subtypeText}{$spanType}. {$closing}";
         }
+    }
+
+    /**
+     * Generate fallback sentence for a photo span (thing with subtype photo).
+     * With featured: "This is a photo of {featured}. It was taken on {date}. It was taken in {location}."
+     * Without featured: "This is a photo called {name}."
+     */
+    protected function generatePhotoFallbackSentence(Span $span): string
+    {
+        $featured = $span->connectionsAsSubject()
+            ->where('type_id', 'features')
+            ->with('child')
+            ->get()
+            ->map(fn ($conn) => $conn->child ? $this->makeSpanLink($conn->child->name, $conn->child) : null)
+            ->filter()
+            ->values();
+
+        if ($featured->isEmpty()) {
+            $name = $this->makeSpanLink($span->name, $span);
+            return "This is a photo called {$name}.";
+        }
+
+        $featuredText = $featured->count() === 1
+            ? $featured->first()
+            : $featured->slice(0, -1)->join(', ') . ' and ' . $featured->last();
+
+        $parts = ["This is a photo of {$featuredText}."];
+
+        if ($span->start_year !== null) {
+            $date = $this->formatHumanReadableDate($span->start_year, $span->start_month, $span->start_day);
+            $parts[] = "It was taken on {$date}.";
+        }
+
+        $locationConn = $span->connectionsAsSubject()
+            ->where('type_id', 'located')
+            ->with('child')
+            ->first();
+        if ($locationConn && $locationConn->child) {
+            $location = $this->makeSpanLink($locationConn->child->name, $locationConn->child);
+            $parts[] = "It was taken in {$location}.";
+        }
+
+        return implode(' ', $parts);
     }
 
     /**

@@ -2,19 +2,32 @@
 
 namespace App\Services;
 
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Service for geocoding place names using OpenStreetMap's Nominatim API
+ * Service for geocoding place names using OpenStreetMap's Nominatim API.
+ * Set NOMINATIM_BASE_URL in .env (e.g. http://nominatim:8080) to use a local instance.
  */
 class OSMGeocodingService
 {
-    private const NOMINATIM_BASE_URL = 'https://nominatim.openstreetmap.org';
+    private const DEFAULT_NOMINATIM_BASE_URL = 'https://nominatim.openstreetmap.org';
     private const CACHE_TTL = 86400; // 24 hours
     private const MAX_RETRIES = 3;
     private const RETRY_DELAY = 1; // seconds
+
+    /** Max coordinate count for boundary_geojson we store (avoids memory exhaustion for huge polygons e.g. USA) */
+    private const MAX_BOUNDARY_POINTS = 8000;
+
+    private function getNominatimBaseUrl(): string
+    {
+        return rtrim(
+            Config::get('services.nominatim_base_url', self::DEFAULT_NOMINATIM_BASE_URL),
+            '/'
+        );
+    }
 
     /**
      * Geocode a place name and return OSM data
@@ -56,10 +69,15 @@ class OSMGeocodingService
                     Cache::put($cacheKey, $fallbackResult, self::CACHE_TTL);
                     return $fallbackResult;
                 }
+                Log::info('OSM geocode returned no results', [
+                    'place_name' => $placeName,
+                    'latitude' => $latitude,
+                    'longitude' => $longitude,
+                ]);
                 return null;
             }
 
-            // Take the first (most relevant) result
+            // Take the first (most relevant) result (node, way, or relation are all valid)
             $result = $response[0];
             
             $osmData = $this->formatOsmData($result);
@@ -82,11 +100,128 @@ class OSMGeocodingService
         } catch (\Exception $e) {
             Log::error('OSM geocoding failed for: ' . $placeName, [
                 'error' => $e->getMessage(),
-                'place_name' => $placeName
+                'place_name' => $placeName,
+                'trace' => $e->getTraceAsString(),
             ]);
             
             return null;
         }
+    }
+
+    /**
+     * Reverse geocode coordinates to get place information.
+     * Tries zoom 18 first (building level), then progressively lower until we get
+     * a useful result (town/city or more specific). Avoids returning just "United States"
+     * when no building exists at the point.
+     *
+     * @param float $latitude
+     * @param float $longitude
+     * @return array|null Returns null on failure, otherwise array with location info
+     */
+    public function reverseGeocode(float $latitude, float $longitude): ?array
+    {
+        // Bump version to bust stale cache from previous implementations
+        $cacheKey = 'osm_reverse_progressive_v2_' . round($latitude, 6) . '_' . round($longitude, 6);
+
+        // Check cache first
+        if (Cache::has($cacheKey)) {
+            return Cache::get($cacheKey);
+        }
+
+        try {
+            // Try from most detailed (18=building) down to least (3=country)
+            // Stop when we get a result with locality info (town, city, suburb, etc.)
+            $zoomLevels = [18, 14, 12, 10, 8, 5, 3];
+            $result = null;
+
+            foreach ($zoomLevels as $index => $zoom) {
+                // Nominatim rate limit: 1 req/sec - wait between attempts
+                if ($index > 0) {
+                    usleep(1100000); // 1.1 seconds
+                }
+
+                $response = Http::withHeaders([
+                    'Accept-Language' => 'en',
+                    'User-Agent' => config('app.user_agent')
+                ])->get($this->getNominatimBaseUrl() . '/reverse', [
+                    'lat' => $latitude,
+                    'lon' => $longitude,
+                    'format' => 'json',
+                    'addressdetails' => 1,
+                    'extratags' => 1,
+                    'namedetails' => 1,
+                    'zoom' => $zoom,
+                ]);
+
+                if (!$response->successful()) {
+                    continue;
+                }
+
+                $data = $response->json();
+                if (!$data || isset($data['error'])) {
+                    continue;
+                }
+
+                $result = [
+                    'display_name' => $data['display_name'] ?? null,
+                    'name' => $data['name'] ?? $data['namedetails']['name'] ?? null,
+                    'place_id' => $data['place_id'] ?? null,
+                    'osm_type' => $data['osm_type'] ?? null,
+                    'osm_id' => $data['osm_id'] ?? null,
+                    'type' => $data['type'] ?? null,
+                    'class' => $data['class'] ?? null,
+                    'address' => $data['address'] ?? [],
+                ];
+
+                if ($this->reverseGeocodeResultIsUseful($result)) {
+                    break;
+                }
+            }
+
+            if ($result) {
+                Cache::put($cacheKey, $result, self::CACHE_TTL);
+            }
+
+            return $result;
+
+        } catch (\Exception $e) {
+            Log::error('Reverse geocoding failed', [
+                'coordinates' => [$latitude, $longitude],
+                'error' => $e->getMessage()
+            ]);
+
+            return null;
+        }
+    }
+
+    /**
+     * Check if a reverse geocode result has useful locality detail (town, city, suburb, etc.)
+     * rather than just country-level.
+     */
+    private function reverseGeocodeResultIsUseful(array $result): bool
+    {
+        $address = $result['address'] ?? [];
+        $displayName = $result['display_name'] ?? '';
+
+        $localityKeys = ['city', 'town', 'village', 'suburb', 'neighbourhood', 'municipality', 'county', 'state', 'state_district'];
+        foreach ($localityKeys as $key) {
+            if (!empty($address[$key])) {
+                return true;
+            }
+        }
+
+        // Also accept if we have road/building (address-level detail)
+        if (!empty($address['road']) || !empty($address['building'])) {
+            return true;
+        }
+
+        // If display_name has multiple comma-separated parts, it's likely more than just country
+        $parts = array_map('trim', explode(',', $displayName));
+        if (count($parts) >= 2) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -144,7 +279,8 @@ class OSMGeocodingService
                     'limit' => $limit,
                     'addressdetails' => 1,
                     'extratags' => 1,
-                    'namedetails' => 1
+                    'namedetails' => 1,
+                    'polygon_geojson' => 1,
                 ];
                 
                 // Add coordinate context if available
@@ -159,7 +295,7 @@ class OSMGeocodingService
                         'User-Agent' => config('app.user_agent'),
                         'Accept-Language' => 'en'
                     ])
-                    ->get(self::NOMINATIM_BASE_URL . '/search', $params);
+                    ->get($this->getNominatimBaseUrl() . '/search', $params);
 
                 if ($response->successful()) {
                     return $response->json();
@@ -206,7 +342,7 @@ class OSMGeocodingService
             $response = Http::withHeaders([
                 'Accept-Language' => 'en',
                 'User-Agent' => config('app.user_agent')
-            ])->get(self::NOMINATIM_BASE_URL . '/reverse', [
+            ])->get($this->getNominatimBaseUrl() . '/reverse', [
                 'lat' => $latitude,
                 'lon' => $longitude,
                 'format' => 'json',
@@ -557,19 +693,41 @@ class OSMGeocodingService
                 $placeName = $italianToEnglish[$placeName];
             }
         }
-        
+
+        $placeName = trim($placeName);
+        if ($placeName === '') {
+            $placeName = $nominatimResult['display_name'] ?? $nominatimResult['name'] ?? 'Unknown';
+        }
+
+        $lat = isset($nominatimResult['lat']) ? (float) $nominatimResult['lat'] : null;
+        $lon = isset($nominatimResult['lon']) ? (float) $nominatimResult['lon'] : null;
+        if ($lat === null || $lon === null) {
+            $bbox = $nominatimResult['boundingbox'] ?? null;
+            if (is_array($bbox) && count($bbox) >= 4) {
+                $lat = ((float) $bbox[0] + (float) $bbox[1]) / 2;
+                $lon = ((float) $bbox[2] + (float) $bbox[3]) / 2;
+            }
+        }
+        if ($lat === null || $lon === null) {
+            Log::warning('Nominatim result missing lat/lon and boundingbox', [
+                'place_id' => $nominatimResult['place_id'] ?? null,
+                'osm_type' => $nominatimResult['osm_type'] ?? null,
+            ]);
+            throw new \InvalidArgumentException('Nominatim result must have lat/lon or boundingbox');
+        }
+
         $osmData = [
-            'place_id' => $nominatimResult['place_id'],
-            'osm_type' => $nominatimResult['osm_type'],
-            'osm_id' => $nominatimResult['osm_id'],
-            'canonical_name' => trim($placeName),
+            'place_id' => $nominatimResult['place_id'] ?? 0,
+            'osm_type' => $nominatimResult['osm_type'] ?? 'way',
+            'osm_id' => $nominatimResult['osm_id'] ?? 0,
+            'canonical_name' => $placeName,
             'display_name' => $nominatimResult['display_name'] ?? $nominatimResult['name'] ?? '',
             'coordinates' => [
-                'latitude' => (float) $nominatimResult['lat'],
-                'longitude' => (float) $nominatimResult['lon']
+                'latitude' => $lat,
+                'longitude' => $lon
             ],
             'hierarchy' => $hierarchy,
-            'place_type' => $nominatimResult['type'] ?? 'unknown',
+            'place_type' => $nominatimResult['type'] ?? $nominatimResult['class'] ?? 'unknown',
             'importance' => $nominatimResult['importance'] ?? 0
         ];
         
@@ -577,11 +735,80 @@ class OSMGeocodingService
         if (isset($nominatimResult['address']) && is_array($nominatimResult['address'])) {
             $osmData['address'] = $nominatimResult['address'];
         }
-        
+
+        // Store boundary geometry when Nominatim returns it (polygon_geojson=1)
+        // Skip very large polygons (e.g. USA) to avoid memory exhaustion and huge DB payloads
+        $boundaryGeo = $nominatimResult['geojson'] ?? $nominatimResult['geometry'] ?? null;
+        if ($boundaryGeo !== null && (is_array($boundaryGeo) || is_object($boundaryGeo))) {
+            $geoArray = is_array($boundaryGeo) ? $boundaryGeo : json_decode(json_encode($boundaryGeo), true);
+            if ($geoArray !== null && $this->countBoundaryPoints($geoArray) <= self::MAX_BOUNDARY_POINTS) {
+                $osmData['boundary_geojson'] = $geoArray;
+            } else {
+                Log::info('Skipping boundary_geojson (polygon too large)', [
+                    'place' => $placeName ?? ($nominatimResult['display_name'] ?? null),
+                    'osm_type' => $nominatimResult['osm_type'] ?? null,
+                    'osm_id' => $nominatimResult['osm_id'] ?? null,
+                ]);
+            }
+        }
+
         return $osmData;
     }
 
+    /**
+     * Count coordinate points in a GeoJSON-like array (Polygon/MultiPolygon coordinates).
+     * Stops at MAX_BOUNDARY_POINTS+1 to avoid iterating huge polygons.
+     */
+    private function countBoundaryPoints(array $geo, int $limit = 0): int
+    {
+        $limit = $limit > 0 ? $limit : self::MAX_BOUNDARY_POINTS + 1;
+        $count = 0;
+        $this->countBoundaryPointsRecurse($geo, $limit, $count);
 
+        return $count;
+    }
+
+    /**
+     * @param array $arr GeoJSON coordinates structure (nested arrays)
+     * @param int $limit Stop counting when count would exceed this
+     * @param int $count Accumulator (by reference)
+     */
+    private function countBoundaryPointsRecurse(array $arr, int $limit, int &$count): void
+    {
+        if ($count >= $limit) {
+            return;
+        }
+        // Coordinate: array of 2 or 3 numbers
+        if (count($arr) >= 2 && count($arr) <= 3 && isset($arr[0], $arr[1]) && is_numeric($arr[0]) && is_numeric($arr[1])) {
+            $count++;
+
+            return;
+        }
+        foreach ($arr as $child) {
+            if (is_array($child)) {
+                $this->countBoundaryPointsRecurse($child, $limit, $count);
+                if ($count >= $limit) {
+                    return;
+                }
+            }
+        }
+    }
+
+    /**
+     * Remove geojson/geometry from a Nominatim lookup result if the boundary is too large.
+     * Modifies the array in place so we don't cache huge polygons.
+     */
+    private function stripLargeBoundaryFromLookupResult(array &$result): void
+    {
+        $boundaryGeo = $result['geojson'] ?? $result['geometry'] ?? null;
+        if ($boundaryGeo === null) {
+            return;
+        }
+        $geoArray = is_array($boundaryGeo) ? $boundaryGeo : json_decode(json_encode($boundaryGeo), true);
+        if ($geoArray !== null && $this->countBoundaryPoints($geoArray) > self::MAX_BOUNDARY_POINTS) {
+            unset($result['geojson'], $result['geometry']);
+        }
+    }
 
     /**
      * Generate a hierarchical slug from OSM data
@@ -862,11 +1089,18 @@ class OSMGeocodingService
     }
 
     /**
-     * Lookup OSM entity by type and ID using Nominatim lookup API
+     * Lookup OSM entity by type and ID using Nominatim lookup API.
+     *
+     * @param bool $usePublicNominatim When true, use the public Nominatim (nominatim.openstreetmap.org)
+     *                                 so results are worldwide. When false, use config (e.g. local Nominatim for admin OSM data).
      */
-    public function lookupByOsmId(string $osmType, int $osmId): ?array
+    public function lookupByOsmId(string $osmType, int $osmId, bool $usePublicNominatim = false): ?array
     {
-        $cacheKey = 'osm_lookup_' . $osmType . '_' . $osmId;
+        $baseUrl = $usePublicNominatim
+            ? self::DEFAULT_NOMINATIM_BASE_URL
+            : $this->getNominatimBaseUrl();
+        // Include _polygon in key so we don't serve stale cache from before polygon_geojson=1 was added
+        $cacheKey = 'osm_lookup_' . $osmType . '_' . $osmId . ($usePublicNominatim ? '_public' : '') . '_polygon';
         
         // Check cache first
         if (Cache::has($cacheKey)) {
@@ -874,17 +1108,18 @@ class OSMGeocodingService
         }
 
         try {
-            $response = Http::timeout(10)
+            $response = Http::timeout(15)
                 ->withHeaders([
                     'User-Agent' => config('app.user_agent'),
                     'Accept-Language' => 'en'
                 ])
-                ->get(self::NOMINATIM_BASE_URL . '/lookup', [
+                ->get(rtrim($baseUrl, '/') . '/lookup', [
                     'osm_ids' => strtoupper($osmType[0]) . $osmId, // e.g., "R123456" for relation, "N123" for node, "W123" for way
                     'format' => 'json',
                     'addressdetails' => 1,
                     'extratags' => 1,
-                    'namedetails' => 1
+                    'namedetails' => 1,
+                    'polygon_geojson' => 1,
                 ]);
 
             if (!$response->successful() || empty($response->json())) {
@@ -903,10 +1138,13 @@ class OSMGeocodingService
 
             // Take the first result (should only be one for a lookup)
             $result = $results[0];
-            
+
+            // Don't cache huge polygons (e.g. USA) - strip before cache to save memory and cache size
+            $this->stripLargeBoundaryFromLookupResult($result);
+
             // Cache the result
             Cache::put($cacheKey, $result, self::CACHE_TTL);
-            
+
             return $result;
             
         } catch (\Exception $e) {

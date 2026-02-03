@@ -437,6 +437,9 @@ class ConfigurableStoryGeneratorServiceTest extends TestCase
             'start_year' => 1977,
             'start_month' => 1,
             'start_day' => 15,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
             'metadata' => ['gender' => 'male'],
         ]);
 
@@ -536,5 +539,189 @@ class ConfigurableStoryGeneratorServiceTest extends TestCase
         // Should include residence at photo date
         $this->assertStringContainsString('He lived in', $storyText);
         $this->assertStringContainsString('London', $storyText);
+    }
+
+    public function test_residence_places_deduplicate_by_city(): void
+    {
+        // Create a person with multiple residences in the same city
+        $person = Span::factory()->create([
+            'name' => 'Test Person',
+            'type_id' => 'person',
+            'start_year' => 1980,
+            'start_month' => null,
+            'start_day' => null,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
+            'metadata' => ['gender' => 'male'],
+        ]);
+
+        // Create two different London addresses (same city, different place spans)
+        $londonAddress1 = Span::factory()->create([
+            'name' => 'Brantwood Road, London Borough of Lambeth',
+            'type_id' => 'place',
+        ]);
+        $londonAddress2 = Span::factory()->create([
+            'name' => '15 Colne Road, Clapton Park',
+            'type_id' => 'place',
+        ]);
+
+        // Add geospatial data so both resolve to "London" via hierarchy
+        $londonHierarchy = [
+            ['name' => 'London', 'type' => 'administrative', 'admin_level' => 8],
+            ['name' => 'England', 'type' => 'state', 'admin_level' => 4],
+            ['name' => 'United Kingdom', 'type' => 'country', 'admin_level' => 2],
+        ];
+        $osmBase = [
+            'place_id' => 1,
+            'osm_type' => 'way',
+            'osm_id' => 1,
+            'canonical_name' => 'London',
+            'hierarchy' => $londonHierarchy,
+        ];
+        foreach ([$londonAddress1, $londonAddress2] as $i => $place) {
+            $place->metadata = array_merge($place->metadata ?? [], [
+                'external_refs' => [
+                    'osm' => array_merge($osmBase, [
+                        'place_id' => 100 + $i,
+                        'osm_id' => 100 + $i,
+                        'display_name' => $place->name,
+                        'canonical_name' => $place->name,
+                    ]),
+                ],
+            ]);
+            $place->save();
+        }
+
+        // Create residence connections (chronological order)
+        $residenceSpan1 = Span::factory()->create([
+            'type_id' => 'connection',
+            'start_year' => 1990,
+            'end_year' => 1995,
+            'start_precision' => 'year',
+            'end_precision' => 'year',
+        ]);
+        $residenceSpan2 = Span::factory()->create([
+            'type_id' => 'connection',
+            'start_year' => 1996,
+            'end_year' => 2000,
+            'start_precision' => 'year',
+            'end_precision' => 'year',
+        ]);
+
+        Connection::factory()->create([
+            'parent_id' => $person->id,
+            'child_id' => $londonAddress1->id,
+            'type_id' => 'residence',
+            'connection_span_id' => $residenceSpan1->id,
+        ]);
+        Connection::factory()->create([
+            'parent_id' => $person->id,
+            'child_id' => $londonAddress2->id,
+            'type_id' => 'residence',
+            'connection_span_id' => $residenceSpan2->id,
+        ]);
+
+        $service = new ConfigurableStoryGeneratorService();
+        $story = $service->generateStory($person);
+
+        $storyText = implode(' ', $story['paragraphs'] ?? []);
+
+        // Should contain the residence sentence
+        $this->assertStringContainsString('lived in', $storyText);
+        $this->assertStringContainsString('London', $storyText);
+
+        // With 2 London addresses: without dedup we'd have 2 London links in residence + 1 in longest = 3 total
+        // With dedup we have 1 in residence + 1 in longest = 2 total
+        preg_match_all('/<a [^>]*>[^<]*London[^<]*<\/a>/', $storyText, $londonLinks);
+        $londonLinkCount = count($londonLinks[0] ?? []);
+        $this->assertSame(2, $londonLinkCount, 'London should appear in residence (once, deduplicated) and longest-residence');
+    }
+
+    public function test_residence_places_deduplicate_multiple_cities_preserves_order(): void
+    {
+        // Person who lived in Cape Town, then London, then Edinburgh
+        $person = Span::factory()->create([
+            'name' => 'Test Person',
+            'type_id' => 'person',
+            'start_year' => 1970,
+            'start_month' => null,
+            'start_day' => null,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
+            'metadata' => ['gender' => 'male'],
+        ]);
+
+        $osmRequired = ['place_id' => 1, 'osm_type' => 'way', 'osm_id' => 1, 'canonical_name' => 'Place'];
+
+        $capeTown = Span::factory()->create(['name' => 'Cape Town suburb', 'type_id' => 'place']);
+        $capeTown->metadata = array_merge($capeTown->metadata ?? [], [
+            'external_refs' => ['osm' => array_merge($osmRequired, [
+                'canonical_name' => 'Cape Town',
+                'hierarchy' => [['name' => 'Cape Town', 'type' => 'city', 'admin_level' => 8]],
+            ])],
+        ]);
+        $capeTown->save();
+
+        $london1 = Span::factory()->create(['name' => 'London address 1', 'type_id' => 'place']);
+        $london1->metadata = array_merge($london1->metadata ?? [], [
+            'external_refs' => ['osm' => array_merge($osmRequired, [
+                'place_id' => 2, 'osm_id' => 2, 'canonical_name' => 'London',
+                'hierarchy' => [['name' => 'London', 'type' => 'administrative', 'admin_level' => 8]],
+            ])],
+        ]);
+        $london1->save();
+
+        $london2 = Span::factory()->create(['name' => 'London address 2', 'type_id' => 'place']);
+        $london2->metadata = array_merge($london2->metadata ?? [], [
+            'external_refs' => ['osm' => array_merge($osmRequired, [
+                'place_id' => 3, 'osm_id' => 3, 'canonical_name' => 'London',
+                'hierarchy' => [['name' => 'London', 'type' => 'administrative', 'admin_level' => 8]],
+            ])],
+        ]);
+        $london2->save();
+
+        $edinburgh = Span::factory()->create(['name' => 'Edinburgh address', 'type_id' => 'place']);
+        $edinburgh->metadata = array_merge($edinburgh->metadata ?? [], [
+            'external_refs' => ['osm' => array_merge($osmRequired, [
+                'place_id' => 4, 'osm_id' => 4, 'canonical_name' => 'Edinburgh',
+                'hierarchy' => [['name' => 'City of Edinburgh', 'type' => 'administrative', 'admin_level' => 8]],
+            ])],
+        ]);
+        $edinburgh->save();
+
+        foreach ([$capeTown, $london1, $london2, $edinburgh] as $i => $place) {
+            $span = Span::factory()->create([
+                'type_id' => 'connection',
+                'start_year' => 1980 + $i * 5,
+                'end_year' => 1984 + $i * 5,
+                'start_precision' => 'year',
+                'end_precision' => 'year',
+            ]);
+            Connection::factory()->create([
+                'parent_id' => $person->id,
+                'child_id' => $place->id,
+                'type_id' => 'residence',
+                'connection_span_id' => $span->id,
+            ]);
+        }
+
+        $service = new ConfigurableStoryGeneratorService();
+        $story = $service->generateStory($person);
+
+        $storyText = implode(' ', $story['paragraphs'] ?? []);
+
+        // Should contain all three cities in chronological order: Cape Town, London, Edinburgh
+        $this->assertStringContainsString('Cape Town', $storyText);
+        $this->assertStringContainsString('London', $storyText);
+        $this->assertStringContainsString('Edinburgh', $storyText);
+
+        // Order should be Cape Town, London, Edinburgh (first occurrence of each in residence sentence)
+        $capeTownPos = strpos($storyText, 'Cape Town');
+        $londonPos = strpos($storyText, 'London');
+        $edinburghPos = strpos($storyText, 'Edinburgh');
+        $this->assertLessThan($londonPos, $capeTownPos, 'Cape Town should appear before London');
+        $this->assertLessThan($edinburghPos, $londonPos, 'London should appear before Edinburgh');
     }
 } 
