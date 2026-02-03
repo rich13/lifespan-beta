@@ -463,7 +463,7 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                     return $span;
                 });
                 
-                return response()->json($spansWithTypeName);
+                return response()->json(['spans' => $spansWithTypeName]);
             });
 
             // New connection creation endpoint

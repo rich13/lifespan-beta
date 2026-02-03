@@ -45,6 +45,11 @@ class RequireProfileCompletion
                 return $next($request);
             }
             
+            // Skip for LinkedIn import routes (preview/import need to work for users without personal span yet)
+            if ($request->routeIs('settings.import.linkedin.*')) {
+                return $next($request);
+            }
+            
             // Redirect to profile completion
             return redirect()->route('profile.complete');
         }

@@ -301,8 +301,10 @@ class LinkedInImportTest extends TestCase
         $user = new User([
             'email' => 'test2@example.com',
             'password' => Hash::make('password'),
-            'email_verified_at' => now(),
         ]);
+        $user->save();
+        // email_verified_at is not fillable, set explicitly so verified middleware allows the request
+        $user->email_verified_at = now();
         $user->save();
         $this->actingAs($user);
 

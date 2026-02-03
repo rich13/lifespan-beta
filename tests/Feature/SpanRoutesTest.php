@@ -204,7 +204,8 @@ class SpanRoutesTest extends TestCase
     public function test_show_span_with_public_access(): void
     {
         $publicSpan = Span::factory()->create([
-            'access_level' => 'public'
+            'access_level' => 'public',
+            'type_id' => 'person', // Avoid 301 redirect (place/set/photo redirect to other routes)
         ]);
 
         $response = $this->get("/spans/{$publicSpan->slug}");

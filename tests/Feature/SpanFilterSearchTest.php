@@ -154,14 +154,14 @@ class SpanFilterSearchTest extends TestCase
         $this->assertDatabaseHas('spans', ['name' => 'Acme Corporation']);
         $this->assertDatabaseHas('spans', ['description' => 'A test organisation where Richard works']);
 
-        // Test basic search
-        $response = $this->get('/spans/?search=Richard');
+        // Test basic search (search matches name and description)
+        $response = $this->get(route('spans.index', ['search' => 'Richard']));
         $response->assertStatus(200);
         $response->assertSee('Richard Northover');
         $response->assertSee('Acme Corporation'); // Should find this because description contains "Richard"
 
         // Test case insensitive search
-        $response = $this->get('/spans/?search=richard');
+        $response = $this->get(route('spans.index', ['search' => 'richard']));
         $response->assertStatus(200);
         $response->assertSee('Richard Northover');
         $response->assertSee('Acme Corporation'); // Should find this because description contains "Richard"
