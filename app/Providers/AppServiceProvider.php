@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\View;
+use Illuminate\Database\Eloquent\Casts\Json;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -50,7 +51,9 @@ class AppServiceProvider extends ServiceProvider
         if ($this->app->environment('production')) {
             $this->configureDatabase();
         }
-        
+
+        $this->registerSafeJsonDecoder();
+
         // Register observers
         $this->registerObservers();
         
@@ -72,16 +75,21 @@ class AppServiceProvider extends ServiceProvider
             $this->configureRailwaySession();
         }
         
-        // Make span types available globally for the new span modal
-        // BUT: Don't override spanTypes if it's already set (e.g., in edit views where we need all types including connection)
+        // Make span types available globally for the new span modal.
+        // Only select type_id and name to avoid loading/decoding metadata on every request
+        // (metadata can be large and was causing 60s timeouts when decoding all types).
+        // Subtype options are loaded via AJAX when the user selects a type (spans.types.subtype-options).
+        // Run the query once per request and share; composer runs for every view ('*') so without this we'd run it 600+ times.
         View::composer('*', function ($view) {
-            // Only set spanTypes if it's not already set by the controller
-            // This allows edit views to include connection, note, and set types
             if (!$view->offsetExists('spanTypes')) {
-                // Exclude connection, note, and set types - these are created through special mechanisms
-                $spanTypes = \App\Models\SpanType::whereNotIn('type_id', ['connection', 'note', 'set'])
-                    ->orderBy('name')
-                    ->get();
+                $spanTypes = View::shared('spanTypes');
+                if ($spanTypes === null) {
+                    $spanTypes = \App\Models\SpanType::whereNotIn('type_id', ['connection', 'note', 'set'])
+                        ->orderBy('name')
+                        ->select('type_id', 'name')
+                        ->get();
+                    View::share('spanTypes', $spanTypes);
+                }
                 $view->with('spanTypes', $spanTypes);
             }
         });
@@ -191,6 +199,43 @@ class AppServiceProvider extends ServiceProvider
         }
     }
     
+    /**
+     * Register a safe JSON decoder to prevent 60s timeouts from oversized or
+     * pathological JSON in DB columns (e.g. Span metadata/sources).
+     */
+    protected function registerSafeJsonDecoder(): void
+    {
+        $maxBytes = (int) config('app.json_decode_max_bytes');
+
+        Json::decodeUsing(function (mixed $value, ?bool $associative = true) use ($maxBytes): mixed {
+            if ($value === null || $value === '') {
+                return null;
+            }
+            if (! is_string($value)) {
+                return $value;
+            }
+            if (strlen($value) > $maxBytes) {
+                Log::warning('JSON column exceeded max size, returning empty structure to prevent timeout', [
+                    'size_bytes' => strlen($value),
+                    'max_bytes' => $maxBytes,
+                ]);
+
+                return $associative ? [] : new \stdClass;
+            }
+            $decoded = json_decode($value, $associative, 512);
+            if (json_last_error() !== \JSON_ERROR_NONE) {
+                Log::warning('JSON decode failed for column', [
+                    'error' => json_last_error_msg(),
+                    'length' => strlen($value),
+                ]);
+
+                return $associative ? [] : new \stdClass;
+            }
+
+            return $decoded;
+        });
+    }
+
     /**
      * Register model observers
      */

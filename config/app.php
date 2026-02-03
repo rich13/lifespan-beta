@@ -74,6 +74,31 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | JSON decode size limit (bytes)
+    |--------------------------------------------------------------------------
+    |
+    | Maximum size of JSON columns (e.g. Span metadata/sources) we attempt to
+    | decode. Larger values are skipped and logged to prevent request timeouts.
+    | Override with JSON_DECODE_MAX_BYTES in .env (e.g. 10485760 for 10MB).
+    |
+    */
+
+    'json_decode_max_bytes' => (int) env('JSON_DECODE_MAX_BYTES', 5 * 1024 * 1024), // 5MB default
+
+    /*
+    |--------------------------------------------------------------------------
+    | Span show page cache TTL (seconds)
+    |--------------------------------------------------------------------------
+    |
+    | How long to cache span show data (family, story, Desert Island Discs).
+    | Longer values reduce load for heavy person pages; set via SPAN_SHOW_CACHE_TTL.
+    |
+    */
+
+    'span_show_cache_ttl' => (int) env('SPAN_SHOW_CACHE_TTL', 900), // 15 minutes default
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

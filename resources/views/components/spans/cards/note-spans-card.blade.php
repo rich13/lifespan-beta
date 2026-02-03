@@ -8,7 +8,7 @@
     $annotatingNotes = \App\Models\Connection::where('type_id', 'annotates')
         ->where('child_id', $span->id)
         ->with(['parent' => function ($q) {
-            $q->where('type_id', 'note');
+            $q->where('type_id', 'note')->with(['owner.personalSpan']);
         }])
         ->get()
         ->pluck('parent')

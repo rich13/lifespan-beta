@@ -1,22 +1,94 @@
-@props(['span', 'interactive' => false, 'columns' => 2])
+@props(['span', 'interactive' => false, 'columns' => 2, 'familyData' => null])
 
 @php
-// Get all family relationships using the span's capabilities
-$ancestors = $span->ancestors(3);
-$descendants = $span->descendants(3);
-$siblings = $span->siblings();
-$unclesAndAunts = $span->unclesAndAunts();
-$cousins = $span->cousins();
-$nephewsAndNieces = $span->nephewsAndNieces();
-$extraNephewsAndNieces = $span->extraNephewsAndNieces();
-$stepParents = $span->stepParents();
-$inLawsAndOutLaws = $span->inLawsAndOutLaws();
-$extraInLawsAndOutLaws = $span->extraInLawsAndOutLaws();
-$childrenInLawsAndOutLaws = $span->childrenInLawsAndOutLaws();
-$grandchildrenInLawsAndOutLaws = $span->grandchildrenInLawsAndOutLaws();
+// Use precomputed family data when provided (e.g. from SpanController) to avoid repeated queries.
+// Fall back to View::shared() so re-renders (e.g. Debugbar) in the same request still get it.
+$familyData = $familyData ?? \Illuminate\Support\Facades\View::shared('familyData', null);
+if ($familyData !== null) {
+    $ancestors = $familyData['ancestors'];
+    $descendants = $familyData['descendants'];
+    $siblings = $familyData['siblings'];
+    $unclesAndAunts = $familyData['unclesAndAunts'];
+    $cousins = $familyData['cousins'];
+    $nephewsAndNieces = $familyData['nephewsAndNieces'];
+    $extraNephewsAndNieces = $familyData['extraNephewsAndNieces'];
+    $stepParents = $familyData['stepParents'];
+    $inLawsAndOutLaws = $familyData['inLawsAndOutLaws'];
+    $extraInLawsAndOutLaws = $familyData['extraInLawsAndOutLaws'];
+    $childrenInLawsAndOutLaws = $familyData['childrenInLawsAndOutLaws'];
+    $grandchildrenInLawsAndOutLaws = $familyData['grandchildrenInLawsAndOutLaws'];
+} else {
+    $ancestors = $span->ancestors(3);
+    $descendants = $span->descendants(3);
+    $siblings = $span->siblings();
+    $unclesAndAunts = $span->unclesAndAunts();
+    $cousins = $span->cousins();
+    $nephewsAndNieces = $span->nephewsAndNieces();
+    $extraNephewsAndNieces = $span->extraNephewsAndNieces();
+    $stepParents = $span->stepParents();
+    $inLawsAndOutLaws = $span->inLawsAndOutLaws();
+    $extraInLawsAndOutLaws = $span->extraInLawsAndOutLaws();
+    $childrenInLawsAndOutLaws = $span->childrenInLawsAndOutLaws();
+    $grandchildrenInLawsAndOutLaws = $span->grandchildrenInLawsAndOutLaws();
+}
 
 // Compute Bootstrap column class
 $colClass = $columns == 3 ? 'col-md-4' : 'col-md-6';
+
+// Precompute photo and parent connections once for all family members (avoids N×2 queries per section)
+$photoConnections = collect();
+$parentsMap = collect();
+$otherParentConnectionsPrecomputed = collect();
+if (!$interactive) {
+    $childrenForGrouped = $descendants->filter(fn ($item) => $item['generation'] === 1)->pluck('span');
+    $childIdsForGrouped = $childrenForGrouped->pluck('id')->all();
+    $otherParentConnectionsPrecomputed = !empty($childIdsForGrouped)
+        ? \App\Models\Connection::where('type_id', 'family')
+            ->whereIn('child_id', $childIdsForGrouped)
+            ->where('parent_id', '!=', $span->id)
+            ->with('parent')
+            ->get()
+        : collect();
+    $otherParentSpans = $otherParentConnectionsPrecomputed->pluck('parent')->unique('id')->filter();
+
+    $allSpans = $ancestors->pluck('span')
+        ->merge($descendants->pluck('span'))
+        ->merge($siblings)->merge($unclesAndAunts)->merge($cousins)
+        ->merge($nephewsAndNieces)->merge($extraNephewsAndNieces)->merge($stepParents)
+        ->merge($inLawsAndOutLaws)->merge($extraInLawsAndOutLaws)
+        ->merge($childrenInLawsAndOutLaws)->merge($grandchildrenInLawsAndOutLaws)
+        ->merge($otherParentSpans)
+        ->filter(fn ($s) => $s && $s->type_id === 'person')->unique('id');
+    $personIds = $allSpans->pluck('id')->filter()->unique()->values()->all();
+    if (!empty($personIds)) {
+        $photoConnections = \App\Models\Connection::where('type_id', 'features')
+            ->whereIn('child_id', $personIds)
+            ->whereHas('parent', function ($q) {
+                $q->where('type_id', 'thing')->whereJsonContains('metadata->subtype', 'photo');
+            })
+            ->with(['parent'])
+            ->get()
+            ->groupBy('child_id')
+            ->map(fn ($conns) => $conns->first());
+        $parentConnectionsForMap = \App\Models\Connection::where('type_id', 'family')
+            ->whereIn('child_id', $personIds)
+            ->whereHas('parent', function ($q) {
+                $q->where('type_id', 'person');
+            })
+            ->with(['parent'])
+            ->get()
+            ->groupBy('child_id');
+        foreach ($personIds as $personId) {
+            $connections = $parentConnectionsForMap->get($personId);
+            if ($connections && $connections->isNotEmpty()) {
+                $parentSpans = $connections->map(fn ($c) => $c->parent)->filter()->values();
+                if ($parentSpans->isNotEmpty()) {
+                    $parentsMap->put($personId, $parentSpans);
+                }
+            }
+        }
+    }
+}
 
 // Check if we have any family relationships to show
 $hasFamily = $ancestors->isNotEmpty() || $descendants->isNotEmpty() || 
@@ -52,7 +124,9 @@ $hasFamily = $ancestors->isNotEmpty() || $descendants->isNotEmpty() ||
                     title="Great-Grandparents" 
                     :members="$greatGrandparents"
                     :interactive="$interactive"
-                    :colClass="$colClass" />
+                    :colClass="$colClass"
+                    :photoConnections="$photoConnections"
+                    :parentsMap="$parentsMap" />
 
                 {{-- Generation +2: Grandparents --}}
                 @php $grandparents = $ancestors->filter(function($item) { return $item['generation'] === 2; })->pluck('span'); @endphp
@@ -60,7 +134,9 @@ $hasFamily = $ancestors->isNotEmpty() || $descendants->isNotEmpty() ||
                     title="Grandparents" 
                     :members="$grandparents"
                     :interactive="$interactive"
-                    :colClass="$colClass" />
+                    :colClass="$colClass"
+                    :photoConnections="$photoConnections"
+                    :parentsMap="$parentsMap" />
 
                 {{-- Generation +1: Parents --}}
                 @php $parents = $ancestors->filter(function($item) { return $item['generation'] === 1; })->pluck('span'); @endphp
@@ -68,21 +144,27 @@ $hasFamily = $ancestors->isNotEmpty() || $descendants->isNotEmpty() ||
                     title="Parents" 
                     :members="$parents"
                     :interactive="$interactive"
-                    :colClass="$colClass" />
+                    :colClass="$colClass"
+                    :photoConnections="$photoConnections"
+                    :parentsMap="$parentsMap" />
 
                 {{-- Step-parents --}}
                 <x-spans.partials.family-relationship-section 
                     title="Step-parents" 
                     :members="$stepParents"
                     :interactive="$interactive"
-                    :colClass="$colClass" />
+                    :colClass="$colClass"
+                    :photoConnections="$photoConnections"
+                    :parentsMap="$parentsMap" />
 
                 {{-- Uncles & Aunts --}}
                 <x-spans.partials.family-relationship-section 
                     title="Uncles & Aunts" 
                     :members="$unclesAndAunts"
                     :interactive="$interactive"
-                    :colClass="$colClass" />
+                    :colClass="$colClass"
+                    :photoConnections="$photoConnections"
+                    :parentsMap="$parentsMap" />
 
                 {{-- Partners & Children (grouped by co-parent) --}}
                 @php $children = $descendants->filter(function($item) { return $item['generation'] === 1; })->pluck('span'); @endphp
@@ -90,56 +172,73 @@ $hasFamily = $ancestors->isNotEmpty() || $descendants->isNotEmpty() ||
                     :span="$span" 
                     :children="$children"
                     :interactive="$interactive"
-                    :colClass="$colClass" />
+                    :colClass="$colClass"
+                    :photoConnections="$photoConnections"
+                    :parentsMap="$parentsMap"
+                    :otherParentConnections="$otherParentConnectionsPrecomputed" />
 
                 {{-- Generation 0: Siblings --}}
                 <x-spans.partials.family-relationship-section 
                     title="Siblings" 
                     :members="$siblings"
                     :interactive="$interactive"
-                    :colClass="$colClass" />
+                    :colClass="$colClass"
+                    :photoConnections="$photoConnections"
+                    :parentsMap="$parentsMap" />
 
                 {{-- In-laws & out-laws (people with whom siblings have had children) --}}
                 <x-spans.partials.family-relationship-section 
                     title="In-laws & out-laws" 
                     :members="$inLawsAndOutLaws"
                     :interactive="$interactive"
-                    :colClass="$colClass" />
+                    :colClass="$colClass"
+                    :photoConnections="$photoConnections"
+                    :parentsMap="$parentsMap" />
 
                 {{-- Extra In-laws & out-laws (people with whom cousins have had children) --}}
                 <x-spans.partials.family-relationship-section 
                     title="Extra In-laws & out-laws" 
                     :members="$extraInLawsAndOutLaws"
                     :interactive="$interactive"
-                    :colClass="$colClass" />
+                    :colClass="$colClass"
+                    :photoConnections="$photoConnections"
+                    :parentsMap="$parentsMap" />
 
                 {{-- Cousins --}}
                 <x-spans.partials.family-relationship-section 
                     title="Cousins" 
                     :members="$cousins"
                     :interactive="$interactive"
-                    :colClass="$colClass" />
+                    :colClass="$colClass"
+                    :photoConnections="$photoConnections"
+                    :parentsMap="$parentsMap" />
 
                 {{-- Nephews & Nieces --}}
                 <x-spans.partials.family-relationship-section 
                     title="Nephews & Nieces" 
                     :members="$nephewsAndNieces"
                     :interactive="$interactive"
-                    :colClass="$colClass" />
+                    :colClass="$colClass"
+                    :photoConnections="$photoConnections"
+                    :parentsMap="$parentsMap" />
 
                 {{-- Extra Nephews & Nieces --}}
                 <x-spans.partials.family-relationship-section 
                     title="Extra Nephews & Nieces" 
                     :members="$extraNephewsAndNieces"
                     :interactive="$interactive"
-                    :colClass="$colClass" />
+                    :colClass="$colClass"
+                    :photoConnections="$photoConnections"
+                    :parentsMap="$parentsMap" />
 
                 {{-- Children-in/out-law (people with whom the user's children have had children) --}}
                 <x-spans.partials.family-relationship-section 
                     title="Children-in/out-law" 
                     :members="$childrenInLawsAndOutLaws"
                     :interactive="$interactive"
-                    :colClass="$colClass" />
+                    :colClass="$colClass"
+                    :photoConnections="$photoConnections"
+                    :parentsMap="$parentsMap" />
 
                 {{-- Generation -2: Grandchildren --}}
                 @php $grandchildren = $descendants->filter(function($item) { return $item['generation'] === 2; })->pluck('span'); @endphp
@@ -147,14 +246,18 @@ $hasFamily = $ancestors->isNotEmpty() || $descendants->isNotEmpty() ||
                     title="Grandchildren" 
                     :members="$grandchildren"
                     :interactive="$interactive"
-                    :colClass="$colClass" />
+                    :colClass="$colClass"
+                    :photoConnections="$photoConnections"
+                    :parentsMap="$parentsMap" />
 
                 {{-- Grandchildren-in/out-law (people with whom the user's grandchildren have had children) --}}
                 <x-spans.partials.family-relationship-section 
                     title="Grandchildren-in/out-law" 
                     :members="$grandchildrenInLawsAndOutLaws"
                     :interactive="$interactive"
-                    :colClass="$colClass" />
+                    :colClass="$colClass"
+                    :photoConnections="$photoConnections"
+                    :parentsMap="$parentsMap" />
 
                 {{-- Generation -3: Great-Grandchildren --}}
                 @php $greatGrandchildren = $descendants->filter(function($item) { return $item['generation'] === 3; })->pluck('span'); @endphp
@@ -162,7 +265,9 @@ $hasFamily = $ancestors->isNotEmpty() || $descendants->isNotEmpty() ||
                     title="Great-Grandchildren" 
                     :members="$greatGrandchildren"
                     :interactive="$interactive"
-                    :colClass="$colClass" />
+                    :colClass="$colClass"
+                    :photoConnections="$photoConnections"
+                    :parentsMap="$parentsMap" />
             </div>
             
             {{-- Graph View Container (hidden by default) --}}

@@ -10,6 +10,9 @@ use Illuminate\Support\Facades\Cache;
 
 class FamilyTreeService
 {
+    /** Request-level cache for getCousins so cousins/extraNephewsAndNieces/extraInLawsAndOutLaws don't recompute (e.g. on homepage). */
+    private static array $cousinsBySpanId = [];
+
     /**
      * Get all ancestors of a person span up to a certain number of generations
      */
@@ -456,6 +459,11 @@ class FamilyTreeService
      */
     public function getCousins(Span $span): Collection
     {
+        $spanId = $span->id;
+        if (array_key_exists($spanId, self::$cousinsBySpanId)) {
+            return self::$cousinsBySpanId[$spanId];
+        }
+
         if (env('APP_DEBUG')) {
             Log::debug("Getting cousins for {$span->name} (ID: {$span->id})");
         }
@@ -496,6 +504,7 @@ class FamilyTreeService
             }
         }
 
+        self::$cousinsBySpanId[$spanId] = $result;
         return $result;
     }
 
@@ -533,6 +542,9 @@ class FamilyTreeService
      */
     public function clearFamilyCaches(Span $span): void
     {
+        // Clear request-level cousins cache so next call recomputes
+        self::$cousinsBySpanId = [];
+
         $cachePrefix = app()->environment();
 
         // Clear descendants cache for different generation levels for this span

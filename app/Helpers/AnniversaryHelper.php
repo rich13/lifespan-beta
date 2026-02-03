@@ -7,6 +7,9 @@ use App\Models\Span;
 
 class AnniversaryHelper
 {
+    /** Cache family member IDs per request so homepage (upcoming-anniversaries + random-person-card) doesn't recompute multiple times */
+    private static ?array $familyMemberIdsBySpanId = null;
+
     /**
      * Calculate significance score for an anniversary
      * Higher scores indicate more significant milestones
@@ -55,32 +58,40 @@ class AnniversaryHelper
         $maxDaysUntil = $options['max_days_until'] ?? null;
         $requirePhoto = $options['require_photo'] ?? false;
         
-        // Get family member IDs if user is authenticated
+        // Get family member IDs if user is authenticated (cached per request to avoid duplicate work on homepage)
         $familyMemberIds = collect();
         $user = auth()->user();
         if ($user && $user->personalSpan) {
             $personalSpan = $user->personalSpan;
-            // Get all family members using the same methods as the family card
-            $ancestors = $personalSpan->ancestors(3);
-            $descendants = $personalSpan->descendants(2);
-            $siblings = $personalSpan->siblings();
-            $unclesAndAunts = $personalSpan->unclesAndAunts();
-            $cousins = $personalSpan->cousins();
-            $nephewsAndNieces = $personalSpan->nephewsAndNieces();
-            $extraNephewsAndNieces = $personalSpan->extraNephewsAndNieces();
-            
-            // Collect all family member IDs
-            $familyMemberIds = collect()
-                ->push($personalSpan->id)
-                ->concat($ancestors->pluck('span')->pluck('id'))
-                ->concat($descendants->pluck('span')->pluck('id'))
-                ->concat($siblings->pluck('id'))
-                ->concat($unclesAndAunts->pluck('id'))
-                ->concat($cousins->pluck('id'))
-                ->concat($nephewsAndNieces->pluck('id'))
-                ->concat($extraNephewsAndNieces->pluck('id'))
-                ->unique()
-                ->filter();
+            $spanId = $personalSpan->id;
+            if (self::$familyMemberIdsBySpanId === null) {
+                self::$familyMemberIdsBySpanId = [];
+            }
+            if (array_key_exists($spanId, self::$familyMemberIdsBySpanId)) {
+                $familyMemberIds = self::$familyMemberIdsBySpanId[$spanId];
+            } else {
+                // Get all family members using the same methods as the family card
+                $ancestors = $personalSpan->ancestors(3);
+                $descendants = $personalSpan->descendants(2);
+                $siblings = $personalSpan->siblings();
+                $unclesAndAunts = $personalSpan->unclesAndAunts();
+                $cousins = $personalSpan->cousins();
+                $nephewsAndNieces = $personalSpan->nephewsAndNieces();
+                $extraNephewsAndNieces = $personalSpan->extraNephewsAndNieces();
+
+                $familyMemberIds = collect()
+                    ->push($personalSpan->id)
+                    ->concat($ancestors->pluck('span')->pluck('id'))
+                    ->concat($descendants->pluck('span')->pluck('id'))
+                    ->concat($siblings->pluck('id'))
+                    ->concat($unclesAndAunts->pluck('id'))
+                    ->concat($cousins->pluck('id'))
+                    ->concat($nephewsAndNieces->pluck('id'))
+                    ->concat($extraNephewsAndNieces->pluck('id'))
+                    ->unique()
+                    ->filter();
+                self::$familyMemberIdsBySpanId[$spanId] = $familyMemberIds;
+            }
         }
         
         $significantDates = [];

@@ -149,7 +149,7 @@
                 <!-- Story Card -->
                 <div class="row">
                     <div class="col-12">
-                        <x-spans.partials.story :span="$span" />
+                        <x-spans.partials.story :span="$span" :story="$story ?? null" />
                     </div>
                 </div>
                 
@@ -171,7 +171,7 @@
                 <!-- Collections Card - Show collections that contain this span -->
                 <x-spans.cards.collections-card :span="$span" />
                 
-                <x-spans.partials.connections :span="$span" />
+                <x-spans.partials.connections :span="$span" :parentConnections="$parentConnections ?? null" :childConnections="$childConnections ?? null" />
             </div>
 
             <div class="col-md-4">
@@ -335,7 +335,7 @@
                     
                 @endauth
                 @if($span->type_id === 'person')
-                    <x-spans.partials.family-relationships :span="$span" />
+                    <x-spans.partials.family-relationships :span="$span" :familyData="$familyData ?? null" />
                     <x-spans.partials.desert-island-discs-tracks-card :span="$span" :desertIslandDiscsSet="$desertIslandDiscsSet" />
                     
                     <!-- Guardian Articles about this person (only for public persons and admin users) -->

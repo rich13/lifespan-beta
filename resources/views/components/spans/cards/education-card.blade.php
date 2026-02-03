@@ -20,6 +20,21 @@
             return sprintf('%08d-%02d-%02d', $y, $m, $d);
         })
         ->values();
+
+    // Batch-fetch all "during" phase connections for education connection spans (avoids N+1)
+    $connectionSpanIds = $educationConnections->map(fn($c) => $c->connectionSpan?->id)->filter()->unique()->values()->all();
+    $duringBySubject = collect();
+    $duringByObject = collect();
+    if (!empty($connectionSpanIds)) {
+        $allDuring = \App\Models\Connection::where(function($q) use ($connectionSpanIds) {
+            $q->whereIn('parent_id', $connectionSpanIds)->orWhereIn('child_id', $connectionSpanIds);
+        })
+            ->whereHas('type', function($q) { $q->where('type', 'during'); })
+            ->with(['child', 'parent'])
+            ->get();
+        $duringBySubject = $allDuring->groupBy('parent_id');
+        $duringByObject = $allDuring->groupBy('child_id');
+    }
 @endphp
 <div class="card mb-4">
     <div class="card-header d-flex justify-content-between align-items-center">
@@ -76,54 +91,43 @@
                         @endif
 
                         @php
-                            // Use specific phase spans connected via 'during' connections linked to the education connection span
+                            // Use pre-fetched during connections (batched above) to avoid N+1
                             $phaseChips = [];
                             if ($dates) {
-                                // Subject-side during
-                                $subjectDuring = $dates->connectionsAsSubject()
-                                    ->whereHas('type', function($q){ $q->where('type','during'); })
-                                    ->with('child')
-                                    ->get();
+                                $subjectDuring = $duringBySubject->get($dates->id, collect());
+                                $objectDuring = $duringByObject->get($dates->id, collect());
                                 foreach ($subjectDuring as $c) {
-                                    $span = $c->child;
-                                    if (!$span) continue;
+                                    $phaseSpan = $c->child;
+                                    if (!$phaseSpan) continue;
                                     $parts = $c->getEffectiveSortDate();
                                     $y = $parts[0] ?? PHP_INT_MAX; $m = $parts[1] ?? PHP_INT_MAX; $d = $parts[2] ?? PHP_INT_MAX;
-                                    $range = ($span->start_year || $span->end_year)
-                                        ? trim(($span->start_year ?? '') . '–' . ($span->end_year ?? ''))
+                                    $range = ($phaseSpan->start_year || $phaseSpan->end_year)
+                                        ? trim(($phaseSpan->start_year ?? '') . '–' . ($phaseSpan->end_year ?? ''))
                                         : null;
-                                    $phaseChips[$span->id] = [
-                                        'id' => $span->id,
-                                        'target' => $c->connection_span_id, // link to during connection span
-                                        'label' => $span->name ?? 'Phase',
+                                    $phaseChips[$phaseSpan->id] = [
+                                        'id' => $phaseSpan->id,
+                                        'target' => $c->connection_span_id,
+                                        'label' => $phaseSpan->name ?? 'Phase',
                                         'range' => $range,
                                         'sort' => sprintf('%08d-%02d-%02d', $y, $m, $d)
                                     ];
                                 }
-
-                                // Object-side during
-                                $objectDuring = $dates->connectionsAsObject()
-                                    ->whereHas('type', function($q){ $q->where('type','during'); })
-                                    ->with('parent')
-                                    ->get();
                                 foreach ($objectDuring as $c) {
-                                    $span = $c->parent;
-                                    if (!$span) continue;
+                                    $phaseSpan = $c->parent;
+                                    if (!$phaseSpan) continue;
                                     $parts = $c->getEffectiveSortDate();
                                     $y = $parts[0] ?? PHP_INT_MAX; $m = $parts[1] ?? PHP_INT_MAX; $d = $parts[2] ?? PHP_INT_MAX;
-                                    $range = ($span->start_year || $span->end_year)
-                                        ? trim(($span->start_year ?? '') . '–' . ($span->end_year ?? ''))
+                                    $range = ($phaseSpan->start_year || $phaseSpan->end_year)
+                                        ? trim(($phaseSpan->start_year ?? '') . '–' . ($phaseSpan->end_year ?? ''))
                                         : null;
-                                    $phaseChips[$span->id] = [
-                                        'id' => $span->id,
-                                        'target' => $c->connection_span_id, // link to during connection span
-                                        'label' => $span->name ?? 'Phase',
+                                    $phaseChips[$phaseSpan->id] = [
+                                        'id' => $phaseSpan->id,
+                                        'target' => $c->connection_span_id,
+                                        'label' => $phaseSpan->name ?? 'Phase',
                                         'range' => $range,
                                         'sort' => sprintf('%08d-%02d-%02d', $y, $m, $d)
                                     ];
                                 }
-
-                                // Sort
                                 usort($phaseChips, function($a, $b) {
                                     return strcmp($a['sort'], $b['sort']);
                                 });

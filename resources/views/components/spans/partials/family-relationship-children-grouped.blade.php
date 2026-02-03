@@ -1,14 +1,16 @@
-@props(['span', 'children', 'interactive' => false, 'colClass' => 'col-md-6'])
+@props(['span', 'children', 'interactive' => false, 'colClass' => 'col-md-6', 'photoConnections' => null, 'parentsMap' => null, 'otherParentConnections' => null])
 
 @php
 $childIds = $children->pluck('id')->all();
-$otherParentConnections = !empty($childIds)
-    ? \App\Models\Connection::where('type_id', 'family')
-        ->whereIn('child_id', $childIds)
-        ->where('parent_id', '!=', $span->id)
-        ->with('parent')
-        ->get()
-    : collect();
+$otherParentConnections = $otherParentConnections ?? (
+    !empty($childIds)
+        ? \App\Models\Connection::where('type_id', 'family')
+            ->whereIn('child_id', $childIds)
+            ->where('parent_id', '!=', $span->id)
+            ->with('parent')
+            ->get()
+        : collect()
+);
 
 // Group by other parent: each group has other_parent (Span|null) and children (Collection)
 $groupsByParentId = $otherParentConnections->groupBy('parent_id');
@@ -39,45 +41,34 @@ $groups = $groups->sortBy(function ($g) {
     return $g['other_parent']->start_year ?? PHP_INT_MAX;
 })->values();
 
-// All people we display (for batch photo/parent lookup when !interactive)
-$allMembers = $groups->flatMap(function ($g) {
-    $list = $g['children']->all();
-    if ($g['other_parent'] !== null) {
-        $list = array_merge([$g['other_parent']], $list);
-    }
-    return $list;
-})->unique('id')->values();
-
-$photoConnections = collect();
-$parentsMap = collect();
-if (!$interactive && $allMembers->isNotEmpty()) {
-    $personIds = $allMembers->filter(fn ($m) => $m->type_id === 'person')->pluck('id')->filter()->unique()->toArray();
-    if (!empty($personIds)) {
-        $photoConnections = \App\Models\Connection::where('type_id', 'features')
-            ->whereIn('child_id', $personIds)
-            ->whereHas('parent', function ($q) {
-                $q->where('type_id', 'thing')->whereJsonContains('metadata->subtype', 'photo');
-            })
-            ->with(['parent'])
-            ->get()
-            ->groupBy('child_id')
-            ->map(fn ($conns) => $conns->first());
-
-        $parentConnections = \App\Models\Connection::where('type_id', 'family')
-            ->whereIn('child_id', $personIds)
-            ->whereHas('parent', function ($q) {
-                $q->where('type_id', 'person');
-            })
-            ->with(['parent'])
-            ->get()
-            ->groupBy('child_id');
-
-        foreach ($personIds as $personId) {
-            $connections = $parentConnections->get($personId);
-            if ($connections && $connections->isNotEmpty()) {
-                $parentSpans = $connections->map(fn ($c) => $c->parent)->filter()->values();
-                if ($parentSpans->isNotEmpty()) {
-                    $parentsMap->put($personId, $parentSpans);
+// Use precomputed photo/parent when passed from family-relationships; otherwise run queries (e.g. family/index)
+$photoConnectionsResolved = $photoConnections ?? collect();
+$parentsMapResolved = $parentsMap ?? collect();
+if (!$interactive && $photoConnectionsResolved->isEmpty() && $parentsMapResolved->isEmpty()) {
+    $allMembers = $groups->flatMap(fn ($g) => array_merge($g['other_parent'] ? [$g['other_parent']] : [], $g['children']->all()))->unique('id')->values();
+    if ($allMembers->isNotEmpty()) {
+        $personIds = $allMembers->filter(fn ($m) => $m->type_id === 'person')->pluck('id')->filter()->unique()->toArray();
+        if (!empty($personIds)) {
+            $photoConnectionsResolved = \App\Models\Connection::where('type_id', 'features')
+                ->whereIn('child_id', $personIds)
+                ->whereHas('parent', fn ($q) => $q->where('type_id', 'thing')->whereJsonContains('metadata->subtype', 'photo'))
+                ->with(['parent'])
+                ->get()
+                ->groupBy('child_id')
+                ->map(fn ($conns) => $conns->first());
+            $parentConnections = \App\Models\Connection::where('type_id', 'family')
+                ->whereIn('child_id', $personIds)
+                ->whereHas('parent', fn ($q) => $q->where('type_id', 'person'))
+                ->with(['parent'])
+                ->get()
+                ->groupBy('child_id');
+            foreach ($personIds as $personId) {
+                $connections = $parentConnections->get($personId);
+                if ($connections && $connections->isNotEmpty()) {
+                    $parentSpans = $connections->map(fn ($c) => $c->parent)->filter()->values();
+                    if ($parentSpans->isNotEmpty()) {
+                        $parentsMapResolved->put($personId, $parentSpans);
+                    }
                 }
             }
         }
@@ -104,8 +95,8 @@ if (!$interactive && $allMembers->isNotEmpty()) {
                                 @else
                                     @include('components.spans.partials.family-member-link', [
                                         'member' => $otherParent,
-                                        'photoConnections' => $photoConnections,
-                                        'parentsMap' => $parentsMap,
+                                        'photoConnections' => $photoConnectionsResolved,
+                                        'parentsMap' => $parentsMapResolved,
                                     ])
                                 @endif
                             </div>
@@ -118,8 +109,8 @@ if (!$interactive && $allMembers->isNotEmpty()) {
                                         @else
                                             @include('components.spans.partials.family-member-link', [
                                                 'member' => $child,
-                                                'photoConnections' => $photoConnections,
-                                                'parentsMap' => $parentsMap,
+                                                'photoConnections' => $photoConnectionsResolved,
+                                                'parentsMap' => $parentsMapResolved,
                                             ])
                                         @endif
                                     </li>
@@ -135,8 +126,8 @@ if (!$interactive && $allMembers->isNotEmpty()) {
                                 @else
                                     @include('components.spans.partials.family-member-link', [
                                         'member' => $child,
-                                        'photoConnections' => $photoConnections,
-                                        'parentsMap' => $parentsMap,
+                                        'photoConnections' => $photoConnectionsResolved,
+                                        'parentsMap' => $parentsMapResolved,
                                     ])
                                 @endif
                             </li>

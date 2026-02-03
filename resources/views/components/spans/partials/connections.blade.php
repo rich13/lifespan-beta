@@ -8,6 +8,7 @@
             ->whereHas('connectionSpan')
             ->with([
                 'connectionSpan.type',
+                'parent.type',
                 'child.type',
                 'type'
             ])
@@ -24,6 +25,7 @@
             ->with([
                 'connectionSpan.type',
                 'parent.type',
+                'child.type',
                 'type'
             ])
             ->get()

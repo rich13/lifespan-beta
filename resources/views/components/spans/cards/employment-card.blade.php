@@ -15,7 +15,7 @@
     // Get has_role connections with nested at_organisation connections
     $roleConnections = $span->connectionsAsSubject()
         ->whereHas('type', function($q) { $q->where('type', 'has_role'); })
-        ->with(['child', 'connectionSpan.connectionsAsSubject.child', 'connectionSpan.connectionsAsSubject.type', 'connectionSpan.connectionsAsSubject.connectionSpan'])
+        ->with(['child', 'connectionSpan.connectionsAsSubject.child', 'connectionSpan.connectionsAsSubject.parent', 'connectionSpan.connectionsAsSubject.type', 'connectionSpan.connectionsAsSubject.connectionSpan'])
         ->get();
 
     // Combine both types into a unified collection with sorting info

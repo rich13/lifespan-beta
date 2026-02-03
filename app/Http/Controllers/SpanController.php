@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\View as ViewFacade;
 use Illuminate\View\View;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Ray;
@@ -891,15 +892,18 @@ class SpanController extends Controller
                 ]);
             }
 
-            // Cache span show data (eager loads + Desert Island Discs) for 5 minutes
-            $spanShowCacheKey = 'span_show_data_' . $subject->id;
-            $cached = Cache::remember($spanShowCacheKey, 300, function () use ($subject) {
+            // Cache span show data (eager loads + Desert Island Discs + family data + story)
+            // v3: includes story to avoid generateStory() in view
+            $spanShowCacheKey = 'span_show_data_v3_' . $subject->id;
+            $spanShowCacheTtl = config('app.span_show_cache_ttl', 900);
+            $cached = Cache::remember($spanShowCacheKey, $spanShowCacheTtl, function () use ($subject) {
                 $subject->load([
                     'type',
                     'owner',
                     'updater',
                 ]);
                 $desertIslandDiscsSet = null;
+                $familyData = null;
                 if ($subject->type_id === 'person') {
                     try {
                         $desertIslandDiscsSet = Span::getDesertIslandDiscsSet($subject);
@@ -909,11 +913,23 @@ class SpanController extends Controller
                             'error' => $e->getMessage()
                         ]);
                     }
+                    $familyData = $this->getFamilyDataForSpan($subject);
                 }
-                return ['span' => $subject, 'desertIslandDiscsSet' => $desertIslandDiscsSet];
+                $story = null;
+                try {
+                    $story = app(\App\Services\ConfigurableStoryGeneratorService::class)->generateStory($subject);
+                } catch (\Exception $e) {
+                    $story = ['paragraphs' => [], 'metadata' => [], 'error' => $e->getMessage()];
+                }
+                return ['span' => $subject, 'desertIslandDiscsSet' => $desertIslandDiscsSet, 'familyData' => $familyData, 'story' => $story];
             });
             $subject = $cached['span'];
             $desertIslandDiscsSet = $cached['desertIslandDiscsSet'];
+            $familyData = $cached['familyData'] ?? null;
+            $story = $cached['story'] ?? null;
+
+            // Precompute connections for the connections partial (access-dependent, so not cached)
+            [$parentConnections, $childConnections] = $this->getConnectionsForSpanShow($subject);
 
             // Additional validation: ensure the type relationship is correct
             if ($subject->type && $subject->type->type_id !== $subject->type_id) {
@@ -952,14 +968,16 @@ class SpanController extends Controller
                     }
                 }
 
-                $response = response()->view('spans.show', compact('span', 'desertIslandDiscsSet'));
+                ViewFacade::share('familyData', $familyData);
+                $response = response()->view('spans.show', compact('span', 'desertIslandDiscsSet', 'familyData', 'parentConnections', 'childConnections', 'story'));
                 $response->header('ETag', $etag);
                 $response->header('Last-Modified', $lastModified);
                 $response->header('Cache-Control', 'private, max-age=60');
                 return $response;
             }
 
-            return view('spans.show', compact('span', 'desertIslandDiscsSet'));
+            ViewFacade::share('familyData', $familyData);
+            return view('spans.show', compact('span', 'desertIslandDiscsSet', 'familyData', 'parentConnections', 'childConnections', 'story'));
         } catch (AuthorizationException $e) {
             // Return a 403 forbidden view
             return view('errors.403');
@@ -980,6 +998,72 @@ class SpanController extends Controller
                 ]);
             }
         }
+    }
+
+    /**
+     * Precompute all family relationship collections for a person span.
+     * Used to avoid N+1 and repeated work when rendering family-relationships partial.
+     *
+     * @return array<string, mixed>|null Null for non-person spans
+     */
+    private function getFamilyDataForSpan(Span $span): ?array
+    {
+        if ($span->type_id !== 'person') {
+            return null;
+        }
+        return [
+            'ancestors' => $span->ancestors(3),
+            'descendants' => $span->descendants(3),
+            'siblings' => $span->siblings(),
+            'unclesAndAunts' => $span->unclesAndAunts(),
+            'cousins' => $span->cousins(),
+            'nephewsAndNieces' => $span->nephewsAndNieces(),
+            'extraNephewsAndNieces' => $span->extraNephewsAndNieces(),
+            'stepParents' => $span->stepParents(),
+            'inLawsAndOutLaws' => $span->inLawsAndOutLaws(),
+            'extraInLawsAndOutLaws' => $span->extraInLawsAndOutLaws(),
+            'childrenInLawsAndOutLaws' => $span->childrenInLawsAndOutLaws(),
+            'grandchildrenInLawsAndOutLaws' => $span->grandchildrenInLawsAndOutLaws(),
+        ];
+    }
+
+    /**
+     * Precompute parent and child connection lists for the connections partial.
+     * Uses same logic as the partial; access-dependent so not cached with span.
+     *
+     * @return array{0: \Illuminate\Support\Collection, 1: \Illuminate\Support\Collection}
+     */
+    private function getConnectionsForSpanShow(Span $span): array
+    {
+        $parentConnections = $span->connectionsAsSubjectWithAccess()
+            ->whereNotNull('connection_span_id')
+            ->whereHas('connectionSpan')
+            ->with([
+                'connectionSpan.type',
+                'parent.type',
+                'child.type',
+                'type',
+            ])
+            ->get()
+            ->sortBy(function ($connection) {
+                return $connection->getEffectiveSortDate();
+            });
+
+        $childConnections = $span->connectionsAsObjectWithAccess()
+            ->whereNotNull('connection_span_id')
+            ->whereHas('connectionSpan')
+            ->with([
+                'connectionSpan.type',
+                'parent.type',
+                'child.type',
+                'type',
+            ])
+            ->get()
+            ->sortBy(function ($connection) {
+                return $connection->getEffectiveSortDate();
+            });
+
+        return [$parentConnections, $childConnections];
     }
 
     /**
@@ -3050,6 +3134,21 @@ class SpanController extends Controller
     }
 
     /**
+     * Return subtype options for a span type as JSON (for modal dropdown).
+     * Used so we don't load/decode all type metadata on every page.
+     */
+    public function subtypeOptions(string $type): \Illuminate\Http\JsonResponse
+    {
+        $spanType = SpanType::where('type_id', $type)->first();
+
+        if (!$spanType) {
+            return response()->json([], 404);
+        }
+
+        return response()->json($spanType->getSubtypeOptions());
+    }
+
+    /**
      * Display all subtypes for a specific span type.
      */
     public function showSubtypes(Request $request, string $type): View|Response
@@ -4086,9 +4185,17 @@ class SpanController extends Controller
             }
         }
 
-        // Use the same view as the span show page, showing the connection span
+        // Use the same view as the span show page, showing the connection span (precompute connections + story)
         $span = $connectionSpan; // For view compatibility
-        return view('spans.show', compact('span', 'desertIslandDiscsSet', 'subject', 'object', 'connectionType'));
+        $familyData = null;
+        [$parentConnections, $childConnections] = $this->getConnectionsForSpanShow($connectionSpan);
+        $story = null;
+        try {
+            $story = app(\App\Services\ConfigurableStoryGeneratorService::class)->generateStory($connectionSpan);
+        } catch (\Exception $e) {
+            $story = ['paragraphs' => [], 'metadata' => [], 'error' => $e->getMessage()];
+        }
+        return view('spans.show', compact('span', 'desertIslandDiscsSet', 'subject', 'object', 'connectionType', 'familyData', 'parentConnections', 'childConnections', 'story'));
     }
 
     /**
