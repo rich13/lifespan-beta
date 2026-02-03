@@ -27,6 +27,7 @@ use App\Http\Controllers\FriendsController;
 use App\Http\Controllers\NewSpanController;
 use App\Http\Controllers\CollectionsController;
 use App\Http\Controllers\FooterController;
+use App\Http\Middleware\SpanShowTimeoutMiddleware;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
@@ -922,8 +923,8 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
             Route::get('/{span}/connection_types', [SpanController::class, 'connectionTypes'])->name('spans.connection-types.index');
             Route::get('/{span}/connection_types/{connectionType}', [SpanController::class, 'connectionsByType'])->name('spans.connection-types.show');
             
-            // General span show route (must come last as catch-all)
-            Route::get('/{subject}', [SpanController::class, 'show'])->name('spans.show');
+            // General span show route (must come last as catch-all). Higher PHP timeout for cold-cache/heavy pages.
+            Route::get('/{subject}', [SpanController::class, 'show'])->name('spans.show')->middleware(SpanShowTimeoutMiddleware::class);
         });
 
         // New POST route for creating a new span from YAML

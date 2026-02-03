@@ -99,6 +99,32 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Span show page max execution time (seconds)
+    |--------------------------------------------------------------------------
+    |
+    | PHP max_execution_time for the span show route only. Default 120 allows
+    | cold-cache or heavy person pages to finish without hitting PHP's default 60s.
+    | Set via SPAN_SHOW_MAX_EXECUTION_TIME in .env. Nginx/proxy timeouts must
+    | allow this (e.g. fastcgi_read_timeout 300 in docker/prod).
+    |
+    */
+
+    'span_show_max_execution_time' => (int) env('SPAN_SHOW_MAX_EXECUTION_TIME', 120),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Span show page memory limit (optional)
+    |--------------------------------------------------------------------------
+    |
+    | Set SPAN_SHOW_MEMORY_LIMIT in .env (e.g. 512M) only if span show hits
+    | memory limits; leave unset to use PHP default.
+    |
+    */
+
+    'span_show_memory_limit' => env('SPAN_SHOW_MEMORY_LIMIT'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

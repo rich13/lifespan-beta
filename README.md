@@ -53,3 +53,12 @@ docker compose exec app php artisan osm:generate-london-json
 ```
 
 This queries local Nominatim for London boroughs, major stations, and airports (see `config/osm_london_locations.php`) and writes `storage/app/osm/london-major-locations.json`. Use `--dry-run` to print results without writing, or `--limit=5` to test with a small batch.
+
+### Production / timeouts (Railway or similar)
+
+**App vs server:** The 60-second "Maximum execution time" error is **PHP’s limit** (app config), not the server size. You can fix it with **app settings** (no need to pay for a bigger Railway plan) unless the bottleneck is CPU/RAM.
+
+- **PHP timeout (app):** The span show route uses `timeout.span-show` middleware, which sets `max_execution_time` from `SPAN_SHOW_MAX_EXECUTION_TIME` (default **120** seconds). Set this in Railway env vars only if you need a different value (e.g. 180).
+- **Optional memory:** If span show hits memory limits, set `SPAN_SHOW_MEMORY_LIMIT=512M` in .env / Railway.
+- **Proxy/server:** Nginx in `docker/prod/nginx.conf` uses `fastcgi_read_timeout 300`, so the app container allows long requests. If Railway or another proxy in front has a 60s gateway timeout, increase it in that layer (Railway dashboard or support); otherwise the browser will still see a timeout even if PHP runs longer.
+- **Bigger server:** Only consider more CPU/RAM if, after the above and the N+1/cache fixes, span show still runs too long; a faster instance can shorten cold-cache response time.
