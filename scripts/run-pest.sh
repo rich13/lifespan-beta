@@ -102,10 +102,14 @@ if [ "$USE_TIMING" -eq 1 ]; then
     log_message "Per-test timing will be written to storage/logs/pest-junit-${TEST_RUN_ID}.xml"
 fi
 
-# When parallel, ensure --processes is set so worker count matches DB count
+# When parallel, ensure --processes is set so worker count matches DB count,
+# and pass memory_limit to Paratest workers (they don't inherit the parent's -d memory_limit)
 if [ "$USE_PARALLEL" -eq 1 ]; then
     if ! printf '%s\n' "${PEST_ARGS[@]}" | grep -q '^--processes='; then
         PEST_ARGS+=("--processes=$PARALLEL_PROCESSES")
+    fi
+    if ! printf '%s\n' "${PEST_ARGS[@]}" | grep -q '^--passthru-php'; then
+        PEST_ARGS+=('--passthru-php=-dmemory_limit=1024M')
     fi
 fi
 

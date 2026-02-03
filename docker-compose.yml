@@ -182,10 +182,34 @@ services:
       timeout: 5s
       retries: 3
 
+  nominatim:
+    image: mediagis/nominatim:5.2
+    container_name: lifespan-nominatim
+    restart: unless-stopped
+    ports:
+      - "7001:8080"
+    volumes:
+      # Writable so the image's init can chown; only the PBF is read by Nominatim.
+      - ./temp:/nominatim/data
+      - nominatim-data:/var/lib/postgresql/16/main
+    environment:
+      - PBF_PATH=/nominatim/data/greater-london-260201.osm.pbf
+      - FREEZE=true
+      - IMPORT_WIKIPEDIA=false
+      - IMPORT_GB_POSTCODES=false
+      - THREADS=2
+    shm_size: 1g
+    networks:
+      - lifespan-network
+    # First start runs a one-off import (can take 10–60+ min for London PBF).
+    # API available at http://localhost:7001 when ready (e.g. /search?q=Camden).
+
 networks:
   lifespan-network:
     driver: bridge
 
 volumes:
   dbdata:
+    driver: local
+  nominatim-data:
     driver: local 

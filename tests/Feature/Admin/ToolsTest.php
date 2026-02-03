@@ -152,6 +152,43 @@ class ToolsTest extends TestCase
     }
 
     /** @test */
+    public function exact_duplicates_section_shows_groups_with_same_type_and_name_when_at_least_one_has_connections()
+    {
+        $unique = 'exact-dup-' . uniqid();
+        $spanA = Span::factory()->create(['name' => 'Duplicate Name', 'slug' => $unique . '-a', 'type_id' => 'place']);
+        $spanB = Span::factory()->create(['name' => 'Duplicate Name', 'slug' => $unique . '-b', 'type_id' => 'place']);
+        Span::factory()->create(['name' => 'Unique Name', 'slug' => $unique . '-c', 'type_id' => 'place']);
+        $connectionType = ConnectionType::factory()->create(['type' => 'test-exact-' . uniqid()]);
+        Connection::factory()->create(['parent_id' => $spanA->id, 'child_id' => $spanB->id, 'type_id' => $connectionType->type]);
+
+        $response = $this->actingAs($this->admin)
+            ->get(route('admin.merge.index'));
+
+        $response->assertStatus(200);
+        $response->assertViewHas('exactDuplicateGroups');
+        $groups = $response->viewData('exactDuplicateGroups');
+        $group = $groups->first(fn ($g) => $g['name'] === 'Duplicate Name' && $g['type_id'] === 'place');
+        $this->assertNotNull($group);
+        $this->assertCount(2, $group['spans']);
+    }
+
+    /** @test */
+    public function exact_duplicates_empty_when_no_duplicate_names()
+    {
+        $unique = 'no-dup-' . uniqid();
+        Span::factory()->create(['name' => 'Only One A', 'slug' => $unique . '-a', 'type_id' => 'place']);
+        Span::factory()->create(['name' => 'Only One B', 'slug' => $unique . '-b', 'type_id' => 'place']);
+
+        $response = $this->actingAs($this->admin)
+            ->get(route('admin.merge.index'));
+
+        $response->assertStatus(200);
+        $groups = $response->viewData('exactDuplicateGroups');
+        $matching = $groups->filter(fn ($g) => in_array($g['name'], ['Only One A', 'Only One B'], true));
+        $this->assertCount(0, $matching);
+    }
+
+    /** @test */
     public function merge_preserves_connection_span_references()
     {
         $targetSpan = Span::factory()->create(['name' => 'Target Span', 'type_id' => 'connection']);
