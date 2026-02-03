@@ -18,6 +18,15 @@ class RequestResponseLogger
      */
     public function handle(Request $request, Closure $next)
     {
+        // Log at the very start of each request so separate page requests are easy to find in the logs
+        $requestId = uniqid('req_', true);
+        $request->attributes->set('request_id', $requestId);
+        Log::info('Page request started', [
+            'request_id' => $requestId,
+            'method' => $request->method(),
+            'url' => $request->fullUrl(),
+        ]);
+
         // Process the request
         $response = $next($request);
         
@@ -52,7 +61,7 @@ class RequestResponseLogger
             'ip' => $request->ip(),
             'user_agent' => $request->header('User-Agent'),
             'referrer' => $request->header('referer'),
-            'request_id' => $request->header('X-Request-ID'),
+            'request_id' => $request->attributes->get('request_id') ?? $request->header('X-Request-ID'),
         ];
         
         // Add session ID if available

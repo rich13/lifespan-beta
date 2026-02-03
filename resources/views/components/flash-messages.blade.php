@@ -2,6 +2,8 @@
     // Only show approval message when user is authenticated but not approved
     // Auth pages handle this message themselves within their form cards
     $showApprovalMessage = auth()->check() && !auth()->user()->approved_at;
+    // Component may be rendered without $errors (e.g. console profiler, or parent didn't pass it)
+    $errors = $errors ?? new \Illuminate\Support\ViewErrorBag();
 @endphp
 
 @if($showApprovalMessage)
