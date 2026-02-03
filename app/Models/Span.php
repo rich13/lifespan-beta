@@ -431,12 +431,14 @@ class Span extends Model
                 if ($connectedSpanId) {
                     // Clear connections_all_v3 cache for guest and all user IDs
                     Cache::forget("connections_all_v3_{$connectedSpanId}_guest");
+                    Cache::forget("connections_all_v4_{$connectedSpanId}_guest");
                     Cache::forget("connections_all_{$connectedSpanId}_guest");
                     Cache::forget("connection_types_{$connectedSpanId}");
                     
                     // Clear for user IDs 1-1000
                     for ($userId = 1; $userId <= 1000; $userId++) {
                         Cache::forget("connections_all_v3_{$connectedSpanId}_{$userId}");
+                        Cache::forget("connections_all_v4_{$connectedSpanId}_{$userId}");
                         Cache::forget("connections_all_{$connectedSpanId}_{$userId}");
                     }
                     
@@ -444,6 +446,7 @@ class Span extends Model
                     if (auth()->check()) {
                         $currentUserId = auth()->id();
                         Cache::forget("connections_all_v3_{$connectedSpanId}_{$currentUserId}");
+                        Cache::forget("connections_all_v4_{$connectedSpanId}_{$currentUserId}");
                         Cache::forget("connections_all_{$connectedSpanId}_{$currentUserId}");
                     }
                 }

@@ -139,6 +139,587 @@ class GeospatialCapability implements SpanCapability
     }
 
     /**
+     * Whether this place has boundary geometry (polygon) stored.
+     */
+    public function hasBoundary(): bool
+    {
+        return $this->getBoundary() !== null;
+    }
+
+    /**
+     * Whether this place has enough geodata to use geospatial traits
+     * (point-in-polygon, containment, radius, etc.). True if it has a boundary
+     * and/or top-level coordinates.
+     */
+    public function hasUsableGeodata(): bool
+    {
+        return $this->hasBoundary() || $this->getCoordinates() !== null;
+    }
+
+    /**
+     * Summary of what geometry this place has, for callers that need to
+     * distinguish "no geodata" vs "point only" vs "boundary" vs "both".
+     *
+     * @return 'none'|'point'|'boundary'|'both'
+     */
+    public function getGeodataLevel(): string
+    {
+        $hasBoundary = $this->hasBoundary();
+        $hasPoint = $this->getCoordinates() !== null;
+        if ($hasBoundary && $hasPoint) {
+            return 'both';
+        }
+        if ($hasBoundary) {
+            return 'boundary';
+        }
+        if ($hasPoint) {
+            return 'point';
+        }
+        return 'none';
+    }
+
+    /**
+     * Get boundary GeoJSON for this place (from metadata, e.g. from PlaceBoundaryService).
+     * Returns GeoJSON Feature or Geometry (Polygon / MultiPolygon) or null.
+     */
+    public function getBoundary(): ?array
+    {
+        $metadata = $this->span->metadata ?? [];
+        $osm = $metadata['external_refs']['osm'] ?? $metadata['osm_data'] ?? null;
+        if (!$osm) {
+            return null;
+        }
+        $boundary = $osm['boundary_geojson'] ?? null;
+        if (!$boundary) {
+            return null;
+        }
+        if (is_object($boundary)) {
+            $boundary = json_decode(json_encode($boundary), true);
+        }
+        if (!is_array($boundary)) {
+            return null;
+        }
+        return $boundary;
+    }
+
+    /**
+     * Area of this place's boundary (exterior rings only), in square degrees.
+     * For relative comparison only; null if no boundary.
+     */
+    public function boundaryArea(): ?float
+    {
+        $boundary = $this->getBoundary();
+        return $boundary ? $this->areaOfGeoJsonGeometry($boundary) : null;
+    }
+
+    /**
+     * Centroid of this place's boundary. Returns ['latitude' => float, 'longitude' => float] or null.
+     */
+    public function boundaryCentroid(): ?array
+    {
+        $boundary = $this->getBoundary();
+        return $boundary ? $this->centroidOfGeoJsonGeometry($boundary) : null;
+    }
+
+    /**
+     * Whether this place's boundary geometrically contains the other boundary
+     * (other's centroid is inside this boundary and other's area is smaller).
+     * E.g. London contains Camden.
+     */
+    public function boundaryContainsBoundary(array $otherBoundaryGeoJson): bool
+    {
+        $boundary = $this->getBoundary();
+        if (!$boundary) {
+            return false;
+        }
+        $areaThis = $this->areaOfGeoJsonGeometry($boundary);
+        $areaOther = $this->areaOfGeoJsonGeometry($otherBoundaryGeoJson);
+        if ($areaThis === null || $areaOther === null || $areaOther >= $areaThis) {
+            return false;
+        }
+        $centroidOther = $this->centroidOfGeoJsonGeometry($otherBoundaryGeoJson);
+        if (!$centroidOther) {
+            return false;
+        }
+        return $this->pointInGeoJsonGeometry(
+            $centroidOther['latitude'],
+            $centroidOther['longitude'],
+            $boundary
+        );
+    }
+
+    /**
+     * Whether two GeoJSON boundaries represent the same place (high overlap).
+     * Uses centroid containment both ways + area ratio; robust without polygon intersection.
+     * E.g. "London" from two sources should match; Camden vs London should not.
+     */
+    public function polygonsRepresentSamePlace(
+        array $geoA,
+        array $geoB,
+        float $minAreaRatio = 0.25,
+        float $maxAreaRatio = 4.0
+    ): bool {
+        $areaA = $this->areaOfGeoJsonGeometry($geoA);
+        $areaB = $this->areaOfGeoJsonGeometry($geoB);
+        if ($areaA === null || $areaB === null || $areaA < 1e-20 || $areaB < 1e-20) {
+            return false;
+        }
+        $ratio = $areaA / $areaB;
+        if ($ratio < $minAreaRatio || $ratio > $maxAreaRatio) {
+            return false;
+        }
+        $centroidA = $this->centroidOfGeoJsonGeometry($geoA);
+        $centroidB = $this->centroidOfGeoJsonGeometry($geoB);
+        if (!$centroidA || !$centroidB) {
+            return false;
+        }
+        $aInB = $this->pointInGeoJsonGeometry($centroidA['latitude'], $centroidA['longitude'], $geoB);
+        $bInA = $this->pointInGeoJsonGeometry($centroidB['latitude'], $centroidB['longitude'], $geoA);
+        return $aInB && $bInA;
+    }
+
+    /**
+     * Relationship between this place's boundary and another span's boundary.
+     * Returns: 'same' | 'contains' | 'contained_by' | 'overlap' | 'disjoint'.
+     * Uses centroid containment + area to distinguish same (similar size, mutual containment)
+     * vs contains/contained_by (one smaller and inside the other).
+     */
+    public function boundaryRelationshipWith(Span $other): string
+    {
+        $boundary = $this->getBoundary();
+        $otherCap = SpanCapabilityRegistry::getCapability($other, 'geospatial');
+        if (!$otherCap instanceof self) {
+            return 'disjoint';
+        }
+        $otherBoundary = $other->getBoundary();
+        if (!$boundary || !$otherBoundary) {
+            return 'disjoint';
+        }
+        $areaThis = $this->areaOfGeoJsonGeometry($boundary);
+        $areaOther = $this->areaOfGeoJsonGeometry($otherBoundary);
+        if ($areaThis === null || $areaOther === null) {
+            return 'disjoint';
+        }
+        $centroidThis = $this->centroidOfGeoJsonGeometry($boundary);
+        $centroidOther = $this->centroidOfGeoJsonGeometry($otherBoundary);
+        if (!$centroidThis || !$centroidOther) {
+            return 'disjoint';
+        }
+        $thisInOther = $this->pointInGeoJsonGeometry(
+            $centroidThis['latitude'],
+            $centroidThis['longitude'],
+            $otherBoundary
+        );
+        $otherInThis = $this->pointInGeoJsonGeometry(
+            $centroidOther['latitude'],
+            $centroidOther['longitude'],
+            $boundary
+        );
+        $ratio = $areaThis / $areaOther;
+        $samePlace = $ratio >= 0.25 && $ratio <= 4.0 && $thisInOther && $otherInThis;
+        if ($samePlace) {
+            return 'same';
+        }
+        if ($otherInThis && $areaOther < $areaThis) {
+            return 'contains';
+        }
+        if ($thisInOther && $areaThis < $areaOther) {
+            return 'contained_by';
+        }
+        if ($thisInOther || $otherInThis) {
+            return 'overlap';
+        }
+        return 'disjoint';
+    }
+
+    /**
+     * Relationship between two GeoJSON boundaries (no span required).
+     * Returns: 'same' | 'contains' | 'contained_by' | 'overlap' | 'disjoint'.
+     */
+    public function boundaryRelationshipBetween(array $geoA, array $geoB): string
+    {
+        $areaA = $this->areaOfGeoJsonGeometry($geoA);
+        $areaB = $this->areaOfGeoJsonGeometry($geoB);
+        if ($areaA === null || $areaB === null) {
+            return 'disjoint';
+        }
+        $centroidA = $this->centroidOfGeoJsonGeometry($geoA);
+        $centroidB = $this->centroidOfGeoJsonGeometry($geoB);
+        if (!$centroidA || !$centroidB) {
+            return 'disjoint';
+        }
+        $aInB = $this->pointInGeoJsonGeometry($centroidA['latitude'], $centroidA['longitude'], $geoB);
+        $bInA = $this->pointInGeoJsonGeometry($centroidB['latitude'], $centroidB['longitude'], $geoA);
+        $ratio = $areaA / $areaB;
+        $samePlace = $ratio >= 0.25 && $ratio <= 4.0 && $aInB && $bInA;
+        if ($samePlace) {
+            return 'same';
+        }
+        if ($bInA && $areaB < $areaA) {
+            return 'contains';
+        }
+        if ($aInB && $areaA < $areaB) {
+            return 'contained_by';
+        }
+        if ($aInB || $bInA) {
+            return 'overlap';
+        }
+        return 'disjoint';
+    }
+
+    /**
+     * Ordering key for "specificity": higher = more specific (e.g. building > neighbourhood > city > country).
+     * Uses OSM admin_level when available (higher number = more specific); else 1/area so smaller boundary = more specific.
+     * Used to sort places at a location from most to least specific.
+     */
+    public function getBoundarySpecificityOrder(): ?float
+    {
+        $adminLevel = $this->getPlaceAdminLevel($this->span);
+        if ($adminLevel !== null) {
+            return (float) $adminLevel;
+        }
+        $area = $this->boundaryArea();
+        if ($area === null || $area < 1e-20) {
+            return null;
+        }
+        return 1.0 / $area;
+    }
+
+    /**
+     * Get geometry type for "where this place is" in geometry terms.
+     * Returns 'point', 'polygon', or null.
+     */
+    public function getGeometryType(): ?string
+    {
+        if ($this->hasBoundary()) {
+            return 'polygon';
+        }
+        if ($this->getCoordinates() !== null) {
+            return 'point';
+        }
+        return null;
+    }
+
+    /**
+     * Whether the given point (lat, lon) is inside this place's geometry.
+     * For polygon places: point-in-polygon. For point-only places: within a small radius (0.05 km).
+     */
+    public function containsPoint(float $latitude, float $longitude): bool
+    {
+        $boundary = $this->getBoundary();
+        if ($boundary) {
+            return $this->pointInGeoJsonGeometry($latitude, $longitude, $boundary);
+        }
+        $coords = $this->getCoordinates();
+        if ($coords) {
+            $km = $this->calculateDistance(
+                (float) $coords['latitude'],
+                (float) $coords['longitude'],
+                $latitude,
+                $longitude
+            );
+            return $km <= 0.05; // 50 m tolerance for point places
+        }
+        return false;
+    }
+
+    /**
+     * Point-in-polygon for GeoJSON geometry (Polygon or MultiPolygon).
+     * Coordinates in GeoJSON are [lon, lat].
+     */
+    protected function pointInGeoJsonGeometry(float $lat, float $lon, array|object $geoJson): bool
+    {
+        $geoJson = $this->normaliseGeoJsonToArray($geoJson);
+        $type = $geoJson['type'] ?? null;
+        $coordinates = $geoJson['coordinates'] ?? null;
+        if ($type === 'Feature' && isset($geoJson['geometry'])) {
+            return $this->pointInGeoJsonGeometry($lat, $lon, $geoJson['geometry']);
+        }
+        if ($type === 'Polygon' && is_array($coordinates)) {
+            $exteriorRing = $coordinates[0] ?? null;
+            return $exteriorRing && $this->pointInRing($lon, $lat, $exteriorRing);
+        }
+        if ($type === 'MultiPolygon' && is_array($coordinates)) {
+            foreach ($coordinates as $polygon) {
+                $exteriorRing = $polygon[0] ?? null;
+                if ($exteriorRing && $this->pointInRing($lon, $lat, $exteriorRing)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return false;
+    }
+
+    /**
+     * Ray-casting point-in-polygon. Ring is array of [lon, lat] pairs (GeoJSON order).
+     */
+    protected function pointInRing(float $lon, float $lat, array $ring): bool
+    {
+        $n = count($ring);
+        if ($n < 3) {
+            return false;
+        }
+        $inside = false;
+        for ($i = 0, $j = $n - 1; $i < $n; $j = $i++) {
+            $xi = (float) ($ring[$i][0] ?? 0);
+            $yi = (float) ($ring[$i][1] ?? 0);
+            $xj = (float) ($ring[$j][0] ?? 0);
+            $yj = (float) ($ring[$j][1] ?? 0);
+            $dy = $yj - $yi;
+            if ($dy === 0.0) {
+                continue;
+            }
+            if ((($yi > $lat) !== ($yj > $lat)) && ($lon < ($xj - $xi) * ($lat - $yi) / $dy + $xi)) {
+                $inside = !$inside;
+            }
+        }
+        return $inside;
+    }
+
+    /**
+     * Signed area of a closed ring (shoelace formula). Ring is array of [lon, lat] (GeoJSON order).
+     * Returns area in "square degrees" (for relative comparison only).
+     */
+    protected function areaOfRing(array $ring): float
+    {
+        $n = count($ring);
+        if ($n < 3) {
+            return 0.0;
+        }
+        $area = 0.0;
+        for ($i = 0, $j = $n - 1; $i < $n; $j = $i++) {
+            $xi = (float) ($ring[$i][0] ?? 0);
+            $yi = (float) ($ring[$i][1] ?? 0);
+            $xj = (float) ($ring[$j][0] ?? 0);
+            $yj = (float) ($ring[$j][1] ?? 0);
+            $area += ($xi * $yj) - ($xj * $yi);
+        }
+        return $area / 2.0;
+    }
+
+    /**
+     * Centroid of a closed ring. Ring is array of [lon, lat]. Returns ['lon' => float, 'lat' => float].
+     */
+    protected function centroidOfRing(array $ring): array
+    {
+        $n = count($ring);
+        if ($n < 3) {
+            return ['lon' => 0.0, 'lat' => 0.0];
+        }
+        $area = 0.0;
+        $cx = 0.0;
+        $cy = 0.0;
+        for ($i = 0, $j = $n - 1; $i < $n; $j = $i++) {
+            $xi = (float) ($ring[$i][0] ?? 0);
+            $yi = (float) ($ring[$i][1] ?? 0);
+            $xj = (float) ($ring[$j][0] ?? 0);
+            $yj = (float) ($ring[$j][1] ?? 0);
+            $cross = ($xi * $yj) - ($xj * $yi);
+            $area += $cross;
+            $cx += ($xi + $xj) * $cross;
+            $cy += ($yi + $yj) * $cross;
+        }
+        $area *= 0.5;
+        if (abs($area) < 1e-20) {
+            return ['lon' => (float) $ring[0][0], 'lat' => (float) $ring[0][1]];
+        }
+        return [
+            'lon' => $cx / (6.0 * $area),
+            'lat' => $cy / (6.0 * $area),
+        ];
+    }
+
+    /**
+     * Normalise GeoJSON to array (handles object from JSON decode).
+     */
+    private function normaliseGeoJsonToArray(array|object $geoJson): array
+    {
+        if (is_object($geoJson)) {
+            return json_decode(json_encode($geoJson), true);
+        }
+        return $geoJson;
+    }
+
+    /**
+     * Area of GeoJSON geometry (Polygon or MultiPolygon). Exterior rings only; absolute value.
+     * Returns area in square degrees (for relative comparison / ordering only).
+     */
+    protected function areaOfGeoJsonGeometry(array $geoJson): ?float
+    {
+        $geoJson = $this->normaliseGeoJsonToArray($geoJson);
+        $type = $geoJson['type'] ?? null;
+        $coordinates = $geoJson['coordinates'] ?? null;
+        if ($type === 'Feature' && isset($geoJson['geometry'])) {
+            return $this->areaOfGeoJsonGeometry($this->normaliseGeoJsonToArray($geoJson['geometry']));
+        }
+        if ($type === 'Polygon' && is_array($coordinates)) {
+            $exterior = $coordinates[0] ?? null;
+            return $exterior ? abs($this->areaOfRing($exterior)) : null;
+        }
+        if ($type === 'MultiPolygon' && is_array($coordinates)) {
+            $total = 0.0;
+            foreach ($coordinates as $polygon) {
+                $exterior = $polygon[0] ?? null;
+                if ($exterior) {
+                    $total += abs($this->areaOfRing($exterior));
+                }
+            }
+            return $total > 0 ? $total : null;
+        }
+        return null;
+    }
+
+    /**
+     * Centroid of GeoJSON geometry (Polygon or MultiPolygon). For MultiPolygon, area-weighted.
+     * Returns ['latitude' => float, 'longitude' => float] or null.
+     */
+    protected function centroidOfGeoJsonGeometry(array $geoJson): ?array
+    {
+        $geoJson = $this->normaliseGeoJsonToArray($geoJson);
+        $type = $geoJson['type'] ?? null;
+        $coordinates = $geoJson['coordinates'] ?? null;
+        if ($type === 'Feature' && isset($geoJson['geometry'])) {
+            return $this->centroidOfGeoJsonGeometry($this->normaliseGeoJsonToArray($geoJson['geometry']));
+        }
+        if ($type === 'Polygon' && is_array($coordinates)) {
+            $exterior = $coordinates[0] ?? null;
+            if (!$exterior || count($exterior) < 3) {
+                return null;
+            }
+            $c = $this->centroidOfRing($exterior);
+            return ['latitude' => $c['lat'], 'longitude' => $c['lon']];
+        }
+        if ($type === 'MultiPolygon' && is_array($coordinates)) {
+            $sumLat = 0.0;
+            $sumLon = 0.0;
+            $totalArea = 0.0;
+            foreach ($coordinates as $polygon) {
+                $exterior = $polygon[0] ?? null;
+                if (!$exterior || count($exterior) < 3) {
+                    continue;
+                }
+                $a = abs($this->areaOfRing($exterior));
+                $c = $this->centroidOfRing($exterior);
+                $sumLat += $c['lat'] * $a;
+                $sumLon += $c['lon'] * $a;
+                $totalArea += $a;
+            }
+            if ($totalArea < 1e-20) {
+                return null;
+            }
+            return [
+                'latitude' => $sumLat / $totalArea,
+                'longitude' => $sumLon / $totalArea,
+            ];
+        }
+        return null;
+    }
+
+    /**
+     * Distance in km from the point to this place's boundary (0 if inside).
+     * Returns null if the place has no boundary.
+     */
+    public function distanceToBoundary(float $latitude, float $longitude): ?float
+    {
+        $boundary = $this->getBoundary();
+        if (!$boundary) {
+            return null;
+        }
+        if ($this->containsPoint($latitude, $longitude)) {
+            return 0.0;
+        }
+        $km = $this->distanceFromPointToGeoJsonGeometry($latitude, $longitude, $boundary);
+        return $km === null ? null : round($km, 6);
+    }
+
+    /**
+     * Minimum distance in km from point to GeoJSON polygon/multi-polygon boundary.
+     * Coordinates in GeoJSON are [lon, lat].
+     */
+    protected function distanceFromPointToGeoJsonGeometry(float $lat, float $lon, array $geoJson): ?float
+    {
+        $type = $geoJson['type'] ?? null;
+        $coordinates = $geoJson['coordinates'] ?? null;
+        if ($type === 'Feature' && isset($geoJson['geometry'])) {
+            return $this->distanceFromPointToGeoJsonGeometry($lat, $lon, $geoJson['geometry']);
+        }
+        if ($type === 'Polygon' && is_array($coordinates)) {
+            $min = null;
+            foreach ($coordinates as $ring) {
+                if (!is_array($ring) || count($ring) < 2) {
+                    continue;
+                }
+                $d = $this->distanceFromPointToRing($lon, $lat, $ring);
+                if ($d !== null && ($min === null || $d < $min)) {
+                    $min = $d;
+                }
+            }
+            return $min;
+        }
+        if ($type === 'MultiPolygon' && is_array($coordinates)) {
+            $min = null;
+            foreach ($coordinates as $polygon) {
+                if (!is_array($polygon)) {
+                    continue;
+                }
+                foreach ($polygon as $ring) {
+                    if (!is_array($ring) || count($ring) < 2) {
+                        continue;
+                    }
+                    $d = $this->distanceFromPointToRing($lon, $lat, $ring);
+                    if ($d !== null && ($min === null || $d < $min)) {
+                        $min = $d;
+                    }
+                }
+            }
+            return $min;
+        }
+        return null;
+    }
+
+    /**
+     * Distance in km from point to ring (closed polygon boundary). Ring is [lon, lat] pairs.
+     */
+    protected function distanceFromPointToRing(float $lon, float $lat, array $ring): ?float
+    {
+        $n = count($ring);
+        if ($n < 2) {
+            return null;
+        }
+        $minKm = null;
+        for ($i = 0, $j = $n - 1; $i < $n; $j = $i++) {
+            $lon1 = (float) ($ring[$j][0] ?? 0);
+            $lat1 = (float) ($ring[$j][1] ?? 0);
+            $lon2 = (float) ($ring[$i][0] ?? 0);
+            $lat2 = (float) ($ring[$i][1] ?? 0);
+            $km = $this->distancePointToSegmentKm($lat, $lon, $lat1, $lon1, $lat2, $lon2);
+            if ($minKm === null || $km < $minKm) {
+                $minKm = $km;
+            }
+        }
+        return $minKm;
+    }
+
+    /**
+     * Distance in km from point (lat, lon) to line segment (lat1,lon1)-(lat2,lon2).
+     */
+    protected function distancePointToSegmentKm(float $lat, float $lon, float $lat1, float $lon1, float $lat2, float $lon2): float
+    {
+        $dx = $lon2 - $lon1;
+        $dy = $lat2 - $lat1;
+        $lenSq = $dx * $dx + $dy * $dy;
+        if ($lenSq < 1e-20) {
+            return $this->calculateDistance($lat, $lon, $lat1, $lon1);
+        }
+        $t = (($lon - $lon1) * $dx + ($lat - $lat1) * $dy) / $lenSq;
+        $t = max(0, min(1, $t));
+        $closestLon = $lon1 + $t * $dx;
+        $closestLat = $lat1 + $t * $dy;
+        return $this->calculateDistance($lat, $lon, $closestLat, $closestLon);
+    }
+
+    /**
      * Find spans within a radius of these coordinates
      */
     public function findWithinRadius(float $latitude, float $longitude, float $radiusKm): Builder
@@ -183,6 +764,24 @@ class GeospatialCapability implements SpanCapability
             $coords1['longitude'],
             $coords2['latitude'],
             $coords2['longitude']
+        );
+    }
+
+    /**
+     * Distance in km from the given point to this place's representative point (boundary centroid or coordinates).
+     * Returns null if this place has no representative point.
+     */
+    public function distanceFromPoint(float $latitude, float $longitude): ?float
+    {
+        $point = $this->boundaryCentroid() ?? $this->getCoordinates();
+        if (!$point || !isset($point['latitude'], $point['longitude'])) {
+            return null;
+        }
+        return $this->calculateDistance(
+            $latitude,
+            $longitude,
+            (float) $point['latitude'],
+            (float) $point['longitude']
         );
     }
 
@@ -566,6 +1165,52 @@ class GeospatialCapability implements SpanCapability
     }
 
     /**
+     * Label for this place's OSM level (for grouping in Place relations card).
+     * Returns ['order' => int, 'label' => string] for sorting/display, or null if unknown.
+     * Order follows OSM admin_level (2=country, 4=state, 8=city, 9=borough, etc.).
+     */
+    public function getPlaceRelationLevelLabel(): ?array
+    {
+        $adminLevel = $this->getPlaceAdminLevel($this->span);
+        if ($adminLevel !== null) {
+            $label = $this->getPlaceRelationLevelName($adminLevel);
+            return ['order' => $adminLevel, 'label' => $label];
+        }
+        $osmData = $this->getOsmData();
+        $placeType = $osmData['place_type'] ?? $osmData['type'] ?? null;
+        if ($placeType) {
+            $label = ucfirst(str_replace('_', ' ', $placeType));
+            return ['order' => 99, 'label' => $label];
+        }
+        return null;
+    }
+
+    /**
+     * Human-readable name for OSM admin_level (Nominatim-style).
+     */
+    protected function getPlaceRelationLevelName(int $adminLevel): string
+    {
+        $names = [
+            2 => 'Country',
+            3 => 'State',
+            4 => 'State / Region',
+            5 => 'State',
+            6 => 'County / Province',
+            7 => 'County',
+            8 => 'City',
+            9 => 'Borough',
+            10 => 'District / Suburb',
+            11 => 'District',
+            12 => 'Neighbourhood',
+            13 => 'Neighbourhood',
+            14 => 'Sub-neighbourhood',
+            15 => 'Sub-neighbourhood',
+            16 => 'Building / Property',
+        ];
+        return $names[$adminLevel] ?? 'Administrative';
+    }
+
+    /**
      * Get OSM data for this place
      */
     public function getOsmData(): ?array
@@ -675,6 +1320,164 @@ class GeospatialCapability implements SpanCapability
     {
         $osmData = $this->getOsmData();
         return $osmData['display_name'] ?? null;
+    }
+
+    /**
+     * Get the nearest city name. Uses the same approach as the place relations card:
+     * PlaceLocationService finds place spans whose boundaries contain this place's point,
+     * grouped by level (City, Borough, etc.). We return the city-level containing place.
+     * For London itself or bigger we return the place's own name.
+     * Falls back to OSM hierarchy in metadata when spatial has no result.
+     */
+    public function getNearestCityName(): string
+    {
+        $fallback = $this->span->name;
+
+        if ($this->span->hasUsableGeodata()) {
+            $fromSpatial = $this->getNearestCityFromSpatialContainment();
+            if ($fromSpatial !== null) {
+                return $fromSpatial;
+            }
+        }
+
+        $osmData = $this->getOsmData();
+        if (!$osmData) {
+            return $fallback;
+        }
+
+        $hierarchy = $this->getLocationHierarchy();
+        if (empty($hierarchy)) {
+            return $fallback;
+        }
+
+        // If the place itself is city-level or larger, return its span name (not OSM display_name)
+        foreach ($hierarchy as $level) {
+            if (!($level['is_current'] ?? false)) {
+                continue;
+            }
+            $currentAdminLevel = $level['admin_level'] ?? null;
+            $currentType = $level['type'] ?? '';
+            if ($currentType !== 'road' && $currentAdminLevel !== null && $currentAdminLevel <= 8) {
+                return $this->span->name;
+            }
+            break; // only check the current place
+        }
+
+        $priorities = [
+            ['admin_level' => 8],
+            ['admin_level' => 7],
+            ['admin_level' => 6],
+            ['admin_level' => 4, 'type' => 'state'],
+            ['admin_level' => 2, 'type' => 'country'],
+        ];
+
+        $majorCityNames = [
+            'London', 'Greater London', 'Manchester', 'Birmingham', 'Liverpool', 'Leeds', 'Glasgow', 'Edinburgh',
+            'Bristol', 'Cardiff', 'Belfast', 'Newcastle', 'Sheffield', 'Nottingham', 'Leicester',
+            'Cape Town', 'City of Edinburgh',
+        ];
+
+        foreach ($priorities as $priority) {
+            foreach ($hierarchy as $level) {
+                if ($level['is_current'] ?? false) {
+                    continue;
+                }
+                $type = $level['type'] ?? '';
+                if ($type === 'road') {
+                    continue;
+                }
+                $adminLevel = $level['admin_level'] ?? null;
+                $name = $level['name'] ?? null;
+                $matchesAdminLevel = $adminLevel === $priority['admin_level'];
+                $matchesType = !isset($priority['type']) || $type === $priority['type'];
+                if ($matchesAdminLevel && $matchesType && $name) {
+                    return $name;
+                }
+                $normalizedName = $this->normalizePlaceNameForComparison($name);
+                foreach ($majorCityNames as $majorCity) {
+                    if ($normalizedName && strcasecmp($normalizedName, $this->normalizePlaceNameForComparison($majorCity)) === 0) {
+                        return $name;
+                    }
+                }
+            }
+        }
+
+        return $fallback;
+    }
+
+    private function getNearestCityFromSpatialContainment(): ?string
+    {
+        $span = $this->getNearestCitySpanFromSpatialContainment();
+        return $span?->name;
+    }
+
+    /**
+     * Get the span for the nearest city from spatial containment (for linking).
+     * Returns the city-level containing place span when available.
+     */
+    private function getNearestCitySpanFromSpatialContainment(): ?\App\Models\Span
+    {
+        $summary = app(\App\Services\PlaceLocationService::class)->getPlaceRelationSummary($this->span, 20, 0, 0);
+        if (!$summary || empty($summary['contained_by_by_level'])) {
+            return null;
+        }
+        foreach ($summary['contained_by_by_level'] as $levelGroup) {
+            $label = $levelGroup['label'] ?? '';
+            if ($label === 'City' || stripos($label, 'City') === 0) {
+                $spans = $levelGroup['spans'] ?? [];
+                $first = $spans[0] ?? null;
+                if ($first) {
+                    return $first;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Get the span to link to when displaying the nearest city.
+     * Returns the city span when we have it (from spatial or when place is city-level); otherwise null.
+     */
+    public function getNearestCitySpan(): ?\App\Models\Span
+    {
+        if ($this->span->hasUsableGeodata()) {
+            $fromSpatial = $this->getNearestCitySpanFromSpatialContainment();
+            if ($fromSpatial !== null) {
+                return $fromSpatial;
+            }
+        }
+
+        $hierarchy = $this->getLocationHierarchy();
+        if (empty($hierarchy)) {
+            return null;
+        }
+
+        // If the place itself is city-level or larger, link to it
+        foreach ($hierarchy as $level) {
+            if (!($level['is_current'] ?? false)) {
+                continue;
+            }
+            $currentAdminLevel = $level['admin_level'] ?? null;
+            $currentType = $level['type'] ?? '';
+            if ($currentType !== 'road' && $currentAdminLevel !== null && $currentAdminLevel <= 8) {
+                return $this->span;
+            }
+            break;
+        }
+
+        return null;
+    }
+
+    private function normalizePlaceNameForComparison(?string $name): string
+    {
+        $name = trim($name ?? '');
+        if (stripos($name, 'City of ') === 0) {
+            $name = substr($name, 8);
+        }
+        if (stripos($name, 'Greater ') === 0) {
+            $name = substr($name, 8);
+        }
+        return trim($name);
     }
 
     /**

@@ -2,6 +2,7 @@
 
 namespace App\Models\Traits;
 
+use App\Models\Span;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
@@ -71,6 +72,122 @@ trait HasGeospatialCapabilities
     public function getCoordinates(): ?array
     {
         return $this->geospatial()->getCoordinates();
+    }
+
+    /**
+     * Whether this place has boundary geometry (polygon) stored.
+     */
+    public function hasBoundary(): bool
+    {
+        return $this->geospatial()->hasBoundary();
+    }
+
+    /**
+     * Whether this place has enough geodata to use geospatial traits
+     * (point-in-polygon, containment, radius, etc.). True if it has a boundary
+     * and/or top-level coordinates.
+     */
+    public function hasUsableGeodata(): bool
+    {
+        return $this->geospatial()->hasUsableGeodata();
+    }
+
+    /**
+     * Summary of what geometry this place has: 'none' | 'point' | 'boundary' | 'both'.
+     * Use this when you need to distinguish places that can participate in spatial
+     * queries from those that cannot.
+     */
+    public function getGeodataLevel(): string
+    {
+        return $this->geospatial()->getGeodataLevel();
+    }
+
+    /**
+     * Get boundary GeoJSON for this place (polygon / multi-polygon), or null.
+     */
+    public function getBoundary(): ?array
+    {
+        return $this->geospatial()->getBoundary();
+    }
+
+    /**
+     * Get geometry type: 'point', 'polygon', or null.
+     */
+    public function getGeometryType(): ?string
+    {
+        return $this->geospatial()->getGeometryType();
+    }
+
+    /**
+     * Whether the given point (lat, lon) is inside this place's geometry.
+     */
+    public function containsPoint(float $latitude, float $longitude): bool
+    {
+        return $this->geospatial()->containsPoint($latitude, $longitude);
+    }
+
+    /**
+     * Distance in km from the point to this place's boundary (0 if inside). Null if no boundary.
+     */
+    public function distanceToBoundary(float $latitude, float $longitude): ?float
+    {
+        return $this->geospatial()->distanceToBoundary($latitude, $longitude);
+    }
+
+    /**
+     * Area of this place's boundary (square degrees; for relative comparison). Null if no boundary.
+     */
+    public function boundaryArea(): ?float
+    {
+        return $this->geospatial()->boundaryArea();
+    }
+
+    /**
+     * Centroid of this place's boundary. ['latitude' => float, 'longitude' => float] or null.
+     */
+    public function boundaryCentroid(): ?array
+    {
+        return $this->geospatial()->boundaryCentroid();
+    }
+
+    /**
+     * Whether this place's boundary contains the other (other's centroid inside this, other smaller). E.g. London contains Camden.
+     */
+    public function boundaryContainsBoundary(array $otherBoundaryGeoJson): bool
+    {
+        return $this->geospatial()->boundaryContainsBoundary($otherBoundaryGeoJson);
+    }
+
+    /**
+     * Whether two GeoJSON boundaries represent the same place (mutual centroid containment + similar area).
+     */
+    public function polygonsRepresentSamePlace(array $geoA, array $geoB, float $minAreaRatio = 0.25, float $maxAreaRatio = 4.0): bool
+    {
+        return $this->geospatial()->polygonsRepresentSamePlace($geoA, $geoB, $minAreaRatio, $maxAreaRatio);
+    }
+
+    /**
+     * Relationship between this place's boundary and another span's: 'same' | 'contains' | 'contained_by' | 'overlap' | 'disjoint'.
+     */
+    public function boundaryRelationshipWith(Span $other): string
+    {
+        return $this->geospatial()->boundaryRelationshipWith($other);
+    }
+
+    /**
+     * Relationship between two GeoJSON boundaries: 'same' | 'contains' | 'contained_by' | 'overlap' | 'disjoint'.
+     */
+    public function boundaryRelationshipBetween(array $geoA, array $geoB): string
+    {
+        return $this->geospatial()->boundaryRelationshipBetween($geoA, $geoB);
+    }
+
+    /**
+     * Ordering key for specificity (higher = more specific). Use OSM admin_level when set; else 1/area.
+     */
+    public function getBoundarySpecificityOrder(): ?float
+    {
+        return $this->geospatial()->getBoundarySpecificityOrder();
     }
 
     /**
@@ -200,5 +317,42 @@ trait HasGeospatialCapabilities
     public function getLocationHierarchy(): array
     {
         return $this->geospatial()->getLocationHierarchy();
+    }
+
+    /**
+     * Get the nearest city name from the hierarchy.
+     * For a road in Lambeth returns "London"; for London or bigger returns the place's own name.
+     * 
+     * @return string
+     */
+    public function getNearestCityName(): string
+    {
+        return $this->geospatial()->getNearestCityName();
+    }
+
+    /**
+     * Get the span to link to when displaying the nearest city.
+     * Returns the city span when available (from spatial or when place is city-level); otherwise null.
+     */
+    public function getNearestCitySpan(): ?Span
+    {
+        return $this->geospatial()->getNearestCitySpan();
+    }
+
+    /**
+     * Label for this place's OSM level (for grouping in Place relations card).
+     * Returns ['order' => int, 'label' => string] or null.
+     */
+    public function getPlaceRelationLevelLabel(): ?array
+    {
+        return $this->geospatial()->getPlaceRelationLevelLabel();
+    }
+
+    /**
+     * Distance in km from the given point to this place's representative point (centroid or coordinates).
+     */
+    public function distanceFromPoint(float $latitude, float $longitude): ?float
+    {
+        return $this->geospatial()->distanceFromPoint($latitude, $longitude);
     }
 } 

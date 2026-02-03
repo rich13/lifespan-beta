@@ -253,6 +253,7 @@ class Connection extends Model
             // Clear both v1 and v2 cache keys for all-connections timeline
             Cache::forget("connections_all_{$spanId}_{$userId}");
             Cache::forget("connections_all_v3_{$spanId}_{$userId}");
+            Cache::forget("connections_all_v4_{$spanId}_{$userId}");
             
             // Clear per-type connection list caches
             foreach ($connectionTypes as $type) {
@@ -264,6 +265,7 @@ class Connection extends Model
         // Also clear for guest
         Cache::forget("connections_all_{$spanId}_guest");
         Cache::forget("connections_all_v3_{$spanId}_guest");
+        Cache::forget("connections_all_v4_{$spanId}_guest");
         foreach ($connectionTypes as $type) {
             Cache::forget("connections_list_{$spanId}_{$type}_guest");
         }
@@ -277,6 +279,7 @@ class Connection extends Model
             // Clear both v1 and v2 cache keys for all-connections timeline
             Cache::forget("connections_all_{$spanId}_{$currentUserId}");
             Cache::forget("connections_all_v3_{$spanId}_{$currentUserId}");
+            Cache::forget("connections_all_v4_{$spanId}_{$currentUserId}");
             
             foreach ($connectionTypes as $type) {
                 Cache::forget("connections_list_{$spanId}_{$type}_{$currentUserId}");
