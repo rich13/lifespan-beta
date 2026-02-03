@@ -1035,11 +1035,16 @@ class SpanController extends Controller
      */
     private function getConnectionsForSpanShow(Span $span): array
     {
+        // Eager-load nested connectionSpan.connectionsAsSubject so getEffectiveSortDate() does not
+        // trigger N+1 loads for has_role connections (which check at_organisation dates)
         $parentConnections = $span->connectionsAsSubjectWithAccess()
             ->whereNotNull('connection_span_id')
             ->whereHas('connectionSpan')
             ->with([
                 'connectionSpan.type',
+                'connectionSpan.connectionsAsSubject.child.type',
+                'connectionSpan.connectionsAsSubject.type',
+                'connectionSpan.connectionsAsSubject.connectionSpan',
                 'parent.type',
                 'child.type',
                 'type',
@@ -1054,6 +1059,9 @@ class SpanController extends Controller
             ->whereHas('connectionSpan')
             ->with([
                 'connectionSpan.type',
+                'connectionSpan.connectionsAsSubject.child.type',
+                'connectionSpan.connectionsAsSubject.type',
+                'connectionSpan.connectionsAsSubject.connectionSpan',
                 'parent.type',
                 'child.type',
                 'type',

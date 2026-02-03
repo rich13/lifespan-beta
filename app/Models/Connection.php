@@ -346,8 +346,8 @@ class Connection extends Model
     {
         // For has_role connections, check for nested at_organisation dates
         if ($this->type_id === 'has_role' && $this->connectionSpan) {
-            // Load nested connections
-            $this->connectionSpan->load([
+            // Load nested connections only when not already loaded (avoids N+1 when caller eager-loads)
+            $this->connectionSpan->loadMissing([
                 'connectionsAsSubject.child.type',
                 'connectionsAsSubject.type',
                 'connectionsAsSubject.connectionSpan'

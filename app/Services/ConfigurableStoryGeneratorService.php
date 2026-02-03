@@ -14,6 +14,9 @@ class ConfigurableStoryGeneratorService
     protected $currentUser;
     protected $contextDate;
 
+    /** Request-level cache for getResidences so we don't run the same query 3+ times per span. */
+    private array $residencesCache = [];
+
     public function __construct()
     {
         $this->templates = config('story_templates');
@@ -1250,6 +1253,7 @@ class ConfigurableStoryGeneratorService
                 $query->where('type_id', 'place');
             })
             ->with(['child', 'connectionSpan'])
+            ->limit(50)
             ->get();
 
         // Find the best matching residence for birth location
@@ -1445,12 +1449,18 @@ class ConfigurableStoryGeneratorService
 
     protected function getResidences(Span $person): Collection
     {
-        return $person->connectionsAsSubjectWithAccess($this->currentUser)
+        $cacheKey = $person->id;
+        if (isset($this->residencesCache[$cacheKey])) {
+            return $this->residencesCache[$cacheKey];
+        }
+
+        $residences = $person->connectionsAsSubjectWithAccess($this->currentUser)
             ->where('type_id', 'residence')
             ->whereHas('child', function ($query) {
                 $query->where('type_id', 'place');
             })
             ->with(['child', 'connectionSpan'])
+            ->limit(100)
             ->get()
             ->map(function ($connection) {
                 $connectionSpan = $connection->connectionSpan;
@@ -1480,6 +1490,10 @@ class ConfigurableStoryGeneratorService
                 return sprintf('%08d-%02d-%02d', $year, $month, $day);
             })
             ->values();
+
+        $this->residencesCache[$cacheKey] = $residences;
+
+        return $residences;
     }
 
     protected function getResidencePlaces(Span $person): string

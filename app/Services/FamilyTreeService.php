@@ -14,15 +14,21 @@ class FamilyTreeService
     private static array $cousinsBySpanId = [];
 
     /**
-     * Get all ancestors of a person span up to a certain number of generations
+     * Get all ancestors of a person span up to a certain number of generations.
+     * Cached (like getDescendants) to avoid repeated traversal on span show / story generation.
      */
     public function getAncestors(Span $span, int $generations = 2): Collection
     {
-        $ancestors = collect();
-        $this->traverseAncestors($span, $ancestors, $generations);
-        return $ancestors->unique(function ($item) {
-            return $item['span']->id;
-        })->values();
+        $cachePrefix = app()->environment();
+        $cacheKey = "{$cachePrefix}:ancestors_{$span->id}_{$generations}";
+
+        return Cache::remember($cacheKey, 3600, function () use ($span, $generations) {
+            $ancestors = collect();
+            $this->traverseAncestors($span, $ancestors, $generations);
+            return $ancestors->unique(function ($item) {
+                return $item['span']->id;
+            })->values();
+        });
     }
 
     /**

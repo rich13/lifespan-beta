@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Span;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Service for querying place spans by location in space.
@@ -188,6 +189,24 @@ class PlaceLocationService
      * @return array{contains_count: int|null, contains_sample: array<Span>, contained_by: array<Span>, near: array<Span>}|null
      */
     public function getPlaceRelationSummary(Span $place, int $containedByLimit = 20, int $nearLimit = 20, int $containsSampleLimit = 20): ?array
+    {
+        $point = $place->boundaryCentroid() ?? $place->getCoordinates();
+        if (!$point || !isset($point['latitude'], $point['longitude'])) {
+            return null;
+        }
+
+        $cacheKey = sprintf('place_relation_summary:%s:%d:%d:%d', $place->id, $containedByLimit, $nearLimit, $containsSampleLimit);
+        $cacheTtl = (int) config('app.span_show_cache_ttl', 900);
+
+        return Cache::remember($cacheKey, $cacheTtl, function () use ($place, $containedByLimit, $nearLimit, $containsSampleLimit) {
+            return $this->computePlaceRelationSummary($place, $containedByLimit, $nearLimit, $containsSampleLimit);
+        });
+    }
+
+    /**
+     * Compute place relation summary (uncached). Used by getPlaceRelationSummary after cache lookup.
+     */
+    private function computePlaceRelationSummary(Span $place, int $containedByLimit, int $nearLimit, int $containsSampleLimit): ?array
     {
         $point = $place->boundaryCentroid() ?? $place->getCoordinates();
         if (!$point || !isset($point['latitude'], $point['longitude'])) {
