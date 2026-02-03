@@ -35,6 +35,8 @@ class Kernel extends ConsoleKernel
             Commands\ImportYaml::class,
             Commands\DatabaseCreateCommand::class,
             Commands\WarmDesertIslandDiscsCache::class,
+            Commands\AnalysePlaqueResidencePatterns::class,
+            Commands\ListPlaquePersonPlaceCandidates::class,
         ];
     }
 }

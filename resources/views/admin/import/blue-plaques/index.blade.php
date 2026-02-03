@@ -135,6 +135,44 @@
                         </div>
                     </div>
 
+                    <!-- Search by person: import a single plaque -->
+                    <div class="row mb-4" id="searchByPersonSection">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0">
+                                        <i class="bi bi-person-search me-2"></i>
+                                        Import a specific person's plaque
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <p class="text-muted small mb-3">
+                                        Search the CSV by person name and import just that plaque if it is not already in the database. Uses the same import logic as batch import. Only available for London Blue or London Green plaques.
+                                    </p>
+                                    <div class="row align-items-end">
+                                        <div class="col-md-4 mb-2">
+                                            <label for="personSearchQuery" class="form-label">Person name</label>
+                                            <input type="text" class="form-control" id="personSearchQuery" placeholder="e.g. Charles Dickens or Dickens" maxlength="200">
+                                        </div>
+                                        <div class="col-md-4 mb-2">
+                                            <button type="button" class="btn btn-outline-primary" id="searchPersonBtn">
+                                                <i class="bi bi-search me-2"></i>Search
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div id="searchPersonResults" class="mt-3" style="display: none;">
+                                        <h6 class="mb-2">Results</h6>
+                                        <div id="searchPersonResultsList"></div>
+                                    </div>
+                                    <div id="searchPersonEmpty" class="mt-3 alert alert-info" style="display: none;">
+                                        No plaques found for that name.
+                                    </div>
+                                    <div id="searchPersonError" class="mt-3 alert alert-danger" style="display: none;"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Progress Section -->
                     <div class="row mb-4" id="progressSection" style="display: none;">
                         <!-- Left Column: Progress -->
@@ -353,8 +391,109 @@ $(document).ready(function() {
         loadImportStatus();
         loadStats();
         $('#importBackgroundBtn').toggle($('input[name="plaqueType"]:checked').val() !== 'custom');
+        $('#searchPersonSection').toggle($('input[name="plaqueType"]:checked').val() !== 'custom');
     });
     $('#importBackgroundBtn').toggle($('input[name="plaqueType"]:checked').val() !== 'custom');
+    $('#searchPersonSection').toggle($('input[name="plaqueType"]:checked').val() !== 'custom');
+
+    // Search by person
+    $('#searchPersonBtn').click(function() {
+        const plaqueType = $('input[name="plaqueType"]:checked').val();
+        if (plaqueType === 'custom') {
+            alert('Search by person is only available for London Blue or London Green plaques.');
+            return;
+        }
+        const query = $.trim($('#personSearchQuery').val());
+        if (!query) {
+            alert('Please enter a person name to search.');
+            return;
+        }
+        const $btn = $(this);
+        $btn.prop('disabled', true).html('<i class="bi bi-hourglass-split me-2"></i>Searching...');
+        $('#searchPersonError').hide().empty();
+        $('#searchPersonEmpty').hide();
+        $('#searchPersonResults').hide();
+
+        $.post('{{ route("admin.import.blue-plaques.search-person") }}', {
+            plaque_type: plaqueType,
+            person_query: query
+        })
+        .done(function(response) {
+            if (!response.success) {
+                $('#searchPersonError').text(response.message || 'Search failed').show();
+                return;
+            }
+            if (!response.matches || response.matches.length === 0) {
+                $('#searchPersonEmpty').show();
+                return;
+            }
+            let html = '<div class="list-group">';
+            response.matches.forEach(function(m) {
+                const title = (m.title || 'Untitled plaque').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                const personName = (m.person_display_name || m.lead_subject_name || 'Unknown').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                const address = (m.address || 'Unknown address').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                html += `
+                    <div class="list-group-item list-group-item-action" data-plaque-index="${m.index}">
+                        <div class="d-flex w-100 justify-content-between align-items-start flex-wrap">
+                            <div class="mb-1">
+                                <strong>${personName}</strong>
+                                <br><small class="text-muted">${title}</small>
+                                <br><small class="text-muted">${address}</small>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-success import-single-plaque-btn" data-plaque-index="${m.index}">
+                                <i class="bi bi-download me-1"></i>Import
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            $('#searchPersonResultsList').html(html);
+            $('#searchPersonResults').show();
+        })
+        .fail(function(xhr) {
+            $('#searchPersonError').text('Search failed: ' + (xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Unknown error')).show();
+        })
+        .always(function() {
+            $btn.prop('disabled', false).html('<i class="bi bi-search me-2"></i>Search');
+        });
+    });
+
+    // Import single plaque from search results (delegated)
+    $(document).on('click', '.import-single-plaque-btn', function() {
+        const plaqueType = $('input[name="plaqueType"]:checked').val();
+        if (plaqueType === 'custom') return;
+        const plaqueIndex = $(this).data('plaque-index');
+        const $btn = $(this);
+        const $item = $btn.closest('.list-group-item');
+        $btn.prop('disabled', true).html('<i class="bi bi-hourglass-split me-1"></i>Importing...');
+
+        $.post('{{ route("admin.import.blue-plaques.process-single") }}', {
+            plaque_type: plaqueType,
+            plaque_index: plaqueIndex
+        })
+        .done(function(response) {
+            if (response.success) {
+                const skipped = response.details && response.details.skipped;
+                if (skipped) {
+                    $btn.removeClass('btn-success').addClass('btn-secondary').html('<i class="bi bi-check2 me-1"></i>Already in database');
+                } else {
+                    $btn.removeClass('btn-success').addClass('btn-secondary').html('<i class="bi bi-check2 me-1"></i>Imported');
+                    if (response.details && response.details.plaque_id) {
+                        const url = '{{ url("/spans") }}/' + response.details.plaque_id;
+                        $item.append('<br><small><a href="' + url + '" target="_blank">View plaque</a></small>');
+                    }
+                }
+            } else {
+                $btn.prop('disabled', false).html('<i class="bi bi-download me-1"></i>Import');
+                alert(response.message || 'Import failed');
+            }
+        })
+        .fail(function(xhr) {
+            $btn.prop('disabled', false).html('<i class="bi bi-download me-1"></i>Import');
+            alert('Import failed: ' + (xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Unknown error'));
+        });
+    });
 
     // Preview Data
     $('#previewBtn').click(function() {

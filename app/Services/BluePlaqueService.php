@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Connection;
 use App\Models\Span;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -474,6 +475,15 @@ class BluePlaqueService
                         'timestamp' => now()->format('H:i:s'),
                         'message' => "❌ Exception processing plaque: {$plaqueName} - " . $e->getMessage()
                     ];
+                    // Fatal DB errors (e.g. disk full, transaction aborted) leave the transaction
+                    // in a failed state; rethrow so the batch transaction rolls back and we don't
+                    // cascade "current transaction is aborted" for every remaining plaque.
+                    if ($e instanceof QueryException && $e->getCode() === '25P02') {
+                        throw $e;
+                    }
+                    if (str_contains($e->getMessage(), 'transaction is aborted') || str_contains($e->getMessage(), 'No space left on device')) {
+                        throw $e;
+                    }
                 }
 
                 if ($onProgress && $totalPlaques !== null && $batchOffset !== null) {
@@ -1204,6 +1214,15 @@ class BluePlaqueService
                 'line' => $e->getLine(),
                 'trace' => $e->getTraceAsString()
             ]);
+
+            // Fatal DB errors (transaction aborted, disk full) leave the transaction in a failed
+            // state; rethrow so the batch transaction rolls back and we don't cascade errors.
+            if ($e instanceof QueryException && $e->getCode() === '25P02') {
+                throw $e;
+            }
+            if (str_contains($e->getMessage(), 'transaction is aborted') || str_contains($e->getMessage(), 'No space left on device')) {
+                throw $e;
+            }
             
             return [
                 'success' => false,

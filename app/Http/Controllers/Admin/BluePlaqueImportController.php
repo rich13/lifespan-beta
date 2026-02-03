@@ -25,6 +25,83 @@ class BluePlaqueImportController extends Controller
     }
     
     /**
+     * Search the CSV for plaques by person name and return matches (for single-plaque import).
+     * Only available for London Blue/Green (CSV URL) sources. Uses existing import logic
+     * when user chooses to import a result via processSingle.
+     */
+    public function searchPerson(Request $request)
+    {
+        $request->validate([
+            'plaque_type' => 'required|string|in:london_blue,london_green',
+            'person_query' => 'required|string|min:1|max:200',
+        ]);
+
+        if ($request->plaque_type === 'custom') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Search by person is only available for London Blue or London Green plaques.',
+            ], 400);
+        }
+
+        try {
+            $config = BluePlaqueService::getConfigForType($request->plaque_type);
+            $service = new BluePlaqueService($config);
+
+            $plaques = $service->getParsedPlaques();
+
+            if ($request->plaque_type === 'london_green') {
+                $plaques = array_values(array_filter($plaques, function ($plaque) {
+                    return ($plaque['colour'] ?? 'blue') === 'green';
+                }));
+            }
+
+            $query = trim($request->person_query);
+            $queryLower = mb_strtolower($query);
+            $matches = [];
+
+            // Index must match what processSingle uses (filtered array for london_green, full for london_blue)
+            foreach ($plaques as $index => $plaque) {
+                $name = trim($plaque['lead_subject_name'] ?? '');
+                $surname = trim($plaque['lead_subject_surname'] ?? '');
+                $fullName = trim($name . ' ' . $surname);
+                $reverseName = trim($surname . ' ' . $name);
+                $searchable = mb_strtolower($fullName . ' ' . $reverseName);
+
+                if ($searchable === '' || mb_strpos($searchable, $queryLower) === false) {
+                    continue;
+                }
+
+                $matches[] = [
+                    'index' => $index,
+                    'id' => $plaque['id'] ?? null,
+                    'title' => $plaque['title'] ?? null,
+                    'inscription' => $plaque['inscription'] ?? null,
+                    'address' => $plaque['address'] ?? null,
+                    'lead_subject_name' => $name,
+                    'lead_subject_surname' => $surname,
+                    'person_display_name' => $fullName ?: ($surname ?: 'Unknown'),
+                    'colour' => $plaque['colour'] ?? 'blue',
+                    'erected' => $plaque['erected'] ?? null,
+                ];
+            }
+
+            return response()->json([
+                'success' => true,
+                'query' => $query,
+                'matches' => $matches,
+                'count' => count($matches),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Blue plaque person search failed: ' . $e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Search failed: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Download and preview the data (one plaque at a time with validation)
      */
     public function preview(Request $request)
