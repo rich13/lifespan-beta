@@ -48,6 +48,29 @@ class MusicBrainzCoverArtServiceTest extends TestCase
         $this->assertSame($instance1, $instance2);
     }
 
+    public function test_404_no_cover_art_is_cached_to_avoid_duplicate_fetches()
+    {
+        Log::shouldReceive('info')->withAnyArgs()->andReturnNull();
+
+        $releaseGroupId = 'bca9280e-28b4-327f-8fe0-fd918579e486';
+        Http::fake([
+            'https://coverartarchive.org/*' => Http::response(null, 404),
+        ]);
+
+        $service = MusicBrainzCoverArtService::getInstance();
+        $service->clearCache($releaseGroupId);
+
+        $result1 = $service->getCoverArt($releaseGroupId);
+        $this->assertNull($result1);
+
+        // Second call must use cache (no duplicate API request)
+        $result2 = $service->getCoverArt($releaseGroupId);
+        $this->assertNull($result2);
+
+        $cacheKey = "coverart_{$releaseGroupId}";
+        $this->assertTrue(Cache::has($cacheKey), '404 result should be cached so we do not refetch');
+    }
+
     public function test_cache_clearing_works()
     {
         $service = MusicBrainzCoverArtService::getInstance();

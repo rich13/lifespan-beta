@@ -90,6 +90,9 @@ class MusicBrainzCoverArtService
         return $response;
     }
 
+    /** Cache wrapper key so we can store "no cover art" (null) and distinguish from cache miss */
+    private const CACHE_RESULT_KEY = '_result';
+
     /**
      * Get cover art information for a release group
      * 
@@ -98,17 +101,16 @@ class MusicBrainzCoverArtService
      */
     public function getCoverArt(string $releaseGroupId): ?array
     {
-        // Cache key for this release group
+        // Cache key for this release group. We store a wrapper array so that
+        // "no cover art" (null) is cached and not treated as a cache miss.
         $cacheKey = "coverart_{$releaseGroupId}";
-        
-        // Try to get from cache first
-        $cachedData = Cache::get($cacheKey);
-        if ($cachedData !== null) {
+        $wrapper = Cache::get($cacheKey);
+        if ($wrapper !== null && is_array($wrapper) && array_key_exists(self::CACHE_RESULT_KEY, $wrapper)) {
             Log::info('Cover art retrieved from cache', [
                 'release_group_id' => $releaseGroupId,
                 'cached' => true
             ]);
-            return $cachedData;
+            return $wrapper[self::CACHE_RESULT_KEY];
         }
 
         Log::info('Fetching cover art from Cover Art Archive', [
@@ -123,16 +125,14 @@ class MusicBrainzCoverArtService
                 'release_group_id' => $releaseGroupId,
                 'error' => $e->getMessage(),
             ]);
-            // Cache the null result for a short time to avoid repeated failed requests
-            Cache::put($cacheKey, null, 300); // 5 minutes for connection errors
+            $this->putCoverArtCache($cacheKey, null, 300); // 5 minutes for connection errors
             return null;
         } catch (\Exception $e) {
             Log::error('Unexpected error fetching cover art', [
                 'release_group_id' => $releaseGroupId,
                 'error' => $e->getMessage(),
             ]);
-            // Cache the null result for a short time
-            Cache::put($cacheKey, null, 300); // 5 minutes for unexpected errors
+            $this->putCoverArtCache($cacheKey, null, 300); // 5 minutes for unexpected errors
             return null;
         }
 
@@ -141,8 +141,7 @@ class MusicBrainzCoverArtService
                 Log::info('No cover art found for release group', [
                     'release_group_id' => $releaseGroupId
                 ]);
-                // Cache the null result for a shorter time to avoid repeated 404 requests
-                Cache::put($cacheKey, null, 3600); // 1 hour for 404s
+                $this->putCoverArtCache($cacheKey, null, 3600); // 1 hour for 404s
                 return null;
             }
             
@@ -163,10 +162,17 @@ class MusicBrainzCoverArtService
             'sample_image' => $data['images'][0] ?? null
         ]);
 
-        // Cache the successful response for 24 hours
-        Cache::put($cacheKey, $data, 86400); // 24 hours
+        $this->putCoverArtCache($cacheKey, $data, 86400); // 24 hours
 
         return $data;
+    }
+
+    /**
+     * Store cover art result in cache using a wrapper so null (no cover) is distinguishable from a miss.
+     */
+    protected function putCoverArtCache(string $cacheKey, ?array $result, int $ttlSeconds): void
+    {
+        Cache::put($cacheKey, [self::CACHE_RESULT_KEY => $result], $ttlSeconds);
     }
 
     /**
