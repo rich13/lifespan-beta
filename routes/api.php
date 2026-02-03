@@ -332,7 +332,8 @@ Route::middleware('auth')->group(function () {
                     'format' => 'json',
                     'addressdetails' => 1,
                     'extratags' => 1,
-                    'namedetails' => 1
+                    'namedetails' => 1,
+                    'polygon_geojson' => 1,
                 ]);
                 
                 if ($reverseResult->successful()) {
@@ -440,7 +441,8 @@ Route::middleware(['auth', 'admin'])->group(function () {
                     'format' => 'json',
                     'addressdetails' => 1,
                     'extratags' => 1,
-                    'namedetails' => 1
+                    'namedetails' => 1,
+                    'polygon_geojson' => 1,
                 ]);
                 
                 if ($reverseResult->successful()) {

@@ -1740,7 +1740,8 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                             'Accept-Language' => 'en'
                         ])->get('https://nominatim.openstreetmap.org/reverse', [
                             'lat' => $lat, 'lon' => $lng, 'format' => 'json',
-                            'addressdetails' => 1, 'extratags' => 1, 'namedetails' => 1
+                            'addressdetails' => 1, 'extratags' => 1, 'namedetails' => 1,
+                            'polygon_geojson' => 1,
                         ]);
                         if ($reverseResult->successful()) {
                             $reverseData = $reverseResult->json();
