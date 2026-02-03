@@ -312,7 +312,7 @@
         $statistics[] = [
             'text' => "there " . ($photosCount === 1 ? 'is' : 'are') . " {$photosCount} photo" . ($photosCount !== 1 ? 's' : '') . " featuring you",
             'icon' => 'bi-camera',
-            'link' => route('photos.index', ['features' => $personalSpan->id]),
+            'link' => route('photos.of', $personalSpan),
         ];
     }
     

@@ -253,9 +253,19 @@
                                     </div>
                                 @else
                                     <div class="mb-3">
-                                        <div class="alert alert-warning small mb-0">
-                                            <i class="bi bi-exclamation-triangle me-1"></i>
-                                            No coordinates available. Use the re-geocode button to add location data.
+                                        <div class="alert alert-warning small mb-0 d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                            <span>
+                                                <i class="bi bi-exclamation-triangle me-1"></i>
+                                                No coordinates available. Use the re-geocode button to add location data.
+                                            </span>
+                                            @auth
+                                                @if(Auth::user()->getEffectiveAdminStatus())
+                                                    <button type="button" class="btn btn-sm btn-outline-secondary" id="regeocode-btn-no-coords">
+                                                        <i class="bi bi-geo-alt me-1"></i>
+                                                        Re-geocode
+                                                    </button>
+                                                @endif
+                                            @endauth
                                         </div>
                                     </div>
                                 @endif
@@ -334,6 +344,144 @@
                                 </div>
                             </div>
                         </div>
+
+                        <!-- Place relations (right column; subcards by relation type, place links as small buttons) -->
+                        <div class="card mb-3">
+                            <div class="card-header d-flex flex-wrap align-items-center gap-2">
+                                <h6 class="card-title mb-0">
+                                    <i class="bi bi-geo-alt me-2"></i>
+                                    Place relations
+                                </h6>
+                                @if(isset($geodataLevel))
+                                    @if($geodataLevel === 'none')
+                                        <span class="badge bg-secondary">Not geo-aware</span>
+                                    @else
+                                        <span class="badge bg-success">Geo-aware</span>
+                                        <span class="badge bg-light text-dark border">{{ $geodataLevel }}</span>
+                                    @endif
+                                @endif
+                            </div>
+                            <div class="card-body">
+                                @php
+                                    $otherPlacesSameOsm = $span ? collect($duplicateNominatimPlaces ?? [])->filter(fn ($dup) => $dup->id !== $span->id)->values() : collect([]);
+                                @endphp
+                                @if($otherPlacesSameOsm->isNotEmpty())
+                                    <div class="alert alert-warning py-2 px-3 mb-3 small" role="alert">
+                                        <strong>Duplicate OSM identity:</strong> This place shares the same Nominatim/OSM identity (same imported ID and coordinates) as
+                                        @foreach($otherPlacesSameOsm as $dup)
+                                            <a href="{{ route('places.show', $dup->id) }}" class="alert-link">{{ $dup->name ?: 'Place (unnamed)' }}</a>@if(!$loop->last),@endif
+                                        @endforeach
+                                        . Consider merging or disambiguating.
+                                    </div>
+                                @endif
+                                @if(isset($geodataLevel) && $geodataLevel === 'none')
+                                    <p class="mb-0 text-muted small">
+                                        Re-geocode this place to add location data and enable geo-aware traits.
+                                    </p>
+                                @elseif(isset($placeRelationSummary) && $placeRelationSummary !== null)
+                                    @php
+                                        $hasContains = (int) ($placeRelationSummary['contains_count'] ?? 0) > 0;
+                                        $hasInside = !empty($placeRelationSummary['contained_by_by_level']) || !empty($placeRelationSummary['contained_by']);
+                                        $hasNear = !empty($placeRelationSummary['near_by_level']) || !empty($placeRelationSummary['near']);
+                                        $hasAny = $hasContains || $hasInside || $hasNear;
+                                    @endphp
+
+                                    @if($hasContains)
+                                        <div class="card border mb-2">
+                                            <div class="card-header py-1 px-2 bg-light">
+                                                <strong class="small">Contains</strong>
+                                                <span class="text-muted small ms-1">{{ $placeRelationSummary['contains_count'] === 1 ? '1 place' : $placeRelationSummary['contains_count'] . ' places' }}</span>
+                                            </div>
+                                            <div class="card-body py-2 px-2">
+                                                @if(!empty($placeRelationSummary['contains_sample_by_level']))
+                                                    @foreach($placeRelationSummary['contains_sample_by_level'] as $levelGroup)
+                                                        <div class="mb-2 small">
+                                                            <span class="text-muted fw-semibold d-block mb-1">{{ $levelGroup['label'] }}</span>
+                                                            <div class="d-flex flex-wrap gap-1">
+                                                                @foreach($levelGroup['spans'] as $contained)
+                                                                    <a href="{{ route('places.show', $contained->id) }}" class="btn btn-sm btn-outline-primary">{{ $contained->name }}</a>
+                                                                @endforeach
+                                                            </div>
+                                                        </div>
+                                                    @endforeach
+                                                @elseif(!empty($placeRelationSummary['contains_sample']))
+                                                    <div class="d-flex flex-wrap gap-1">
+                                                        @foreach($placeRelationSummary['contains_sample'] as $contained)
+                                                            <a href="{{ route('places.show', $contained->id) }}" class="btn btn-sm btn-outline-primary">{{ $contained->name }}</a>
+                                                        @endforeach
+                                                    </div>
+                                                @endif
+                                            </div>
+                                        </div>
+                                    @endif
+
+                                    @if($hasInside)
+                                        <div class="card border mb-2">
+                                            <div class="card-header py-1 px-2 bg-light">
+                                                <strong class="small">Inside</strong>
+                                            </div>
+                                            <div class="card-body py-2 px-2">
+                                                @if(!empty($placeRelationSummary['contained_by_by_level']))
+                                                    @foreach($placeRelationSummary['contained_by_by_level'] as $levelGroup)
+                                                        <div class="mb-2 small">
+                                                            <span class="text-muted fw-semibold d-block mb-1">{{ $levelGroup['label'] }}</span>
+                                                            <div class="d-flex flex-wrap gap-1">
+                                                                @foreach($levelGroup['spans'] as $parent)
+                                                                    <a href="{{ route('places.show', $parent->id) }}" class="btn btn-sm btn-outline-primary">{{ $parent->name }}</a>
+                                                                @endforeach
+                                                            </div>
+                                                        </div>
+                                                    @endforeach
+                                                @else
+                                                    <div class="d-flex flex-wrap gap-1">
+                                                        @foreach($placeRelationSummary['contained_by'] as $parent)
+                                                            <a href="{{ route('places.show', $parent->id) }}" class="btn btn-sm btn-outline-primary">{{ $parent->name }}</a>
+                                                        @endforeach
+                                                    </div>
+                                                @endif
+                                            </div>
+                                        </div>
+                                    @endif
+
+                                    @if($hasNear)
+                                        <div class="card border mb-2">
+                                            <div class="card-header py-1 px-2 bg-light">
+                                                <strong class="small">Near</strong>
+                                            </div>
+                                            <div class="card-body py-2 px-2">
+                                                @if(!empty($placeRelationSummary['near_by_level']))
+                                                    @foreach($placeRelationSummary['near_by_level'] as $levelGroup)
+                                                        <div class="mb-2 small">
+                                                            <span class="text-muted fw-semibold d-block mb-1">{{ $levelGroup['label'] }}</span>
+                                                            <div class="d-flex flex-wrap gap-1">
+                                                                @foreach($levelGroup['spans'] as $nearby)
+                                                                    <a href="{{ route('places.show', $nearby->id) }}" class="btn btn-sm btn-outline-primary">{{ $nearby->name }}</a>
+                                                                @endforeach
+                                                            </div>
+                                                        </div>
+                                                    @endforeach
+                                                @else
+                                                    <div class="d-flex flex-wrap gap-1">
+                                                        @foreach($placeRelationSummary['near'] as $nearby)
+                                                            <a href="{{ route('places.show', $nearby->id) }}" class="btn btn-sm btn-outline-primary">{{ $nearby->name }}</a>
+                                                        @endforeach
+                                                    </div>
+                                                @endif
+                                            </div>
+                                        </div>
+                                    @endif
+
+                                    @if(!$hasAny)
+                                        <p class="mb-0 text-muted small">No other place relations at this location.</p>
+                                    @endif
+
+                                @else
+                                    <p class="mb-0 text-muted small">
+                                        No location point; place relations are not available. Re-geocode to add coordinates or boundary.
+                                    </p>
+                                @endif
+                            </div>
+                        </div>
                         
                         <!-- Status -->
                         @if($span)
@@ -390,6 +538,46 @@
     </div>
 </div>
 
+@if($span && Auth::check() && Auth::user()->getEffectiveAdminStatus())
+<!-- Re-geocode modal: search Nominatim and pick result -->
+<div class="modal fade" id="regeocode-modal" tabindex="-1" aria-labelledby="regeocode-modal-label" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="regeocode-modal-label">
+                    <i class="bi bi-geo-alt me-2"></i>Re-geocode place
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-2">Search OpenStreetMap (Nominatim) and choose the correct result to update this place.</p>
+                <div class="input-group mb-2">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control" id="regeocode-search-query" placeholder="e.g. Edinburgh, Scotland" value="{{ $span->name ?? '' }}">
+                    <button type="button" class="btn btn-primary" id="regeocode-search-btn">Search</button>
+                </div>
+                <div class="mb-3">
+                    <label for="regeocode-filter-type" class="form-label small text-muted mb-1">Narrow by type</label>
+                    <select class="form-select form-select-sm" id="regeocode-filter-type" title="Filter results by OSM type (e.g. suburb vs road)">
+                        <option value="any">Any</option>
+                        <option value="place">Place (suburb, neighbourhood, village, city…)</option>
+                        <option value="road">Road / Street</option>
+                        <option value="administrative">Administrative (boundary)</option>
+                        <option value="historic">Historic (memorial, blue plaque, etc.)</option>
+                    </select>
+                </div>
+                <div id="regeocode-results" class="border rounded p-2" style="min-height: 120px;">
+                    <p class="text-muted small mb-0">Enter a query and click Search, or edit the query to disambiguate (e.g. add country or region).</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            </div>
+        </div>
+    </div>
+</div>
+@endif
+
 <!-- Leaflet CSS -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
@@ -440,17 +628,11 @@ document.addEventListener('DOMContentLoaded', function() {
         })
     }).addTo(map);
     
-    // Handle boundary display for larger administrative areas
+    // Show boundary whenever the place has boundary geometry (point is always shown above)
     @php
-        if ($span) {
-            $osmData = $span->getOsmData();
-            $boundaryPlaceTypes = ['country', 'state', 'region', 'province', 'administrative', 'city'];
-            $shouldShowBoundary = $osmData && in_array($osmData['place_type'] ?? null, $boundaryPlaceTypes);
-        } else {
-            $shouldShowBoundary = false;
-        }
+        $shouldShowBoundary = $span && $span->hasBoundary();
     @endphp
-    
+
         @if($span && $shouldShowBoundary)
         $.ajax({
             url: '{{ $span ? route('places.boundary', $span->id) : '#' }}',
@@ -464,7 +646,9 @@ document.addEventListener('DOMContentLoaded', function() {
                             color: '#3388ff',
                             weight: 2,
                             opacity: 0.8,
-                            fill: false
+                            fill: true,
+                            fillColor: '#3388ff',
+                            fillOpacity: 0.25
                         }
                     }).addTo(map);
                     
@@ -578,66 +762,143 @@ document.addEventListener('DOMContentLoaded', function() {
     
     window.addEventListener('resize', resizeMap);
     
-    // Re-geocode place function for admin users
+    // Re-geocode modal: open on button click, search Nominatim, pick result to import
     function setupRegeocodeButton(buttonId) {
         const regeocodeBtn = document.getElementById(buttonId);
-        if (regeocodeBtn) {
-            regeocodeBtn.addEventListener('click', function() {
-                const btn = this;
-                const originalText = btn.innerHTML;
-                btn.disabled = true;
-                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Re-geocoding...';
-                
-                // Get current slug to detect if it changes
-                const currentSlug = '{{ $span->slug ?? "" }}';
-                
-                fetch('{{ $span ? route("admin.places.fetch-osm-data", $span->id) : "#" }}', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                    },
-                    body: JSON.stringify({
-                        old_slug: currentSlug
+        const modalEl = document.getElementById('regeocode-modal');
+        const searchInput = document.getElementById('regeocode-search-query');
+        const searchBtn = document.getElementById('regeocode-search-btn');
+        const resultsEl = document.getElementById('regeocode-results');
+        if (!regeocodeBtn || !modalEl) { return; }
+        regeocodeBtn.addEventListener('click', function() {
+            if (searchInput) { searchInput.value = {!! json_encode($span->name ?? '') !!}; }
+            if (resultsEl) {
+                resultsEl.innerHTML = '<p class="text-muted small mb-0">Enter a query and click Search, or edit the query to disambiguate (e.g. add country or region).</p>';
+            }
+            const modal = window.bootstrap && window.bootstrap.Modal ? new window.bootstrap.Modal(modalEl) : null;
+            if (modal) { modal.show(); }
+            if (searchInput) { searchInput.focus(); }
+        });
+    }
+
+    function runRegeocodeNominatimSearch() {
+        const searchInput = document.getElementById('regeocode-search-query');
+        const searchBtn = document.getElementById('regeocode-search-btn');
+        const resultsEl = document.getElementById('regeocode-results');
+        if (!searchInput || !resultsEl) { return; }
+        const query = searchInput.value.trim();
+        if (!query) {
+            resultsEl.innerHTML = '<p class="text-warning small mb-0">Enter a search query.</p>';
+            return;
+        }
+        if (searchBtn) { searchBtn.disabled = true; }
+        resultsEl.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div><p class="mt-2 text-muted small mb-0">Searching Nominatim...</p></div>';
+        const params = new URLSearchParams({ q: query, format: 'json', limit: '15', addressdetails: '1', extratags: '1', namedetails: '1', polygon_geojson: '1' });
+        fetch('https://nominatim.openstreetmap.org/search?' + params, {
+            headers: { 'User-Agent': '{{ config("app.user_agent") }}', 'Accept-Language': 'en' }
+        })
+        .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function(data) {
+            if (searchBtn) { searchBtn.disabled = false; }
+            if (!data || data.length === 0) {
+                resultsEl.innerHTML = '<p class="text-muted small mb-0">No results. Try a different query (e.g. add country or region).</p>';
+                return;
+            }
+            var filterType = (document.getElementById('regeocode-filter-type') || {}).value || 'any';
+            if (filterType !== 'any') {
+                var cls = function(r) { return (r.class || '').toLowerCase(); };
+                var typ = function(r) { return (r.type || '').toLowerCase(); };
+                data = data.filter(function(r) {
+                    if (filterType === 'place') {
+                        return cls(r) === 'place' || ['suburb','neighbourhood','village','hamlet','town','city','locality','district','quarter'].indexOf(typ(r)) !== -1;
+                    }
+                    if (filterType === 'road') {
+                        return cls(r) === 'highway' || ['road','street','residential','primary','secondary','tertiary','trunk','motorway','path','footway','pedestrian','cycleway','unclassified','living_street'].indexOf(typ(r)) !== -1;
+                    }
+                    if (filterType === 'administrative') {
+                        return cls(r) === 'boundary' || typ(r) === 'administrative';
+                    }
+                    if (filterType === 'historic') {
+                        return cls(r) === 'historic';
+                    }
+                    return true;
+                });
+            }
+            if (data.length === 0) {
+                resultsEl.innerHTML = '<p class="text-muted small mb-0">No results match the selected type. Try "Any" or a different query.</p>';
+                return;
+            }
+            // Prefer boundaries: relation (admin boundary) first, then way, then node
+            var order = { relation: 0, way: 1, node: 2 };
+            data.sort(function(a, b) {
+                var aOrder = order[a.osm_type] !== undefined ? order[a.osm_type] : 3;
+                var bOrder = order[b.osm_type] !== undefined ? order[b.osm_type] : 3;
+                if (aOrder !== bOrder) return aOrder - bOrder;
+                return (b.importance || 0) - (a.importance || 0);
+            });
+            const updateUrl = '{{ $span ? route("admin.places.update-from-nominatim", $span->id) : "" }}';
+            const csrf = '{{ csrf_token() }}';
+            let html = '<div class="list-group list-group-flush">';
+            data.forEach(function(result) {
+                const osmType = result.osm_type || 'node';
+                const placeType = result.type || result.class || 'location';
+                const displayName = result.display_name || result.name || 'Unknown';
+                const lat = result.lat; const lng = result.lon; const osmId = result.osm_id;
+                const hasBoundary = !!(result.geojson);
+                html += '<div class="list-group-item d-flex justify-content-between align-items-start">';
+                html += '<div class="flex-grow-1 small">';
+                html += '<div class="fw-semibold">' + escapeHtml(displayName) + '</div>';
+                html += '<span class="badge bg-secondary me-1">' + escapeHtml(placeType) + '</span>';
+                html += '<span class="badge bg-info text-dark me-1">' + escapeHtml(osmType) + ' ' + osmId + '</span>';
+                if (hasBoundary) { html += '<span class="badge bg-success me-1">boundary</span>'; }
+                html += '</div>';
+                html += '<button type="button" class="btn btn-sm btn-primary ms-2 use-nominatim-result" data-lat="' + lat + '" data-lng="' + lng + '" data-osm-type="' + escapeHtml(osmType) + '" data-osm-id="' + osmId + '" data-display-name="' + escapeHtml(displayName) + '" data-place-type="' + escapeHtml(placeType) + '">Use this</button>';
+                html += '</div>';
+            });
+            html += '</div>';
+            resultsEl.innerHTML = html;
+            resultsEl.querySelectorAll('.use-nominatim-result').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    const lat = this.getAttribute('data-lat'); const lng = this.getAttribute('data-lng');
+                    const osmType = this.getAttribute('data-osm-type'); const osmId = this.getAttribute('data-osm-id');
+                    const displayName = this.getAttribute('data-display-name'); const placeType = this.getAttribute('data-place-type') || '';
+                    btn.disabled = true;
+                    btn.textContent = 'Updating...';
+                    fetch(updateUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
+                        body: JSON.stringify({ lat: lat, lng: lng, osm_type: osmType, osm_id: osmId, display_name: displayName, place_type: placeType })
                     })
-                })
-                .then(response => {
-                    if (!response.ok) {
-                        return response.json().then(data => {
-                            throw new Error(data.message || `HTTP ${response.status}`);
-                        });
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    if (data.success) {
-                        // If slug changed, redirect to the new URL (prefer UUID to avoid future redirects)
-                        if (data.slug_changed && data.redirect_url) {
-                            window.location.href = data.redirect_url;
-                        } else {
-                            // Reload the page to show updated data
-                            window.location.reload();
-                        }
-                    } else {
-                        alert('Re-geocoding failed: ' + (data.message || 'Unknown error'));
+                    .then(function(r) { return r.json().then(function(d) { if (!r.ok) throw new Error(d.message || 'Request failed'); return d; }); })
+                    .then(function(d) {
+                        if (d.success && d.redirect_url) { window.location.href = d.redirect_url; }
+                        else { window.location.reload(); }
+                    })
+                    .catch(function(err) {
+                        alert('Update failed: ' + err.message);
                         btn.disabled = false;
-                        btn.innerHTML = originalText;
-                    }
-                })
-                .catch(error => {
-                    console.error('Re-geocoding error:', error);
-                    alert('Error re-geocoding place: ' + error.message);
-                    btn.disabled = false;
-                    btn.innerHTML = originalText;
+                        btn.textContent = 'Use this';
+                    });
                 });
             });
-        }
+        })
+        .catch(function(err) {
+            if (searchBtn) { searchBtn.disabled = false; }
+            resultsEl.innerHTML = '<p class="text-danger small mb-0">Error searching: ' + escapeHtml(err.message) + '</p>';
+        });
     }
-    
-    // Setup re-geocode buttons (only if span exists)
+
     @if($span)
     setupRegeocodeButton('regeocode-btn');
     setupRegeocodeButton('regeocode-btn-no-coords');
+    var regeocodeSearchBtn = document.getElementById('regeocode-search-btn');
+    if (regeocodeSearchBtn) {
+        regeocodeSearchBtn.addEventListener('click', runRegeocodeNominatimSearch);
+    }
+    var regeocodeSearchInput = document.getElementById('regeocode-search-query');
+    if (regeocodeSearchInput) {
+        regeocodeSearchInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); runRegeocodeNominatimSearch(); } });
+    }
     @endif
     
     // Inline editing for name and slug (admin only)

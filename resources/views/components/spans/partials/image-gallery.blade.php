@@ -178,7 +178,7 @@
         <div class="card-header d-flex justify-content-between align-items-center">
             @php
                 $photosLink = $imageConnections->isNotEmpty() && $imageConnections->count() > 3 
-                    ? route('photos.index', ['features' => $span->id])
+                    ? route('photos.of', $span)
                     : null;
             @endphp
             @if($photosLink)

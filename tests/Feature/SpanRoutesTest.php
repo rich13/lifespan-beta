@@ -112,6 +112,77 @@ class SpanRoutesTest extends TestCase
         ]);
     }
 
+    public function test_update_place_span_preserves_geolocation_metadata(): void
+    {
+        $placeSpan = Span::factory()->create([
+            'owner_id' => $this->user->id,
+            'type_id' => 'place',
+            'name' => 'Camden Town',
+            'state' => 'complete',
+            'metadata' => [
+                'subtype' => 'city',
+                'country' => 'United Kingdom',
+                'coordinates' => [
+                    'latitude' => 51.5392,
+                    'longitude' => -0.1426,
+                ],
+                'osm_data' => [
+                    'place_id' => 12345,
+                    'osm_type' => 'relation',
+                    'osm_id' => 12345,
+                    'canonical_name' => 'Camden, London, UK',
+                    'display_name' => 'Camden, London, UK',
+                ],
+                'external_refs' => [
+                    'osm' => [
+                        'place_id' => 12345,
+                        'osm_type' => 'relation',
+                        'osm_id' => 12345,
+                        'canonical_name' => 'Camden, London, UK',
+                    ],
+                ],
+            ],
+        ]);
+
+        // Simulate the edit form: user changes name/date but form sends metadata with schema
+        // fields only (and the place schema has a "coordinates" text field that would send
+        // a string, wiping the latitude/longitude array if we didn't protect it).
+        $response = $this->actingAs($this->user)
+            ->put("/spans/{$placeSpan->id}", [
+                'name' => 'Camden Town',
+                'type_id' => 'place',
+                'state' => 'complete',
+                'metadata' => [
+                    'subtype' => 'city',
+                    'country' => 'United Kingdom',
+                    'coordinates' => '', // form text field empty – would overwrite array
+                ],
+            ]);
+
+        $response->assertStatus(302);
+
+        $placeSpan->refresh();
+        $metadata = $placeSpan->metadata;
+
+        $this->assertArrayHasKey('coordinates', $metadata);
+        $this->assertIsArray($metadata['coordinates']);
+        $this->assertSame(51.5392, $metadata['coordinates']['latitude']);
+        $this->assertSame(-0.1426, $metadata['coordinates']['longitude']);
+
+        $this->assertArrayHasKey('osm_data', $metadata);
+        $this->assertIsArray($metadata['osm_data']);
+        $this->assertSame('relation', $metadata['osm_data']['osm_type']);
+        $this->assertSame(12345, $metadata['osm_data']['osm_id']);
+
+        $this->assertArrayHasKey('external_refs', $metadata);
+        $this->assertIsArray($metadata['external_refs']['osm'] ?? null);
+        $this->assertSame(12345, $metadata['external_refs']['osm']['osm_id'] ?? null);
+
+        // Schema fields from the form should still be updated
+        $this->assertSame('city', $metadata['subtype'] ?? null);
+        $this->assertSame('United Kingdom', $metadata['country'] ?? null);
+    }
+
     public function test_delete_span_requires_auth(): void
     {
         $response = $this->delete("/spans/{$this->span->id}");

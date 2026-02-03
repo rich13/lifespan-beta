@@ -1754,6 +1754,32 @@ class SpanController extends Controller
                 }
             }
 
+            // Preserve metadata keys not in the form, and protect structured geolocation from
+            // being overwritten by schema text fields (e.g. place type has a "coordinates" text
+            // input that would otherwise replace the latitude/longitude array).
+            if (array_key_exists('metadata', $validated)) {
+                $existingMetadata = $span->metadata ?? [];
+                $requestMetadata = $validated['metadata'] ?? [];
+                $merged = array_replace_recursive($existingMetadata, $requestMetadata);
+
+                // Restore structured geolocation keys if the form overwrote them with a scalar/empty value.
+                // The place type schema has a "coordinates" text field; submitting it overwrites the
+                // latitude/longitude array, so we restore when the merged value is not a valid structure.
+                $geolocationKeys = ['coordinates', 'osm_data', 'external_refs'];
+                foreach ($geolocationKeys as $key) {
+                    $existingValue = $existingMetadata[$key] ?? null;
+                    $mergedValue = $merged[$key] ?? null;
+                    $existingIsValid = is_array($existingValue) && !empty($existingValue);
+                    $mergedIsInvalid = is_string($mergedValue) || $mergedValue === null
+                        || (is_array($mergedValue) && empty($mergedValue));
+                    if ($existingIsValid && $mergedIsInvalid) {
+                        $merged[$key] = $existingValue;
+                    }
+                }
+
+                $validated['metadata'] = $merged;
+            }
+
             // Regular update without type change
             $span->update($validated);
 
@@ -2279,6 +2305,13 @@ class SpanController extends Controller
         if ($query) {
             $spans->where('name', 'ilike', "%{$query}%");
         }
+
+        // Order by connection count (richer spans first)
+        $spans->withCount(['connectionsAsSubject', 'connectionsAsObject'])
+            ->orderByRaw(
+                '(SELECT COUNT(*) FROM connections WHERE connections.parent_id = spans.id) + ' .
+                '(SELECT COUNT(*) FROM connections WHERE connections.child_id = spans.id) DESC'
+            );
 
         // Get results with type information
         $results = $spans->with('type')

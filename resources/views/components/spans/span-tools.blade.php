@@ -7,25 +7,14 @@
 @auth
     @if(auth()->user()->can('update', $span) || auth()->user()->can('delete', $span))
         @can('update', $span)
-            @if($span->type && $span->type->type_id === 'place')
-                <a href="{{ route('spans.yaml-editor', $span) }}" 
-                   class="btn btn-sm btn-outline-primary" 
-                   id="edit-{{ $idPrefix }}-btn" 
-                   data-bs-toggle="tooltip" 
-                   data-bs-placement="bottom" 
-                   title="Edit {{ $label }} (⌘E)">
-                    <i class="bi bi-code-square me-1"></i> Edit
-                </a>
-            @else
-                <a href="{{ route('spans.edit', $span) }}" 
-                   class="btn btn-sm btn-outline-primary" 
-                   id="edit-{{ $idPrefix }}-btn" 
-                   data-bs-toggle="tooltip" 
-                   data-bs-placement="bottom" 
-                   title="Edit {{ $label }} (⌘E)">
-                    <i class="bi bi-wrench me-1"></i> Edit
-                </a>
-            @endif
+            <a href="{{ route('spans.edit', $span) }}" 
+               class="btn btn-sm btn-outline-primary" 
+               id="edit-{{ $idPrefix }}-btn" 
+               data-bs-toggle="tooltip" 
+               data-bs-placement="bottom" 
+               title="Edit {{ $label }} (⌘E)">
+                <i class="bi bi-wrench me-1"></i> Edit
+            </a>
         @endcan
         @can('delete', $span)
             <form id="delete-{{ $idPrefix }}-form" 

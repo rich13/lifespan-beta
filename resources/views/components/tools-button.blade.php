@@ -39,9 +39,9 @@
     if ($model) {
         $modelClass = get_class($model);
         if ($modelClass === \App\Models\Span::class) {
-            // Use spreadsheet editor for all span types except 'place'
+            // Use form edit for place, spreadsheet editor for other span types
             if ($model->type && $model->type->type_id === 'place') {
-                $editRoute = 'spans.yaml-editor';
+                $editRoute = 'spans.edit';
             } else {
                 $editRoute = 'spans.spanner';
             }
