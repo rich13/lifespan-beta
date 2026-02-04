@@ -159,12 +159,17 @@ const SessionBridge = {
                 this._reloadPending = true;
                 // Reload the page to apply the restored session
                 setTimeout(() => {
-                    // Final check before reload
-                    if (!this._isNavigating) {
-                        window.location.reload();
-                    } else {
+                    // Final check before reload: skip if user has navigated away or page is leaving
+                    if (this._isNavigating) {
                         this._reloadPending = false;
+                        return;
                     }
+                    if (document.visibilityState === 'hidden') {
+                        // Tab may be backgrounded or page unloading; don't reload
+                        this._reloadPending = false;
+                        return;
+                    }
+                    window.location.reload();
                 }, 1000); // Give user time to see the notification
             } else {
                 console.warn('Session restoration failed:', response.message);
@@ -350,6 +355,15 @@ document.addEventListener('click', function(e) {
         navigationStartTime = Date.now();
     }
 }, true); // Use capture phase to catch links early
+
+// Critical: mark navigation when page is about to unload (any navigation: form submit,
+// location.href, back/forward, etc.). This prevents a pending session-restore reload
+// from firing after the user has already navigated away, which would reload the
+// previous page and cause the URL bar to flip: B → A → B.
+window.addEventListener('beforeunload', function() {
+    SessionBridge._isNavigating = true;
+    navigationStartTime = Date.now();
+});
 
 // Also track programmatic navigation
 let originalPushState = history.pushState;

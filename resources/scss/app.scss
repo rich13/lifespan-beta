@@ -4,16 +4,15 @@
 // @use "bootstrap-icons/font/bootstrap-icons.css" as icons;
 @use "user-dropdown" as dropdown;
 
-// Import Bootstrap Icons with custom font path
-@import "bootstrap-icons/font/bootstrap-icons.css";
-
-// Fix Bootstrap Icons font path for production
-@font-face {
-  font-display: block;
-  font-family: "bootstrap-icons";
-  src: url("/fonts/bootstrap-icons.woff2") format("woff2"),
-       url("/fonts/bootstrap-icons.woff") format("woff");
-}
+// Bootstrap Icons: loaded from CDN in layout (app.blade.php). Do not @import here
+// or Vite will resolve font URLs to the dev server (localhost:5173) and they 404.
+// Optional local @font-face override if you want to serve fonts from public/fonts:
+// @font-face {
+//   font-display: block;
+//   font-family: "bootstrap-icons";
+//   src: url("/fonts/bootstrap-icons.woff2") format("woff2"),
+//        url("/fonts/bootstrap-icons.woff") format("woff");
+// }
 
 // ============================================================================
 // LIFESPAN CUSTOM COLOR THEME
