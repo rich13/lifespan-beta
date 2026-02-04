@@ -9,7 +9,6 @@ use App\Services\Connection\ConnectionConstraintService;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\View;
 use Illuminate\Database\Eloquent\Casts\Json;
 
@@ -47,10 +46,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Configure database again to ensure it takes priority, but only in production
-        if ($this->app->environment('production')) {
-            $this->configureDatabase();
-        }
+        // Database config is set once in register(); do not purge/reconnect again in boot()
+        // to avoid tearing down and re-establishing the DB connection on every request.
 
         $this->registerSafeJsonDecoder();
 
@@ -96,7 +93,8 @@ class AppServiceProvider extends ServiceProvider
     }
     
     /**
-     * Set database configuration directly with highest priority
+     * Set database configuration directly with highest priority.
+     * Does not purge/reconnect so the framework connects once per request using this config.
      */
     protected function configureDatabase(): void
     {
@@ -129,17 +127,11 @@ class AppServiceProvider extends ServiceProvider
                 }
             }
 
-            // Log what we're using for debugging
             if (!empty($host) && !empty($database) && !empty($username)) {
-                Log::info("Setting database configuration directly", [
-                    'host' => $host,
-                    'port' => $port,
-                    'database' => $database,
-                    'username' => $username,
-                    'has_password' => !empty($password)
-                ]);
-                
-                // Set the configuration directly - this overrides anything previously set
+                // Set the configuration directly - this overrides anything previously set.
+                // Do not call DB::purge() or DB::reconnect() here: that tears down and
+                // re-establishes the connection on every request. The first DB use in
+                // this request will connect using this config.
                 Config::set('database.default', 'pgsql');
                 Config::set('database.connections.pgsql.driver', 'pgsql');
                 Config::set('database.connections.pgsql.host', $host);
@@ -150,12 +142,6 @@ class AppServiceProvider extends ServiceProvider
                 if (!empty($password)) {
                     Config::set('database.connections.pgsql.password', $password);
                 }
-                
-                // Force database to reconnect with new config
-                DB::purge('pgsql');
-                DB::reconnect('pgsql');
-                
-                Log::info("Database configuration set and connection purged/reconnected");
             } else {
                 Log::error("Failed to set database configuration - missing required values", [
                     'has_host' => !empty($host),

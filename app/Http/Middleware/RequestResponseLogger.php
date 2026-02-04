@@ -18,14 +18,17 @@ class RequestResponseLogger
      */
     public function handle(Request $request, Closure $next)
     {
-        // Log at the very start of each request so separate page requests are easy to find in the logs
         $requestId = uniqid('req_', true);
         $request->attributes->set('request_id', $requestId);
-        Log::info('Page request started', [
-            'request_id' => $requestId,
-            'method' => $request->method(),
-            'url' => $request->fullUrl(),
-        ]);
+
+        // Skip per-request "request started" logging in production to reduce I/O
+        if (!app()->environment('production')) {
+            Log::info('Page request started', [
+                'request_id' => $requestId,
+                'method' => $request->method(),
+                'url' => $request->fullUrl(),
+            ]);
+        }
 
         // Process the request
         $response = $next($request);

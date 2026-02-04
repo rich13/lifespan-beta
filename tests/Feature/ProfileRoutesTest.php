@@ -52,6 +52,7 @@ class ProfileRoutesTest extends TestCase
         $personalSpan = Span::factory()->personal($this->user)->create();
         $this->user->personal_span_id = $personalSpan->id;
         $this->user->save();
+        $this->user->unsetRelation('personalSpan'); // ensure next access loads the span we just linked
 
         $response = $this->actingAs($this->user)
             ->patch('/profile', [

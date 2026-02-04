@@ -18,33 +18,38 @@ class DatabaseConnectionLogger
      */
     public function handle(Request $request, Closure $next): Response
     {
-        // Only log in Railway production environment
-        if (env('APP_ENV') === 'production' && env('DOCKER_CONTAINER') === 'true') {
-            try {
-                $dbConfig = Config::get('database.connections.pgsql');
-                
-                // Log database configuration (read-only, no reconfiguration)
-                Log::info('Database connection configuration', [
-                    'host' => $dbConfig['host'] ?? 'not set',
-                    'port' => $dbConfig['port'] ?? 'not set',
-                    'database' => $dbConfig['database'] ?? 'not set',
-                    'username' => $dbConfig['username'] ?? 'not set',
-                    'has_password' => !empty($dbConfig['password']),
-                    'using_url' => !empty($dbConfig['url']),
-                    'database_url' => !empty(env('DATABASE_URL')) ? 'is set' : 'not set',
-                ]);
-                
-                // Test database connection (read-only test)
-                DB::connection('pgsql')->getPdo();
-                Log::info('Database connection successful');
-            } catch (\Exception $e) {
-                Log::error('Database connection failed: ' . $e->getMessage(), [
-                    'trace' => $e->getTraceAsString(),
-                    'database_url' => $this->maskSensitiveInfo(env('DATABASE_URL')),
-                ]);
-            }
+        // Do not run DB config logging or connection check on every request in production;
+        // use the /health or /debug routes for that. This avoids 2–3 log writes and an
+        // extra DB touch per request.
+        if (env('APP_ENV') !== 'production' || env('DOCKER_CONTAINER') !== 'true') {
+            return $next($request);
         }
-        
+
+        // Only run on health/debug routes so production monitoring can still verify DB
+        if (!$request->is('health') && !$request->is('debug')) {
+            return $next($request);
+        }
+
+        try {
+            $dbConfig = Config::get('database.connections.pgsql');
+            Log::info('Database connection configuration', [
+                'host' => $dbConfig['host'] ?? 'not set',
+                'port' => $dbConfig['port'] ?? 'not set',
+                'database' => $dbConfig['database'] ?? 'not set',
+                'username' => $dbConfig['username'] ?? 'not set',
+                'has_password' => !empty($dbConfig['password']),
+                'using_url' => !empty($dbConfig['url']),
+                'database_url' => !empty(env('DATABASE_URL')) ? 'is set' : 'not set',
+            ]);
+            DB::connection('pgsql')->getPdo();
+            Log::info('Database connection successful');
+        } catch (\Exception $e) {
+            Log::error('Database connection failed: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+                'database_url' => $this->maskSensitiveInfo(env('DATABASE_URL')),
+            ]);
+        }
+
         return $next($request);
     }
     
