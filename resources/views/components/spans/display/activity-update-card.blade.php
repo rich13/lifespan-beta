@@ -1,6 +1,7 @@
 @props([
     'version' => null,
     'span' => null,
+    'previousVersion' => null,
     'label' => null,
     'timestamp' => null,
     'changeSummary' => null,
@@ -11,21 +12,21 @@
 @php
     $resolvedSpan = $span ?? $version?->span;
     $resolvedLabel = $label ?? ($version ? 'Updated' : 'Added');
-    $resolvedTimestamp = $timestamp ?? $version?->created_at ?? $resolvedSpan?->created_at;
     $resolvedSummary = $changeSummary ?? $version?->change_summary ?? ($version ? 'Updated details' : 'Created span');
     $resolvedChangedBy = $showChangedBy ? $version?->changedBy : null;
     $resolvedGroupName = $groupName;
+    $resolvedTimestamp = $timestamp ?? $version?->created_at ?? $resolvedSpan?->created_at;
 
     $resolvedChangesList = null;
 
     if ($version) {
-        $previousVersion = \App\Models\SpanVersion::where('span_id', $version->span_id)
+        $previousVersionResolved = $previousVersion ?? \App\Models\SpanVersion::where('span_id', $version->span_id)
             ->where('version_number', '<', $version->version_number)
             ->orderByDesc('version_number')
             ->first();
 
-        if ($previousVersion) {
-            $changes = $version->getDiffFrom($previousVersion);
+        if ($previousVersionResolved) {
+            $changes = $version->getDiffFrom($previousVersionResolved);
             $changeFields = array_keys($changes);
             $friendlyLabels = [];
 

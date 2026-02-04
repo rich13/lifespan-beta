@@ -1,10 +1,5 @@
 @extends('layouts.app')
 
-@php
-    // User's personal span is guaranteed by profile.complete middleware
-    $personalSpan = auth()->user()->personalSpan;
-@endphp
-
 @section('page_title')
     @if($personalSpan)
         {{ $personalSpan->name }}
@@ -53,7 +48,11 @@
 
         <div class="col-md-6 mb-4">
             <x-home.lifespan-summary-card />
-            <x-home.life-heatmap-card />
+            <x-home.life-heatmap-card
+                :userConnectionsAsSubject="$userConnectionsAsSubject ?? collect()"
+                :userConnectionsAsObject="$userConnectionsAsObject ?? collect()"
+                :allUserConnections="$allUserConnections ?? collect()"
+            />
         </div>
     </div>
 </div>

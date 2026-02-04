@@ -166,15 +166,11 @@ Route::middleware('web')->group(function () {
         return view('home');
     })->middleware('profile.complete')->name('home');
     
-    // Personal homepage mode
-    Route::get('/me', function () {
-        return view('me');
-    })->middleware('profile.complete')->name('me');
+    // Personal homepage mode (MeController pre-loads connections for heatmap/summary)
+    Route::get('/me', \App\Http\Controllers\MeController::class)->middleware('profile.complete')->name('me');
     
-    // Activity workspace mode
-    Route::get('/activity', function () {
-        return view('activity');
-    })->middleware('profile.complete')->name('activity');
+    // Activity workspace mode (ActivityController loads data for view)
+    Route::get('/activity', \App\Http\Controllers\ActivityController::class)->middleware('profile.complete')->name('activity');
 
         Route::get('/places/{span}/boundary', [\App\Http\Controllers\PlaceBoundaryController::class, 'show'])
             ->name('places.boundary');

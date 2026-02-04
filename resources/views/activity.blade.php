@@ -1,138 +1,5 @@
 @extends('layouts.app')
 
-@php
-    use App\Helpers\DateHelper;
-
-    $user = auth()->user();
-
-    $now = DateHelper::getCurrentDate();
-
-    $dayStart = $now->copy()->subDay();
-    $weekStart = $now->copy()->subWeek();
-    $monthStart = $now->copy()->subMonth();
-    $yearStart = $now->copy()->subYear();
-
-    $periods = [
-        [
-            'key' => 'day',
-            'label' => 'Last day',
-            'start' => $dayStart,
-            'end' => $now,
-        ],
-        [
-            'key' => 'week',
-            'label' => 'Last week',
-            'start' => $weekStart,
-            'end' => $dayStart,
-        ],
-        [
-            'key' => 'month',
-            'label' => 'Last month',
-            'start' => $monthStart,
-            'end' => $weekStart,
-        ],
-        [
-            'key' => 'year',
-            'label' => 'Last year',
-            'start' => $yearStart,
-            'end' => $monthStart,
-        ],
-    ];
-
-    $recentSpansByPeriod = [];
-
-    foreach ($periods as $period) {
-        $addedSpans = \App\Models\Span::where('owner_id', $user->id)
-            ->where('type_id', '!=', 'connection')
-            ->where('created_at', '>=', $period['start'])
-            ->where('created_at', '<', $period['end'])
-            ->orderByDesc('created_at')
-            ->limit(10)
-            ->get();
-
-        $updatedSpanVersions = \App\Models\SpanVersion::where('changed_by', $user->id)
-            ->where('version_number', '>', 1)
-            ->where('created_at', '>=', $period['start'])
-            ->where('created_at', '<', $period['end'])
-            ->whereHas('span', function ($query) {
-                $query->where('type_id', '!=', 'connection');
-            })
-            ->with('span')
-            ->orderByDesc('created_at')
-            ->get()
-            ->groupBy('span_id')
-            ->map(function ($versions) {
-                return $versions->first();
-            })
-            ->values()
-            ->take(10);
-
-        $recentSpansByPeriod[$period['key']] = [
-            'label' => $period['label'],
-            'added' => $addedSpans,
-            'updated' => $updatedSpanVersions,
-        ];
-    }
-
-    $groupIds = $user->groups()->pluck('groups.id');
-    $sharedSpanIds = collect();
-
-    if ($groupIds->isNotEmpty()) {
-        $sharedSpanIds = \App\Models\SpanPermission::whereIn('group_id', $groupIds)
-            ->whereIn('permission_type', ['view', 'edit'])
-            ->pluck('span_id')
-            ->unique();
-    }
-
-    $getSharedGroupName = function ($span) use ($groupIds) {
-        if (!$span || $groupIds->isEmpty()) {
-            return null;
-        }
-
-        $permission = $span->spanPermissions
-            ->first(function ($permission) use ($groupIds) {
-                return $permission->group_id && $groupIds->contains($permission->group_id);
-            });
-
-        return $permission?->group?->name;
-    };
-
-    $sharedUpdatesByPeriod = [];
-
-    foreach ($periods as $period) {
-        if ($sharedSpanIds->isEmpty()) {
-            $sharedUpdatesByPeriod[$period['key']] = [
-                'label' => $period['label'],
-                'updated' => collect(),
-            ];
-            continue;
-        }
-
-        $sharedUpdates = \App\Models\SpanVersion::whereIn('span_id', $sharedSpanIds)
-            ->where('version_number', '>', 1)
-            ->where('created_at', '>=', $period['start'])
-            ->where('created_at', '<', $period['end'])
-            ->whereHas('span', function ($query) use ($user) {
-                $query->where('type_id', '!=', 'connection')
-                    ->where('owner_id', '!=', $user->id);
-            })
-            ->with(['span', 'changedBy', 'span.spanPermissions.group'])
-            ->orderByDesc('created_at')
-            ->get()
-            ->groupBy('span_id')
-            ->map(function ($versions) {
-                return $versions->first();
-            })
-            ->values()
-            ->take(10);
-
-        $sharedUpdatesByPeriod[$period['key']] = [
-            'label' => $period['label'],
-            'updated' => $sharedUpdates,
-        ];
-    }
-@endphp
-
 @section('page_title')
     Recent activity
 @endsection
@@ -226,7 +93,10 @@
                                             @else
                                                 <div class="spans-list">
                                                 @foreach($periodData['updated'] as $version)
-                                                    <x-spans.display.activity-update-card :version="$version" />
+                                                    <x-spans.display.activity-update-card
+                                                        :version="$version"
+                                                        :previousVersion="$previousVersionMap[$version->id] ?? null"
+                                                    />
                                                 @endforeach
                                                 </div>
                                             @endif
@@ -284,7 +154,12 @@
                                 @else
                                     <div class="spans-list">
                                         @foreach($periodData['updated'] as $version)
-                                            <x-spans.display.activity-update-card :version="$version" showChangedBy :groupName="$getSharedGroupName($version->span)" />
+                                            <x-spans.display.activity-update-card
+                                                :version="$version"
+                                                :previousVersion="$previousVersionMap[$version->id] ?? null"
+                                                showChangedBy
+                                                :groupName="$getSharedGroupName($version->span)"
+                                            />
                                         @endforeach
                                     </div>
                                 @endif
