@@ -1742,6 +1742,7 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                             'lat' => $lat, 'lon' => $lng, 'format' => 'json',
                             'addressdetails' => 1, 'extratags' => 1, 'namedetails' => 1,
                             'polygon_geojson' => 1,
+                            'polygon_threshold' => config('services.nominatim_polygon_threshold', 0.0005),
                         ]);
                         if ($reverseResult->successful()) {
                             $reverseData = $reverseResult->json();

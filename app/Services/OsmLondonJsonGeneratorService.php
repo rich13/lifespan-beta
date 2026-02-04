@@ -152,6 +152,7 @@ class OsmLondonJsonGeneratorService
             'limit' => 1,
             'addressdetails' => 1,
             'polygon_geojson' => 1,
+            'polygon_threshold' => config('services.nominatim_polygon_threshold', 0.0005),
         ];
 
         try {

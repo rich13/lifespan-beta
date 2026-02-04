@@ -21,6 +21,11 @@ class OSMGeocodingService
     /** Max coordinate count for boundary_geojson we store (avoids memory exhaustion for huge polygons e.g. USA) */
     private const MAX_BOUNDARY_POINTS = 8000;
 
+    private function getPolygonThreshold(): float
+    {
+        return (float) Config::get('services.nominatim_polygon_threshold', 0.0005);
+    }
+
     private function getNominatimBaseUrl(): string
     {
         return rtrim(
@@ -281,6 +286,7 @@ class OSMGeocodingService
                     'extratags' => 1,
                     'namedetails' => 1,
                     'polygon_geojson' => 1,
+                    'polygon_threshold' => $this->getPolygonThreshold(),
                 ];
                 
                 // Add coordinate context if available
@@ -1099,8 +1105,9 @@ class OSMGeocodingService
         $baseUrl = $usePublicNominatim
             ? self::DEFAULT_NOMINATIM_BASE_URL
             : $this->getNominatimBaseUrl();
-        // Include _polygon in key so we don't serve stale cache from before polygon_geojson=1 was added
-        $cacheKey = 'osm_lookup_' . $osmType . '_' . $osmId . ($usePublicNominatim ? '_public' : '') . '_polygon';
+        $threshold = $this->getPolygonThreshold();
+        // Include polygon params in key so we don't serve stale cache
+        $cacheKey = 'osm_lookup_' . $osmType . '_' . $osmId . ($usePublicNominatim ? '_public' : '') . '_polygon_t' . $threshold;
         
         // Check cache first
         if (Cache::has($cacheKey)) {
@@ -1120,6 +1127,7 @@ class OSMGeocodingService
                     'extratags' => 1,
                     'namedetails' => 1,
                     'polygon_geojson' => 1,
+                    'polygon_threshold' => $this->getPolygonThreshold(),
                 ]);
 
             if (!$response->successful() || empty($response->json())) {

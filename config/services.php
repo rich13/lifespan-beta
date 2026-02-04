@@ -69,6 +69,10 @@ return [
     'nominatim_base_url' => env('NOMINATIM_BASE_URL')
         ?: (env('DOCKER_CONTAINER') ? 'http://nominatim:8080' : 'https://nominatim.openstreetmap.org'),
 
+    // Simplify polygon output so large boundaries (e.g. Greater London) fit within MAX_BOUNDARY_POINTS.
+    // Tolerance in degrees; 0.0005 yields ~683 points for London (storable in both local and prod).
+    'nominatim_polygon_threshold' => (float) env('NOMINATIM_POLYGON_THRESHOLD', 0.0005),
+
     'mailersend' => [
         'api_key' => env('MAILERSEND_API_KEY'),
     ],

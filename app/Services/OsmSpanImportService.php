@@ -35,24 +35,21 @@ class OsmSpanImportService
 
     private PlaceLocationService $locationService;
 
-    /**
-     * Relative path under storage/app where the JSON file lives.
-     */
-    private string $relativePath;
-
     public function __construct(OSMGeocodingService $geocoding, PlaceLocationService $locationService)
     {
         $this->geocoding = $geocoding;
         $this->locationService = $locationService;
-        $this->relativePath = Config::get('services.osm_import_data_path', 'osm/london-major-locations.json');
     }
 
     /**
      * Get the absolute path to the JSON data file.
+     * Read from config at runtime so tests (and any code that sets config after boot) see the correct path.
      */
     public function getDataFilePath(): string
     {
-        return storage_path('app/' . $this->relativePath);
+        $relativePath = Config::get('services.osm_import_data_path', 'osm/london-major-locations.json');
+
+        return storage_path('app/' . $relativePath);
     }
 
     /**

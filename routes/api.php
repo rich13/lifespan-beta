@@ -334,6 +334,7 @@ Route::middleware('auth')->group(function () {
                     'extratags' => 1,
                     'namedetails' => 1,
                     'polygon_geojson' => 1,
+                    'polygon_threshold' => config('services.nominatim_polygon_threshold', 0.0005),
                 ]);
                 
                 if ($reverseResult->successful()) {
@@ -443,6 +444,7 @@ Route::middleware(['auth', 'admin'])->group(function () {
                     'extratags' => 1,
                     'namedetails' => 1,
                     'polygon_geojson' => 1,
+                    'polygon_threshold' => config('services.nominatim_polygon_threshold', 0.0005),
                 ]);
                 
                 if ($reverseResult->successful()) {

@@ -799,7 +799,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         if (searchBtn) { searchBtn.disabled = true; }
         resultsEl.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div><p class="mt-2 text-muted small mb-0">Searching Nominatim...</p></div>';
-        const params = new URLSearchParams({ q: query, format: 'json', limit: '15', addressdetails: '1', extratags: '1', namedetails: '1', polygon_geojson: '1' });
+        const params = new URLSearchParams({
+            q: query, format: 'json', limit: '15', addressdetails: '1', extratags: '1', namedetails: '1',
+            polygon_geojson: '1', polygon_threshold: '{{ config("services.nominatim_polygon_threshold", 0.0005) }}'
+        });
         fetch('https://nominatim.openstreetmap.org/search?' + params, {
             headers: { 'User-Agent': '{{ config("app.user_agent") }}', 'Accept-Language': 'en' }
         })
