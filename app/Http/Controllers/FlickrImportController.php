@@ -665,8 +665,10 @@ class FlickrImportController extends Controller
             $newSubjectSpans = $newSubjectSpans->merge($matchingSpans);
         }
 
-        // Remove duplicate spans
-        $newSubjectSpans = $newSubjectSpans->unique('id');
+        // Remove duplicate spans and exclude the photo itself (no "features" self-connection)
+        $newSubjectSpans = $newSubjectSpans->unique('id')->filter(
+            fn (Span $span) => $span->id !== $photoSpan->id
+        );
 
         // Remove connections for subjects that are no longer in the tags
         foreach ($existingSubjectConnections as $existingConnection) {
@@ -726,7 +728,10 @@ class FlickrImportController extends Controller
                 ->get();
 
             foreach ($matchingSpans as $matchingSpan) {
-                // Create features connection
+                // Skip self (no "features" connection from photo to itself)
+                if ($matchingSpan->id === $photoSpan->id) {
+                    continue;
+                }
                 $this->createSubjectConnection($photoSpan, $matchingSpan);
             }
         }
