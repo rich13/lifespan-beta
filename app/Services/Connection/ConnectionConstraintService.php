@@ -35,22 +35,27 @@ class ConnectionConstraintService
     }
 
     /**
-     * Validate that only one connection of this type exists between these spans
+     * Validate single constraint - only one connection of this type is allowed between
+     * the same (parent, child) pair. Used for types like family, created, etc.
      */
     private function validateSingleConstraint(
         Connection $connection
     ): ConnectionConstraintResult {
-        $exists = Connection::where([
-            'parent_id' => $connection->parent_id,
-            'child_id' => $connection->child_id,
-            'type_id' => $connection->type_id,
-        ])
-        ->where('id', '!=', $connection->id)
-        ->exists();
+        $query = Connection::where('parent_id', $connection->parent_id)
+            ->where('child_id', $connection->child_id)
+            ->where('type_id', $connection->type_id);
 
-        return $exists 
-            ? ConnectionConstraintResult::failure('Only one connection of this type is allowed between these spans')
-            : ConnectionConstraintResult::success();
+        if ($connection->id !== null) {
+            $query->where('id', '!=', $connection->id);
+        }
+
+        if ($query->exists()) {
+            return ConnectionConstraintResult::failure(
+                'Only one connection of this type is allowed between these spans'
+            );
+        }
+
+        return ConnectionConstraintResult::success();
     }
 
     /**
@@ -122,22 +127,12 @@ class ConnectionConstraintService
     }
 
     /**
-     * Validate that only one timeless connection of this type exists between these spans
-     * Timeless connections don't have temporal constraints, so we only check for uniqueness
+     * Validate timeless constraint - multiple connections of same type between same spans are allowed.
+     * Timeless connections have no temporal overlap to check.
      */
     private function validateTimelessConstraint(
         Connection $connection
     ): ConnectionConstraintResult {
-        $exists = Connection::where([
-            'parent_id' => $connection->parent_id,
-            'child_id' => $connection->child_id,
-            'type_id' => $connection->type_id,
-        ])
-        ->where('id', '!=', $connection->id)
-        ->exists();
-
-        return $exists 
-            ? ConnectionConstraintResult::failure('Only one connection of this type is allowed between these spans')
-            : ConnectionConstraintResult::success();
+        return ConnectionConstraintResult::success();
     }
 }
