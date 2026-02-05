@@ -36,17 +36,17 @@ class PlaceBoundaryService
         }
 
         // Check if boundary is already stored in metadata
-        // Check both external_refs.osm and osm_data for backward compatibility
         $metadata = $place->metadata ?? [];
-        $storedBoundary = $metadata['external_refs']['osm']['boundary_geojson'] 
-            ?? $metadata['osm_data']['boundary_geojson'] 
+        $storedBoundary = $metadata['external_refs']['osm']['boundary_geojson']
+            ?? $metadata['osm_data']['boundary_geojson']
             ?? null;
-        if ($storedBoundary && is_array($storedBoundary)) {
-            return $storedBoundary;
-        }
 
         $osmType = $osmData['osm_type'];
         $osmId = $osmData['osm_id'];
+
+        if ($storedBoundary && is_array($storedBoundary)) {
+            return $storedBoundary;
+        }
         
         // If this is a node (point) but it's an administrative area, try to find the relation
         if ($osmType === 'node') {
@@ -91,16 +91,12 @@ class PlaceBoundaryService
                 'osm_id' => $osmId,
             ]);
 
-            $geoJson = $this->fetchBoundaryFromOverpass(
-                $osmType,
-                $osmId
-            );
+            $result = $this->fetchBoundaryFromOverpass($osmType, $osmId);
+            $geoJson = $result['geojson'] ?? null;
+            $adminLevelFromOverpass = $result['admin_level'] ?? null;
 
             if ($geoJson) {
-                // Store boundary in metadata for long-term caching
-                // Store in the same location as OSM data (external_refs.osm or osm_data)
                 if (isset($metadata['external_refs']['osm'])) {
-                    // Store in external_refs.osm if it exists
                     if (!isset($metadata['external_refs'])) {
                         $metadata['external_refs'] = [];
                     }
@@ -109,23 +105,27 @@ class PlaceBoundaryService
                     }
                     $metadata['external_refs']['osm']['boundary_geojson'] = $geoJson;
                     $metadata['external_refs']['osm']['boundary_cached_at'] = now()->toIso8601String();
+                    if ($adminLevelFromOverpass !== null) {
+                        $metadata['external_refs']['osm']['admin_level'] = $adminLevelFromOverpass;
+                    }
                 } else {
-                    // Fall back to osm_data for backward compatibility
                     if (!isset($metadata['osm_data'])) {
                         $metadata['osm_data'] = [];
                     }
                     $metadata['osm_data']['boundary_geojson'] = $geoJson;
                     $metadata['osm_data']['boundary_cached_at'] = now()->toIso8601String();
+                    if ($adminLevelFromOverpass !== null) {
+                        $metadata['osm_data']['admin_level'] = $adminLevelFromOverpass;
+                    }
                 }
-                
-                $place->metadata = $metadata;
 
-                // Avoid triggering model events/listeners (this is a cache update)
+                $place->metadata = $metadata;
                 $place->saveQuietly();
 
                 Log::info('Stored place boundary in metadata', [
                     'span_id' => $place->id,
                     'span_name' => $place->name,
+                    'admin_level_from_overpass' => $adminLevelFromOverpass,
                 ]);
             } else {
                 Log::warning('No boundary geometry returned from Overpass', [
@@ -140,14 +140,14 @@ class PlaceBoundaryService
 
     /**
      * Fetch boundary geometry from Overpass API and convert to GeoJSON.
+     * Also returns admin_level from the relation/way tags when present (OSM source of truth).
      *
      * @param  string  $osmType
      * @param  string|int  $osmId
-     * @return array|null
+     * @return array{geojson: array, admin_level: int|null}|null
      */
     protected function fetchBoundaryFromOverpass(string $osmType, $osmId): ?array
     {
-        // Only relations and ways can provide polygon boundaries
         if (!in_array($osmType, ['relation', 'way'])) {
             return null;
         }
@@ -179,14 +179,24 @@ class PlaceBoundaryService
             foreach ($data['elements'] as $element) {
                 $geoJson = $this->convertElementToGeoJson($element);
                 if ($geoJson) {
+                    $adminLevel = null;
+                    if (isset($element['tags']['admin_level']) && is_numeric($element['tags']['admin_level'])) {
+                        $adminLevel = (int) $element['tags']['admin_level'];
+                        if ($adminLevel < 2 || $adminLevel > 16) {
+                            $adminLevel = null;
+                        }
+                    }
                     return [
-                        'type' => 'Feature',
-                        'properties' => [
-                            'source' => 'overpass',
-                            'osm_type' => $osmType,
-                            'osm_id' => $osmId,
+                        'geojson' => [
+                            'type' => 'Feature',
+                            'properties' => [
+                                'source' => 'overpass',
+                                'osm_type' => $osmType,
+                                'osm_id' => $osmId,
+                            ],
+                            'geometry' => $geoJson,
                         ],
-                        'geometry' => $geoJson,
+                        'admin_level' => $adminLevel,
                     ];
                 }
             }
@@ -199,6 +209,93 @@ class PlaceBoundaryService
         }
 
         return null;
+    }
+
+    /**
+     * Refresh this place's admin_level from Overpass (relation/way tags).
+     * Short timeout so it never hangs; call from CLI or jobs, not on every page load.
+     */
+    public function refreshAdminLevelFromOverpass(Span $place): bool
+    {
+        $osmData = $place->getOsmData();
+        if (!$osmData || empty($osmData['osm_type']) || empty($osmData['osm_id'])) {
+            return false;
+        }
+        $osmType = $osmData['osm_type'];
+        $osmId = $osmData['osm_id'];
+        if (!in_array($osmType, ['relation', 'way'])) {
+            return false;
+        }
+        $adminLevel = $this->fetchAdminLevelFromOverpass($osmType, $osmId);
+        if ($adminLevel === null) {
+            return false;
+        }
+        $metadata = $place->metadata ?? [];
+        $storedLevel = isset($metadata['external_refs']['osm']) ? ($metadata['external_refs']['osm']['admin_level'] ?? null) : ($metadata['osm_data']['admin_level'] ?? null);
+        if ($storedLevel === $adminLevel) {
+            return true;
+        }
+        if (isset($metadata['external_refs']['osm'])) {
+            $metadata['external_refs']['osm']['admin_level'] = $adminLevel;
+        }
+        if (isset($metadata['osm_data'])) {
+            $metadata['osm_data']['admin_level'] = $adminLevel;
+        }
+        $place->metadata = $metadata;
+        $place->saveQuietly();
+        Log::info('Updated admin_level from Overpass', [
+            'span_id' => $place->id,
+            'span_name' => $place->name,
+            'admin_level' => $adminLevel,
+            'previous' => $storedLevel,
+        ]);
+        return true;
+    }
+
+    /**
+     * Fetch only the admin_level tag from Overpass (lightweight, no geometry).
+     * Short timeout to avoid hanging; returns null on timeout or failure.
+     */
+    protected function fetchAdminLevelFromOverpass(string $osmType, $osmId): ?int
+    {
+        if (!in_array($osmType, ['relation', 'way'])) {
+            return null;
+        }
+
+        $query = sprintf('[out:json][timeout:5];%s(%s);out tags;', $osmType, $osmId);
+
+        try {
+            $response = Http::timeout(5)
+                ->connectTimeout(3)
+                ->withHeaders(['User-Agent' => config('app.user_agent')])
+                ->withBody($query, 'text/plain')
+                ->post(self::OVERPASS_ENDPOINT);
+
+            if (!$response->successful()) {
+                return null;
+            }
+
+            $data = $response->json();
+            $elements = $data['elements'] ?? [];
+            if (empty($elements)) {
+                return null;
+            }
+
+            $element = $elements[0];
+            if (!isset($element['tags']['admin_level']) || !is_numeric($element['tags']['admin_level'])) {
+                return null;
+            }
+
+            $adminLevel = (int) $element['tags']['admin_level'];
+            return ($adminLevel >= 2 && $adminLevel <= 16) ? $adminLevel : null;
+        } catch (\Throwable $e) {
+            Log::debug('Overpass admin_level fetch failed', [
+                'osm_type' => $osmType,
+                'osm_id' => $osmId,
+                'error' => $e->getMessage(),
+            ]);
+            return null;
+        }
     }
 
     /**

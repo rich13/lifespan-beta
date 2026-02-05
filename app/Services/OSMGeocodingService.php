@@ -64,7 +64,8 @@ class OSMGeocodingService
         }
 
         try {
-            $response = $this->makeNominatimRequest($placeName, 1, $latitude, $longitude);
+            // Request multiple results so we can prefer a boundary (has admin_level) over a node
+            $response = $this->makeNominatimRequest($placeName, 10, $latitude, $longitude);
             
             if (empty($response)) {
                 // If no results, try progressive fallback searches
@@ -82,8 +83,14 @@ class OSMGeocodingService
                 return null;
             }
 
-            // Take the first (most relevant) result (node, way, or relation are all valid)
+            // Prefer first result that has admin_level (a boundary); otherwise use first result
             $result = $response[0];
+            foreach ($response as $candidate) {
+                if (isset($candidate['extratags']['admin_level'])) {
+                    $result = $candidate;
+                    break;
+                }
+            }
             
             $osmData = $this->formatOsmData($result);
             
@@ -536,32 +543,9 @@ class OSMGeocodingService
             'district' => ['admin_level' => 10, 'type' => 'district']
         ];
         
-        // Determine the place's actual level based on its type
         $placeType = $nominatimData['type'] ?? null;
         $maxLevel = $this->getMaxLevelForPlaceType($placeType);
-        
-        // Special handling for administrative places
-        if ($placeType === 'administrative') {
-            $placeName = $nominatimData['name'] ?? '';
-            
-            // Check if this is actually a country
-            if (in_array(strtolower($placeName), ['united kingdom', 'england', 'france', 'spain', 'italy', 'netherlands'])) {
-                $maxLevel = 2; // Treat as country level
-            }
-            // Check if this is a major city
-            elseif (in_array($placeName, ['Paris', 'Rome', 'Amsterdam', 'Manchester', 'Liverpool', 'Edinburgh', 'Madrid'])) {
-                $maxLevel = 8; // Treat as city level
-            }
-            // Check if this is a county/region
-            elseif (in_array(strtolower($placeName), ['oxfordshire', 'vale of white horse'])) {
-                $maxLevel = 6; // Treat as county level
-            }
-            // Default for other administrative places
-            else {
-                $maxLevel = 6; // Allow county level for administrative places
-            }
-        }
-        
+
         foreach ($addressMapping as $nominatimKey => $mapping) {
             if (isset($address[$nominatimKey])) {
                 // Include all administrative levels up to the place's level
@@ -592,33 +576,90 @@ class OSMGeocodingService
     }
 
     /**
-     * Get the maximum admin level for a place type
+     * Resolve this place's admin_level: explicit (lookup/extratags) > OSM identity in hierarchy > most specific containing boundary > name match > place_type map.
+     * When the place is a node/way (e.g. place:suburb "Hackney") search returns that, not the boundary relation; use the most specific boundary in the hierarchy (max admin_level).
+     */
+    private function resolveAdminLevelFromOsmData(?int $explicitFromExtratags, string $placeName, string $placeType, array $hierarchy, ?string $placeOsmId = null, ?string $placeOsmType = null): ?int
+    {
+        if ($explicitFromExtratags !== null && $explicitFromExtratags >= 2 && $explicitFromExtratags <= 16) {
+            return $explicitFromExtratags;
+        }
+        // This place's own boundary is in the hierarchy (same OSM entity)
+        if ($placeOsmId !== null && $placeOsmType !== null) {
+            foreach ($hierarchy as $level) {
+                if (!isset($level['admin_level'])) {
+                    continue;
+                }
+                $levelOsmId = isset($level['osm_id']) ? (string) $level['osm_id'] : null;
+                $levelOsmType = isset($level['osm_type']) ? $this->normaliseOsmType($level['osm_type']) : null;
+                if ($levelOsmId === $placeOsmId && $levelOsmType === $placeOsmType) {
+                    return (int) $level['admin_level'];
+                }
+            }
+        }
+        // Place is a node/way (e.g. place:suburb "Hackney"); use most specific containing boundary from hierarchy (max admin_level)
+        $levels = array_filter(array_map(function ($level) {
+            return isset($level['admin_level']) ? (int) $level['admin_level'] : null;
+        }, $hierarchy));
+        if (!empty($levels)) {
+            return max($levels);
+        }
+        foreach ($hierarchy as $level) {
+            $levelName = $level['name'] ?? '';
+            if ($levelName !== '' && isset($level['admin_level']) && strtolower($levelName) === strtolower($placeName)) {
+                return (int) $level['admin_level'];
+            }
+        }
+        $level = $this->getMaxLevelForPlaceType($placeType);
+        return $level;
+    }
+
+    /**
+     * Normalise OSM type to 'relation' or 'way' for consistent comparison with Overpass output.
+     */
+    private function normaliseOsmType($osmType): string
+    {
+        $t = strtolower((string) $osmType);
+        if ($t === 'r' || $t === 'relation') {
+            return 'relation';
+        }
+        if ($t === 'w' || $t === 'way') {
+            return 'way';
+        }
+        return $t;
+    }
+
+    /**
+     * OSM-consistent mapping: place_type from Nominatim/Overpass -> admin_level (2–16).
+     * No hardcoded place names; same type always maps to same level.
      */
     private function getMaxLevelForPlaceType(?string $placeType): int
     {
         $typeToLevel = [
             'country' => 2,
             'state' => 4,
-            'administrative' => 6, // Administrative places can be counties (level 6)
+            'administrative' => 6,
             'city' => 8,
-            'town' => 10, // Towns should be at level 10 (suburb/area level)
+            'borough' => 9,
+            'city_district' => 9,
+            'town' => 10,
             'suburb' => 10,
-            'neighbourhood' => 12, // Neighbourhoods should be at level 12
-            'district' => 10, // Districts can be at level 10
-            'village' => 10, // Villages should be at level 10
-            'hamlet' => 12, // Hamlets can be at level 12
-            'quarter' => 12, // Quarters are neighbourhoods
-            'building' => 16, // Buildings are at level 16
-            'house' => 16, // Houses are at level 16
-            'museum' => 16, // Museums are specific buildings/properties
-            'landmark' => 16, // Landmarks are specific buildings/properties
-            'attraction' => 16, // Tourist attractions are specific buildings/properties
-            'historic' => 16, // Historic sites are specific buildings/properties
-            'memorial' => 16, // Memorials are specific buildings/properties
-            'monument' => 16 // Monuments are specific buildings/properties
+            'neighbourhood' => 12,
+            'district' => 10,
+            'village' => 10,
+            'hamlet' => 12,
+            'quarter' => 12,
+            'building' => 16,
+            'house' => 16,
+            'museum' => 16,
+            'landmark' => 16,
+            'attraction' => 16,
+            'historic' => 16,
+            'memorial' => 16,
+            'monument' => 16,
         ];
-        
-        return $typeToLevel[$placeType] ?? 10; // Default to most specific if unknown
+
+        return $typeToLevel[$placeType] ?? 10;
     }
 
     /**
@@ -630,36 +671,90 @@ class OSMGeocodingService
         return $this->buildAdminHierarchyFromNominatim(['address' => $address]);
     }
 
-
+    /**
+     * Single Nominatim reverse call at (lat, lon). Returns raw response or null.
+     */
+    private function reverseAt(float $latitude, float $longitude, int $zoom = 10): ?array
+    {
+        $cacheKey = 'osm_reverse_at_' . round($latitude, 5) . '_' . round($longitude, 5) . '_' . $zoom;
+        if (Cache::has($cacheKey)) {
+            return Cache::get($cacheKey);
+        }
+        try {
+            $response = Http::timeout(10)
+                ->withHeaders([
+                    'Accept-Language' => 'en',
+                    'User-Agent' => config('app.user_agent'),
+                ])
+                ->get($this->getNominatimBaseUrl() . '/reverse', [
+                    'lat' => $latitude,
+                    'lon' => $longitude,
+                    'format' => 'json',
+                    'addressdetails' => 1,
+                    'extratags' => 1,
+                    'zoom' => $zoom,
+                ]);
+            if (!$response->successful()) {
+                return null;
+            }
+            $data = $response->json();
+            if (!$data || isset($data['error'])) {
+                return null;
+            }
+            Cache::put($cacheKey, $data, self::CACHE_TTL);
+            return $data;
+        } catch (\Exception $e) {
+            return null;
+        }
+    }
 
     /**
-     * Format Nominatim response into our OSM data structure
+     * Build hierarchy from Nominatim address keys only (parents for display).
+     */
+    private function buildHierarchyFromAddress(array $address): array
+    {
+        $mapping = [
+            'country' => ['admin_level' => 2, 'type' => 'country'],
+            'state' => ['admin_level' => 4, 'type' => 'state'],
+            'county' => ['admin_level' => 6, 'type' => 'county'],
+            'city' => ['admin_level' => 8, 'type' => 'city'],
+            'city_district' => ['admin_level' => 9, 'type' => 'borough'],
+            'town' => ['admin_level' => 10, 'type' => 'town'],
+            'suburb' => ['admin_level' => 10, 'type' => 'district'],
+            'neighbourhood' => ['admin_level' => 12, 'type' => 'neighbourhood'],
+            'district' => ['admin_level' => 10, 'type' => 'district'],
+        ];
+        $hierarchy = [];
+        foreach ($mapping as $key => $m) {
+            if (!empty($address[$key])) {
+                $hierarchy[] = [
+                    'name' => $address[$key],
+                    'admin_level' => $m['admin_level'],
+                    'type' => $m['type'],
+                ];
+            }
+        }
+        return $hierarchy;
+    }
+
+    /**
+     * Format Nominatim response into our OSM data structure.
+     * Hierarchy from one Nominatim reverse at (lat,lon). admin_level from result extratags only.
      */
     private function formatOsmData(array $nominatimResult): array
     {
         $address = $nominatimResult['address'] ?? [];
-        
-        // Try to get full admin hierarchy from Overpass if we have coordinates
-        // This captures all admin levels (2-16), including intermediate levels like 11, 13, 15
         $hierarchy = [];
-        if (isset($nominatimResult['lat']) && isset($nominatimResult['lon'])) {
-            try {
-                $latitude = (float) $nominatimResult['lat'];
-                $longitude = (float) $nominatimResult['lon'];
-                $hierarchy = $this->buildAdminHierarchyFromOverpass($latitude, $longitude, $nominatimResult);
-            } catch (\Exception $e) {
-                // If Overpass fails, fall back to Nominatim
-                Log::warning('Overpass hierarchy fetch failed in formatOsmData, using Nominatim fallback', [
-                    'error' => $e->getMessage(),
-                    'coordinates' => [$nominatimResult['lat'] ?? null, $nominatimResult['lon'] ?? null]
-                ]);
-                $hierarchy = $this->buildAdminHierarchyFromNominatim($nominatimResult);
+        if (isset($nominatimResult['lat'], $nominatimResult['lon'])) {
+            $reverse = $this->reverseAt((float) $nominatimResult['lat'], (float) $nominatimResult['lon']);
+            if ($reverse !== null && !empty($reverse['address'])) {
+                $hierarchy = $this->buildHierarchyFromAddress($reverse['address']);
             }
-        } else {
-            // No coordinates available, use Nominatim address components
-            $hierarchy = $this->buildAdminHierarchyFromNominatim($nominatimResult);
         }
-        
+        if (empty($hierarchy) && !empty($address)) {
+            $hierarchy = $this->buildHierarchyFromAddress($address);
+        }
+
         // Determine if this is a building address that needs special handling
         $placeType = $nominatimResult['type'] ?? '';
         $isBuildingAddress = in_array($placeType, ['house', 'building', 'address', 'office']) || 
@@ -722,10 +817,17 @@ class OSMGeocodingService
             throw new \InvalidArgumentException('Nominatim result must have lat/lon or boundingbox');
         }
 
+        $placeType = $nominatimResult['type'] ?? $nominatimResult['class'] ?? 'unknown';
+        // admin_level only from Nominatim result (we already prefer a boundary in geocode())
+        $adminLevel = isset($nominatimResult['extratags']['admin_level'])
+            ? (int) $nominatimResult['extratags']['admin_level']
+            : null;
+
         $osmData = [
             'place_id' => $nominatimResult['place_id'] ?? 0,
             'osm_type' => $nominatimResult['osm_type'] ?? 'way',
             'osm_id' => $nominatimResult['osm_id'] ?? 0,
+            'wikidata_id' => $nominatimResult['extratags']['wikidata'] ?? null,
             'canonical_name' => $placeName,
             'display_name' => $nominatimResult['display_name'] ?? $nominatimResult['name'] ?? '',
             'coordinates' => [
@@ -733,7 +835,8 @@ class OSMGeocodingService
                 'longitude' => $lon
             ],
             'hierarchy' => $hierarchy,
-            'place_type' => $nominatimResult['type'] ?? $nominatimResult['class'] ?? 'unknown',
+            'place_type' => $placeType,
+            'admin_level' => $adminLevel,
             'importance' => $nominatimResult['importance'] ?? 0
         ];
         
@@ -1164,6 +1267,70 @@ class OSMGeocodingService
             
             return null;
         }
+    }
+
+    /**
+     * Resolve a Nominatim selection (lat/lng + optional osm_type/osm_id) to the same OSM data
+     * structure used by create-from-nominatim and update-from-nominatim. Use this for preview
+     * so the preview matches what would be saved.
+     *
+     * @param float $lat
+     * @param float $lng
+     * @param string $osmType e.g. 'relation', 'way', 'node'
+     * @param int $osmId
+     * @param string $displayName Fallback display name if lookup fails
+     * @param string $placeType Fallback place type if lookup fails
+     * @return array OSM data (canonical_name, hierarchy, admin_level, place_type, etc.)
+     */
+    public function resolveNominatimToOsmData(
+        float $lat,
+        float $lng,
+        string $osmType,
+        int $osmId,
+        string $displayName = '',
+        string $placeType = ''
+    ): array {
+        $nominatimResult = $this->lookupByOsmId($osmType, $osmId, true);
+
+        if ($nominatimResult === null) {
+            $reverseResult = Http::withHeaders([
+                'User-Agent' => config('app.user_agent'),
+                'Accept-Language' => 'en'
+            ])->get('https://nominatim.openstreetmap.org/reverse', [
+                'lat' => $lat,
+                'lon' => $lng,
+                'format' => 'json',
+                'addressdetails' => 1,
+                'extratags' => 1,
+                'namedetails' => 1,
+                'polygon_geojson' => 1,
+                'polygon_threshold' => $this->getPolygonThreshold(),
+            ]);
+
+            if ($reverseResult->successful()) {
+                $reverseData = $reverseResult->json();
+                if (($reverseData['osm_type'] ?? '') === $osmType
+                    && (string) ($reverseData['osm_id'] ?? '') === (string) $osmId) {
+                    $nominatimResult = $reverseData;
+                }
+            }
+        }
+
+        if ($nominatimResult === null) {
+            $nominatimResult = [
+                'place_id' => null,
+                'osm_type' => $osmType,
+                'osm_id' => $osmId,
+                'lat' => (string) $lat,
+                'lon' => (string) $lng,
+                'display_name' => $displayName,
+                'type' => $placeType,
+                'name' => $displayName !== '' ? explode(',', $displayName)[0] : 'Unknown',
+                'address' => [],
+            ];
+        }
+
+        return $this->formatOsmData($nominatimResult);
     }
 
     /**

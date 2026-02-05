@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\Span;
 use Illuminate\Support\Facades\Log;
+use App\Services\PlaceLocationService;
+use App\Services\WikidataPlaceHierarchyFetcher;
 
 /**
  * Service for handling geocoding workflow for place spans
@@ -13,11 +15,19 @@ class PlaceGeocodingWorkflowService
 {
     private OSMGeocodingService $osmService;
     private PlaceBoundaryService $boundaryService;
+    private PlaceLocationService $placeLocationService;
+    private WikidataPlaceHierarchyFetcher $wikidataHierarchyFetcher;
 
-    public function __construct(OSMGeocodingService $osmService, PlaceBoundaryService $boundaryService)
-    {
+    public function __construct(
+        OSMGeocodingService $osmService,
+        PlaceBoundaryService $boundaryService,
+        PlaceLocationService $placeLocationService,
+        WikidataPlaceHierarchyFetcher $wikidataHierarchyFetcher
+    ) {
         $this->osmService = $osmService;
         $this->boundaryService = $boundaryService;
+        $this->placeLocationService = $placeLocationService;
+        $this->wikidataHierarchyFetcher = $wikidataHierarchyFetcher;
     }
 
     /**
@@ -88,6 +98,9 @@ class PlaceGeocodingWorkflowService
                 
                 // Set the OSM data and coordinates
                 $span->setOsmData($osmData);
+
+                // Fetch Wikidata administrative hierarchy when available (direct parent + children; short timeout)
+                $this->storeWikidataHierarchyIfAvailable($span, $osmData);
                 
                 // Add OSM URL to sources if we have OSM type and ID
                 if (isset($osmData['osm_type']) && isset($osmData['osm_id'])) {
@@ -143,6 +156,9 @@ class PlaceGeocodingWorkflowService
                 
                 // Create missing administrative spans for higher-level divisions
                 $this->createMissingAdministrativeSpans($span, $osmData);
+
+                // Clear per-place location caches so boundaries/relations are recomputed
+                $this->placeLocationService->clearPlaceCaches($span);
                 
                 Log::info('Successfully geocoded place', [
                     'span_id' => $span->id,
@@ -200,6 +216,9 @@ class PlaceGeocodingWorkflowService
 
         try {
             $span->setOsmData($osmData);
+
+            // Fetch Wikidata administrative hierarchy when available (direct parent + children; short timeout)
+            $this->storeWikidataHierarchyIfAvailable($span, $osmData);
             
             // Add OSM URL to sources if we have OSM type and ID
             if (isset($osmData['osm_type']) && isset($osmData['osm_id'])) {
@@ -256,6 +275,9 @@ class PlaceGeocodingWorkflowService
             
             // Create missing administrative spans for higher-level divisions
             $this->createMissingAdministrativeSpans($span, $osmData);
+
+            // Clear per-place location caches so boundaries/relations are recomputed
+            $this->placeLocationService->clearPlaceCaches($span);
             
             Log::info('Successfully resolved place with specific match', [
                 'span_id' => $span->id,
@@ -685,6 +707,40 @@ class PlaceGeocodingWorkflowService
         }
         
         return $osmData;
+    }
+
+    /**
+     * When geocoding returns a wikidata_id (from Nominatim), fetch administrative hierarchy
+     * (P131 parent chain, P150 children) from Wikidata and store in span metadata.
+     * Uses direct parent only (max depth 1) to keep latency low; timeout per request avoids hanging.
+     */
+    private function storeWikidataHierarchyIfAvailable(Span $span, array $osmData): void
+    {
+        $wikidataId = $osmData['wikidata_id'] ?? null;
+        if ($wikidataId === null || $wikidataId === '' || !preg_match('/^Q\d+$/', $wikidataId)) {
+            return;
+        }
+
+        try {
+            $hierarchy = $this->wikidataHierarchyFetcher->fetchHierarchy($wikidataId, 1);
+            if ($hierarchy !== null) {
+                $metadata = $span->metadata ?? [];
+                $metadata['wikidata_hierarchy'] = $hierarchy;
+                $span->metadata = $metadata;
+                Log::info('Stored Wikidata hierarchy for place', [
+                    'span_id' => $span->id,
+                    'wikidata_id' => $wikidataId,
+                    'parent_count' => count($hierarchy['parent_chain'] ?? []),
+                    'child_count' => count($hierarchy['child_ids'] ?? []),
+                ]);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Wikidata hierarchy fetch failed during geocoding (non-fatal)', [
+                'span_id' => $span->id,
+                'wikidata_id' => $wikidataId,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**

@@ -10,6 +10,8 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\View\View;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
 
 class PlacesController extends Controller
 {
@@ -36,14 +38,32 @@ class PlacesController extends Controller
             'placeRelationSummary' => null,
             'geodataLevel' => null,
             'duplicateNominatimPlaces' => collect([]),
+            'boroughBoundaryPlaces' => [],
         ]);
     }
 
     /**
      * Display a single place on a full-page map
      */
-    public function show(Span $span): View
+    public function show(Request $request, Span $span): View|\Illuminate\Http\RedirectResponse
     {
+        // If we're accessing via UUID and a slug exists, redirect to slug URL for consistency
+        $routeParam = $request->segment(2); // Get the actual URL segment after /places
+
+        if (Str::isUuid($routeParam) && $span->slug) {
+            if (config('app.debug')) {
+                Log::debug('Places show: redirecting to slug URL', [
+                    'from' => $routeParam,
+                    'to' => $span->slug,
+                    'span_id' => $span->id,
+                ]);
+            }
+
+            return redirect()
+                ->route('places.show', ['span' => $span->slug], 301)
+                ->with('status', session('status')); // Preserve flash message
+        }
+
         // Verify it's a place span
         if ($span->type_id !== 'place') {
             \Log::warning('PlacesController: Span is not a place', [
@@ -80,10 +100,43 @@ class PlacesController extends Controller
         $locationHierarchy = $span->getLocationHierarchy();
         $hierarchyWithSpans = $this->findMatchingSpansForHierarchy($locationHierarchy);
 
-        // Place relations from geodata (contains, contained by, near) when traits are available
+        // Place relations from geodata (contains, contained by, near) when traits are available.
+        // Use higher contains limit (80) so Contains list and map overlay show all children (e.g. all boroughs).
         $placeRelationSummary = null;
         if ($span->hasUsableGeodata()) {
-            $placeRelationSummary = $this->locationService->getPlaceRelationSummary($span);
+            $placeRelationSummary = $this->locationService->getPlaceRelationSummary($span, 20, 20, 80);
+        }
+
+        // Map borough overlay: use same source as Contains list so map and card stay in sync
+        $boroughBoundaryPlaces = [];
+        $containsSample = $placeRelationSummary['contains_sample'] ?? [];
+        foreach ($containsSample as $containedSpan) {
+            if (!$containedSpan->hasBoundary()) {
+                continue;
+            }
+            $level = $containedSpan->getPlaceRelationLevelLabel();
+            $boroughBoundaryPlaces[] = [
+                'id' => $containedSpan->id,
+                'name' => $containedSpan->name,
+                'label' => $level['label'] ?? 'Place',
+                'boundary_url' => route('places.boundary', ['span' => $containedSpan->id]),
+            ];
+        }
+        // Fallback when no place relation summary (e.g. no coordinates): use geometry-based children for map only
+        if (empty($boroughBoundaryPlaces) && $span->hasBoundary() && $span->hasUsableGeodata()) {
+            $childrenAtNextLevel = $this->locationService->getChildrenAtNextLevel($span, 80);
+            foreach ($childrenAtNextLevel as $containedSpan) {
+                if (!$containedSpan->hasBoundary()) {
+                    continue;
+                }
+                $level = $containedSpan->getPlaceRelationLevelLabel();
+                $boroughBoundaryPlaces[] = [
+                    'id' => $containedSpan->id,
+                    'name' => $containedSpan->name,
+                    'label' => $level['label'] ?? 'Place',
+                    'boundary_url' => route('places.boundary', ['span' => $containedSpan->id]),
+                ];
+            }
         }
 
         $geodataLevel = $span->getGeodataLevel();
@@ -91,7 +144,15 @@ class PlacesController extends Controller
         // Other place spans that share the same Nominatim/OSM identity (for duplicate warning)
         $duplicateNominatimPlaces = $this->locationService->getOtherPlacesWithSameNominatimIdentity($span);
 
-        return view('places.show', compact('span', 'coordinates', 'hierarchyWithSpans', 'placeRelationSummary', 'geodataLevel', 'duplicateNominatimPlaces'));
+        return view('places.show', compact(
+            'span',
+            'coordinates',
+            'hierarchyWithSpans',
+            'placeRelationSummary',
+            'geodataLevel',
+            'duplicateNominatimPlaces',
+            'boroughBoundaryPlaces'
+        ));
     }
     
     /**
@@ -274,7 +335,7 @@ class PlacesController extends Controller
                     }
                 }
             }
-            $boundaryUrl = $hasBoundary ? route('places.boundary', $place) : null;
+            $boundaryUrl = $hasBoundary ? route('places.boundary', ['span' => $place->id]) : null;
 
             $placeData = [
                 'id' => $place->id,

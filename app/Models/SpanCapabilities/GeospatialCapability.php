@@ -923,28 +923,36 @@ class GeospatialCapability implements SpanCapability
             return null;
         }
 
-        $placeType = $osmData['place_type'] ?? null;
-        $placeName = $place->name;
-        
-        if (!$placeType) {
-            return null;
+        // 1. Use admin_level stored at geocode time (from OSM hierarchy or place_type)
+        if (isset($osmData['admin_level']) && $osmData['admin_level'] !== null && $osmData['admin_level'] !== '') {
+            return (int) $osmData['admin_level'];
         }
 
-        // Use the existing method to get admin level
-        $level = $this->getAdminLevelFromPlaceType($placeType, $placeName);
-        
-        // If we have hierarchy data and couldn't determine from place type, try hierarchy
-        if ($level === null && isset($osmData['hierarchy'])) {
+        $placeName = $place->name;
+        $canonicalName = $osmData['canonical_name'] ?? null;
+
+        // 2. Match hierarchy by place name or canonical name (OSM-consistent)
+        if (isset($osmData['hierarchy']) && is_array($osmData['hierarchy'])) {
             foreach ($osmData['hierarchy'] as $hierarchyLevel) {
-                if (isset($hierarchyLevel['admin_level']) && 
-                    strtolower($hierarchyLevel['name'] ?? '') === strtolower($placeName)) {
-                    $level = $hierarchyLevel['admin_level'];
-                    break;
+                if (!isset($hierarchyLevel['admin_level'])) {
+                    continue;
+                }
+                $levelName = strtolower($hierarchyLevel['name'] ?? '');
+                if ($levelName !== '' && (
+                    $levelName === strtolower($placeName) ||
+                    ($canonicalName !== null && $levelName === strtolower($canonicalName))
+                )) {
+                    return (int) $hierarchyLevel['admin_level'];
                 }
             }
         }
 
-        return $level;
+        $placeType = $osmData['place_type'] ?? null;
+        if (!$placeType) {
+            return null;
+        }
+
+        return $this->getAdminLevelFromPlaceType($placeType);
     }
 
     /**
@@ -1066,7 +1074,7 @@ class GeospatialCapability implements SpanCapability
         $placeType = $osmData['place_type'] ?? '';
         
         // First, try to determine from place_type and name patterns
-        $placeAdminLevel = $this->getAdminLevelFromPlaceType($placeType, $placeName);
+        $placeAdminLevel = $this->getAdminLevelFromPlaceType($placeType);
         
         // If we couldn't determine from place_type, fall back to hierarchy position
         if (!$placeAdminLevel && isset($osmData['hierarchy'])) {
@@ -1095,36 +1103,17 @@ class GeospatialCapability implements SpanCapability
     }
 
     /**
-     * Get admin level from place type and name
+     * OSM-consistent mapping: place_type -> admin_level (no hardcoded place names).
      */
-    private function getAdminLevelFromPlaceType(string $placeType, string $placeName): ?int
+    private function getAdminLevelFromPlaceType(string $placeType): ?int
     {
-        // Special handling for administrative places
-        if ($placeType === 'administrative') {
-            // Check if this is actually a country
-            if (in_array(strtolower($placeName), ['united kingdom', 'england', 'france', 'spain', 'italy', 'netherlands'])) {
-                return 2; // Treat as country level
-            }
-            
-            // Check if this is a major city
-            if (in_array($placeName, ['Paris', 'Rome', 'Amsterdam', 'Manchester', 'Liverpool', 'Edinburgh', 'Madrid'])) {
-                return 8; // Treat as city level
-            }
-            
-            // Check if this is a county/district level administrative division
-            if (in_array(strtolower($placeName), ['oxfordshire', 'vale of white horse', 'city of milton keynes', 'community of madrid', 'ile-de-france', 'lazio', 'roma capitale', 'north holland'])) {
-                return 6; // Treat as county/district level
-            }
-            
-            // For other administrative places, they're likely counties or similar
-            return 6;
-        }
-        
-        // Map other place types to admin levels
         $typeToLevel = [
             'country' => 2,
             'state' => 4,
+            'administrative' => 6,
             'city' => 8,
+            'borough' => 9,
+            'city_district' => 9,
             'town' => 8,
             'village' => 10,
             'suburb' => 10,
@@ -1138,76 +1127,32 @@ class GeospatialCapability implements SpanCapability
             'historic' => 16,
             'memorial' => 16,
             'monument' => 16,
-            'yes' => 16 // Generic "yes" type often indicates buildings/landmarks
+            'yes' => 16,
         ];
-        
-        if ($placeType && isset($typeToLevel[$placeType])) {
-            return $typeToLevel[$placeType];
-        }
-        
-        // Check if this is a landmark building by name patterns
-        $placeName = strtolower($placeName);
-        $landmarkKeywords = [
-            'palace', 'castle', 'cathedral', 'abbey', 'church', 'temple', 'mosque', 'synagogue',
-            'tower', 'bridge', 'gate', 'wall', 'fort', 'fortress', 'manor', 'hall', 'house',
-            'museum', 'gallery', 'theatre', 'theater', 'stadium', 'arena', 'monument', 'memorial',
-            'statue', 'fountain', 'park', 'garden', 'zoo', 'aquarium', 'library', 'university',
-            'college', 'school', 'hospital', 'station', 'airport', 'harbor', 'harbour', 'port'
-        ];
-        
-        foreach ($landmarkKeywords as $keyword) {
-            if (strpos($placeName, $keyword) !== false) {
-                return 16; // Building/Property level
-            }
-        }
-        
-        return null;
+
+        return $typeToLevel[$placeType] ?? null;
     }
 
     /**
      * Label for this place's OSM level (for grouping in Place relations card).
      * Returns ['order' => int, 'label' => string] for sorting/display, or null if unknown.
-     * Order follows OSM admin_level (2=country, 4=state, 8=city, 9=borough, etc.).
+     * Uses the place's OSM/Nominatim type/class as the label when available; order from admin_level.
      */
     public function getPlaceRelationLevelLabel(): ?array
     {
-        $adminLevel = $this->getPlaceAdminLevel($this->span);
-        if ($adminLevel !== null) {
-            $label = $this->getPlaceRelationLevelName($adminLevel);
-            return ['order' => $adminLevel, 'label' => $label];
-        }
         $osmData = $this->getOsmData();
         $placeType = $osmData['place_type'] ?? $osmData['type'] ?? null;
-        if ($placeType) {
+        $adminLevel = $this->getPlaceAdminLevel($this->span);
+
+        $order = $adminLevel !== null ? $adminLevel : 99;
+        if ($placeType !== null && $placeType !== '') {
             $label = ucfirst(str_replace('_', ' ', $placeType));
-            return ['order' => 99, 'label' => $label];
+            return ['order' => $order, 'label' => $label];
+        }
+        if ($adminLevel !== null) {
+            return ['order' => $order, 'label' => 'Administrative'];
         }
         return null;
-    }
-
-    /**
-     * Human-readable name for OSM admin_level (Nominatim-style).
-     */
-    protected function getPlaceRelationLevelName(int $adminLevel): string
-    {
-        $names = [
-            2 => 'Country',
-            3 => 'State',
-            4 => 'State / Region',
-            5 => 'State',
-            6 => 'County / Province',
-            7 => 'County',
-            8 => 'City',
-            9 => 'Borough',
-            10 => 'District / Suburb',
-            11 => 'District',
-            12 => 'Neighbourhood',
-            13 => 'Neighbourhood',
-            14 => 'Sub-neighbourhood',
-            15 => 'Sub-neighbourhood',
-            16 => 'Building / Property',
-        ];
-        return $names[$adminLevel] ?? 'Administrative';
     }
 
     /**
@@ -1508,12 +1453,18 @@ class GeospatialCapability implements SpanCapability
     }
 
     /**
-     * Get Wikidata ID (Q number) from external_refs
+     * Get Wikidata ID (Q number). Reads from external_refs.wikidata.id, then
+     * external_refs.osm.wikidata_id / osm_data.wikidata_id (from Nominatim).
      */
     public function getWikidataId(): ?string
     {
         $wikidata = $this->getWikidataData();
-        return $wikidata['id'] ?? null;
+        if (isset($wikidata['id']) && $wikidata['id'] !== '') {
+            return $wikidata['id'];
+        }
+        $osmData = $this->getOsmData();
+        $id = $osmData['wikidata_id'] ?? null;
+        return $id !== null && $id !== '' ? $id : null;
     }
 
     /**
@@ -1562,9 +1513,23 @@ class GeospatialCapability implements SpanCapability
             'is_current' => true,
         ];
 
-        // Parents from hierarchy
+        // Parents from hierarchy (only true parents: same OSM entity excluded, and admin_level must be higher in hierarchy)
         if (isset($osmData['hierarchy']) && is_array($osmData['hierarchy'])) {
+            $spanOsmId = isset($osmData['osm_id']) ? (string) $osmData['osm_id'] : null;
+            $spanOsmType = $osmData['osm_type'] ?? null;
             foreach ($osmData['hierarchy'] as $parent) {
+                // Skip if this is the current place (same OSM entity)
+                if ($spanOsmId !== null && $spanOsmType !== null
+                    && isset($parent['osm_id'], $parent['osm_type'])
+                    && (string) $parent['osm_id'] === $spanOsmId
+                    && (string) $parent['osm_type'] === (string) $spanOsmType) {
+                    continue;
+                }
+                // Only include true parents: parent must have a lower admin_level number (higher in hierarchy)
+                $parentLevel = isset($parent['admin_level']) ? (int) $parent['admin_level'] : null;
+                if ($currentLevel !== null && $parentLevel !== null && $parentLevel >= $currentLevel) {
+                    continue;
+                }
                 $levels[] = [
                     'name' => $parent['name'] ?? null,
                     'type' => $parent['type'] ?? null,
