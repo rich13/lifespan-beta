@@ -192,7 +192,7 @@ class SpanEditorConnectionTest extends TestCase
     }
 
     /** @test */
-    public function it_prevents_duplicate_connections(): void
+    public function it_allows_multiple_connections_between_same_spans(): void
     {
         // Create initial connection
         Connection::create([
@@ -202,7 +202,7 @@ class SpanEditorConnectionTest extends TestCase
             'connection_span_id' => Span::factory()->create(['type_id' => 'connection'])->id
         ]);
 
-        // Try to create duplicate connection
+        // Create second connection of same type between same spans (e.g. different residence periods)
         $response = $this->actingAs($this->user)
             ->postJson(route('admin.connections.store'), [
                 'type' => $this->connectionType->type,
@@ -211,10 +211,9 @@ class SpanEditorConnectionTest extends TestCase
                 'direction' => 'forward'
             ]);
 
-        $response->assertStatus(422)
-            ->assertJson([
-                'success' => false,
-                'message' => 'A connection of this type already exists between these spans'
-            ]);
+        $response->assertStatus(200)
+            ->assertJson(['success' => true]);
+
+        $this->assertDatabaseCount('connections', 2);
     }
 } 

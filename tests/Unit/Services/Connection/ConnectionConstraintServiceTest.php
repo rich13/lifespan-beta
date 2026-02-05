@@ -346,7 +346,7 @@ class ConnectionConstraintServiceTest extends TestCase
             'connection_span_id' => $existingSpan->id
         ]);
 
-        // Try to create another timeless connection between the same spans
+        // Create another timeless connection between the same spans (multiple connections allowed)
         $newSpan = Span::factory()->create([
             'type_id' => 'connection',
             'start_year' => null,
@@ -367,16 +367,13 @@ class ConnectionConstraintServiceTest extends TestCase
 
         $result = $this->service->validateConstraint($connection, 'timeless');
         
-        $this->assertFalse($result->isValid());
-        $this->assertEquals(
-            'Only one connection of this type is allowed between these spans',
-            $result->getError()
-        );
+        $this->assertTrue($result->isValid());
+        $this->assertNull($result->getError());
     }
 
     public function test_validates_timeless_constraint_ignores_temporal_validation(): void
     {
-        // Create existing timeless connection with dates (should be ignored)
+        // Create existing timeless connection with dates (should be ignored for overlap check)
         $existingSpan = Span::factory()->create([
             'type_id' => 'connection',
             'start_year' => 2000,
@@ -395,11 +392,10 @@ class ConnectionConstraintServiceTest extends TestCase
             'connection_span_id' => $existingSpan->id
         ]);
 
-        // Try to create another timeless connection with overlapping dates
-        // This should still fail due to uniqueness constraint, not temporal overlap
+        // Create another timeless connection - multiple connections of same type are allowed
         $newSpan = Span::factory()->create([
             'type_id' => 'connection',
-            'start_year' => 2002, // Overlapping dates
+            'start_year' => 2002,
             'start_month' => 1,
             'start_day' => 1,
             'end_year' => 2007,
@@ -417,11 +413,8 @@ class ConnectionConstraintServiceTest extends TestCase
 
         $result = $this->service->validateConstraint($connection, 'timeless');
         
-        $this->assertFalse($result->isValid());
-        $this->assertEquals(
-            'Only one connection of this type is allowed between these spans',
-            $result->getError()
-        );
+        $this->assertTrue($result->isValid());
+        $this->assertNull($result->getError());
     }
 
     public function test_validates_timeless_constraint_allows_different_connection_types(): void
