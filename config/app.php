@@ -99,6 +99,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Redirect connection span slugs to triple URL
+    |--------------------------------------------------------------------------
+    |
+    | When true, /spans/{connection-span-slug} redirects 301 to the canonical
+    | triple format: /spans/{subject}/{predicate}/{object} or .../{uuid} when
+    | multiple connections exist. Set to false to restore direct span rendering.
+    |
+    */
+
+    'redirect_connection_spans_to_triple_url' => env('REDIRECT_CONNECTION_SPANS_TO_TRIPLE_URL', true),
+
+    /*
+    |--------------------------------------------------------------------------
     | Span show page max execution time (seconds)
     |--------------------------------------------------------------------------
     |
