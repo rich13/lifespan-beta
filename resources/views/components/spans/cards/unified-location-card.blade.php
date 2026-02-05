@@ -399,7 +399,7 @@
                 @endphp
                 @if($primaryLocation->getOsmData() && in_array($primaryLocation->getOsmData()['place_type'], $boundaryPlaceTypes))
                     $.ajax({
-                        url: '{{ route('places.boundary', $primaryLocation) }}',
+                        url: '{{ route('places.boundary', ['span' => $primaryLocation->id]) }}',
                         method: 'GET',
                         dataType: 'json'
                     }).done(function(response) {
