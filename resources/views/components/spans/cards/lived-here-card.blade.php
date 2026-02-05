@@ -195,16 +195,18 @@
                 @if($allResidents->isNotEmpty())
                     <div class="list-group list-group-flush">
                         @foreach($allResidents as $resident)
+                            @php
+                                $person = $resident['person'];
+                                $connectionSpan = $resident['connection']->connectionSpan;
+                                $linkSpan = $connectionSpan ?? $person;
+                                $isAccessible = $linkSpan->isAccessibleBy(auth()->user());
+                            @endphp
                             <div class="list-group-item px-0 py-2 border-0 border-bottom">
                                 <div class="d-flex align-items-center">
                                     <!-- Photo on the left -->
                                     <div class="me-3 flex-shrink-0">
-                                        @php
-                                            $person = $resident['person'];
-                                            $isAccessible = $person->isAccessibleBy(auth()->user());
-                                        @endphp
                                         @if($resident['photo_url'] && $isAccessible)
-                                            <a href="{{ route('spans.show', $person) }}">
+                                            <a href="{{ route('spans.show', $linkSpan) }}">
                                                 <img src="{{ $resident['photo_url'] }}" 
                                                      alt="{{ $person->name }}"
                                                      class="rounded"
@@ -213,7 +215,7 @@
                                             </a>
                                         @else
                                             @if($isAccessible)
-                                                <a href="{{ route('spans.show', $person) }}" 
+                                                <a href="{{ route('spans.show', $linkSpan) }}" 
                                                    class="d-flex align-items-center justify-content-center bg-light rounded text-muted text-decoration-none"
                                                    style="width: 50px; height: 50px;">
                                                     <i class="bi bi-person"></i>
@@ -227,9 +229,15 @@
                                         @endif
                                     </div>
                                     
-                                    <!-- Name and dates on the right -->
+                                    <!-- Name and dates on the right (link to connection span so user sees "lived in [place]" page) -->
                                     <div class="flex-grow-1">
-                                        <x-span-link :span="$resident['person']" class="text-decoration-none fw-semibold" />
+                                        @if($linkSpan && $isAccessible)
+                                            <a href="{{ route('spans.show', $linkSpan) }}" class="text-decoration-none fw-semibold">{{ trim($person->name) }}</a>
+                                        @elseif($person->isAccessibleBy(auth()->user()))
+                                            <x-span-link :span="$person" class="text-decoration-none fw-semibold" />
+                                        @else
+                                            <span class="text-muted fst-italic fw-semibold">Private person</span>
+                                        @endif
                                         @if($resident['date_text'])
                                             <div class="text-muted small">
                                                 <i class="bi bi-calendar me-1"></i>{{ $resident['date_text'] }}
