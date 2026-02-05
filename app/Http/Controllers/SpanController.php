@@ -843,6 +843,62 @@ class SpanController extends Controller
                     ->with('status', session('status')); // Preserve flash message
             }
 
+            // Redirect connection span slugs to canonical triple URL format.
+            // Disable by setting config('app.redirect_connection_spans_to_triple_url', false).
+            if (config('app.redirect_connection_spans_to_triple_url', true) && $subject->type_id === 'connection') {
+                $connection = Connection::where('connection_span_id', $subject->id)
+                    ->with(['subject', 'object', 'type'])
+                    ->first();
+
+                if ($connection && $connection->subject && $connection->object && $connection->type) {
+                    $connectionSubject = $connection->subject;
+                    $connectionObject = $connection->object;
+                    $connectionType = $connection->type;
+
+                    // Determine predicate for URL (forward when parent→child, inverse when child→parent)
+                    $isForward = $connection->parent_id === $connectionSubject->id;
+                    $predicate = str_replace(' ', '-', $isForward
+                        ? $connectionType->forward_predicate
+                        : $connectionType->inverse_predicate);
+
+                    // Count accessible connections for this triple to decide single vs disambiguation URL
+                    $user = Auth::user();
+                    $connectionsForTriple = Connection::where('type_id', $connectionType->type)
+                        ->where(function($query) use ($connectionSubject, $connectionObject) {
+                            $query->where(function($q) use ($connectionSubject, $connectionObject) {
+                                $q->where('parent_id', $connectionSubject->id)->where('child_id', $connectionObject->id);
+                            })->orWhere(function($q) use ($connectionSubject, $connectionObject) {
+                                $q->where('parent_id', $connectionObject->id)->where('child_id', $connectionSubject->id);
+                            });
+                        })
+                        ->with('connectionSpan')
+                        ->get()
+                        ->filter(function ($c) use ($user) {
+                            $cs = $c->connectionSpan;
+                            return $cs && ($user ? $cs->isAccessibleBy($user) : $cs->access_level === 'public');
+                        });
+
+                    if ($connectionsForTriple->count() === 1) {
+                        return redirect()
+                            ->route('spans.connection', [
+                                'subject' => $connectionSubject,
+                                'predicate' => $predicate,
+                                'object' => $connectionObject,
+                            ], 301)
+                            ->with('status', session('status'));
+                    }
+
+                    return redirect()
+                        ->route('spans.connection.by-id', [
+                            'subject' => $connectionSubject,
+                            'predicate' => $predicate,
+                            'object' => $connectionObject,
+                            'connectionSpanId' => $subject->id,
+                        ], 301)
+                        ->with('status', session('status'));
+                }
+            }
+
             // Check for global time travel cookie and redirect if it exists
             $timeTravelDate = $request->cookie('time_travel_date');
             
@@ -4151,8 +4207,8 @@ class SpanController extends Controller
             abort(404, 'Connection type not found');
         }
 
-        // Find the connection between the subject and object
-        $connection = Connection::where('type_id', $connectionType->type)
+        // Find all connections between the subject and object of this type
+        $connections = Connection::where('type_id', $connectionType->type)
             ->where(function($query) use ($subject, $object) {
                 $query->where(function($q) use ($subject, $object) {
                     $q->where('parent_id', $subject->id)
@@ -4162,30 +4218,106 @@ class SpanController extends Controller
                       ->where('child_id', $subject->id);
                 });
             })
-            ->first();
+            ->with('connectionSpan')
+            ->get();
 
-        if (!$connection) {
+        // Filter to connections with accessible connection spans
+        // Guests can view public connection spans; logged-in users use full permission check
+        $user = Auth::user();
+        $connections = $connections->filter(function ($connection) use ($user) {
+            $connectionSpan = $connection->connectionSpan;
+            if (!$connectionSpan) {
+                return false;
+            }
+            if ($user) {
+                return $connectionSpan->isAccessibleBy($user);
+            }
+            return $connectionSpan->access_level === 'public';
+        })->values();
+
+        if ($connections->isEmpty()) {
             abort(404, 'Connection not found');
         }
 
-        // Get the connection span (the span that represents this connection)
-        $connectionSpan = $connection->connectionSpan;
-        if (!$connectionSpan) {
-            abort(404, 'Connection span not found');
+        // Single connection: show the connection span (same as span show page)
+        if ($connections->count() === 1) {
+            $connection = $connections->first();
+            $connectionSpan = $connection->connectionSpan;
+
+            $desertIslandDiscsSet = null;
+            if ($connectionSpan->type_id === 'person') {
+                try {
+                    $desertIslandDiscsSet = Span::getDesertIslandDiscsSet($connectionSpan);
+                } catch (\Exception $e) {
+                    Log::warning('Failed to get Desert Island Discs set for person', [
+                        'person_id' => $connectionSpan->id,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+
+            $span = $connectionSpan;
+            $familyData = null;
+            [$parentConnections, $childConnections] = $this->getConnectionsForSpanShow($connectionSpan);
+            $story = null;
+            try {
+                $story = app(\App\Services\ConfigurableStoryGeneratorService::class)->generateStory($connectionSpan);
+            } catch (\Exception $e) {
+                $story = ['paragraphs' => [], 'metadata' => [], 'error' => $e->getMessage()];
+            }
+            return view('spans.show', compact('span', 'desertIslandDiscsSet', 'subject', 'object', 'connectionType', 'familyData', 'parentConnections', 'childConnections', 'story'));
         }
 
-        // Check if the connection span is private and the user is not authenticated
-        if ($connectionSpan->access_level !== 'public' && !Auth::check()) {
+        // Multiple connections: show disambiguation view
+        return view('spans.connection-disambiguation', compact('subject', 'object', 'connectionType', 'connections'));
+    }
+
+    /**
+     * Display a specific connection by its connection span UUID.
+     * Resolves /spans/{subject}/{predicate}/{object}/{connectionSpanId}.
+     */
+    public function showConnectionBySpanId(Request $request, Span $subject, string $predicate, Span $object, string $connectionSpanId): View|\Illuminate\Http\RedirectResponse
+    {
+        $predicateWithSpaces = str_replace('-', ' ', $predicate);
+        $connectionType = ConnectionType::where('forward_predicate', $predicateWithSpaces)
+            ->orWhere('inverse_predicate', $predicateWithSpaces)
+            ->first();
+
+        if (!$connectionType) {
+            abort(404, 'Connection type not found');
+        }
+
+        $connection = Connection::where('type_id', $connectionType->type)
+            ->where('connection_span_id', $connectionSpanId)
+            ->where(function($query) use ($subject, $object) {
+                $query->where(function($q) use ($subject, $object) {
+                    $q->where('parent_id', $subject->id)->where('child_id', $object->id);
+                })->orWhere(function($q) use ($subject, $object) {
+                    $q->where('parent_id', $object->id)->where('child_id', $subject->id);
+                });
+            })
+            ->with('connectionSpan')
+            ->first();
+
+        if (!$connection || !$connection->connectionSpan) {
+            abort(404, 'Connection not found');
+        }
+
+        $connectionSpan = $connection->connectionSpan;
+        $user = Auth::user();
+        if ($user) {
+            if (!$connectionSpan->isAccessibleBy($user)) {
+                abort(404, 'Connection not found');
+            }
+        } elseif ($connectionSpan->access_level !== 'public') {
             return redirect()->route('login');
         }
 
-        // Check if this is a person and they have a Desert Island Discs set
         $desertIslandDiscsSet = null;
         if ($connectionSpan->type_id === 'person') {
             try {
                 $desertIslandDiscsSet = Span::getDesertIslandDiscsSet($connectionSpan);
             } catch (\Exception $e) {
-                // Log the error but don't fail the page
                 Log::warning('Failed to get Desert Island Discs set for person', [
                     'person_id' => $connectionSpan->id,
                     'error' => $e->getMessage()
@@ -4193,8 +4325,7 @@ class SpanController extends Controller
             }
         }
 
-        // Use the same view as the span show page, showing the connection span (precompute connections + story)
-        $span = $connectionSpan; // For view compatibility
+        $span = $connectionSpan;
         $familyData = null;
         [$parentConnections, $childConnections] = $this->getConnectionsForSpanShow($connectionSpan);
         $story = null;
@@ -4530,83 +4661,84 @@ class SpanController extends Controller
     }
 
     /**
-     * Show all connections for a span in a comprehensive Gantt chart view
+     * Build and cache the "all connections" data for a span.
+     *
+     * Shared between the traditional /connections view and the experimental /all view.
      */
-    public function allConnections(Request $request, Span $subject): View
+    protected function buildAllConnectionsData(Span $subject, ?User $user): array
     {
-        $user = auth()->user();
         $userId = $user?->id ?? 'guest';
-        
+
         // Cache key includes user ID for proper access control
         // Version 4: includes connectionCounts and connectionTypeDirections in return array
         $cacheKey = "connections_all_v4_{$subject->id}_{$userId}";
-        
-        $cachedData = Cache::remember($cacheKey, 300, function () use ($subject, $user) {
+
+        return Cache::remember($cacheKey, 300, function () use ($subject, $user) {
             // Get all relevant connection types for this span with connection counts
             // Exclude "features" connections
-            $relevantConnectionTypes = ConnectionType::where(function($query) use ($subject) {
+            $relevantConnectionTypes = ConnectionType::where(function ($query) use ($subject) {
                 $query->whereJsonContains('allowed_span_types->parent', $subject->type_id)
-                      ->orWhereJsonContains('allowed_span_types->child', $subject->type_id);
+                    ->orWhereJsonContains('allowed_span_types->child', $subject->type_id);
             })->whereNotIn('type', ['features'])
-              ->orderBy('forward_predicate')->get();
+                ->orderBy('forward_predicate')->get();
 
             // Collect all connections across all types, then merge and sort chronologically
             $allConnectionsFlat = collect();
             $connectionCounts = [];
             $connectionTypeDirections = []; // Track whether each type has forward/inverse connections
-            
+
             foreach ($relevantConnectionTypes as $connectionType) {
                 // Apply access control similar to listConnections
                 $connections = Connection::where('type_id', $connectionType->type)
-                    ->where(function($query) use ($subject) {
+                    ->where(function ($query) use ($subject) {
                         $query->where('parent_id', $subject->id)
-                              ->orWhere('child_id', $subject->id);
+                            ->orWhere('child_id', $subject->id);
                     })
-                    ->where(function($query) use ($user) {
+                    ->where(function ($query) use ($user) {
                         if (!$user) {
                             // Guest users can only see connections involving public spans
-                            $query->whereHas('subject', function($q) {
+                            $query->whereHas('subject', function ($q) {
                                 $q->where('access_level', 'public');
-                            })->whereHas('object', function($q) {
+                            })->whereHas('object', function ($q) {
                                 $q->where('access_level', 'public');
                             });
                         } elseif (!$user->is_admin) {
                             // Regular users can see connections involving spans they have permission to view
-                            $query->where(function($subQ) use ($user) {
-                                $subQ->whereHas('subject', function($q) use ($user) {
-                                    $q->where(function($spanQ) use ($user) {
+                            $query->where(function ($subQ) use ($user) {
+                                $subQ->whereHas('subject', function ($q) use ($user) {
+                                    $q->where(function ($spanQ) use ($user) {
                                         $spanQ->where('access_level', 'public')
                                             ->orWhere('owner_id', $user->id)
-                                            ->orWhereHas('spanPermissions', function($permQ) use ($user) {
+                                            ->orWhereHas('spanPermissions', function ($permQ) use ($user) {
                                                 $permQ->where('user_id', $user->id)
-                                                      ->whereIn('permission_type', ['view', 'edit']);
+                                                    ->whereIn('permission_type', ['view', 'edit']);
                                             })
-                                            ->orWhereHas('spanPermissions', function($permQ) use ($user) {
+                                            ->orWhereHas('spanPermissions', function ($permQ) use ($user) {
                                                 $permQ->whereNotNull('group_id')
-                                                      ->whereIn('permission_type', ['view', 'edit'])
-                                                      ->whereHas('group', function($groupQ) use ($user) {
-                                                          $groupQ->whereHas('users', function($userQ) use ($user) {
-                                                              $userQ->where('user_id', $user->id);
-                                                          });
-                                                      });
+                                                    ->whereIn('permission_type', ['view', 'edit'])
+                                                    ->whereHas('group', function ($groupQ) use ($user) {
+                                                        $groupQ->whereHas('users', function ($userQ) use ($user) {
+                                                            $userQ->where('user_id', $user->id);
+                                                        });
+                                                    });
                                             });
                                     });
-                                })->whereHas('object', function($q) use ($user) {
-                                    $q->where(function($spanQ) use ($user) {
+                                })->whereHas('object', function ($q) use ($user) {
+                                    $q->where(function ($spanQ) use ($user) {
                                         $spanQ->where('access_level', 'public')
                                             ->orWhere('owner_id', $user->id)
-                                            ->orWhereHas('spanPermissions', function($permQ) use ($user) {
+                                            ->orWhereHas('spanPermissions', function ($permQ) use ($user) {
                                                 $permQ->where('user_id', $user->id)
-                                                      ->whereIn('permission_type', ['view', 'edit']);
+                                                    ->whereIn('permission_type', ['view', 'edit']);
                                             })
-                                            ->orWhereHas('spanPermissions', function($permQ) use ($user) {
+                                            ->orWhereHas('spanPermissions', function ($permQ) use ($user) {
                                                 $permQ->whereNotNull('group_id')
-                                                      ->whereIn('permission_type', ['view', 'edit'])
-                                                      ->whereHas('group', function($groupQ) use ($user) {
-                                                          $groupQ->whereHas('users', function($userQ) use ($user) {
-                                                              $userQ->where('user_id', $user->id);
-                                                          });
-                                                      });
+                                                    ->whereIn('permission_type', ['view', 'edit'])
+                                                    ->whereHas('group', function ($groupQ) use ($user) {
+                                                        $groupQ->whereHas('users', function ($userQ) use ($user) {
+                                                            $userQ->where('user_id', $user->id);
+                                                        });
+                                                    });
                                             });
                                     });
                                 });
@@ -4621,33 +4753,33 @@ class SpanController extends Controller
                     ->get();
 
                 // Transform connections to show the other span and relationship direction
-                $connections->transform(function($connection) use ($subject, $connectionType) {
+                $connections->transform(function ($connection) use ($subject, $connectionType) {
                     $isParent = $connection->parent_id === $subject->id;
                     $otherSpan = $isParent ? $connection->object : $connection->subject;
                     $predicate = $isParent ? $connectionType->forward_predicate : $connectionType->inverse_predicate;
-                    
+
                     $connection->other_span = $otherSpan;
                     $connection->is_parent = $isParent;
                     $connection->predicate = $predicate;
                     $connection->connection_type = $connectionType;
-                    // Store the connection type ID for color coding
+                    // Store the connection type ID for colour coding
                     $connection->connection_type_id = $connectionType->type;
-                    
+
                     return $connection;
                 });
 
                 // Filter out "created" connections to photos and notes, and "features" connections
-                $filteredConnections = $connections->filter(function($conn) use ($connectionType, $subject) {
+                $filteredConnections = $connections->filter(function ($conn) use ($connectionType, $subject) {
                     // Filter out "features" connections
                     if ($connectionType->type === 'features') {
                         return false;
                     }
-                    
+
                     if ($connectionType->type === 'created') {
                         $otherSpan = $conn->parent_id === $subject->id ? $conn->object : $conn->subject;
                         // Filter out connections to photos (type=thing, subtype=photo)
-                        if ($otherSpan->type_id === 'thing' && 
-                            isset($otherSpan->metadata['subtype']) && 
+                        if ($otherSpan->type_id === 'thing' &&
+                            isset($otherSpan->metadata['subtype']) &&
                             $otherSpan->metadata['subtype'] === 'photo') {
                             return false;
                         }
@@ -4661,51 +4793,51 @@ class SpanController extends Controller
 
                 // Store count for this connection type
                 $connectionCounts[$connectionType->type] = $filteredConnections->count();
-                
+
                 // Track connection directions for this type
                 // Only track if there are connections
                 if ($filteredConnections->count() > 0) {
-                    $hasForward = $filteredConnections->contains(function($conn) {
+                    $hasForward = $filteredConnections->contains(function ($conn) {
                         return isset($conn->is_parent) && $conn->is_parent === true;
                     });
-                    $hasInverse = $filteredConnections->contains(function($conn) {
+                    $hasInverse = $filteredConnections->contains(function ($conn) {
                         return isset($conn->is_parent) && $conn->is_parent === false;
                     });
-                    
+
                     // Determine which predicate to show:
                     // - If there are any forward connections, prefer forward predicate
                     // - Otherwise, use inverse predicate
                     $predicate = $hasForward ? $connectionType->forward_predicate : $connectionType->inverse_predicate;
-                    
+
                     $connectionTypeDirections[$connectionType->type] = [
                         'has_forward' => $hasForward,
                         'has_inverse' => $hasInverse,
                         'predicate' => $predicate
                     ];
                 }
-                
+
                 // Add to flat collection for chronological sorting
                 $allConnectionsFlat = $allConnectionsFlat->merge($filteredConnections);
             }
 
             // Sort all connections chronologically (across all types) by full start date
-            $connectionsWithDates = $allConnectionsFlat->filter(function($conn) {
+            $connectionsWithDates = $allConnectionsFlat->filter(function ($conn) {
                 return $conn->connectionSpan && $conn->connectionSpan->start_year;
-            })->sortBy(function($conn) {
+            })->sortBy(function ($conn) {
                 $connectionSpan = $conn->connectionSpan;
                 if (!$connectionSpan || !$connectionSpan->start_year) {
                     return PHP_INT_MAX; // Put connections without dates at the end
                 }
-                
+
                 // Create a sortable date string (YYYYMMDD format)
                 $year = $connectionSpan->start_year;
                 $month = $connectionSpan->start_month ?? 1;
                 $day = $connectionSpan->start_day ?? 1;
-                
+
                 return sprintf('%04d%02d%02d', $year, $month, $day);
             });
 
-            $connectionsWithoutDates = $allConnectionsFlat->filter(function($conn) {
+            $connectionsWithoutDates = $allConnectionsFlat->filter(function ($conn) {
                 return !$conn->connectionSpan || !$conn->connectionSpan->start_year;
             });
 
@@ -4719,6 +4851,15 @@ class SpanController extends Controller
                 'connectionTypeDirections' => $connectionTypeDirections
             ];
         });
+    }
+
+    /**
+     * Show all connections for a span in a comprehensive Gantt chart view (/connections).
+     */
+    public function allConnections(Request $request, Span $subject): View
+    {
+        $user = auth()->user();
+        $cachedData = $this->buildAllConnectionsData($subject, $user);
 
         return view('spans.all-connections', [
             'subject' => $subject,
@@ -4726,6 +4867,25 @@ class SpanController extends Controller
             'connectionCounts' => $cachedData['connectionCounts'] ?? [],
             'connectionTypeDirections' => $cachedData['connectionTypeDirections'] ?? [],
             'relevantConnectionTypes' => $cachedData['relevantConnectionTypes']
+        ]);
+    }
+
+    /**
+     * Experimental Konva-based "all connections" view at /spans/{subject}/all.
+     *
+     * Uses the same underlying data as /connections but toggles the Konva MVP timeline.
+     */
+    public function allTimeline(Request $request, Span $subject): View
+    {
+        $user = auth()->user();
+        $cachedData = $this->buildAllConnectionsData($subject, $user);
+
+        return view('spans.all-konva', [
+            'subject' => $subject,
+            'allConnections' => $cachedData['allConnections'],
+            'connectionCounts' => $cachedData['connectionCounts'] ?? [],
+            'connectionTypeDirections' => $cachedData['connectionTypeDirections'] ?? [],
+            'relevantConnectionTypes' => $cachedData['relevantConnectionTypes'],
         ]);
     }
 

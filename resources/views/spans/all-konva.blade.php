@@ -2,12 +2,6 @@
 
 @section('page_title')
     <x-breadcrumb :items="[
-        //[
-        //    'text' => 'Spans',
-        //    'url' => route('spans.index'),
-        //    'icon' => 'view',
-        //    'icon_category' => 'action'
-        //],
         [
             'text' => $subject->getDisplayTitle(),
             'url' => route('spans.show', $subject),
@@ -16,7 +10,7 @@
         ],
         [
             'text' => 'All Connections',
-            'url' => route('spans.all-connections', $subject),
+            'url' => route('spans.all', $subject),
             'icon' => 'diagram-3',
             'icon_category' => 'connection'
         ]
@@ -28,28 +22,16 @@
     <div class="row">
         <div class="col-12">
 
-            <!-- Connection Type Navigation moved into timeline card header -->
-
-            <!-- Comprehensive Gantt Chart -->
+            {{-- Konva-only "all connections" timeline --}}
             @if($allConnections->count() > 0)
-                <x-spans.connections-timeline-card
+                <x-spans.konva-all-connections-timeline
                     :subject="$subject"
                     :connections="$allConnections"
                     :relevantConnectionTypes="$relevantConnectionTypes"
                     :connectionCounts="$connectionCounts"
                     :connectionTypeDirections="$connectionTypeDirections"
-                    containerId="all-connections-timeline-container"
-                    initialConnectionType="all"
+                    containerId="konva-all-connections-timeline-container"
                 />
-
-                @if(!empty($showKonva))
-                    {{-- Experimental Konva-based MVP timeline using the same connection data --}}
-                    <x-spans.konva-all-connections-timeline
-                        :subject="$subject"
-                        :connections="$allConnections"
-                        containerId="konva-all-connections-timeline-container"
-                    />
-                @endif
             @else
                 <div class="card">
                     <div class="card-body text-center">
@@ -64,3 +46,4 @@
 </div>
 
 @endsection
+

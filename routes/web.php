@@ -380,20 +380,7 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                 
                 $connectionSpan = \App\Models\Span::create($connectionSpanData);
                 
-                // Check for existing connection to prevent duplicates
-                $existingConnection = \App\Models\Connection::where('parent_id', $validated['parent_id'])
-                    ->where('child_id', $validated['child_id'])
-                    ->where('type_id', $validated['type_id'])
-                    ->first();
-                
-                if ($existingConnection) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'A connection of this type already exists between these spans'
-                    ], 422);
-                }
-                
-                // Create the connection
+                // Create the connection (multiple connections of same type between same spans are allowed)
                 $connection = \App\Models\Connection::create([
                     'parent_id' => $validated['parent_id'],
                     'child_id' => $validated['child_id'],
@@ -518,23 +505,6 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                             'success' => false,
                             'message' => "Invalid child span type. Expected one of: " . 
                                         implode(', ', $connectionType->getAllowedSpanTypes('child'))
-                        ], 422);
-                    }
-
-                    // Check for existing connection (check both directions)
-                    $existingConnection = \App\Models\Connection::where(function($query) use ($parent, $child) {
-                        $query->where('parent_id', $parent->id)
-                              ->where('child_id', $child->id);
-                    })->orWhere(function($query) use ($parent, $child) {
-                        $query->where('parent_id', $child->id)
-                              ->where('child_id', $parent->id);
-                    })->where('type_id', $validated['predicate'])
-                    ->first();
-
-                    if ($existingConnection) {
-                        return response()->json([
-                            'success' => false,
-                            'message' => 'A connection of this type already exists between these spans'
                         ], 422);
                     }
 
@@ -915,7 +885,11 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
             
             // Connection routes (must come before general span route)
             Route::get('/{subject}/connections', [SpanController::class, 'allConnections'])->name('spans.all-connections');
+            Route::get('/{subject}/all', [SpanController::class, 'allTimeline'])->name('spans.all');
             Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])->name('spans.connections');
+            Route::get('/{subject}/{predicate}/{object}/{connectionSpanId}', [SpanController::class, 'showConnectionBySpanId'])
+                ->whereUuid('connectionSpanId')
+                ->name('spans.connection.by-id');
             Route::get('/{subject}/{predicate}/{object}', [SpanController::class, 'showConnection'])->name('spans.connection');
             
             // Legacy connection type routes
