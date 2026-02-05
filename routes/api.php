@@ -318,56 +318,15 @@ Route::middleware('auth')->group(function () {
             $osmType = $request->get('osm_type');
             $osmId = $request->get('osm_id');
             
-            // Lookup the full Nominatim result using OSM type and ID
-            $nominatimResult = $osmService->lookupByOsmId($osmType, (int)$osmId, true);
-            
-            if (!$nominatimResult) {
-                // If lookup fails, try reverse geocode as fallback
-                $reverseResult = Http::withHeaders([
-                    'User-Agent' => config('app.user_agent'),
-                    'Accept-Language' => 'en'
-                ])->get('https://nominatim.openstreetmap.org/reverse', [
-                    'lat' => $lat,
-                    'lon' => $lng,
-                    'format' => 'json',
-                    'addressdetails' => 1,
-                    'extratags' => 1,
-                    'namedetails' => 1,
-                    'polygon_geojson' => 1,
-                    'polygon_threshold' => config('services.nominatim_polygon_threshold', 0.0005),
-                ]);
-                
-                if ($reverseResult->successful()) {
-                    $reverseData = $reverseResult->json();
-                    // Verify it matches the OSM type and ID
-                    if (($reverseData['osm_type'] ?? '') === $osmType && 
-                        (string)($reverseData['osm_id'] ?? '') === (string)$osmId) {
-                        $nominatimResult = $reverseData;
-                    }
-                }
-            }
-            
-            if (!$nominatimResult) {
-                // Last resort: construct a minimal result from what we have
-                $nominatimResult = [
-                    'place_id' => null,
-                    'osm_type' => $osmType,
-                    'osm_id' => (int)$osmId,
-                    'lat' => (string)$lat,
-                    'lon' => (string)$lng,
-                    'display_name' => $request->get('display_name'),
-                    'type' => $request->get('place_type', ''),
-                    'name' => explode(',', $request->get('display_name'))[0] ?? '',
-                    'address' => [],
-                ];
-            }
-            
-            // Format the Nominatim result to OSM data format
-            $reflection = new \ReflectionClass($osmService);
-            $formatMethod = $reflection->getMethod('formatOsmData');
-            $formatMethod->setAccessible(true);
-            $osmData = $formatMethod->invoke($osmService, $nominatimResult);
-            
+            $osmData = $osmService->resolveNominatimToOsmData(
+                $lat,
+                $lng,
+                $osmType,
+                (int) $osmId,
+                $request->get('display_name'),
+                $request->get('place_type', '')
+            );
+
             // Update the span using the geocoding workflow
             $success = $geocodingWorkflow->resolveWithMatch($span, $osmData);
             
@@ -428,56 +387,15 @@ Route::middleware(['auth', 'admin'])->group(function () {
             $osmType = $request->get('osm_type');
             $osmId = $request->get('osm_id');
             
-            // Lookup the full Nominatim result using OSM type and ID
-            $nominatimResult = $osmService->lookupByOsmId($osmType, (int)$osmId, true);
-            
-            if (!$nominatimResult) {
-                // If lookup fails, try reverse geocode as fallback
-                $reverseResult = Http::withHeaders([
-                    'User-Agent' => config('app.user_agent'),
-                    'Accept-Language' => 'en'
-                ])->get('https://nominatim.openstreetmap.org/reverse', [
-                    'lat' => $lat,
-                    'lon' => $lng,
-                    'format' => 'json',
-                    'addressdetails' => 1,
-                    'extratags' => 1,
-                    'namedetails' => 1,
-                    'polygon_geojson' => 1,
-                    'polygon_threshold' => config('services.nominatim_polygon_threshold', 0.0005),
-                ]);
-                
-                if ($reverseResult->successful()) {
-                    $reverseData = $reverseResult->json();
-                    // Verify it matches the OSM type and ID
-                    if (($reverseData['osm_type'] ?? '') === $osmType && 
-                        (string)($reverseData['osm_id'] ?? '') === (string)$osmId) {
-                        $nominatimResult = $reverseData;
-                    }
-                }
-            }
-            
-            if (!$nominatimResult) {
-                // Last resort: construct a minimal result from what we have
-                $nominatimResult = [
-                    'place_id' => null,
-                    'osm_type' => $osmType,
-                    'osm_id' => (int)$osmId,
-                    'lat' => (string)$lat,
-                    'lon' => (string)$lng,
-                    'display_name' => $request->get('display_name'),
-                    'type' => $request->get('place_type', ''),
-                    'name' => explode(',', $request->get('display_name'))[0] ?? '',
-                    'address' => [],
-                ];
-            }
-            
-            // Format the Nominatim result to OSM data format
-            $reflection = new \ReflectionClass($osmService);
-            $formatMethod = $reflection->getMethod('formatOsmData');
-            $formatMethod->setAccessible(true);
-            $osmData = $formatMethod->invoke($osmService, $nominatimResult);
-            
+            $osmData = $osmService->resolveNominatimToOsmData(
+                $lat,
+                $lng,
+                $osmType,
+                (int) $osmId,
+                $request->get('display_name'),
+                $request->get('place_type', '')
+            );
+
             // Create a new place span
             $span = new \App\Models\Span();
             $span->type_id = 'place';
@@ -534,6 +452,7 @@ Route::middleware(['auth', 'admin'])->group(function () {
 });
     
 // Preview geocoded data for a Nominatim result (accessible to all authenticated users)
+// Uses the same lookup + format as create-from-nominatim / update-from-nominatim so preview matches what would be saved.
 Route::middleware('auth')->group(function () {
     Route::get('/places/preview-geocode', function (Request $request) {
         $lat = $request->get('lat');
@@ -546,107 +465,73 @@ Route::middleware('auth')->group(function () {
         if (!$lat || !$lng) {
             return response()->json(['success' => false, 'message' => 'Latitude and longitude are required'], 400);
         }
+        if (trim((string) $osmType) === '' || trim((string) $osmId) === '') {
+            return response()->json(['success' => false, 'message' => 'OSM type and ID are required for preview'], 400);
+        }
         
         try {
             $osmService = app(\App\Services\OSMGeocodingService::class);
-            
-            // Get administrative hierarchy using coordinates
-            $hierarchy = $osmService->getAdministrativeHierarchyByCoordinates((float)$lat, (float)$lng);
-            
-            // Add the current place to the hierarchy
+            $osmIdInt = (int) $osmId;
+            $osmTypeNorm = $osmType ?: 'way';
+
+            // Same path as create-from-nominatim / update-from-nominatim: lookup then formatOsmData
+            $osmData = $osmService->resolveNominatimToOsmData(
+                (float) $lat,
+                (float) $lng,
+                $osmTypeNorm,
+                $osmIdInt,
+                $displayName,
+                $placeType
+            );
+
+            // Build hierarchy for preview: current place (from osmData) + parent levels (from osmData['hierarchy'])
             $fullHierarchy = [];
-            if ($displayName) {
-                // Try to determine admin level from place type
-                $currentAdminLevel = null;
-                if ($placeType) {
-                    $typeToLevel = [
-                        'country' => 2,
-                        'state' => 4,
-                        'county' => 6,
-                        'city' => 8,
-                        'city_district' => 9,
-                        'town' => 10,
-                        'suburb' => 10,
-                        'neighbourhood' => 12,
-                        'building' => 16,
-                        'house' => 16
-                    ];
-                    $currentAdminLevel = $typeToLevel[$placeType] ?? null;
-                }
-                
-                // If we couldn't determine from type, try to find matching level in hierarchy
-                if ($currentAdminLevel === null && $hierarchy && count($hierarchy) > 0) {
-                    // Use the most specific (lowest) admin level from hierarchy
-                    foreach ($hierarchy as $level) {
-                        if (isset($level['admin_level']) && $level['admin_level'] !== null) {
-                            $currentAdminLevel = $level['admin_level'];
-                            break;
-                        }
-                    }
-                }
-                
+            $fullHierarchy[] = [
+                'name' => $osmData['canonical_name'] ?? $displayName,
+                'type' => $osmData['place_type'] ?? $placeType ?: 'location',
+                'admin_level' => $osmData['admin_level'] ?? null,
+                'is_current' => true,
+            ];
+            foreach ($osmData['hierarchy'] ?? [] as $level) {
                 $fullHierarchy[] = [
-                    'name' => $displayName,
-                    'type' => $placeType ?: 'location',
-                    'admin_level' => $currentAdminLevel,
-                    'is_current' => true
+                    'name' => $level['name'] ?? null,
+                    'type' => $level['type'] ?? null,
+                    'admin_level' => $level['admin_level'] ?? null,
+                    'is_current' => false,
                 ];
             }
-            
-            // Add parent levels from hierarchy
-            if ($hierarchy && is_array($hierarchy)) {
-                foreach ($hierarchy as $level) {
-                    $fullHierarchy[] = [
-                        'name' => $level['name'] ?? null,
-                        'type' => $level['type'] ?? null,
-                        'admin_level' => $level['admin_level'] ?? null,
-                        'is_current' => false
-                    ];
-                }
-            }
-            
+
             // Sort by admin_level ascending (country first), nulls at end; keep current above same-level parents
             usort($fullHierarchy, function ($a, $b) {
                 $aLevel = $a['admin_level'] ?? 999;
                 $bLevel = $b['admin_level'] ?? 999;
                 if ($aLevel === $bLevel) {
-                    if (($a['is_current'] ?? false) && !($b['is_current'] ?? false)) return -1;
-                    if (!($a['is_current'] ?? false) && ($b['is_current'] ?? false)) return 1;
+                    if (($a['is_current'] ?? false) && !($b['is_current'] ?? false)) {
+                        return -1;
+                    }
+                    if (!($a['is_current'] ?? false) && ($b['is_current'] ?? false)) {
+                        return 1;
+                    }
                     return 0;
                 }
                 return $aLevel <=> $bLevel;
             });
-            
-            // Determine admin level and subtype from the current place
-            $adminLevel = null;
-            $subtype = null;
-            
-            // Get admin level from the current place in hierarchy
-            foreach ($fullHierarchy as $level) {
-                if (($level['is_current'] ?? false) && $level['admin_level'] !== null) {
-                    $adminLevel = $level['admin_level'];
-                    break;
-                }
-            }
-            
-            // Map admin level to subtype
-            if ($adminLevel !== null) {
-                $levelToSubtype = [
-                    2 => 'country',
-                    4 => 'state_region',
-                    6 => 'county_province',
-                    8 => 'city_district',
-                    9 => 'borough',
-                    10 => 'suburb_area',
-                    12 => 'neighbourhood',
-                    14 => 'sub_neighbourhood',
-                    16 => 'building_property'
-                ];
-                $subtype = $levelToSubtype[$adminLevel] ?? null;
-            }
-            
-            // If no subtype from admin level, try to infer from place type
-            if (!$subtype && $placeType) {
+
+            $adminLevel = $osmData['admin_level'] ?? null;
+            $placeTypeOut = $osmData['place_type'] ?? $placeType;
+            $levelToSubtype = [
+                2 => 'country',
+                4 => 'state_region',
+                6 => 'county_province',
+                8 => 'city_district',
+                9 => 'borough',
+                10 => 'suburb_area',
+                12 => 'neighbourhood',
+                14 => 'sub_neighbourhood',
+                16 => 'building_property',
+            ];
+            $subtype = $adminLevel !== null ? ($levelToSubtype[$adminLevel] ?? null) : null;
+            if ($subtype === null && $placeTypeOut) {
                 $typeToSubtype = [
                     'country' => 'country',
                     'state' => 'state_region',
@@ -657,19 +542,19 @@ Route::middleware('auth')->group(function () {
                     'suburb' => 'suburb_area',
                     'neighbourhood' => 'neighbourhood',
                     'building' => 'building_property',
-                    'house' => 'building_property'
+                    'house' => 'building_property',
                 ];
-                $subtype = $typeToSubtype[$placeType] ?? null;
+                $subtype = $typeToSubtype[$placeTypeOut] ?? null;
             }
-            
+
             return response()->json([
                 'success' => true,
                 'hierarchy' => $fullHierarchy,
                 'admin_level' => $adminLevel,
                 'subtype' => $subtype,
-                'place_type' => $placeType,
-                'osm_type' => $osmType,
-                'osm_id' => $osmId
+                'place_type' => $placeTypeOut,
+                'osm_type' => $osmData['osm_type'] ?? $osmTypeNorm,
+                'osm_id' => $osmData['osm_id'] ?? $osmIdInt,
             ]);
         } catch (\Exception $e) {
             \Illuminate\Support\Facades\Log::error('Error previewing geocode data', [
@@ -677,7 +562,6 @@ Route::middleware('auth')->group(function () {
                 'lng' => $lng,
                 'error' => $e->getMessage()
             ]);
-            
             return response()->json([
                 'success' => false,
                 'message' => 'An error occurred while previewing geocode data'
