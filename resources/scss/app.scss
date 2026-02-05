@@ -461,6 +461,11 @@ main {
     }
 }
 
+// Place show map: borough boundaries toggle above Leaflet map
+#place-map-overlays {
+    z-index: 1000;
+}
+
 // Utility classes
 .z-index-1 {
     z-index: 5;

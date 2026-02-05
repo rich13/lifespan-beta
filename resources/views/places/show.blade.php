@@ -133,6 +133,20 @@
                 <div class="card-body p-0 position-relative" style="overflow: hidden;">
                     <!-- Map Container - Square (always show map, even without coordinates) -->
                     <div id="place-map" style="width: 100%; aspect-ratio: 1/1; border-radius: 0.375rem;"></div>
+                    @if($span && !empty($boroughBoundaryPlaces))
+                        <div id="place-map-overlays" class="position-absolute top-0 end-0 m-2 place-map-overlays">
+                            <div class="card shadow-sm border-0">
+                                <div class="card-body py-1 px-2">
+                                    <div class="form-check form-switch mb-0 small">
+                                        <input class="form-check-input" type="checkbox" role="switch" id="toggle-contained-borough-boundaries" checked>
+                                        <label class="form-check-label" for="toggle-contained-borough-boundaries">
+                                            Show borough boundaries
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    @endif
                 </div>
             </div>
         </div>
@@ -296,6 +310,25 @@
                                         </ul>
                                     </div>
                                 @endif
+
+                                <!-- Wikidata -->
+                                @php
+                                    $wikidataId = $span->geospatial()->getWikidataId();
+                                    $wikidataData = $span->geospatial()->getWikidataData();
+                                @endphp
+                                @if($wikidataId)
+                                    <div class="mb-3">
+                                        <h6 class="text-muted small mb-2">Wikidata</h6>
+                                        <p class="mb-1 small">
+                                            <a href="https://www.wikidata.org/wiki/{{ $wikidataId }}" target="_blank" rel="noopener noreferrer" class="text-decoration-none">
+                                                <i class="bi bi-box-arrow-up-right me-1"></i>{{ $wikidataId }}
+                                            </a>
+                                        </p>
+                                        @if($wikidataData && !empty($wikidataData['label']))
+                                            <p class="mb-0 small text-muted">{{ $wikidataData['label'] }}</p>
+                                        @endif
+                                    </div>
+                                @endif
                                 
                                 <!-- Location levels -->
                                 @if(!empty($locationHierarchy))
@@ -375,7 +408,7 @@
                                     <div class="alert alert-warning py-2 px-3 mb-3 small" role="alert">
                                         <strong>Duplicate OSM identity:</strong> This place shares the same Nominatim/OSM identity (same imported ID and coordinates) as
                                         @foreach($otherPlacesSameOsm as $dup)
-                                            <a href="{{ route('places.show', $dup->id) }}" class="alert-link">{{ $dup->name ?: 'Place (unnamed)' }}</a>@if(!$loop->last),@endif
+                                            <a href="{{ route('places.show', $dup) }}" class="alert-link">{{ $dup->name ?: 'Place (unnamed)' }}</a>@if(!$loop->last),@endif
                                         @endforeach
                                         . Consider merging or disambiguating.
                                     </div>
@@ -386,9 +419,44 @@
                                     </p>
                                 @elseif(isset($placeRelationSummary) && $placeRelationSummary !== null)
                                     @php
-                                        $hasContains = (int) ($placeRelationSummary['contains_count'] ?? 0) > 0;
-                                        $hasInside = !empty($placeRelationSummary['contained_by_by_level']) || !empty($placeRelationSummary['contained_by']);
-                                        $hasNear = !empty($placeRelationSummary['near_by_level']) || !empty($placeRelationSummary['near']);
+                                        // Determine this place's own level (admin_level-style order)
+                                        $currentLevel = $span ? $span->getPlaceRelationLevelLabel() : null;
+                                        $currentOrder = $currentLevel['order'] ?? null;
+
+                                        // Show the single "next useful" tier (service already returns one tier only)
+                                        $containsByLevel = $placeRelationSummary['contains_sample_by_level'] ?? [];
+                                        $filteredContainsByLevel = $containsByLevel;
+
+                                        // Filter "Inside" to show only the next level up (less specific)
+                                        $containedByByLevel = $placeRelationSummary['contained_by_by_level'] ?? [];
+                                        $filteredContainedByByLevel = $containedByByLevel;
+                                        if ($currentOrder !== null && !empty($containedByByLevel)) {
+                                            $targetUpOrder = null;
+                                            foreach ($containedByByLevel as $group) {
+                                                $order = $group['order'] ?? null;
+                                                if ($order === null) {
+                                                    continue;
+                                                }
+                                                // Find the largest order less than current (next level up)
+                                                if ($order < $currentOrder && ($targetUpOrder === null || $order > $targetUpOrder)) {
+                                                    $targetUpOrder = $order;
+                                                }
+                                            }
+                                            if ($targetUpOrder !== null) {
+                                                $filteredContainedByByLevel = array_values(array_filter(
+                                                    $containedByByLevel,
+                                                    fn($g) => ($g['order'] ?? null) === $targetUpOrder
+                                                ));
+                                            }
+                                        }
+
+                                        // Flags for which sections to show
+                                        $hasContains = !empty($filteredContainsByLevel)
+                                            || !empty($placeRelationSummary['contains_sample'] ?? []);
+                                        $hasInside = !empty($filteredContainedByByLevel)
+                                            || !empty($placeRelationSummary['contained_by'] ?? []);
+                                        $hasNear = !empty($placeRelationSummary['near_by_level'] ?? [])
+                                            || !empty($placeRelationSummary['near'] ?? []);
                                         $hasAny = $hasContains || $hasInside || $hasNear;
                                     @endphp
 
@@ -399,13 +467,13 @@
                                                 <span class="text-muted small ms-1">{{ $placeRelationSummary['contains_count'] === 1 ? '1 place' : $placeRelationSummary['contains_count'] . ' places' }}</span>
                                             </div>
                                             <div class="card-body py-2 px-2">
-                                                @if(!empty($placeRelationSummary['contains_sample_by_level']))
-                                                    @foreach($placeRelationSummary['contains_sample_by_level'] as $levelGroup)
+                                                @if(!empty($filteredContainsByLevel))
+                                                    @foreach($filteredContainsByLevel as $levelGroup)
                                                         <div class="mb-2 small">
                                                             <span class="text-muted fw-semibold d-block mb-1">{{ $levelGroup['label'] }}</span>
                                                             <div class="d-flex flex-wrap gap-1">
                                                                 @foreach($levelGroup['spans'] as $contained)
-                                                                    <a href="{{ route('places.show', $contained->id) }}" class="btn btn-sm btn-outline-primary">{{ $contained->name }}</a>
+                                                                    <a href="{{ route('places.show', ['span' => $contained->id]) }}" class="btn btn-sm btn-outline-primary">{{ $contained->name }}</a>
                                                                 @endforeach
                                                             </div>
                                                         </div>
@@ -413,7 +481,7 @@
                                                 @elseif(!empty($placeRelationSummary['contains_sample']))
                                                     <div class="d-flex flex-wrap gap-1">
                                                         @foreach($placeRelationSummary['contains_sample'] as $contained)
-                                                            <a href="{{ route('places.show', $contained->id) }}" class="btn btn-sm btn-outline-primary">{{ $contained->name }}</a>
+                                                            <a href="{{ route('places.show', ['span' => $contained->id]) }}" class="btn btn-sm btn-outline-primary">{{ $contained->name }}</a>
                                                         @endforeach
                                                     </div>
                                                 @endif
@@ -427,13 +495,13 @@
                                                 <strong class="small">Inside</strong>
                                             </div>
                                             <div class="card-body py-2 px-2">
-                                                @if(!empty($placeRelationSummary['contained_by_by_level']))
-                                                    @foreach($placeRelationSummary['contained_by_by_level'] as $levelGroup)
+                                                @if(!empty($filteredContainedByByLevel))
+                                                    @foreach($filteredContainedByByLevel as $levelGroup)
                                                         <div class="mb-2 small">
                                                             <span class="text-muted fw-semibold d-block mb-1">{{ $levelGroup['label'] }}</span>
                                                             <div class="d-flex flex-wrap gap-1">
                                                                 @foreach($levelGroup['spans'] as $parent)
-                                                                    <a href="{{ route('places.show', $parent->id) }}" class="btn btn-sm btn-outline-primary">{{ $parent->name }}</a>
+                                                                    <a href="{{ route('places.show', ['span' => $parent->id]) }}" class="btn btn-sm btn-outline-primary">{{ $parent->name }}</a>
                                                                 @endforeach
                                                             </div>
                                                         </div>
@@ -441,7 +509,7 @@
                                                 @else
                                                     <div class="d-flex flex-wrap gap-1">
                                                         @foreach($placeRelationSummary['contained_by'] as $parent)
-                                                            <a href="{{ route('places.show', $parent->id) }}" class="btn btn-sm btn-outline-primary">{{ $parent->name }}</a>
+                                                            <a href="{{ route('places.show', ['span' => $parent->id]) }}" class="btn btn-sm btn-outline-primary">{{ $parent->name }}</a>
                                                         @endforeach
                                                     </div>
                                                 @endif
@@ -461,7 +529,7 @@
                                                             <span class="text-muted fw-semibold d-block mb-1">{{ $levelGroup['label'] }}</span>
                                                             <div class="d-flex flex-wrap gap-1">
                                                                 @foreach($levelGroup['spans'] as $nearby)
-                                                                    <a href="{{ route('places.show', $nearby->id) }}" class="btn btn-sm btn-outline-primary">{{ $nearby->name }}</a>
+                                                                    <a href="{{ route('places.show', ['span' => $nearby->id]) }}" class="btn btn-sm btn-outline-primary">{{ $nearby->name }}</a>
                                                                 @endforeach
                                                             </div>
                                                         </div>
@@ -469,7 +537,7 @@
                                                 @else
                                                     <div class="d-flex flex-wrap gap-1">
                                                         @foreach($placeRelationSummary['near'] as $nearby)
-                                                            <a href="{{ route('places.show', $nearby->id) }}" class="btn btn-sm btn-outline-primary">{{ $nearby->name }}</a>
+                                                            <a href="{{ route('places.show', ['span' => $nearby->id]) }}" class="btn btn-sm btn-outline-primary">{{ $nearby->name }}</a>
                                                         @endforeach
                                                     </div>
                                                 @endif
@@ -615,14 +683,27 @@ document.addEventListener('DOMContentLoaded', function() {
     // Store place markers for browsing mode (when no specific place is selected)
     const placeMarkers = [];
     let placesLoadingTimeout = null;
-    
+
+    // Borough boundaries (child polygons) overlay support
+    const boroughBoundaryPlaces = @json($boroughBoundaryPlaces ?? []);
+    let boroughBoundaryLayerGroup = null;
+    let boroughBoundariesLoaded = false;
+
+    // Pane for borough boundaries so they draw on top of the main boundary and receive mouse events
+    const boroughPane = map.createPane('boroughBoundaries');
+    boroughPane.style.zIndex = 450;
+
     // Add OpenStreetMap tiles
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
     
     @if($span && $coordinates)
-    // Add marker for the place (only if coordinates exist)
+    @php
+        $shouldShowBoundary = $span && $span->hasBoundary();
+    @endphp
+    // Add point marker only for places without a boundary (leave point labels for point-only places)
+    @if(!$shouldShowBoundary)
     const marker = L.marker([lat, lng], {
         icon: L.icon({
             iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
@@ -633,13 +714,11 @@ document.addEventListener('DOMContentLoaded', function() {
             shadowSize: [41, 41]
         })
     }).addTo(map);
-    
-    // Show boundary whenever the place has boundary geometry (point is always shown above)
-    @php
-        $shouldShowBoundary = $span && $span->hasBoundary();
-    @endphp
+    marker.bindPopup('{{ addslashes($span->name) }}');
+    @endif
 
-        @if($span && $shouldShowBoundary)
+    // Show boundary whenever the place has boundary geometry (no point marker in that case)
+    @if($span && $shouldShowBoundary)
         $.ajax({
             url: '{{ $span ? route('places.boundary', $span->id) : '#' }}',
             method: 'GET',
@@ -660,20 +739,114 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                     map.fitBounds(mainBoundaryLayer.getBounds());
                     if (mainBoundaryLayer.getLayers().length > 0) {
-                        mainBoundaryLayer.getLayers()[0].bindPopup('{{ $span->name }} boundary');
+                        mainBoundaryLayer.getLayers()[0].bindPopup({!! json_encode(e($span->name) . ' boundary<br><a href="' . e(route('places.show', ['span' => $span->id])) . '">View place</a>') !!});
                     }
                 } catch (e) {
                     console.log('Error rendering boundary geojson:', e);
-                    marker.openPopup();
                 }
-            } else {
-                marker.openPopup();
             }
         }).fail(function(error) {
             console.log('Boundary request failed:', error);
-            marker.openPopup();
         });
-        @endif
+    @endif
+    @endif
+
+    // Helper functions for borough boundary overlay
+    function ensureBoroughBoundaryLayerGroup() {
+        if (!boroughBoundaryLayerGroup) {
+            boroughBoundaryLayerGroup = L.layerGroup();
+        }
+        return boroughBoundaryLayerGroup;
+    }
+
+    function loadBoroughBoundariesIfNeeded() {
+        if (boroughBoundariesLoaded) {
+            return;
+        }
+        if (!Array.isArray(boroughBoundaryPlaces) || boroughBoundaryPlaces.length === 0) {
+            return;
+        }
+
+        const group = ensureBoroughBoundaryLayerGroup();
+
+        boroughBoundaryPlaces.forEach(function(place) {
+            if (!place.boundary_url) {
+                return;
+            }
+
+            $.ajax({
+                url: place.boundary_url,
+                method: 'GET',
+                dataType: 'json'
+            }).done(function(response) {
+                if (response && response.success && response.geojson) {
+                    try {
+                        const layer = L.geoJSON(response.geojson, {
+                            style: {
+                                color: '#ff7f0e',
+                                weight: 1.5,
+                                opacity: 0.8,
+                                fill: true,
+                                fillColor: '#ff7f0e',
+                                fillOpacity: 0.15
+                            },
+                            onEachFeature: function(feature, innerLayer) {
+                                if (innerLayer.setPane) {
+                                    innerLayer.setPane('boroughBoundaries');
+                                }
+                                const placeUrl = '/places/' + escapeHtml(place.id);
+                                const popupHtml =  '<a href="' + placeUrl + '">' + escapeHtml(place.name) + '</a>';
+                                if (typeof innerLayer.bindPopup === 'function') {
+                                    innerLayer.bindPopup(popupHtml);
+                                }
+                            }
+                        });
+
+                        group.addLayer(layer);
+                    } catch (e) {
+                        console.log('Error rendering borough boundary geojson for', place.name, e);
+                    }
+                }
+            }).fail(function(error) {
+                console.log('Borough boundary request failed for', place.name, error);
+            });
+        });
+
+        boroughBoundariesLoaded = true;
+    }
+
+    function showBoroughBoundaries() {
+        if (!Array.isArray(boroughBoundaryPlaces) || boroughBoundaryPlaces.length === 0) {
+            return;
+        }
+        loadBoroughBoundariesIfNeeded();
+        const group = ensureBoroughBoundaryLayerGroup();
+        if (map && group && (!map.hasLayer || !map.hasLayer(group))) {
+            group.addTo(map);
+        }
+    }
+
+    function hideBoroughBoundaries() {
+        if (boroughBoundaryLayerGroup && map && map.hasLayer && map.hasLayer(boroughBoundaryLayerGroup)) {
+            map.removeLayer(boroughBoundaryLayerGroup);
+        }
+    }
+
+    @if($span && !empty($boroughBoundaryPlaces))
+    // Wire up borough boundaries toggle (jQuery)
+    $(function() {
+        $('#toggle-contained-borough-boundaries').on('change', function() {
+            if (this.checked) {
+                showBoroughBoundaries();
+            } else {
+                hideBoroughBoundaries();
+            }
+        });
+        // Load borough boundaries on init when toggle is on by default
+        if (document.getElementById('toggle-contained-borough-boundaries').checked) {
+            showBoroughBoundaries();
+        }
+    });
     @endif
     
     // Load places in current map bounds when no specific place is selected
@@ -1089,6 +1262,18 @@ document.addEventListener('DOMContentLoaded', function() {
         // Restore main boundary if it exists
         if (mainBoundaryLayer && map.hasLayer && !map.hasLayer(mainBoundaryLayer)) {
             mainBoundaryLayer.addTo(map);
+        }
+
+        // Restore borough boundaries if toggle is enabled
+        const boroughToggle = document.getElementById('toggle-contained-borough-boundaries');
+        if (
+            boroughToggle &&
+            boroughToggle.checked &&
+            boroughBoundaryLayerGroup &&
+            map.hasLayer &&
+            !map.hasLayer(boroughBoundaryLayerGroup)
+        ) {
+            boroughBoundaryLayerGroup.addTo(map);
         }
     }
     
@@ -1605,6 +1790,11 @@ document.addEventListener('DOMContentLoaded', function() {
         if (mainBoundaryLayer && map.hasLayer && map.hasLayer(mainBoundaryLayer)) {
             map.removeLayer(mainBoundaryLayer);
         }
+
+        // Hide borough boundaries while showing search results
+        if (boroughBoundaryLayerGroup && map.hasLayer && map.hasLayer(boroughBoundaryLayerGroup)) {
+            map.removeLayer(boroughBoundaryLayerGroup);
+        }
         
         // Create marker for search result
         const resultMarker = L.marker([resultLat, resultLng], {
@@ -1838,64 +2028,67 @@ document.addEventListener('DOMContentLoaded', function() {
         performPlaceSearch(query);
     }
     
-    // Handle unified search input with debouncing
-    unifiedSearchInput.addEventListener('input', function() {
-        const query = this.value.trim();
-        
-        // Clear existing timeout
-        if (unifiedSearchTimeout) {
-            clearTimeout(unifiedSearchTimeout);
-        }
-        
-        // Debounce search (wait 500ms after user stops typing)
-        unifiedSearchTimeout = setTimeout(() => {
-            performUnifiedSearch(query);
-        }, 500);
-    });
-    
-    // Show dropdown when input is focused (if there are results)
-    unifiedSearchInput.addEventListener('focus', function() {
-        const hasResults = (placeSearchResultsSection && placeSearchResultsSection.style.display !== 'none') ||
-                          (osmSearchResultsSection && osmSearchResultsSection.style.display !== 'none');
-        if (hasResults) {
-            showSearchDropdown();
-        }
-    });
-    
-    // Trigger search when admin level filter changes
-    const adminLevelFilter = document.getElementById('adminLevelFilter');
-    if (adminLevelFilter) {
-        adminLevelFilter.addEventListener('change', function() {
-            const query = unifiedSearchInput.value.trim();
-            if (query && query.length >= 2) {
-                // Clear the last query to force a new search
-                lastUnifiedSearchQuery = null;
-                performUnifiedSearch(query);
-            }
-        });
-    }
-    
-    // Auto-search for place name if no coordinates exist
-    @if($span && !$coordinates)
-    // Pre-fill search input with place name
-    unifiedSearchInput.value = '{{ addslashes($span->name) }}';
-    
-    // Automatically perform search after a short delay
-    setTimeout(() => {
-        performUnifiedSearch('{{ addslashes($span->name) }}');
-    }, 500);
-    @endif
-    
-    // Handle Enter key for immediate search
-    unifiedSearchInput.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
+    // Unified search only exists when no place is selected (!$span); on place show this element is absent
+    if (unifiedSearchInput) {
+        // Handle unified search input with debouncing
+        unifiedSearchInput.addEventListener('input', function() {
+            const query = this.value.trim();
+            
+            // Clear existing timeout
             if (unifiedSearchTimeout) {
                 clearTimeout(unifiedSearchTimeout);
             }
-            performUnifiedSearch(this.value.trim());
+            
+            // Debounce search (wait 500ms after user stops typing)
+            unifiedSearchTimeout = setTimeout(() => {
+                performUnifiedSearch(query);
+            }, 500);
+        });
+        
+        // Show dropdown when input is focused (if there are results)
+        unifiedSearchInput.addEventListener('focus', function() {
+            const hasResults = (placeSearchResultsSection && placeSearchResultsSection.style.display !== 'none') ||
+                              (osmSearchResultsSection && osmSearchResultsSection.style.display !== 'none');
+            if (hasResults) {
+                showSearchDropdown();
+            }
+        });
+        
+        // Trigger search when admin level filter changes
+        const adminLevelFilter = document.getElementById('adminLevelFilter');
+        if (adminLevelFilter) {
+            adminLevelFilter.addEventListener('change', function() {
+                const query = unifiedSearchInput.value.trim();
+                if (query && query.length >= 2) {
+                    // Clear the last query to force a new search
+                    lastUnifiedSearchQuery = null;
+                    performUnifiedSearch(query);
+                }
+            });
         }
-    });
+        
+        // Auto-search for place name if no coordinates exist (only when search card is visible, i.e. !$span)
+        @if($span && !$coordinates)
+        // Pre-fill search input with place name
+        unifiedSearchInput.value = '{{ addslashes($span->name) }}';
+        
+        // Automatically perform search after a short delay
+        setTimeout(() => {
+            performUnifiedSearch('{{ addslashes($span->name) }}');
+        }, 500);
+        @endif
+        
+        // Handle Enter key for immediate search
+        unifiedSearchInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                if (unifiedSearchTimeout) {
+                    clearTimeout(unifiedSearchTimeout);
+                }
+                performUnifiedSearch(this.value.trim());
+            }
+        });
+    }
     
     // ========== Place Span Search ==========
     let placeSearchTimeout = null;
