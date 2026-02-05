@@ -50,17 +50,19 @@ class DiagnoseSpanAccessTest extends TestCase
             'connection_span_id' => $connectionSpan->id,
         ]);
         
-        // Test accessing the connection span as the owner
-        $response = $this->actingAs($user)
-            ->get('/spans/' . $uniqueSlug);
-        
-        echo "Response status: " . $response->status() . PHP_EOL;
-        echo "Connection Span Owner ID: " . $connectionSpan->owner_id . PHP_EOL;
-        echo "Connection Span Access Level: " . $connectionSpan->access_level . PHP_EOL;
-        echo "Connection Span Type: " . $connectionSpan->type_id . PHP_EOL;
-        echo "User ID: " . $user->id . PHP_EOL;
-        echo "User is_admin: " . ($user->is_admin ? 'yes' : 'no') . PHP_EOL;
-        
+        // Test accessing the connection span as the owner. Use canonical triple URL so we assert
+        // the same access as production (slug URL redirects to triple URL).
+        $connection->load(['subject', 'object', 'type']);
+        $predicate = $connection->parent_id === $connection->subject->id
+            ? str_replace(' ', '-', $connection->type->forward_predicate)
+            : str_replace(' ', '-', $connection->type->inverse_predicate);
+        $url = route('spans.connection', [
+            'subject' => $connection->subject,
+            'predicate' => $predicate,
+            'object' => $connection->object,
+        ]);
+        $response = $this->actingAs($user)->get($url);
+
         $this->assertEquals(200, $response->status());
     }
 }

@@ -328,7 +328,8 @@ class ImageGalleryComponentTest extends TestCase
             'connection_span_id' => $featuresConnectionSpan->id,
         ]);
 
-        $response = $this->get("/spans/{$connectionSpan->slug}");
+        // Connection span slug redirects to triple URL; follow redirect to get final 200
+        $response = $this->followingRedirects()->get("/spans/{$connectionSpan->slug}");
         $response->assertStatus(200);
         $response->assertSee('Richard at school 1987');
     }
@@ -414,7 +415,8 @@ class ImageGalleryComponentTest extends TestCase
             'connection_span_id' => $featuresConnectionSpan->id,
         ]);
 
-        $response = $this->get("/spans/{$connectionSpan->slug}");
+        // Connection span slug redirects to triple URL; follow redirect to get final 200
+        $response = $this->followingRedirects()->get("/spans/{$connectionSpan->slug}");
         $response->assertStatus(200);
         $response->assertDontSee('Richard in 1995');
     }
@@ -500,7 +502,8 @@ class ImageGalleryComponentTest extends TestCase
             'connection_span_id' => $featuresSpan->id,
         ]);
 
-        $response = $this->get("/spans/{$connectionSpan->slug}");
+        // Connection span slug redirects to triple URL; follow redirect to get final 200
+        $response = $this->followingRedirects()->get("/spans/{$connectionSpan->slug}");
         $response->assertStatus(200);
         $response->assertSee('Richard at Alleyns graduation');
         // Should appear exactly once (no duplicate from merge)
