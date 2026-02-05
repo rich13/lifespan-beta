@@ -322,6 +322,9 @@
                     <x-spans.display.photo-card :span="$span" />
                 @endif
 
+                <!-- Connection place map (located/travelled/residence) - simple map only -->
+                <x-spans.cards.connection-place-map-card :span="$span" />
+
                 <!-- Related Films Card (only for films) -->
                 @if($span->type_id === 'thing' && isset($span->metadata['subtype']) && $span->metadata['subtype'] === 'film')
                     <x-spans.cards.related-films-card :span="$span" />
