@@ -2387,10 +2387,11 @@ class Span extends Model
      */
     public function hasPermission($user, string $permission): bool
     {
+        // Guest: may view public spans only; private/shared require login or permissions
         if (!$user) {
-            return false;
+            return $permission === 'view' && $this->access_level === 'public';
         }
-        
+
         // Admins can do anything (respects admin mode toggle)
         if ($user->getEffectiveAdminStatus()) {
             return true;

@@ -68,11 +68,22 @@ temp/
 # New backups directory
 /backups
 
-# Ensure yaml-samples is not ignored
-!/yaml-samples/
-!/yaml-samples/*.yaml
+# Internal/private - not for public repo
+/plans
+/yaml-samples
+basic-spec.md
+/db-dumps
+/imports
+resources/markdown/latest-features.md
+
 storage/debugbar/
 
 # Test output files
 test-output*.txt
+pest-output*.txt
 @test-output.txt
+test.log
+
+# Deployment config with secrets
+.env.railway
+railway.toml

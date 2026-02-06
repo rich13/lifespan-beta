@@ -46,7 +46,7 @@
                                     @if($group->description)
                                         <p class="card-text text-muted small">{{ Str::limit($group->description, 100) }}</p>
                                     @endif
-                                    <div class="d-flex justify-content-between align-items-center mt-3">
+                                    <div class="d-flex justify-content-between align-items-center mt-3 mb-3">
                                         <div class="small text-muted">
                                             <i class="bi bi-people me-1"></i>
                                             {{ $group->users->count() }} member{{ $group->users->count() !== 1 ? 's' : '' }}
@@ -55,6 +55,28 @@
                                             View Timeline
                                         </a>
                                     </div>
+                                    @if($group->users->isNotEmpty())
+                                        <div class="border-top pt-2">
+                                            <div class="small text-muted mb-2">Members</div>
+                                            <div class="row g-2">
+                                                @foreach($group->users as $member)
+                                                    <div class="col-12">
+                                                        <div class="card bg-light">
+                                                            <div class="card-body py-2 px-3">
+                                                                @if($member->personalSpan)
+                                                                    <a href="{{ route('spans.show', $member->personalSpan) }}" class="text-decoration-none fw-medium">
+                                                                        {{ $member->personalSpan->name }}
+                                                                    </a>
+                                                                @else
+                                                                    <span class="text-muted">{{ $member->email }}</span>
+                                                                @endif
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                @endforeach
+                                            </div>
+                                        </div>
+                                    @endif
                                 </div>
                             </div>
                         </div>

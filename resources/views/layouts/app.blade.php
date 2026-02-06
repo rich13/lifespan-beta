@@ -337,6 +337,16 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
                 margin-right: 0.5rem;
             }
             
+            /* Preserve Bootstrap row/col spacing for guest layout (matches .main-content) */
+            .guest-content-wrapper .row {
+                margin-left: -0.75rem;
+                margin-right: -0.75rem;
+            }
+            .guest-content-wrapper .row > * {
+                padding-left: 0.75rem;
+                padding-right: 0.75rem;
+            }
+            
             /* Ensure proper spacing for guest layout */
             .guest-content-wrapper .container-fluid {
                 padding-left: 0;

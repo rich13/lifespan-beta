@@ -16,7 +16,8 @@ return [
     |
     */
 
-    'enabled' => env('TELESCOPE_ENABLED', false),
+    // Disable in console when not in Docker so artisan on the host doesn't try to write to unreachable DB
+    'enabled' => env('TELESCOPE_ENABLED', false) && (!app()->runningInConsole() || env('DOCKER_CONTAINER') === 'true'),
 
     /*
     |--------------------------------------------------------------------------
