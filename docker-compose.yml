@@ -37,11 +37,17 @@ services:
       - DOCKER_CONTAINER=true
       - MAIL_HOST=mailpit
       - MAIL_PORT=1025
+      - CACHE_DRIVER=redis
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_CLIENT=predis
     entrypoint: ["/var/www/docker/start.sh"]
     depends_on:
       db:
         condition: service_healthy
       mailpit:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   nginx:
@@ -133,10 +139,15 @@ services:
       - DB_USERNAME=lifespan_user
       - DB_PASSWORD=lifespan_password
       - QUEUE_CONNECTION=database
-      - CACHE_DRIVER=file
+      - CACHE_DRIVER=redis
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_CLIENT=predis
       - SESSION_DRIVER=file
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   queue2:
@@ -161,11 +172,28 @@ services:
       - DB_USERNAME=lifespan_user
       - DB_PASSWORD=lifespan_password
       - QUEUE_CONNECTION=database
-      - CACHE_DRIVER=file
+      - CACHE_DRIVER=redis
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_CLIENT=predis
       - SESSION_DRIVER=file
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    container_name: lifespan-redis
+    restart: unless-stopped
+    networks:
+      - lifespan-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   mailpit:
     image: axllent/mailpit:latest

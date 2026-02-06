@@ -23,6 +23,7 @@
         "league/oauth1-client": "^1.11",
         "nonsoniyi/the-guardian-api-client": "^1.0",
         "openai-php/client": "^0.14.0",
+        "predis/predis": "^2.2",
         "sentry/sentry-laravel": "^4.15",
         "spatie/laravel-backup": "^9.2",
         "symfony/yaml": "^6.3",
