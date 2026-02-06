@@ -8,6 +8,8 @@ A project to map time.
 **Stop (keeps project visible in Docker Desktop):** `docker compose stop`  
 Avoid `docker compose down` unless you need to remove containers—it can make the project disappear from the Docker UI until you run `up` again.
 
+Local Docker uses **Redis** for cache (same as production): the app and queue workers connect to the `redis` service. The public span page cache and other Laravel cache use Redis. No `.env` change needed—compose sets `CACHE_DRIVER=redis` and `REDIS_HOST=redis`.
+
 ### Email Testing
 
 The project includes Mailpit for email testing in local development. When you run `docker-compose up`, Mailpit will be available at:
@@ -62,3 +64,6 @@ This queries local Nominatim for London boroughs, major stations, and airports (
 - **Optional memory:** If span show hits memory limits, set `SPAN_SHOW_MEMORY_LIMIT=512M` in .env / Railway.
 - **Proxy/server:** Nginx in `docker/prod/nginx.conf` uses `fastcgi_read_timeout 300`, so the app container allows long requests. If Railway or another proxy in front has a 60s gateway timeout, increase it in that layer (Railway dashboard or support); otherwise the browser will still see a timeout even if PHP runs longer.
 - **Bigger server:** Only consider more CPU/RAM if, after the above and the N+1/cache fixes, span show still runs too long; a faster instance can shorten cold-cache response time.
+- **Cache (Redis):** With many public spans (~30k+), use Redis for cache: set `CACHE_DRIVER=redis` and add a Redis service (e.g. Railway Redis). File cache does not scale at that volume. The public span full-page cache uses the default cache store.
+- **Cache warming:** Bulk warming (deploy-time and post-invalidation rewarm job) is disabled by default to avoid triggering expensive full-page renders. Invalidation still runs so stale cache entries are not served; pages repopulate on next request. To enable rewarm after span/connection updates set `WARM_PUBLIC_SPAN_PAGES_ON_INVALIDATION=true`. Manual: `php artisan cache:warm-public-span-pages` (optionally `--limit=N`). Browsers get a short Cache-Control max-age (default 5 min via `PUBLIC_SPAN_BROWSER_MAX_AGE`) so they revalidate and receive updated server-cached content after invalidation.
+- **Verify cache with Redis (production-like):** Run the same cache tests against Redis so the production path is exercised: `./scripts/run-pest-with-redis.sh` (requires Redis and test container). If Redis is not available the Redis test file skips; the main cache tests in `PublicSpanPageCacheTest` use the array driver.
