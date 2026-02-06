@@ -30,6 +30,8 @@
                 'subtype' => $nameSpan->getMeta('subtype', 'other'),
                 'start_date' => $startDate,
                 'end_date' => $endDate,
+                'display_start' => $connectionSpan->human_readable_start_date,
+                'display_end' => $connectionSpan->human_readable_end_date,
                 'is_default' => false,
                 'sort_date' => $startDate ? $startDate->timestamp : 0
             ];
@@ -44,8 +46,10 @@
     // Add the default/base name at the beginning
     // If there are other names, end the default name when the first other name starts
     $defaultEndDate = $span->getExpandedEndDate();
+    $defaultDisplayEnd = $span->human_readable_end_date;
     if (count($names) > 0 && $names[0]['start_date']) {
         $defaultEndDate = $names[0]['start_date'];
+        $defaultDisplayEnd = $names[0]['display_start'];
     }
     
     array_unshift($names, [
@@ -53,6 +57,8 @@
         'subtype' => 'default',
         'start_date' => $span->getExpandedStartDate(),
         'end_date' => $defaultEndDate,
+        'display_start' => $span->human_readable_start_date,
+        'display_end' => $defaultDisplayEnd,
         'is_default' => true,
         'sort_date' => $span->start_year ?? 0
     ]);
@@ -122,16 +128,16 @@
                                     <span class="badge bg-light text-dark">{{ ucfirst(str_replace('_', ' ', $nameData['subtype'])) }}</span>
                                 @endif
                                 
-                                @if($nameData['start_date'] || $nameData['end_date'])
+                                @if($nameData['display_start'] || $nameData['display_end'])
                                     <span class="ms-2">
-                                        @if($nameData['start_date'])
-                                            {{ DateHelper::formatDate($nameData['start_date']->year, $nameData['start_date']->month, $nameData['start_date']->day) }}
+                                        @if($nameData['display_start'])
+                                            {{ $nameData['display_start'] }}
                                         @else
                                             ?
                                         @endif
                                         —
-                                        @if($nameData['end_date'])
-                                            {{ DateHelper::formatDate($nameData['end_date']->year, $nameData['end_date']->month, $nameData['end_date']->day) }}
+                                        @if($nameData['display_end'])
+                                            {{ $nameData['display_end'] }}
                                         @else
                                             present
                                         @endif
