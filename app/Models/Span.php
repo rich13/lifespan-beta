@@ -144,12 +144,16 @@ class Span extends Model
             }
         });
 
-        // Set things as public by default
+        // Set things as public by default (track and album subtypes always public)
         static::creating(function ($span) {
-            if ($span->type_id === 'thing' && !isset($span->access_level)) {
+            $subtype = $span->metadata['subtype'] ?? null;
+            $isTrackOrAlbum = in_array($subtype, ['track', 'album'], true);
+            if ($span->type_id === 'thing' && $isTrackOrAlbum) {
+                $span->access_level = 'public';
+            } elseif ($span->type_id === 'thing' && !isset($span->access_level)) {
                 $span->access_level = 'public';
             }
-            
+
             // System-owned spans should always be public (sets, connections, etc.)
             if (!isset($span->access_level)) {
                 $systemUser = User::where('email', 'system@lifespan.app')->first();

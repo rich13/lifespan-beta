@@ -465,7 +465,7 @@ class MusicBrainzImportController extends Controller
                         'name' => $cleanTitle,
                         'type_id' => 'thing',
                         'state' => $albumState,
-                        'access_level' => 'private',
+                        'access_level' => 'public',
                         'metadata' => [
                             'musicbrainz_id' => $album['id'],
                             'type' => $album['type'] ?? null,
@@ -614,12 +614,12 @@ class MusicBrainzImportController extends Controller
                                 }
                             }
                             
-                            // Prepare track data
+                            // Prepare track data (tracks are public by default)
                             $trackData = [
                                 'name' => $track['title'],
                                 'type_id' => 'thing',
                                 'state' => $trackState,
-                                'access_level' => 'private',
+                                'access_level' => 'public',
                                 'metadata' => [
                                     'musicbrainz_id' => $track['id'],
                                     'isrc' => $track['isrc'],
@@ -981,12 +981,12 @@ class MusicBrainzImportController extends Controller
                         }
                     }
                     
-                    // Prepare album data
+                    // Prepare album data (albums are public by default)
                     $albumData = [
                         'name' => $cleanTitle,
                         'type_id' => 'thing',
                         'state' => $albumState,
-                        'access_level' => 'private',
+                        'access_level' => 'public',
                         'metadata' => [
                             'musicbrainz_id' => $album['id'],
                             'type' => $album['type'] ?? null,
@@ -1217,12 +1217,12 @@ class MusicBrainzImportController extends Controller
                             }
                             $trackState = ($hasTrackReleaseDate && !$isTrackToday) ? 'complete' : 'placeholder';
                             
-                            // Prepare track data
+                            // Prepare track data (tracks are public by default)
                             $trackData = [
                                 'name' => $track['title'],
                                 'type_id' => 'thing',
                                 'state' => $trackState,
-                                'access_level' => 'private',
+                                'access_level' => 'public',
                                 'metadata' => [
                                     'musicbrainz_id' => $track['id'],
                                     'isrc' => $track['isrc'],
@@ -1560,12 +1560,12 @@ class MusicBrainzImportController extends Controller
                 $albumState = 'complete';
             }
 
-            // Create album span
+            // Create album span (albums are public by default)
             $albumSpan = Span::create([
                 'name' => $releaseData['title'],
                 'type_id' => 'thing',
                 'state' => $albumState,
-                'access_level' => 'private',
+                'access_level' => 'public',
                 'metadata' => [
                     'musicbrainz_id' => $releaseId,
                     'subtype' => 'album'
@@ -1606,12 +1606,12 @@ class MusicBrainzImportController extends Controller
                 foreach ($releaseData['media'] as $medium) {
                     if (!empty($medium['tracks'])) {
                         foreach ($medium['tracks'] as $track) {
-                            // Create track span
+                            // Create track span (tracks are public by default)
                             $trackSpan = Span::create([
                                 'name' => $track['title'],
                                 'type_id' => 'thing',
                                 'state' => 'placeholder',
-                                'access_level' => 'private',
+                                'access_level' => 'public',
                                 'metadata' => [
                                     'musicbrainz_id' => $track['id'],
                                     'subtype' => 'track'

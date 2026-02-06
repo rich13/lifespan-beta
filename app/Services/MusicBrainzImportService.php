@@ -642,12 +642,12 @@ class MusicBrainzImportService
                 $hasReleaseDate = !empty($album['first_release_date']);
                 $albumState = $hasReleaseDate ? 'complete' : 'placeholder';
                 
-                // Prepare album data
+                // Prepare album data (albums are public by default)
                 $albumData = [
                     'name' => $cleanTitle,
                     'type_id' => 'thing',
                     'state' => $albumState,
-                    'access_level' => 'private',
+                    'access_level' => 'public',
                     'metadata' => [
                         'musicbrainz_id' => $album['id'],
                         'type' => $album['type'] ?? null,
@@ -784,12 +784,12 @@ class MusicBrainzImportService
                         $hasTrackReleaseDate = !empty($track['first_release_date']);
                         $trackState = $hasTrackReleaseDate ? 'complete' : 'placeholder';
                         
-                        // Prepare track data
+                        // Prepare track data (tracks are public by default)
                         $trackData = [
                             'name' => $track['title'],
                             'type_id' => 'thing',
                             'state' => $trackState,
-                            'access_level' => 'private',
+                            'access_level' => 'public',
                             'metadata' => [
                                 'musicbrainz_id' => $track['id'],
                                 'isrc' => $track['isrc'],
