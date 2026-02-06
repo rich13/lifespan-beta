@@ -60,7 +60,7 @@ class CachePublicSpanPage
             if ($etag || $lastModified) {
                 $conditional = $this->handleConditionalRequest($request, $etag, $lastModified);
                 if ($conditional instanceof Response) {
-                    $conditional->headers->set('Cache-Control', 'public, max-age=' . $this->cache->ttl());
+                    $conditional->headers->set('Cache-Control', 'public, max-age=' . $this->cache->browserMaxAge());
                     $conditional->headers->set('X-Public-Span-Cache', 'HIT');
 
                     return $conditional;
@@ -74,7 +74,7 @@ class CachePublicSpanPage
             if ($lastModified) {
                 $response->headers->set('Last-Modified', $lastModified);
             }
-            $response->headers->set('Cache-Control', 'public, max-age=' . $this->cache->ttl());
+            $response->headers->set('Cache-Control', 'public, max-age=' . $this->cache->browserMaxAge());
             $response->headers->set('X-Public-Span-Cache', 'HIT');
 
             return $response;
@@ -93,7 +93,7 @@ class CachePublicSpanPage
 
             $this->cache->store($cacheKey, $payload);
 
-            $response->headers->set('Cache-Control', 'public, max-age=' . $this->cache->ttl());
+            $response->headers->set('Cache-Control', 'public, max-age=' . $this->cache->browserMaxAge());
             $response->headers->set('X-Public-Span-Cache', 'MISS');
 
             return $response;

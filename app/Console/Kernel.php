@@ -20,6 +20,8 @@ class Kernel extends ConsoleKernel
             ->at('02:00')
             ->withoutOverlapping()
             ->runInBackground();
+
+        // Public span page cache: no scheduled warming; pages cache on first visit and stay until invalidation or deploy (cache:clear).
     }
 
     /**
@@ -35,6 +37,7 @@ class Kernel extends ConsoleKernel
             Commands\ImportYaml::class,
             Commands\DatabaseCreateCommand::class,
             Commands\WarmDesertIslandDiscsCache::class,
+            Commands\WarmPublicSpanPageCache::class,
             Commands\AnalysePlaqueResidencePatterns::class,
             Commands\ListPlaquePersonPlaceCandidates::class,
         ];

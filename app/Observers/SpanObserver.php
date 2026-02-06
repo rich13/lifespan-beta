@@ -2,7 +2,9 @@
 
 namespace App\Observers;
 
+use App\Jobs\WarmPublicSpanPagesJob;
 use App\Models\Span;
+use App\Services\PublicSpanCache;
 use App\Services\SlackNotificationService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -10,12 +12,10 @@ use Illuminate\Support\Facades\Log;
 
 class SpanObserver
 {
-    protected SlackNotificationService $slackService;
-
-    public function __construct(SlackNotificationService $slackService)
-    {
-        $this->slackService = $slackService;
-    }
+    public function __construct(
+        protected SlackNotificationService $slackService,
+        protected PublicSpanCache $publicSpanCache
+    ) {}
 
     /**
      * Handle the Span "saving" event.
@@ -128,6 +128,9 @@ class SpanObserver
         // Send Slack notification for span updates
         $changes = $span->getDirty();
         $this->slackService->notifySpanUpdated($span, $changes);
+
+        // Invalidate public page cache for this span and all connected spans; then rewarm them
+        $this->invalidateAndRewarmAffectedSpans($span);
     }
 
     /**
@@ -155,8 +158,31 @@ class SpanObserver
                 'error' => $e->getMessage()
             ]);
         }
+
+        // Invalidate and rewarm connected spans (their pages may have listed this span)
+        $this->invalidateAndRewarmAffectedSpans($span);
     }
-    
+
+    /**
+     * Invalidate public page cache for the span and all spans connected to it, then
+     * dispatch a job to rewarm those caches. Allows long TTLs while keeping content fresh.
+     */
+    private function invalidateAndRewarmAffectedSpans(Span $span): void
+    {
+        $spanIds = $span->getPublicCacheAffectedSpanIds();
+        if (empty($spanIds)) {
+            return;
+        }
+
+        foreach ($spanIds as $id) {
+            $this->publicSpanCache->invalidateSpan($id);
+        }
+
+        if (config('cache.warm_public_span_pages_on_invalidation', false)) {
+            WarmPublicSpanPagesJob::dispatch($spanIds);
+        }
+    }
+
     /**
      * Make all connections for a public figure public
      */

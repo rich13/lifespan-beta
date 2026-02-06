@@ -6,13 +6,42 @@ use App\Models\Connection;
 use App\Models\Span;
 use App\Models\User;
 use App\Services\PublicSpanCache;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Config;
 use Tests\TestCase;
 
-class PublicSpanPageCacheTest extends TestCase
+/**
+ * Same scenarios as PublicSpanPageCacheTest but with Redis as the cache store.
+ * Run with Redis available and CACHE_DRIVER=redis so we verify the production path.
+ *
+ * Local (Docker): ensure Redis is up, then:
+ *   docker compose run --rm -e CACHE_DRIVER=redis -e REDIS_HOST=redis -e REDIS_CLIENT=predis test \
+ *     php /var/www/artisan test tests/Feature/PublicSpanPageCacheRedisTest.php
+ *
+ * Or use: ./scripts/run-pest-with-redis.sh tests/Feature/PublicSpanPageCacheRedisTest.php
+ */
+class PublicSpanPageCacheRedisTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        Config::set('cache.default', 'redis');
+        Config::set('database.redis.cache.host', env('REDIS_HOST', 'redis'));
+        Config::set('database.redis.cache.port', env('REDIS_PORT', 6379));
+        Config::set('database.redis.cache.password', env('REDIS_PASSWORD'));
+        Config::set('database.redis.cache.database', env('REDIS_CACHE_DB', '1'));
+
+        try {
+            Cache::store('redis')->put('__redis_connect_test__', 1, 1);
+            Cache::store('redis')->forget('__redis_connect_test__');
+        } catch (\Throwable $e) {
+            $this->markTestSkipped('Redis not available: ' . $e->getMessage());
+        }
+    }
+
     public function test_guest_span_page_is_cached_between_requests(): void
     {
-        // Create a public span that will render the standard show view
         $user = $this->createUserWithoutPersonalSpan();
         $span = Span::factory()->create([
             'owner_id' => $user->id,
@@ -21,12 +50,10 @@ class PublicSpanPageCacheTest extends TestCase
             'access_level' => 'public',
         ]);
 
-        // First anonymous request should be a MISS
         $response1 = $this->get(route('spans.show', ['subject' => $span->slug]));
         $response1->assertStatus(200);
         $response1->assertHeader('X-Public-Span-Cache', 'MISS');
 
-        // Second anonymous request should be served from cache (HIT)
         $response2 = $this->get(route('spans.show', ['subject' => $span->slug]));
         $response2->assertStatus(200);
         $response2->assertHeader('X-Public-Span-Cache', 'HIT');
@@ -65,17 +92,14 @@ class PublicSpanPageCacheTest extends TestCase
             'name' => 'Original Name',
         ]);
 
-        // Prime cache as guest
         $firstResponse = $this->get(route('spans.show', ['subject' => $span->slug]));
         $firstResponse->assertStatus(200);
         $firstResponse->assertSee('Original Name');
 
-        // Simulate an update that would invalidate the cache
         /** @var PublicSpanCache $cacheService */
         $cacheService = app(PublicSpanCache::class);
         $cacheService->invalidateSpan((string) $span->id);
 
-        // Change the span name and hit the page again as guest
         $span->update(['name' => 'Updated Name']);
 
         $secondResponse = $this->get(route('spans.show', ['subject' => $span->slug]));
@@ -116,14 +140,11 @@ class PublicSpanPageCacheTest extends TestCase
             'connection_span_id' => $connectionSpan->id,
         ]);
 
-        // Prime cache for both as guest
         $this->get(route('spans.show', ['subject' => $spanA->slug]))->assertStatus(200);
         $this->get(route('spans.show', ['subject' => $spanB->slug]))->assertStatus(200);
 
-        // Update A; observer invalidates A and B and dispatches rewarm job
         $spanA->update(['name' => 'Person A Updated']);
 
-        // Both pages should show fresh content (observer invalidated + job rewarmed)
         $responseA = $this->get(route('spans.show', ['subject' => $spanA->slug]));
         $responseA->assertStatus(200);
         $responseA->assertSee('Person A Updated');
@@ -159,11 +180,9 @@ class PublicSpanPageCacheTest extends TestCase
             'end_year' => 2010,
         ]);
 
-        // Prime cache for both
         $this->get(route('spans.show', ['subject' => $subject->slug]))->assertStatus(200);
         $this->get(route('spans.show', ['subject' => $object->slug]))->assertStatus(200);
 
-        // Create connection; observer invalidates both and dispatches rewarm
         Connection::create([
             'parent_id' => $subject->id,
             'child_id' => $object->id,
@@ -171,12 +190,8 @@ class PublicSpanPageCacheTest extends TestCase
             'connection_span_id' => $connectionSpan->id,
         ]);
 
-        // Subject page should show fresh content (connections list may include the new connection)
-        $responseSubject = $this->get(route('spans.show', ['subject' => $subject->slug]));
-        $responseSubject->assertStatus(200);
-
-        $responseObject = $this->get(route('spans.show', ['subject' => $object->slug]));
-        $responseObject->assertStatus(200);
+        $this->get(route('spans.show', ['subject' => $subject->slug]))->assertStatus(200);
+        $this->get(route('spans.show', ['subject' => $object->slug]))->assertStatus(200);
     }
 
     public function test_connection_delete_invalidates_subject_and_object(): void
@@ -212,16 +227,12 @@ class PublicSpanPageCacheTest extends TestCase
             'connection_span_id' => $connectionSpan->id,
         ]);
 
-        // Prime cache
         $this->get(route('spans.show', ['subject' => $subject->slug]))->assertStatus(200);
         $this->get(route('spans.show', ['subject' => $object->slug]))->assertStatus(200);
 
-        // Delete connection; observer invalidates both and dispatches rewarm
         $connection->delete();
 
-        // Both pages should still load with fresh content (cache was invalidated and rewarmed)
         $this->get(route('spans.show', ['subject' => $subject->slug]))->assertStatus(200);
         $this->get(route('spans.show', ['subject' => $object->slug]))->assertStatus(200);
     }
 }
-

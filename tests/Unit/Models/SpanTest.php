@@ -2,10 +2,11 @@
 
 namespace Tests\Unit\Models;
 
-use Tests\TestCase;
-use App\Models\User;
+use App\Models\Connection;
 use App\Models\Span;
+use App\Models\User;
 use Illuminate\Support\Str;
+use Tests\TestCase;
 
 class SpanTest extends TestCase
 {
@@ -157,5 +158,90 @@ class SpanTest extends TestCase
             ->count();
         
         $this->assertEquals(1, $connectionCount);
+    }
+
+    public function test_get_public_cache_affected_span_ids_returns_self_when_no_connections(): void
+    {
+        $user = User::factory()->create();
+        $span = Span::factory()->create([
+            'type_id' => 'person',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+        ]);
+
+        $ids = $span->getPublicCacheAffectedSpanIds();
+
+        $this->assertCount(1, $ids);
+        $this->assertContains((string) $span->id, $ids);
+    }
+
+    public function test_get_public_cache_affected_span_ids_includes_connected_spans(): void
+    {
+        $user = User::factory()->create();
+        $subject = Span::factory()->create([
+            'type_id' => 'person',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+        ]);
+        $object = Span::factory()->create([
+            'type_id' => 'organisation',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+        ]);
+        $connectionSpan = Span::factory()->create([
+            'type_id' => 'connection',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+            'start_year' => 2000,
+            'end_year' => 2010,
+        ]);
+
+        Connection::create([
+            'parent_id' => $subject->id,
+            'child_id' => $object->id,
+            'type_id' => 'created',
+            'connection_span_id' => $connectionSpan->id,
+        ]);
+
+        $ids = $subject->getPublicCacheAffectedSpanIds();
+
+        $this->assertCount(3, $ids);
+        $this->assertContains((string) $subject->id, $ids);
+        $this->assertContains((string) $object->id, $ids);
+        $this->assertContains((string) $connectionSpan->id, $ids);
+    }
+
+    public function test_get_public_cache_affected_span_ids_includes_connection_span(): void
+    {
+        $user = User::factory()->create();
+        $subject = Span::factory()->create([
+            'type_id' => 'person',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+        ]);
+        $object = Span::factory()->create([
+            'type_id' => 'place',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+        ]);
+        $connectionSpan = Span::factory()->create([
+            'type_id' => 'connection',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+        ]);
+
+        Connection::create([
+            'parent_id' => $subject->id,
+            'child_id' => $object->id,
+            'type_id' => 'created',
+            'connection_span_id' => $connectionSpan->id,
+        ]);
+
+        $ids = $subject->getPublicCacheAffectedSpanIds();
+
+        $this->assertCount(3, $ids);
+        $this->assertContains((string) $subject->id, $ids);
+        $this->assertContains((string) $object->id, $ids);
+        $this->assertContains((string) $connectionSpan->id, $ids);
     }
 } 

@@ -13,6 +13,10 @@ return [
     | using this caching library. This connection is used when another is
     | not explicitly specified when executing a given caching function.
     |
+    | For production with many public spans (~30k+), use Redis (CACHE_DRIVER=redis).
+    | File cache does not scale well at that volume (disk size, inodes, no
+    | eviction). Redis is shared across instances and supports memory limits.
+    |
     */
 
     'default' => env('CACHE_DRIVER', 'file'),
@@ -107,5 +111,42 @@ return [
     */
 
     'prefix' => env('CACHE_PREFIX', Str::slug(env('APP_NAME', 'laravel'), '_').'_cache_'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Public span page cache TTL
+    |--------------------------------------------------------------------------
+    |
+    | Time-to-live in seconds for cached public span show pages (guest view).
+    | Per-span invalidation on update means a long TTL is safe; this is how
+    | long the HTML is reused before expiring. Default: 1 year (closed beta).
+    |
+    */
+
+    'public_span_ttl' => (int) env('PUBLIC_SPAN_CACHE_TTL', 31536000), // 1 year (server-side Redis)
+
+    /*
+    |--------------------------------------------------------------------------
+    | Public span page cache: browser Cache-Control max-age
+    |--------------------------------------------------------------------------
+    |
+    | Shorter than server TTL so browsers revalidate sooner; the next request
+    | hits the server and gets the (possibly updated) server-cached response.
+    | Default: 5 minutes.
+    |
+    */
+    'public_span_browser_max_age' => (int) env('PUBLIC_SPAN_BROWSER_MAX_AGE', 300), // 5 minutes
+
+    /*
+    |--------------------------------------------------------------------------
+    | Public span page cache: rewarm after invalidation
+    |--------------------------------------------------------------------------
+    |
+    | When a span or connection is updated, we invalidate affected pages. If
+    | this is true, we also dispatch a job to rewarm those pages. Set to false
+    | to avoid triggering expensive full page renders on every update.
+    |
+    */
+    'warm_public_span_pages_on_invalidation' => (bool) env('WARM_PUBLIC_SPAN_PAGES_ON_INVALIDATION', false),
 
 ];

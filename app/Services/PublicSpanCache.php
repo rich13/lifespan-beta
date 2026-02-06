@@ -10,15 +10,18 @@ use Illuminate\Support\Facades\Cache;
  *
  * Uses a per-span version key so we can invalidate all cached variants
  * for a span (different locales / query strings) without needing cache tags.
+ * TTL is configurable (config/cache.php public_span_ttl); per-span invalidation
+ * on update makes long TTLs safe.
  */
 class PublicSpanCache
 {
     /**
-     * Time-to-live for cached HTML responses (seconds).
-     *
-     * Keep this in sync with how stale you're happy for signed-out pages to be.
+     * Time-to-live for cached HTML responses (seconds). From config.
      */
-    protected int $ttl = 900; // 15 minutes
+    protected function ttlSeconds(): int
+    {
+        return (int) config('cache.public_span_ttl', 31536000);
+    }
 
     /**
      * Build the cache key for a given request/span combination.
@@ -40,7 +43,7 @@ class PublicSpanCache
      */
     public function store(string $key, array $payload): void
     {
-        Cache::put($key, $payload, $this->ttl);
+        Cache::put($key, $payload, $this->ttlSeconds());
     }
 
     /**
@@ -74,11 +77,12 @@ class PublicSpanCache
     }
 
     /**
-     * Expose the TTL for use in headers.
+     * Max-age for browser Cache-Control (seconds). Shorter than server TTL so
+     * browsers revalidate and get updated server cache after invalidation.
      */
-    public function ttl(): int
+    public function browserMaxAge(): int
     {
-        return $this->ttl;
+        return (int) config('cache.public_span_browser_max_age', 300);
     }
 
     protected function versionKey(string $spanId): string

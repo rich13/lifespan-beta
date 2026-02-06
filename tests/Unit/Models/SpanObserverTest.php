@@ -7,6 +7,7 @@ use App\Models\Connection;
 use App\Models\ConnectionType;
 use App\Models\User;
 use App\Observers\SpanObserver;
+use App\Services\PublicSpanCache;
 use App\Services\SlackNotificationService;
 use Tests\TestCase;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
@@ -23,9 +24,10 @@ class SpanObserverTest extends TestCase
         parent::setUp();
         $this->user = User::factory()->create();
         
-        // Create a mock SlackNotificationService
+        // Create a mock SlackNotificationService and resolve PublicSpanCache from container
         $slackService = $this->createMock(SlackNotificationService::class);
-        $this->observer = new SpanObserver($slackService);
+        $publicSpanCache = app(PublicSpanCache::class);
+        $this->observer = new SpanObserver($slackService, $publicSpanCache);
     }
 
     /** @test */

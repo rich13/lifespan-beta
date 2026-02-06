@@ -1568,6 +1568,34 @@ class Span extends Model
     }
 
     /**
+     * Span IDs that should have their public page cache invalidated when this span is updated.
+     * Includes this span, every span connected to it (subject/object of any connection),
+     * and each connection span (the span representing the relationship). Used for
+     * cache invalidation and targeted rewarming so we can use long TTLs.
+     *
+     * @return array<int, string>
+     */
+    public function getPublicCacheAffectedSpanIds(): array
+    {
+        $ids = [(string) $this->id];
+
+        $rows = Connection::query()
+            ->where('parent_id', $this->id)
+            ->orWhere('child_id', $this->id)
+            ->get(['parent_id', 'child_id', 'connection_span_id']);
+
+        foreach ($rows as $row) {
+            $ids[] = $row->parent_id;
+            $ids[] = $row->child_id;
+            if ($row->connection_span_id) {
+                $ids[] = $row->connection_span_id;
+            }
+        }
+
+        return array_values(array_unique($ids));
+    }
+
+    /**
      * Get relationship connections for this span
      */
     public function relationships()
