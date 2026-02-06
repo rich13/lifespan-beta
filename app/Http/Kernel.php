@@ -84,5 +84,6 @@ class Kernel extends HttpKernel
         'timeout.prevention' => \App\Http\Middleware\TimeoutPreventionMiddleware::class,
         'timeout.span-show' => \App\Http\Middleware\SpanShowTimeoutMiddleware::class,
         'profile.complete' => \App\Http\Middleware\RequireProfileCompletion::class,
+        'cache.span.public' => \App\Http\Middleware\CachePublicSpanPage::class,
     ];
 }

@@ -22,6 +22,7 @@ use App\Services\ConfigurableStoryGeneratorService;
 use App\Services\RouteReservationService;
 use App\Services\YamlValidationService;
 use App\Services\SpreadsheetValidationService;
+use App\Services\PublicSpanCache;
 
 use InvalidArgumentException;
 use App\Models\Connection;
@@ -38,16 +39,18 @@ class SpanController extends Controller
 {
     protected $yamlService;
     protected $routeReservationService;
+    protected PublicSpanCache $publicSpanCache;
 
     /**
      * Create a new controller instance.
      */
-    public function __construct(YamlSpanService $yamlService, RouteReservationService $routeReservationService)
+    public function __construct(YamlSpanService $yamlService, RouteReservationService $routeReservationService, PublicSpanCache $publicSpanCache)
     {
         // Require auth for all routes except show, index, search, explore, desertIslandDiscs, explorePlaques, connectionTypes, connectionsByType, showConnection, and listConnections
         $this->middleware('auth')->except(['show', 'index', 'search', 'explore', 'desertIslandDiscs', 'explorePlaques', 'connectionTypes', 'connectionsByType', 'showConnection', 'listConnections']);
         $this->yamlService = $yamlService;
         $this->routeReservationService = $routeReservationService;
+        $this->publicSpanCache = $publicSpanCache;
     }
 
     /**
@@ -1931,6 +1934,9 @@ class SpanController extends Controller
             // Regular update without type change
             $span->update($validated);
 
+            // Invalidate public cached span page after successful update
+            $this->publicSpanCache->invalidateSpan((string) $span->id);
+
             Log::channel('spans')->info('Span updated successfully', [
                 'span_id' => $span->id,
                 'changes' => $span->getChanges()
@@ -2052,6 +2058,9 @@ class SpanController extends Controller
             }
             
             $span->delete();
+
+            // Invalidate public cached span page after delete
+            $this->publicSpanCache->invalidateSpan((string) $span->id);
             
             // Debug: Log the request details
             Log::info('Span delete request details', [
@@ -2900,6 +2909,9 @@ class SpanController extends Controller
         $applyResult = $this->yamlService->applyYamlToSpan($span, $validationResult['data']);
         
         if ($applyResult['success']) {
+            // Invalidate public cached span page after YAML apply
+            $this->publicSpanCache->invalidateSpan((string) $span->id);
+
             return response()->json([
                 'success' => true,
                 'message' => $applyResult['message'],
@@ -2945,6 +2957,9 @@ class SpanController extends Controller
         $applyResult = $this->yamlService->applyMergedYamlToSpan($span, $mergedData);
         
         if ($applyResult['success']) {
+            // Invalidate public cached span page after merged YAML apply
+            $this->publicSpanCache->invalidateSpan((string) $span->id);
+
             return response()->json([
                 'success' => true,
                 'message' => $applyResult['message'],
@@ -5800,6 +5815,9 @@ class SpanController extends Controller
                 'changes' => $span->getChanges(),
                 'changes_count' => count($span->getChanges())
             ]);
+
+            // Invalidate public cached span page after spreadsheet update
+            $this->publicSpanCache->invalidateSpan((string) $span->id);
 
             return response()->json([
                 'success' => true,

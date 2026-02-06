@@ -394,7 +394,6 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                     'connection_span' => $connectionSpan
                 ]);
             });
-
             // New API routes for add connection modal
             // Note: connection-types endpoint moved to routes/api.php
 
@@ -846,6 +845,11 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                     ], 500);
                 }
             });
+
+            // General span show route (must come last as catch-all). Higher PHP timeout for cold-cache/heavy pages.
+            Route::get('/{subject}', [SpanController::class, 'show'])
+                ->name('spans.show')
+                ->middleware(['timeout.span-show', 'cache.span.public']);
         });
 
         // Public routes with span access control
@@ -897,7 +901,9 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
             Route::get('/{span}/connection_types/{connectionType}', [SpanController::class, 'connectionsByType'])->name('spans.connection-types.show');
             
             // General span show route (must come last as catch-all). Higher PHP timeout for cold-cache/heavy pages.
-            Route::get('/{subject}', [SpanController::class, 'show'])->name('spans.show')->middleware(SpanShowTimeoutMiddleware::class);
+            Route::get('/{subject}', [SpanController::class, 'show'])
+                ->name('spans.show')
+                ->middleware(['timeout.span-show', 'cache.span.public']);
         });
 
         // New POST route for creating a new span from YAML
