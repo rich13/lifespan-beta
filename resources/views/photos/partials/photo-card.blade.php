@@ -82,7 +82,7 @@
                         $features = $allConnections->filter(fn($c) => $c->type_id === 'features');
                     @endphp
                     @foreach($locations->take(2) as $conn)
-                        <a href="{{ route('photos.of', $conn->child) }}" class="badge bg-info text-decoration-none">
+                        <a href="{{ route('photos.in', $conn->child) }}" class="badge bg-info text-decoration-none">
                             <i class="bi bi-geo-alt me-1"></i>{{ Str::limit($conn->child->name, 15) }}
                         </a>
                     @endforeach

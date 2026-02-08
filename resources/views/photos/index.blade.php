@@ -1,6 +1,8 @@
 @php
-    $featuresSpanForForm = request('features') ? \App\Models\Span::find(request('features')) : null;
-    // Always submit search/filters to main photos index URL (not /photos/of/slug) so URLs stay /photos/?search=...
+    // Filter spans for "of" (features) and "in" (location) – passed from controller when using pretty URLs
+    $filterOfSpan = $filterOfSpan ?? (request('features') ? \App\Models\Span::find(request('features')) : null);
+    $filterInSpan = $filterInSpan ?? (request('location') ? \App\Models\Span::find(request('location')) : null);
+    // Always submit search/filters to main photos index URL so URLs stay consistent
     $photosFormAction = route('photos.index');
 @endphp
 @extends('layouts.app')
@@ -50,14 +52,19 @@
             <input type="radio" class="btn-check photos-filter-radio" name="access_level" id="access_level_private" value="private" {{ request('access_level') === 'private' ? 'checked' : '' }} autocomplete="off">
             <label class="btn btn-outline-secondary" for="access_level_private">Private</label>
         </div>
-        @if(request('features') && $featuresSpanForForm)
-            <a href="{{ route('photos.index', request()->except('features')) }}" class="btn btn-sm btn-outline-info text-nowrap">
-                <i class="bi bi-x-circle me-1"></i>Clear “{{ Str::limit($featuresSpanForForm->name, 12) }}”
+        @if($filterOfSpan)
+            <a href="{{ \App\Helpers\RouteHelper::photosIndexUrl(null, $filterInSpan, request()->except(['features', 'location'])) }}" class="btn btn-sm btn-outline-info text-nowrap">
+                <i class="bi bi-x-circle me-1"></i>Clear “of {{ Str::limit($filterOfSpan->name, 12) }}”
+            </a>
+        @endif
+        @if($filterInSpan)
+            <a href="{{ \App\Helpers\RouteHelper::photosIndexUrl($filterOfSpan, null, request()->except(['features', 'location'])) }}" class="btn btn-sm btn-outline-info text-nowrap">
+                <i class="bi bi-x-circle me-1"></i>Clear “in {{ Str::limit($filterInSpan->name, 12) }}”
             </a>
         @endif
         @if(request('from_date') || request('to_date'))
             @php
-                $clearDateUrl = $featuresSpanForForm ? route('photos.of', $featuresSpanForForm) : route('photos.index');
+                $clearDateUrl = \App\Helpers\RouteHelper::photosIndexUrl($filterOfSpan, $filterInSpan);
             @endphp
             <a href="{{ $clearDateUrl }}" class="btn btn-sm btn-outline-secondary text-nowrap" title="Clear date filter">
                 <i class="bi bi-calendar-x me-1"></i>
@@ -109,7 +116,7 @@
                     <i class="bi bi-images fs-1 text-muted mb-3"></i>
                     <h4 class="text-muted">No photos found</h4>
                     <p class="text-muted">
-                        @if(request()->hasAny(['search', 'access_level', 'state', 'photos_filter', 'features', 'from_date', 'to_date']))
+                        @if(request()->hasAny(['search', 'access_level', 'state', 'photos_filter', 'features', 'location', 'from_date', 'to_date']))
                             Try adjusting your filters or 
                             <a href="{{ route('photos.index') }}">clear all filters</a>.
                         @else

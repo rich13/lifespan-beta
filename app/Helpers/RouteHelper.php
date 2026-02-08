@@ -41,4 +41,35 @@ class RouteHelper
     {
         return $span->type_id === 'thing' && ($span->metadata['subtype'] ?? null) === 'photo';
     }
+
+    /**
+     * Build the photos index URL for the given filters (maintainable single place for photo list URLs).
+     * Use this instead of calling route('photos.of', ...) / route('photos.in', ...) directly so
+     * all URL patterns stay consistent (e.g. /photos/of/:slug, /photos/in/:slug, /photos/of/:slug/in/:slug).
+     *
+     * @param  Span|null  $of  Span that photos feature (connection type "features")
+     * @param  Span|null  $in  Span that photos are located in (connection type "located")
+     * @param  array  $query  Extra query params (e.g. search, state, from_date, to_date)
+     */
+    public static function photosIndexUrl(?Span $of = null, ?Span $in = null, array $query = []): string
+    {
+        if ($of && $in) {
+            return route('photos.of.in', ['slug' => $of->slug, 'locationSlug' => $in->slug]) . self::queryString($query);
+        }
+        if ($of) {
+            return route('photos.of', ['slug' => $of->slug]) . self::queryString($query);
+        }
+        if ($in) {
+            return route('photos.in', ['slug' => $in->slug]) . self::queryString($query);
+        }
+        return route('photos.index', $query);
+    }
+
+    private static function queryString(array $query): string
+    {
+        if ($query === []) {
+            return '';
+        }
+        return '?' . http_build_query($query);
+    }
 }

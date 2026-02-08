@@ -497,7 +497,7 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
                             <!-- Top Navigation Actions (Search, New, Improve) -->
                             <x-topnav.topnav-actions :span="$span ?? null" class="d-none d-md-flex" />
                             <!-- Page Tools (Edit, Delete, History) -->
-                            <x-topnav.page-tools class="d-none d-md-flex" :group="!request()->routeIs('photos.index') && !request()->routeIs('photos.of') && !request()->routeIs('photos.of.from') && !request()->routeIs('photos.of.from.to') && !request()->routeIs('photos.from') && !request()->routeIs('photos.from.to') && !request()->routeIs('photos.during')" />
+                            <x-topnav.page-tools class="d-none d-md-flex" :group="!request()->routeIs('photos.index') && !request()->routeIs('photos.of') && !request()->routeIs('photos.of.in') && !request()->routeIs('photos.of.from') && !request()->routeIs('photos.of.from.to') && !request()->routeIs('photos.from') && !request()->routeIs('photos.from.to') && !request()->routeIs('photos.during') && !request()->routeIs('photos.in')" />
                             <!-- User Profile -->
                             <x-topnav.user-profile :span="$span ?? null" class="d-none d-md-flex" />
                             

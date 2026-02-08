@@ -117,12 +117,21 @@ class PhotoController extends Controller
             $query->where('state', $request->state);
         }
 
-        // Apply features filter (photos featuring a specific person/span or located in a place)
+        // Apply "of" filter (photos featuring a specific span – connection type "features" only)
         if ($request->filled('features')) {
             $featuresSpanId = $request->features;
             $query->whereHas('connectionsAsSubject', function ($q) use ($featuresSpanId) {
-                $q->whereIn('type_id', ['features', 'located'])
+                $q->where('type_id', 'features')
                   ->where('child_id', $featuresSpanId);
+            });
+        }
+
+        // Apply "in" filter (photos located in a place – connection type "located" only)
+        if ($request->filled('location')) {
+            $locationSpanId = $request->location;
+            $query->whereHas('connectionsAsSubject', function ($q) use ($locationSpanId) {
+                $q->where('type_id', 'located')
+                  ->where('child_id', $locationSpanId);
             });
         }
 
@@ -192,7 +201,15 @@ class PhotoController extends Controller
             ]);
         }
 
-        return view('photos.index', compact('photos', 'showMyPhotosTab', 'photosFilter'));
+        // Resolve filter spans for view (breadcrumb, clear buttons)
+        $filterOfSpan = $request->filled('features')
+            ? Span::find($request->features)
+            : null;
+        $filterInSpan = $request->filled('location')
+            ? Span::find($request->location)
+            : null;
+
+        return view('photos.index', compact('photos', 'showMyPhotosTab', 'photosFilter', 'filterOfSpan', 'filterInSpan'));
     }
 
     /**
@@ -311,6 +328,46 @@ class PhotoController extends Controller
         }
 
         request()->merge(['features' => $span->id]);
+
+        return $this->index(request());
+    }
+
+    /**
+     * Display photos located in the given span (pretty URL: /photos/in/:slug).
+     * If the span doesn't exist, shows empty results instead of 404.
+     */
+    public function indexIn(string $slug): View|JsonResponse
+    {
+        $span = Span::where('slug', $slug)->first();
+
+        if (!$span) {
+            request()->merge(['_no_results' => true]);
+            return $this->index(request());
+        }
+
+        request()->merge(['location' => $span->id]);
+
+        return $this->index(request());
+    }
+
+    /**
+     * Display photos featuring one span and located in another (pretty URL: /photos/of/:slug/in/:locationSlug).
+     * If either span doesn't exist, shows empty results instead of 404.
+     */
+    public function indexOfIn(string $slug, string $locationSlug): View|JsonResponse
+    {
+        $span = Span::where('slug', $slug)->first();
+        $locationSpan = Span::where('slug', $locationSlug)->first();
+
+        if (!$span || !$locationSpan) {
+            request()->merge(['_no_results' => true]);
+            return $this->index(request());
+        }
+
+        request()->merge([
+            'features' => $span->id,
+            'location' => $locationSpan->id,
+        ]);
 
         return $this->index(request());
     }
