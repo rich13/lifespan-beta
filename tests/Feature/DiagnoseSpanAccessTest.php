@@ -50,16 +50,16 @@ class DiagnoseSpanAccessTest extends TestCase
             'connection_span_id' => $connectionSpan->id,
         ]);
         
-        // Test accessing the connection span as the owner. Use canonical triple URL so we assert
-        // the same access as production (slug URL redirects to triple URL).
-        $connection->load(['subject', 'object', 'type']);
+        // Test accessing the connection span as the owner. Use canonical 4-segment URL (short_id).
+        $connection->load(['subject', 'object', 'type', 'connectionSpan']);
         $predicate = $connection->parent_id === $connection->subject->id
             ? str_replace(' ', '-', $connection->type->forward_predicate)
             : str_replace(' ', '-', $connection->type->inverse_predicate);
-        $url = route('spans.connection', [
+        $url = route('spans.connection.by-id', [
             'subject' => $connection->subject,
             'predicate' => $predicate,
             'object' => $connection->object,
+            'shortId' => $connection->connectionSpan->short_id,
         ]);
         $response = $this->actingAs($user)->get($url);
 

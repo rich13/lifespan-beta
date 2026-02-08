@@ -41,6 +41,7 @@ use App\Services\SetFilterService;
  * 
  * @property string $id UUID of the span
  * @property string $name Human-readable name
+ * @property string $short_id Unique 8-char base62 id (for URLs / sharing)
  * @property string $type_id Foreign key to span_types table
  * @property string $state Current state (draft, published, etc)
  * @property string|null $description Optional long-form description
@@ -79,6 +80,7 @@ class Span extends Model
         'name',
         'type_id',
         'slug',
+        'short_id',
         'start_year',
         'start_month',
         'start_day',
@@ -141,6 +143,13 @@ class Span extends Model
         static::creating(function ($span) {
             if (!$span->id) {
                 $span->id = (string) Str::uuid();
+            }
+        });
+
+        // Generate short_id for all spans (canonical URL for connections, sharing for nouns)
+        static::creating(function ($span) {
+            if (empty($span->short_id)) {
+                $span->short_id = self::generateUniqueShortId();
             }
         });
 
@@ -545,6 +554,35 @@ class Span extends Model
                 }
             }
         });
+    }
+
+    /**
+     * Base62 alphabet for short_id (0-9, A-Z, a-z).
+     */
+    private const SHORT_ID_ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+
+    private const SHORT_ID_LENGTH = 8;
+
+    /**
+     * Generate a globally unique 8-character base62 short_id for use in URLs.
+     */
+    public static function generateUniqueShortId(): string
+    {
+        $maxAttempts = 100;
+        $alphabet = self::SHORT_ID_ALPHABET;
+        $len = strlen($alphabet);
+
+        for ($attempt = 0; $attempt < $maxAttempts; $attempt++) {
+            $id = '';
+            for ($i = 0; $i < self::SHORT_ID_LENGTH; $i++) {
+                $id .= $alphabet[random_int(0, $len - 1)];
+            }
+            if (! static::where('short_id', $id)->exists()) {
+                return $id;
+            }
+        }
+
+        throw new \RuntimeException('Could not generate unique short_id after ' . $maxAttempts . ' attempts');
     }
 
     /**

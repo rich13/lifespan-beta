@@ -878,24 +878,27 @@ class SpanController extends Controller
                             return $cs && ($user ? $cs->isAccessibleBy($user) : $cs->access_level === 'public');
                         });
 
-                    if ($connectionsForTriple->count() === 1) {
+                    if ($connectionsForTriple->count() === 1 && $subject->short_id) {
                         return redirect()
-                            ->route('spans.connection', [
+                            ->route('spans.connection.by-id', [
                                 'subject' => $connectionSubject,
                                 'predicate' => $predicate,
                                 'object' => $connectionObject,
+                                'shortId' => $subject->short_id,
                             ], 301)
                             ->with('status', session('status'));
                     }
 
-                    return redirect()
-                        ->route('spans.connection.by-id', [
-                            'subject' => $connectionSubject,
-                            'predicate' => $predicate,
-                            'object' => $connectionObject,
-                            'connectionSpanId' => $subject->id,
-                        ], 301)
-                        ->with('status', session('status'));
+                    if ($subject->short_id) {
+                        return redirect()
+                            ->route('spans.connection.by-id', [
+                                'subject' => $connectionSubject,
+                                'predicate' => $predicate,
+                                'object' => $connectionObject,
+                                'shortId' => $subject->short_id,
+                            ], 301)
+                            ->with('status', session('status'));
+                    }
                 }
             }
 
@@ -4239,23 +4242,19 @@ class SpanController extends Controller
             abort(404, 'Connection not found');
         }
 
-        // Single connection: show the connection span (same as span show page)
+        // Single connection: redirect to canonical URL with short_id (or show in place if short_id not yet set)
         if ($connections->count() === 1) {
             $connection = $connections->first();
             $connectionSpan = $connection->connectionSpan;
-
-            $desertIslandDiscsSet = null;
-            if ($connectionSpan->type_id === 'person') {
-                try {
-                    $desertIslandDiscsSet = Span::getDesertIslandDiscsSet($connectionSpan);
-                } catch (\Exception $e) {
-                    Log::warning('Failed to get Desert Island Discs set for person', [
-                        'person_id' => $connectionSpan->id,
-                        'error' => $e->getMessage()
-                    ]);
-                }
+            if ($connectionSpan && $connectionSpan->short_id) {
+                return redirect()->route('spans.connection.by-id', [
+                    'subject' => $subject,
+                    'predicate' => $predicate,
+                    'object' => $object,
+                    'shortId' => $connectionSpan->short_id,
+                ], 302);
             }
-
+            // Fallback: short_id not set (e.g. before migration), show in place
             $span = $connectionSpan;
             $familyData = null;
             [$parentConnections, $childConnections] = $this->getConnectionsForSpanShow($connectionSpan);
@@ -4265,18 +4264,43 @@ class SpanController extends Controller
             } catch (\Exception $e) {
                 $story = ['paragraphs' => [], 'metadata' => [], 'error' => $e->getMessage()];
             }
-            return view('spans.show', compact('span', 'desertIslandDiscsSet', 'subject', 'object', 'connectionType', 'familyData', 'parentConnections', 'childConnections', 'story'));
+            $desertIslandDiscsSet = null;
+            if ($connectionSpan->type_id === 'person') {
+                try {
+                    $desertIslandDiscsSet = Span::getDesertIslandDiscsSet($connectionSpan);
+                } catch (\Exception $e) {
+                    Log::warning('Failed to get Desert Island Discs set for person', ['person_id' => $connectionSpan->id, 'error' => $e->getMessage()]);
+                }
+            }
+            return view('spans.show', compact('span', 'desertIslandDiscsSet', 'subject', 'object', 'connectionType', 'familyData', 'parentConnections', 'childConnections', 'story', 'predicate'));
         }
 
         // Multiple connections: show disambiguation view
-        return view('spans.connection-disambiguation', compact('subject', 'object', 'connectionType', 'connections'));
+        return view('spans.connection-disambiguation', compact('subject', 'object', 'connectionType', 'connections', 'predicate'));
     }
 
     /**
-     * Display a specific connection by its connection span UUID.
-     * Resolves /spans/{subject}/{predicate}/{object}/{connectionSpanId}.
+     * Redirect legacy UUID-based connection URL to canonical short_id URL.
      */
-    public function showConnectionBySpanId(Request $request, Span $subject, string $predicate, Span $object, string $connectionSpanId): View|\Illuminate\Http\RedirectResponse
+    public function redirectConnectionFromUuidToShortId(Span $subject, string $predicate, Span $object, string $connectionSpanId): \Illuminate\Http\RedirectResponse
+    {
+        $connectionSpan = Span::where('id', $connectionSpanId)->where('type_id', 'connection')->first();
+        if (!$connectionSpan || !$connectionSpan->short_id) {
+            abort(404, 'Connection not found');
+        }
+        return redirect()->route('spans.connection.by-id', [
+            'subject' => $subject,
+            'predicate' => $predicate,
+            'object' => $object,
+            'shortId' => $connectionSpan->short_id,
+        ], 301);
+    }
+
+    /**
+     * Display a specific connection by its connection span short_id.
+     * Resolves /spans/{subject}/{predicate}/{object}/{shortId}.
+     */
+    public function showConnectionBySpanId(Request $request, Span $subject, string $predicate, Span $object, string $shortId): View|\Illuminate\Http\RedirectResponse
     {
         $predicateWithSpaces = str_replace('-', ' ', $predicate);
         $connectionType = ConnectionType::where('forward_predicate', $predicateWithSpaces)
@@ -4287,8 +4311,13 @@ class SpanController extends Controller
             abort(404, 'Connection type not found');
         }
 
+        $connectionSpan = Span::where('short_id', $shortId)->where('type_id', 'connection')->first();
+        if (!$connectionSpan) {
+            abort(404, 'Connection not found');
+        }
+
         $connection = Connection::where('type_id', $connectionType->type)
-            ->where('connection_span_id', $connectionSpanId)
+            ->where('connection_span_id', $connectionSpan->id)
             ->where(function($query) use ($subject, $object) {
                 $query->where(function($q) use ($subject, $object) {
                     $q->where('parent_id', $subject->id)->where('child_id', $object->id);
@@ -4334,7 +4363,7 @@ class SpanController extends Controller
         } catch (\Exception $e) {
             $story = ['paragraphs' => [], 'metadata' => [], 'error' => $e->getMessage()];
         }
-        return view('spans.show', compact('span', 'desertIslandDiscsSet', 'subject', 'object', 'connectionType', 'familyData', 'parentConnections', 'childConnections', 'story'));
+        return view('spans.show', compact('span', 'desertIslandDiscsSet', 'subject', 'object', 'connectionType', 'familyData', 'parentConnections', 'childConnections', 'story', 'predicate'));
     }
 
     /**

@@ -1,6 +1,11 @@
 @extends('layouts.app')
 
-@section('title', "Multiple connections: {$subject->name} {$connectionType->forward_predicate} {$object->name}")
+@php
+    $displayPredicate = isset($predicate) ? str_replace('-', ' ', $predicate) : $connectionType->forward_predicate;
+    $predicateForUrl = isset($predicate) ? $predicate : str_replace(' ', '-', $connectionType->forward_predicate);
+@endphp
+
+@section('title', "Multiple connections: {$subject->name} {$displayPredicate} {$object->name}")
 
 @section('page_title')
     <x-breadcrumb :items="[
@@ -17,8 +22,8 @@
             'icon_category' => 'span'
         ],
         [
-            'text' => $connectionType->forward_predicate,
-            'url' => route('spans.all-connections', $subject) . '#' . str_replace(' ', '-', $connectionType->forward_predicate),
+            'text' => $displayPredicate,
+            'url' => route('spans.all-connections', $subject) . '#' . $predicateForUrl,
             'icon' => $connectionType->type_id,
             'icon_category' => 'connection'
         ],
@@ -44,8 +49,9 @@
             <div class="card">
                 <div class="card-header">
                     <h5 class="card-title mb-0">
-                        Multiple {{ $connectionType->forward_predicate }} connections
+                        Multiple {{ $displayPredicate }} connections
                     </h5>
+                    <p class="text-muted">NOTE TO SELF - add timeline view here</p>
                 </div>
                 <div class="card-body">
                     <p class="text-muted">
@@ -70,7 +76,7 @@
                                     }
                                 }
                             @endphp
-                            <a href="{{ route('spans.connection.by-id', ['subject' => $subject, 'predicate' => str_replace(' ', '-', $connectionType->forward_predicate), 'object' => $object, 'connectionSpanId' => $connectionSpan->id]) }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                            <a href="{{ $connectionSpan->short_id ? route('spans.connection.by-id', ['subject' => $subject, 'predicate' => $predicateForUrl, 'object' => $object, 'shortId' => $connectionSpan->short_id]) : route('spans.connection.by-uuid-legacy', ['subject' => $subject, 'predicate' => $predicateForUrl, 'object' => $object, 'connectionSpanId' => $connectionSpan->id]) }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
                                 <span>{{ $connectionSpan->name }}</span>
                                 @if($dateText)
                                     <span class="text-muted small">{{ $dateText }}</span>

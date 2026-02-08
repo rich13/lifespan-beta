@@ -52,15 +52,16 @@ class ConnectionSpanAccessTest extends TestCase
         ]);
         
         // Test: User should be able to access the connection span because they own both parent and child.
-        // Use canonical triple URL (slug URL redirects to this; showConnection applies access).
-        $connection->load(['subject', 'object', 'type']);
+        // Use canonical 4-segment URL (short_id).
+        $connection->load(['subject', 'object', 'type', 'connectionSpan']);
         $predicate = $connection->parent_id === $connection->subject->id
             ? str_replace(' ', '-', $connection->type->forward_predicate)
             : str_replace(' ', '-', $connection->type->inverse_predicate);
-        $url = route('spans.connection', [
+        $url = route('spans.connection.by-id', [
             'subject' => $connection->subject,
             'predicate' => $predicate,
             'object' => $connection->object,
+            'shortId' => $connection->connectionSpan->short_id,
         ]);
         $response = $this->actingAs($user)->get($url);
 
@@ -108,7 +109,7 @@ class ConnectionSpanAccessTest extends TestCase
         ]);
         
         // Test: User should NOT be able to access because they cannot access the child span.
-        // Use canonical triple URL; span.access middleware returns 403.
+        // span.access middleware returns 403 when resolving the object in the triple URL.
         $conn = Connection::where('connection_span_id', $connectionSpan->id)->with(['subject', 'object', 'type'])->first();
         $predicate = $conn->parent_id === $conn->subject->id
             ? str_replace(' ', '-', $conn->type->forward_predicate)
@@ -119,7 +120,6 @@ class ConnectionSpanAccessTest extends TestCase
             'object' => $conn->object,
         ]);
         $response = $this->actingAs($user)->get($url);
-
         $this->assertEquals(403, $response->status());
     }
 
@@ -162,15 +162,16 @@ class ConnectionSpanAccessTest extends TestCase
         ]);
         
         // Test: User should be able to access because parent is theirs and child is public.
-        // Use canonical triple URL (slug URL redirects to this; showConnection applies access).
-        $conn = Connection::where('connection_span_id', $connectionSpan->id)->with(['subject', 'object', 'type'])->first();
+        // Use canonical 4-segment URL (short_id).
+        $conn = Connection::where('connection_span_id', $connectionSpan->id)->with(['subject', 'object', 'type', 'connectionSpan'])->first();
         $predicate = $conn->parent_id === $conn->subject->id
             ? str_replace(' ', '-', $conn->type->forward_predicate)
             : str_replace(' ', '-', $conn->type->inverse_predicate);
-        $url = route('spans.connection', [
+        $url = route('spans.connection.by-id', [
             'subject' => $conn->subject,
             'predicate' => $predicate,
             'object' => $conn->object,
+            'shortId' => $conn->connectionSpan->short_id,
         ]);
         $response = $this->actingAs($user)->get($url);
 

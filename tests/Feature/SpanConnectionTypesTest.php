@@ -128,7 +128,10 @@ class SpanConnectionTypesTest extends TestCase
         ]);
         
         $response = $this->get(route('spans.connection', ['subject' => $subject, 'predicate' => 'lived-in', 'object' => $object]));
-        
+
+        // Single connection: resolver redirects to canonical URL with short_id
+        $response->assertRedirect();
+        $response = $this->followingRedirects()->get(route('spans.connection', ['subject' => $subject, 'predicate' => 'lived-in', 'object' => $object]));
         $response->assertStatus(200);
     }
 
@@ -162,7 +165,10 @@ class SpanConnectionTypesTest extends TestCase
         ]);
         
         $response = $this->get(route('spans.connection', ['subject' => $subject, 'predicate' => 'lived-in', 'object' => $object]));
-        
+
+        // Single connection: resolver redirects to canonical URL with short_id
+        $response->assertRedirect();
+        $response = $this->followingRedirects()->get(route('spans.connection', ['subject' => $subject, 'predicate' => 'lived-in', 'object' => $object]));
         $response->assertStatus(200);
         // Content assertion removed for now; will be covered by API test later.
     }

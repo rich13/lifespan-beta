@@ -20,6 +20,10 @@
         
         // If we have connection context from the controller, use it
         if (isset($connectionType) && isset($subject) && isset($object)) {
+            // Use the predicate from the URL when present (so inverse URLs show "was home to" not "lived in")
+            $breadcrumbPredicate = isset($predicate) ? str_replace('-', ' ', $predicate) : $connectionType->forward_predicate;
+            $breadcrumbPredicateForUrl = isset($predicate) ? $predicate : str_replace(' ', '-', $connectionType->forward_predicate);
+
             // Add subject to breadcrumb
             $breadcrumbItems[] = [
                 'text' => $subject->getDisplayTitle(),
@@ -27,15 +31,15 @@
                 'icon' => $subject->type_id,
                 'icon_category' => 'span'
             ];
-            
+
             // Add predicate to breadcrumb
             $breadcrumbItems[] = [
-                'text' => $connectionType->forward_predicate,
-                'url' => route('spans.connections', ['subject' => $subject, 'predicate' => str_replace(' ', '-', $connectionType->forward_predicate)]),
+                'text' => $breadcrumbPredicate,
+                'url' => route('spans.connections', ['subject' => $subject, 'predicate' => $breadcrumbPredicateForUrl]),
                 'icon' => $connectionType->type_id,
                 'icon_category' => 'connection'
             ];
-            
+
             // Add object to breadcrumb
             $breadcrumbItems[] = [
                 'text' => $object->getDisplayTitle(),

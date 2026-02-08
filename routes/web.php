@@ -891,8 +891,12 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
             Route::get('/{subject}/connections', [SpanController::class, 'allConnections'])->name('spans.all-connections');
             Route::get('/{subject}/all', [SpanController::class, 'allTimeline'])->name('spans.all');
             Route::get('/{subject}/{predicate}', [SpanController::class, 'listConnections'])->name('spans.connections');
-            Route::get('/{subject}/{predicate}/{object}/{connectionSpanId}', [SpanController::class, 'showConnectionBySpanId'])
+            // Legacy: UUID in fourth segment redirects to canonical short_id URL
+            Route::get('/{subject}/{predicate}/{object}/{connectionSpanId}', [SpanController::class, 'redirectConnectionFromUuidToShortId'])
                 ->whereUuid('connectionSpanId')
+                ->name('spans.connection.by-uuid-legacy');
+            Route::get('/{subject}/{predicate}/{object}/{shortId}', [SpanController::class, 'showConnectionBySpanId'])
+                ->where('shortId', '[0-9A-Za-z]{8}')
                 ->name('spans.connection.by-id');
             Route::get('/{subject}/{predicate}/{object}', [SpanController::class, 'showConnection'])->name('spans.connection');
             
@@ -952,7 +956,11 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                 ->name('photos.of.from');
             // Photos featuring a span during another span's date range
             Route::get('/of/{slug}/during/{duringSlug}', [PhotoController::class, 'indexOfDuring'])->name('photos.of.during');
+            // Photos featuring one span and located in another
+            Route::get('/of/{slug}/in/{locationSlug}', [PhotoController::class, 'indexOfIn'])->name('photos.of.in');
             Route::get('/of/{slug}', [PhotoController::class, 'indexOf'])->name('photos.of');
+            // Photos located in a place (must be before /{photo} so "in" is not captured as photo slug)
+            Route::get('/in/{slug}', [PhotoController::class, 'indexIn'])->name('photos.in');
 
             Route::get('/{photo}', [PhotoController::class, 'show'])->name('photos.show');
             
