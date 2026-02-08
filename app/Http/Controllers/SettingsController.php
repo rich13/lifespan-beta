@@ -22,10 +22,11 @@ class SettingsController extends Controller
     public function index(): View
     {
         $user = auth()->user();
-        
-        // Load user relationships
-        $user->load(['personalSpan', 'createdSpans', 'updatedSpans']);
-        
+
+        // Load only personalSpan; avoid loading createdSpans/updatedSpans to prevent
+        // memory exhaustion for users with many spans (stats use count() queries).
+        $user->load('personalSpan');
+
         // Get user statistics
         $stats = [
             'total_spans_created' => $user->createdSpans()->count(),
