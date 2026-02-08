@@ -475,10 +475,10 @@ class BluePlaqueService
                         'timestamp' => now()->format('H:i:s'),
                         'message' => "❌ Exception processing plaque: {$plaqueName} - " . $e->getMessage()
                     ];
-                    // Fatal DB errors (e.g. disk full, transaction aborted) leave the transaction
-                    // in a failed state; rethrow so the batch transaction rolls back and we don't
-                    // cascade "current transaction is aborted" for every remaining plaque.
-                    if ($e instanceof QueryException && $e->getCode() === '25P02') {
+                    // Any DB failure aborts the PostgreSQL transaction. If we don't rethrow,
+                    // the next query will get 25P02 (current transaction is aborted). Rethrow
+                    // so the batch transaction rolls back and we report the real error.
+                    if ($e instanceof QueryException) {
                         throw $e;
                     }
                     if (str_contains($e->getMessage(), 'transaction is aborted') || str_contains($e->getMessage(), 'No space left on device')) {
@@ -1215,15 +1215,15 @@ class BluePlaqueService
                 'trace' => $e->getTraceAsString()
             ]);
 
-            // Fatal DB errors (transaction aborted, disk full) leave the transaction in a failed
-            // state; rethrow so the batch transaction rolls back and we don't cascade errors.
-            if ($e instanceof QueryException && $e->getCode() === '25P02') {
+            // Any DB failure aborts the PostgreSQL transaction; rethrow so we roll back and
+            // report the real error instead of 25P02 on the next query.
+            if ($e instanceof QueryException) {
                 throw $e;
             }
             if (str_contains($e->getMessage(), 'transaction is aborted') || str_contains($e->getMessage(), 'No space left on device')) {
                 throw $e;
             }
-            
+
             return [
                 'success' => false,
                 'message' => 'Failed to import plaque: ' . $e->getMessage(),
@@ -1311,6 +1311,7 @@ class BluePlaqueService
         $span = Span::create([
             'name' => $plaqueName,
             'slug' => $this->generateUniqueSlug($plaqueName),
+            'short_id' => Span::generateUniqueShortId(),
             'type_id' => 'thing',
             'description' => $plaque[$this->config['field_mapping']['inscription']] ?? '',
             'start_year' => $erectedYear,
@@ -1416,6 +1417,7 @@ class BluePlaqueService
         $span = Span::create([
             'name' => $personName, // This is already correct - using just the name
             'slug' => $this->generateUniqueSlug($personName),
+            'short_id' => Span::generateUniqueShortId(),
             'type_id' => 'person',
             'description' => '', // Person spans don't need description from inscription
             'start_year' => $birthYear,
@@ -1490,6 +1492,7 @@ class BluePlaqueService
         $span = Span::create([
             'name' => $address, // This is already correct - using just the address
             'slug' => $this->generateUniqueSlug($address),
+            'short_id' => Span::generateUniqueShortId(),
             'type_id' => 'place',
             'description' => "Location of " . ($plaque[$this->config['field_mapping']['title']] ?? 'blue plaque'),
             'metadata' => [
@@ -1550,6 +1553,7 @@ class BluePlaqueService
         return Span::create([
             'name' => $photoName,
             'slug' => $this->generateUniqueSlug($photoName),
+            'short_id' => Span::generateUniqueShortId(),
             'type_id' => 'thing',
             'description' => "Photograph of " . ($plaque[$this->config['field_mapping']['title']] ?? 'Unknown Plaque'),
             'start_year' => $erectedYear,
@@ -1631,6 +1635,7 @@ class BluePlaqueService
         return Span::create([
             'name' => $photoName,
             'slug' => $this->generateUniqueSlug($photoName),
+            'short_id' => Span::generateUniqueShortId(),
             'type_id' => 'thing',
             'description' => "Photograph of {$personName}",
             'start_year' => $birthYear,
@@ -1705,6 +1710,7 @@ class BluePlaqueService
                 $connectionSpan = Span::create([
                     'name' => $connectionName,
                     'slug' => $this->generateUniqueSlug($connectionName),
+                    'short_id' => Span::generateUniqueShortId(),
                     'type_id' => 'connection',
                     'description' => "Connection of type '{$type}' between {$parent->name} and {$child->name}",
                     'state' => 'placeholder', // Connections are typically placeholders unless they have specific dates
