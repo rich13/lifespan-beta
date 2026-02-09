@@ -17,12 +17,12 @@
 @section('content')
 <div class="container-fluid">
     <div class="row">
-        <div class="col-md-6 mb-4">
+        <div class="col-md-4 mb-4">
             <div class="card h-100">
                 <div class="card-header">
                     <h3 class="h6 mb-0">
                         <i class="bi bi-journal-text me-2"></i>
-                        {{ $biography['title'] ?? 'Life sentences' }}
+                        {{ $biography['title'] ?? 'Life in sentences' }}
                     </h3>
                 </div>
                 <div class="card-body">
@@ -50,7 +50,11 @@
             </div>
         </div>
 
-        <div class="col-md-6 mb-4">
+        <div class="col-md-4 mb-4">
+            <x-me.story-set-card />
+        </div>
+
+        <div class="col-md-4 mb-4">
             <x-home.lifespan-summary-card />
             <x-home.life-heatmap-card
                 :userConnectionsAsSubject="$userConnectionsAsSubject ?? collect()"
