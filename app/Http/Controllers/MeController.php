@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\MicroStoryService;
 use Illuminate\View\View;
 
 class MeController extends Controller
@@ -18,6 +19,7 @@ class MeController extends Controller
         $userConnectionsAsSubject = collect();
         $userConnectionsAsObject = collect();
         $allUserConnections = collect();
+        $biography = ['title' => 'Life sentences', 'sentences' => []];
 
         if ($personalSpan) {
             $userConnectionsAsSubject = $personalSpan->connectionsAsSubject()
@@ -39,13 +41,15 @@ class MeController extends Controller
                 ->get();
 
             $allUserConnections = $userConnectionsAsSubject->concat($userConnectionsAsObject);
+            $biography = app(MicroStoryService::class)->generateBiography($personalSpan, $allUserConnections);
         }
 
         return view('me', compact(
             'personalSpan',
             'userConnectionsAsSubject',
             'userConnectionsAsObject',
-            'allUserConnections'
+            'allUserConnections',
+            'biography'
         ));
     }
 }

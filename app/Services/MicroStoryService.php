@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Span;
 use App\Models\Connection;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
 /**
@@ -67,6 +68,113 @@ class MicroStoryService
         }
         
         return $this->generateFallbackConnectionStory($connection);
+    }
+
+    /**
+     * Generate a biography for a span: intro sentence (for persons) plus one micro story per connection, chronologically ordered.
+     *
+     * @return array{title: string, sentences: string[]}  Title and array of HTML sentence strings.
+     */
+    public function generateBiography(Span $span, ?Collection $connections = null): array
+    {
+        $connections = $connections ?? $this->loadConnectionsForSpan($span);
+        $connections = $this->filterConnectionsForBiography($connections);
+        $sorted = $this->sortConnectionsChronologically($connections);
+        $sentences = [];
+
+        if ($span->type_id === 'person' && $span->start_year) {
+            $intro = $this->generateSpanStory($span);
+            if ($intro) {
+                $sentences[] = $intro;
+            }
+        }
+
+        foreach ($sorted as $connection) {
+            $sentences[] = $this->generateConnectionStory($connection);
+        }
+
+        return [
+            'title' => 'Life in sentences',
+            'sentences' => $sentences,
+        ];
+    }
+
+    /**
+     * Load all connections for a span (as subject or object) that have a connection span, excluding self-loops.
+     */
+    private function loadConnectionsForSpan(Span $span): Collection
+    {
+        $asSubject = $span->connectionsAsSubject()
+            ->whereNotNull('connection_span_id')
+            ->where('child_id', '!=', $span->id)
+            ->with(['connectionSpan', 'parent', 'child', 'type'])
+            ->get();
+
+        $asObject = $span->connectionsAsObject()
+            ->whereNotNull('connection_span_id')
+            ->where('parent_id', '!=', $span->id)
+            ->with(['connectionSpan', 'parent', 'child', 'type'])
+            ->get();
+
+        return $asSubject->concat($asObject);
+    }
+
+    /**
+     * Filter connections for biography using config (biography.connection_types_include/exclude and exclude_connection_rules).
+     */
+    private function filterConnectionsForBiography(Collection $connections): Collection
+    {
+        $include = config('biography.connection_types_include');
+        $exclude = config('biography.connection_types_exclude', []);
+        $rules = config('biography.exclude_connection_rules', []);
+
+        return $connections->filter(function (Connection $connection) use ($include, $exclude, $rules): bool {
+            $typeId = $connection->type_id;
+            if ($typeId === null) {
+                return false;
+            }
+            if ($include !== null && ! in_array($typeId, $include, true)) {
+                return false;
+            }
+            if (in_array($typeId, $exclude, true)) {
+                return false;
+            }
+            foreach ($rules as $rule) {
+                if (($rule['connection_type_id'] ?? null) !== $typeId) {
+                    continue;
+                }
+                $object = $connection->child;
+                if (isset($rule['object_type_id']) && ($object === null || ($object->type_id ?? null) !== $rule['object_type_id'])) {
+                    continue;
+                }
+                if (isset($rule['object_subtype'])) {
+                    $subtype = $object?->getMeta('subtype') ?? $object?->metadata['subtype'] ?? null;
+                    if ($subtype !== $rule['object_subtype']) {
+                        continue;
+                    }
+                }
+                return false;
+            }
+            return true;
+        })->values();
+    }
+
+    /**
+     * Sort connections by effective start date (earliest first); undated connections last.
+     */
+    private function sortConnectionsChronologically(Collection $connections): Collection
+    {
+        return $connections->sort(function (Connection $a, Connection $b): int {
+            $da = $a->getEffectiveSortDate();
+            $db = $b->getEffectiveSortDate();
+            if ($da[0] !== $db[0]) {
+                return $da[0] <=> $db[0];
+            }
+            if ($da[1] !== $db[1]) {
+                return $da[1] <=> $db[1];
+            }
+            return $da[2] <=> $db[2];
+        })->values();
     }
     
     /**
@@ -266,7 +374,7 @@ class MicroStoryService
     private function createSpanLink(Span $span): string
     {
         return sprintf(
-            '<a href="%s" class="lead">%s</a>',
+            '<a href="%s">%s</a>',
             route('spans.show', $span),
             e($span->name)
         );
@@ -278,7 +386,7 @@ class MicroStoryService
     private function createDateLink(?int $year, ?int $month = null, ?int $day = null): string
     {
         if (!$year) {
-            return '<span class="lead text-muted">unknown date</span>';
+            return '<span class="text-muted">unknown date</span>';
         }
         
         // Build the date string for display
@@ -288,7 +396,7 @@ class MicroStoryService
         $dateLink = $this->buildDateLink($year, $month, $day);
         
         return sprintf(
-            '<a href="%s" class="lead">%s</a>',
+            '<a href="%s">%s</a>',
             route('date.explore', ['date' => $dateLink]),
             e($displayDate)
         );
@@ -325,7 +433,7 @@ class MicroStoryService
     private function createPredicateLink(Connection $connection): string
     {
         return sprintf(
-            '<a href="%s" class="lead">%s</a>',
+            '<a href="%s">%s</a>',
             route('spans.connections', [
                 'subject' => $connection->parent, 
                 'predicate' => str_replace(' ', '-', $connection->type->forward_predicate)

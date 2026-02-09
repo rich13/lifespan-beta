@@ -1,5 +1,32 @@
 <?php
 
+/**
+ * Micro-story template configuration.
+ *
+ * TEMPLATE LANGUAGE (edit sentences here without touching PHP):
+ *
+ * - Each sentence is a 'template' string with placeholders in curly braces: {placeholder}.
+ * - 'data_methods' maps each placeholder to a provider name (implemented in MicroStoryService).
+ *   The provider returns the value (often HTML with links) that replaces the placeholder.
+ * - 'condition' selects when this template is used (e.g. hasStartYear, hasStartAndEndYear).
+ *   The first template whose condition matches is used.
+ *
+ * AVAILABLE PLACEHOLDERS:
+ *
+ * For SPANS (person, place, thing, etc.):
+ *   name, start_date, end_date  → createSpanLink, createDateLink
+ *   occupation, creator         → getOccupation, createCreatorLink (when in data_methods)
+ *
+ * For CONNECTIONS (residence, employment, education, family, etc.):
+ *   subject, object             → links to subject/object span
+ *   predicate                   → link to connection type (forward_predicate)
+ *   start_date, end_date        → links to connection span dates
+ *   For 'during' only: phase, organisation  → phase name and linked organisation
+ *
+ * Adding a new placeholder requires implementing its provider in MicroStoryService.
+ * Rephrasing or adding sentence variants is config-only: duplicate a template block,
+ * change the 'template' string and/or 'condition'.
+ */
 return [
     'spans' => [
         'person' => [
