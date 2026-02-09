@@ -1,4 +1,4 @@
-@props(['span'])
+@props(['span', 'precomputedConnections' => null])
 
 <style>
     .image-gallery-card {
@@ -83,12 +83,16 @@
     
     if ($isPhotoSpan) {
         // If this is a photo span, show related photos that share the same subjects
-        $subjectConnections = $span->connectionsAsSubjectWithAccess()
-            ->where('type_id', 'features')
-            ->whereNotNull('connection_span_id')
-            ->whereHas('connectionSpan')
-            ->with(['child', 'connectionSpan', 'type'])
-            ->get();
+        if ($precomputedConnections instanceof \App\Support\PrecomputedSpanConnections) {
+            $subjectConnections = $precomputedConnections->getParentByType('features');
+        } else {
+            $subjectConnections = $span->connectionsAsSubjectWithAccess()
+                ->where('type_id', 'features')
+                ->whereNotNull('connection_span_id')
+                ->whereHas('connectionSpan')
+                ->with(['child', 'connectionSpan', 'type'])
+                ->get();
+        }
         
         if ($subjectConnections->isNotEmpty()) {
             // Get the subject IDs
@@ -120,19 +124,26 @@
             $imageConnections = collect();
         }
     } else {
-        // Get images connected to this span via features connections
-        // The span is the object (child) in features connections, so we use connectionsAsObjectWithAccess
-        $directConnections = $span->connectionsAsObjectWithAccess()
-            ->where('type_id', 'features')
-            ->whereNotNull('connection_span_id')
-            ->whereHas('connectionSpan')
-            ->whereHas('parent', function($query) {
-                // Only get spans that are photos
-                $query->where('type_id', 'thing')
-                      ->whereJsonContains('metadata->subtype', 'photo');
-            })
-            ->with(['connectionSpan', 'parent', 'type'])
-            ->get();
+        // Get images connected to this span via features connections (span is object/child)
+        if ($precomputedConnections instanceof \App\Support\PrecomputedSpanConnections) {
+            $directConnections = $precomputedConnections->getChildByType('features')
+                ->filter(function ($c) {
+                    $parent = $c->parent;
+                    return $parent && $parent->type_id === 'thing' && isset($parent->metadata['subtype']) && $parent->metadata['subtype'] === 'photo';
+                })
+                ->values();
+        } else {
+            $directConnections = $span->connectionsAsObjectWithAccess()
+                ->where('type_id', 'features')
+                ->whereNotNull('connection_span_id')
+                ->whereHas('connectionSpan')
+                ->whereHas('parent', function($query) {
+                    $query->where('type_id', 'thing')
+                          ->whereJsonContains('metadata->subtype', 'photo');
+                })
+                ->with(['connectionSpan', 'parent', 'type'])
+                ->get();
+        }
 
         // For connection spans with dates: also find photos that feature the subject and fall within the date range
         $temporalConnections = collect();

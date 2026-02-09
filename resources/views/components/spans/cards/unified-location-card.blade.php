@@ -1,11 +1,14 @@
-@props(['span'])
+@props(['span', 'precomputedConnections' => null])
 
 @php
-    // Get located connections where this span is the subject (parent)
-    $locatedConnections = $span->connectionsAsSubject()
-        ->where('type_id', 'located')
-        ->with(['child', 'connectionSpan'])
-        ->get();
+    if ($precomputedConnections instanceof \App\Support\PrecomputedSpanConnections) {
+        $locatedConnections = $precomputedConnections->getParentByType('located');
+    } else {
+        $locatedConnections = $span->connectionsAsSubject()
+            ->where('type_id', 'located')
+            ->with(['child', 'connectionSpan'])
+            ->get();
+    }
     
     // Determine what to show
     $isPlaceSpan = $span->type_id === 'place';

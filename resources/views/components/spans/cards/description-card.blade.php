@@ -44,7 +44,7 @@
             @endauth
         </div>
     </div>
-    <div class="card-body">
+    <div class="card-body p-2">
         @if($span->description)
             <!-- View mode -->
             <div id="description-view-mode" class="description-content">               
@@ -72,29 +72,7 @@
                 </div>
             </div>
         @else
-            <div id="description-no-content">
-                <div class="text-muted">
-                    <div class="text-center py-3">
-                        <i class="bi bi-info-circle display-6 text-muted mb-2"></i>
-                        <p class="mb-1">
-                            No description available for this {{ $span->type_id }}.
-                        </p>
-                        @auth
-                            @can('update', $span)
-                                <button type="button" class="btn btn-sm btn-outline-primary mt-2" onclick="showAddDescription()">
-                                    <i class="bi bi-plus-lg me-1"></i>
-                                    Add Description
-                                </button>
-                            @endcan
-                            @if(auth()->user()->is_admin)
-                                <p class="small mb-0 mt-2">
-                                    As an admin, you can also fetch a description from Wikidata using the button above.
-                                </p>
-                            @endif
-                        @endauth
-                    </div>
-                </div>
-            </div>
+            
             
             <!-- Add mode (when no description exists) -->
             <div id="description-add-mode" class="d-none">

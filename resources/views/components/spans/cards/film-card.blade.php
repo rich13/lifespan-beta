@@ -1,4 +1,4 @@
-@props(['span'])
+@props(['span', 'precomputedConnections' => null, 'directorConnectionsByFilmId' => null])
 
 @php
     // Only show for person spans
@@ -6,13 +6,16 @@
         return;
     }
 
-    // Get connections where this person is featured in films
-    // Connection type: [film][features][person]
-    // So person is the object (child) of the connection
-    $filmConnections = $span->connectionsAsObject()
-        ->whereHas('type', function($q) { $q->where('type', 'features'); })
-        ->with(['parent', 'connectionSpan'])
-        ->get()
+    // Connection type: [film][features][person] – person is object (child)
+    if ($precomputedConnections instanceof \App\Support\PrecomputedSpanConnections) {
+        $filmConnections = $precomputedConnections->getChildByType('features');
+    } else {
+        $filmConnections = $span->connectionsAsObject()
+            ->whereHas('type', function($q) { $q->where('type', 'features'); })
+            ->with(['parent', 'connectionSpan'])
+            ->get();
+    }
+    $filmConnections = $filmConnections
         ->filter(function($conn) {
             // Only include if parent is a film (type=thing, subtype=film)
             $film = $conn->parent;
@@ -74,14 +77,17 @@
                         }
                     }
                     
-                    // Get director if available
+                    // Get director if available (from precomputed batch when on span show)
                     $director = null;
-                    $directorConnection = $film->connectionsAsObject()
-                        ->whereHas('type', function($q) { $q->where('type', 'created'); })
-                        ->with('parent')
-                        ->first();
-                    if ($directorConnection) {
-                        $director = $directorConnection->parent;
+                    if ($directorConnectionsByFilmId instanceof \Illuminate\Support\Collection && $directorConnectionsByFilmId->has($film->id)) {
+                        $directorConnection = $directorConnectionsByFilmId->get($film->id);
+                        $director = $directorConnection ? $directorConnection->parent : null;
+                    } else {
+                        $directorConnection = $film->connectionsAsObject()
+                            ->whereHas('type', function($q) { $q->where('type', 'created'); })
+                            ->with('parent')
+                            ->first();
+                        $director = $directorConnection ? $directorConnection->parent : null;
                     }
                     
                     // Get film poster/image if available

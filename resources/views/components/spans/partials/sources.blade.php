@@ -1,34 +1,34 @@
-@props(['span'])
+@props(['span', 'connectionForSpan' => null])
 
 @php
     // Get sources from current span
     $directSources = $span->sources ?? [];
     $inheritedSourcesBySpan = [];
     
-    // If this is a connection span, also try to inherit from subject and object
+    // If this is a connection span, also try to inherit from subject and object (use shared connectionForSpan when provided)
     if ($span->type_id === 'connection') {
-        $connection = \App\Models\Connection::where('connection_span_id', $span->id)
-            ->with(['subject', 'object'])
+        $connection = $connectionForSpan ?? \App\Models\Connection::where('connection_span_id', $span->id)
+            ->with(['parent', 'child'])
             ->first();
         
         if ($connection) {
-            // Get sources from subject span
-            if ($connection->subject) {
-                $subjectSources = $connection->subject->sources ?? [];
+            // Get sources from subject span (parent)
+            if ($connection->parent) {
+                $subjectSources = $connection->parent->sources ?? [];
                 if (!empty($subjectSources)) {
-                    $inheritedSourcesBySpan[$connection->subject->id] = [
-                        'span' => $connection->subject,
+                    $inheritedSourcesBySpan[$connection->parent->id] = [
+                        'span' => $connection->parent,
                         'sources' => $subjectSources
                     ];
                 }
             }
             
-            // Get sources from object span
-            if ($connection->object) {
-                $objectSources = $connection->object->sources ?? [];
+            // Get sources from object span (child)
+            if ($connection->child) {
+                $objectSources = $connection->child->sources ?? [];
                 if (!empty($objectSources)) {
-                    $inheritedSourcesBySpan[$connection->object->id] = [
-                        'span' => $connection->object,
+                    $inheritedSourcesBySpan[$connection->child->id] = [
+                        'span' => $connection->child,
                         'sources' => $objectSources
                     ];
                 }

@@ -36,6 +36,11 @@ class Connection extends Model
     public static bool $skipCacheClearingDuringImport = false;
 
     /**
+     * Eager-load connectionSpan by default so getEffectiveSortDate() and other callers don't trigger N+1.
+     */
+    protected $with = ['connectionSpan'];
+
+    /**
      * The attributes that are mass assignable.
      *
      * @var array<int, string>

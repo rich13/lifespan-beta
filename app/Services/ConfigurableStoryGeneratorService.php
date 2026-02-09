@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Span;
 use App\Models\Connection;
+use App\Support\PrecomputedSpanConnections;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
@@ -16,6 +17,9 @@ class ConfigurableStoryGeneratorService
 
     /** Request-level cache for getResidences so we don't run the same query 3+ times per span. */
     private array $residencesCache = [];
+
+    /** When set, story uses this instead of querying; avoids duplicate connection loads when controller already has them. */
+    private ?PrecomputedSpanConnections $precomputedForStory = null;
 
     public function __construct()
     {
@@ -132,24 +136,21 @@ class ConfigurableStoryGeneratorService
         if ($span->type_id !== 'person') {
             return false;
         }
-        // Person → education connections
-        $educationConnections = $span->connectionsAsSubject()
-            ->where('type_id', 'education')
-            ->with('connectionSpan')
-            ->get();
-        foreach ($educationConnections as $edu) {
-            $connSpan = $edu->connectionSpan;
-            if (!$connSpan) continue;
-            // Look for during connections that reference this connection span
-            $phaseLinks = Connection::where('type_id', 'during')
-                ->where(function($q) use ($connSpan) {
-                    $q->where('child_id', $connSpan->id)
-                      ->orWhere('parent_id', $connSpan->id);
-                })
-                ->exists();
-            if ($phaseLinks) return true;
+        $educationConnections = $this->precomputedForStory
+            ? $this->precomputedForStory->getParentByType('education')
+            : $span->connectionsAsSubject()
+                ->where('type_id', 'education')
+                ->with('connectionSpan')
+                ->get();
+        $connectionSpanIds = $educationConnections->map(fn ($c) => $c->connectionSpan?->id)->filter()->unique()->values()->all();
+        if (empty($connectionSpanIds)) {
+            return false;
         }
-        return false;
+        return Connection::where('type_id', 'during')
+            ->where(function ($q) use ($connectionSpanIds) {
+                $q->whereIn('child_id', $connectionSpanIds)->orWhereIn('parent_id', $connectionSpanIds);
+            })
+            ->exists();
     }
 
     // person_at_date support: hasEducationPhaseAtDate
@@ -261,30 +262,42 @@ class ConfigurableStoryGeneratorService
      */
     public function getEducationPhasesSentence(Span $span): string
     {
-        if ($span->type_id !== 'person') return '';
-        $sentences = [];
-        // Gather person → education connections
-        $educationConnections = $span->connectionsAsSubject()
-            ->where('type_id', 'education')
-            ->with(['connectionSpan', 'child'])
+        if ($span->type_id !== 'person') {
+            return '';
+        }
+        $educationConnections = $this->precomputedForStory
+            ? $this->precomputedForStory->getParentByType('education')
+            : $span->connectionsAsSubject()
+                ->where('type_id', 'education')
+                ->with(['connectionSpan', 'child'])
+                ->get();
+
+        $connectionSpanIds = $educationConnections->map(fn ($c) => $c->connectionSpan?->id)->filter()->unique()->values()->all();
+        $allDuring = empty($connectionSpanIds) ? collect() : Connection::where('type_id', 'during')
+            ->where(function ($q) use ($connectionSpanIds) {
+                $q->whereIn('child_id', $connectionSpanIds)->orWhereIn('parent_id', $connectionSpanIds);
+            })
+            ->with(['parent', 'child'])
             ->get();
 
-        foreach ($educationConnections as $edu) {
-            $connSpan = $edu->connectionSpan; // the dated connection span
-            $org = $edu->child;              // organisation
-            if (!$connSpan || !$org) continue;
+        $duringByConnSpan = $allDuring->groupBy(function ($c) use ($connectionSpanIds) {
+            return in_array($c->parent_id, $connectionSpanIds) ? $c->parent_id : $c->child_id;
+        });
 
-            // Find during connections from phase → connSpan
-            $phases = Connection::where('type_id', 'during')
-                ->where(function($q) use ($connSpan){
-                    $q->where('child_id', $connSpan->id)->orWhere('parent_id', $connSpan->id);
-                })
-                ->with(['parent','child'])
-                ->get()
-                ->sortBy(function($c){
+        $sentences = [];
+        foreach ($educationConnections as $edu) {
+            $connSpan = $edu->connectionSpan;
+            $org = $edu->child;
+            if (!$connSpan || !$org) {
+                continue;
+            }
+
+            $phases = ($duringByConnSpan->get($connSpan->id) ?? collect())
+                ->sortBy(function ($c) {
                     $p = $c->getEffectiveSortDate();
                     return sprintf('%08d-%02d-%02d', $p[0] ?? 99999999, $p[1] ?? 99, $p[2] ?? 99);
-                });
+                })
+                ->values();
 
             foreach ($phases as $i => $link) {
                 // Phase span is the non-connection end
@@ -339,19 +352,24 @@ class ConfigurableStoryGeneratorService
     }
 
     /**
-     * Generate a story for a span using configuration templates
+     * Generate a story for a span using configuration templates.
+     *
+     * @param  PrecomputedSpanConnections|null  $precomputed  When provided (e.g. from span show controller), story uses this instead of querying connections again — same sentence output, fewer queries.
      */
-    public function generateStory(Span $span): array
+    public function generateStory(Span $span, ?PrecomputedSpanConnections $precomputed = null): array
     {
-        // Handle connection spans explicitly (e.g., during phase connections)
-        if ($span->type_id === 'connection') {
-            $connectionStory = $this->generateConnectionSpanStory($span);
-            if ($connectionStory) {
-                return $connectionStory;
-            }
-        }
+        $this->precomputedForStory = $precomputed;
 
-        $spanType = $span->type_id;
+        try {
+            // Handle connection spans explicitly (e.g., during phase connections)
+            if ($span->type_id === 'connection') {
+                $connectionStory = $this->generateConnectionSpanStory($span);
+                if ($connectionStory) {
+                    return $connectionStory;
+                }
+            }
+
+            $spanType = $span->type_id;
         $spanSubtype = $span->metadata['subtype'] ?? null;
         $debug = [];
         
@@ -497,6 +515,9 @@ class ConfigurableStoryGeneratorService
             'metadata' => $this->generateMetadata($span),
             'debug' => $debug,
         ];
+        } finally {
+            $this->precomputedForStory = null;
+        }
     }
 
     /**
@@ -1454,15 +1475,20 @@ class ConfigurableStoryGeneratorService
             return $this->residencesCache[$cacheKey];
         }
 
-        $residences = $person->connectionsAsSubjectWithAccess($this->currentUser)
-            ->where('type_id', 'residence')
-            ->whereHas('child', function ($query) {
-                $query->where('type_id', 'place');
-            })
-            ->with(['child', 'connectionSpan'])
-            ->limit(100)
-            ->get()
-            ->map(function ($connection) {
+        $connections = $this->precomputedForStory
+            ? $this->precomputedForStory->getParentByType('residence')
+                ->filter(fn ($c) => $c->child && $c->child->type_id === 'place')
+                ->take(100)
+            : $person->connectionsAsSubjectWithAccess($this->currentUser)
+                ->where('type_id', 'residence')
+                ->whereHas('child', function ($query) {
+                    $query->where('type_id', 'place');
+                })
+                ->with(['child', 'connectionSpan'])
+                ->limit(100)
+                ->get();
+
+        $residences = $connections->map(function ($connection) {
                 $connectionSpan = $connection->connectionSpan;
                 return [
                     'place' => $connection->child->name,
@@ -1622,27 +1648,32 @@ class ConfigurableStoryGeneratorService
 
     protected function getEducation(Span $person): Collection
     {
-        return $person->connectionsAsSubjectWithAccess($this->currentUser)
-            ->where('type_id', 'education')
-            ->whereHas('child', function ($query) {
-                $query->where('type_id', 'organisation');
-            })
-            ->with(['child', 'connectionSpan'])
-            ->get()
-            ->map(function ($connection) {
-                return [
-                    'organisation' => $connection->child->name,
-                    'start_date' => $connection->connectionSpan?->formatted_start_date,
-                    'end_date' => $connection->connectionSpan?->formatted_end_date,
-                ];
-            });
+        $connections = $this->precomputedForStory
+            ? $this->precomputedForStory->getParentByType('education')
+                ->filter(fn ($c) => $c->child && $c->child->type_id === 'organisation')
+            : $person->connectionsAsSubjectWithAccess($this->currentUser)
+                ->where('type_id', 'education')
+                ->whereHas('child', function ($query) {
+                    $query->where('type_id', 'organisation');
+                })
+                ->with(['child', 'connectionSpan'])
+                ->get();
+
+        return $connections->map(function ($connection) {
+            return [
+                'organisation' => $connection->child->name,
+                'organisation_span' => $connection->child,
+                'start_date' => $connection->connectionSpan?->formatted_start_date,
+                'end_date' => $connection->connectionSpan?->formatted_end_date,
+            ];
+        });
     }
 
     protected function getEducationInstitutions(Span $person): string
     {
         $institutions = $this->getEducation($person);
         $links = $institutions->map(function ($edu) use ($person) {
-            $org = $person->connectionsAsSubjectWithAccess($this->currentUser)
+            $org = $edu['organisation_span'] ?? $person->connectionsAsSubjectWithAccess($this->currentUser)
                 ->where('type_id', 'education')
                 ->whereHas('child', function ($query) {
                     $query->where('type_id', 'organisation');
@@ -1660,27 +1691,32 @@ class ConfigurableStoryGeneratorService
 
     protected function getWork(Span $person): Collection
     {
-        return $person->connectionsAsSubjectWithAccess($this->currentUser)
-            ->where('type_id', 'employment')
-            ->whereHas('child', function ($query) {
-                $query->where('type_id', 'organisation');
-            })
-            ->with(['child', 'connectionSpan'])
-            ->get()
-            ->map(function ($connection) {
-                return [
-                    'organisation' => $connection->child->name,
-                    'start_date' => $connection->connectionSpan?->formatted_start_date,
-                    'end_date' => $connection->connectionSpan?->formatted_end_date,
-                ];
-            });
+        $connections = $this->precomputedForStory
+            ? $this->precomputedForStory->getParentByType('employment')
+                ->filter(fn ($c) => $c->child && $c->child->type_id === 'organisation')
+            : $person->connectionsAsSubjectWithAccess($this->currentUser)
+                ->where('type_id', 'employment')
+                ->whereHas('child', function ($query) {
+                    $query->where('type_id', 'organisation');
+                })
+                ->with(['child', 'connectionSpan'])
+                ->get();
+
+        return $connections->map(function ($connection) {
+            return [
+                'organisation' => $connection->child->name,
+                'organisation_span' => $connection->child,
+                'start_date' => $connection->connectionSpan?->formatted_start_date,
+                'end_date' => $connection->connectionSpan?->formatted_end_date,
+            ];
+        });
     }
 
     protected function getWorkOrganisations(Span $person): string
     {
         $organisations = $this->getWork($person);
         $links = $organisations->map(function ($work) use ($person) {
-            $org = $person->connectionsAsSubjectWithAccess($this->currentUser)
+            $org = $work['organisation_span'] ?? $person->connectionsAsSubjectWithAccess($this->currentUser)
                 ->where('type_id', 'employment')
                 ->whereHas('child', function ($query) {
                     $query->where('type_id', 'organisation');
@@ -1746,9 +1782,8 @@ class ConfigurableStoryGeneratorService
         if (!$mostRecent) {
             return null;
         }
-        
-        // Find the organisation span to create a link
-        $org = $person->connectionsAsSubjectWithAccess($this->currentUser)
+
+        $org = $mostRecent['organisation_span'] ?? $person->connectionsAsSubjectWithAccess($this->currentUser)
             ->where('type_id', 'employment')
             ->whereHas('child', function ($query) {
                 $query->where('type_id', 'organisation');
@@ -1756,24 +1791,28 @@ class ConfigurableStoryGeneratorService
             ->with('child')
             ->get()
             ->firstWhere('child.name', $mostRecent['organisation'])?->child;
-            
+
         if ($org) {
             return $this->makeSpanLink($mostRecent['organisation'], $org);
         }
-        
+
         return e($mostRecent['organisation']);
     }
 
     protected function getRelationships(Span $person): Collection
     {
-        return $person->connectionsAsSubjectWithAccess($this->currentUser)
-            ->where('type_id', 'relationship')
-            ->whereHas('child', function ($query) {
-                $query->where('type_id', 'person');
-            })
-            ->with(['child', 'connectionSpan'])
-            ->get()
-            ->map(function ($connection) {
+        $connections = $this->precomputedForStory
+            ? $this->precomputedForStory->getParentByType('relationship')
+                ->filter(fn ($c) => $c->child && $c->child->type_id === 'person')
+            : $person->connectionsAsSubjectWithAccess($this->currentUser)
+                ->where('type_id', 'relationship')
+                ->whereHas('child', function ($query) {
+                    $query->where('type_id', 'person');
+                })
+                ->with(['child', 'connectionSpan'])
+                ->get();
+
+        return $connections->map(function ($connection) {
                 $connectionSpan = $connection->connectionSpan;
                 return [
                     'person' => $connection->child->name,
@@ -1954,21 +1993,25 @@ class ConfigurableStoryGeneratorService
 
     protected function getBandMemberships(Span $person): Collection
     {
-        return $person->connectionsAsSubjectWithAccess($this->currentUser)
-            ->where('type_id', 'membership')
-            ->whereHas('child', function ($query) {
-                $query->where('type_id', 'band');
-            })
-            ->with(['child', 'connectionSpan'])
-            ->get()
-            ->map(function ($connection) {
-                return [
-                    'band' => $connection->child->name,
-                    'band_span' => $connection->child,
-                    'start_date' => $connection->connectionSpan?->formatted_start_date,
-                    'end_date' => $connection->connectionSpan?->formatted_end_date,
-                ];
-            });
+        $connections = $this->precomputedForStory
+            ? $this->precomputedForStory->getParentByType('membership')
+                ->filter(fn ($c) => $c->child && $c->child->type_id === 'band')
+            : $person->connectionsAsSubjectWithAccess($this->currentUser)
+                ->where('type_id', 'membership')
+                ->whereHas('child', function ($query) {
+                    $query->where('type_id', 'band');
+                })
+                ->with(['child', 'connectionSpan'])
+                ->get();
+
+        return $connections->map(function ($connection) {
+            return [
+                'band' => $connection->child->name,
+                'band_span' => $connection->child,
+                'start_date' => $connection->connectionSpan?->formatted_start_date,
+                'end_date' => $connection->connectionSpan?->formatted_end_date,
+            ];
+        });
     }
 
     protected function getBandMembershipNames(Span $person): string

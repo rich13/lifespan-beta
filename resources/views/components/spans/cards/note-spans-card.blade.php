@@ -1,34 +1,30 @@
-@props(['span'])
+@props(['span', 'annotatingNotes' => null])
 
 @php
-    $user = auth()->user();
-    
-    // Get all notes that annotate this span
-    // Notes have an "annotates" connection where the note is the parent and this span is the child
-    $annotatingNotes = \App\Models\Connection::where('type_id', 'annotates')
-        ->where('child_id', $span->id)
-        ->with(['parent' => function ($q) {
-            $q->where('type_id', 'note')->with(['owner.personalSpan']);
-        }])
-        ->get()
-        ->pluck('parent')
-        ->filter(function ($note) use ($user) {
-            if (!$note) return false;
-            
-            // If user is not logged in, only show public notes
-            if (!$user) {
-                return $note->access_level === 'public';
-            }
-            
-            // If user created the note, show it
-            if ($note->owner_id === $user->id) {
-                return true;
-            }
-            
-            // Otherwise, only show if accessible to user (shared or public)
-            return $note->isAccessibleBy($user);
-        })
-        ->unique('id');
+    // Use precomputed notes when passed from controller (span show); otherwise query once
+    if ($annotatingNotes !== null) {
+        $annotatingNotes = $annotatingNotes instanceof \Illuminate\Support\Collection ? $annotatingNotes : collect($annotatingNotes);
+    } else {
+        $user = auth()->user();
+        $annotatingNotes = \App\Models\Connection::where('type_id', 'annotates')
+            ->where('child_id', $span->id)
+            ->with(['parent' => function ($q) {
+                $q->where('type_id', 'note')->with(['owner.personalSpan']);
+            }])
+            ->get()
+            ->pluck('parent')
+            ->filter(function ($note) use ($user) {
+                if (!$note) return false;
+                if (!$user) {
+                    return $note->access_level === 'public';
+                }
+                if ($note->owner_id === $user->id) {
+                    return true;
+                }
+                return $note->isAccessibleBy($user);
+            })
+            ->unique('id');
+    }
 @endphp
 
 <!-- Show annotations if they exist -->
@@ -147,7 +143,6 @@
                 </div>
             </div>
             <div class="card-body p-2">
-                <p class="text-muted text-center small mb-0">No notes yet.</p>
             </div>
         </div>
     @endauth

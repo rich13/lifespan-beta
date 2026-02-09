@@ -3,7 +3,7 @@
 @php
     $creator = null;
     if ($span->type_id === 'thing' && !empty($span->metadata['creator'])) {
-        $creator = \App\Models\Span::find($span->metadata['creator']);
+        $creator = \App\Models\Span::findCached($span->metadata['creator']);
     }
 @endphp
 

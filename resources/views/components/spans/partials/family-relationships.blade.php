@@ -35,55 +35,62 @@ if ($familyData !== null) {
 // Compute Bootstrap column class
 $colClass = $columns == 3 ? 'col-md-4' : 'col-md-6';
 
-// Precompute photo and parent connections once for all family members (avoids N×2 queries per section)
+// Precompute photo and parent connections once for all family members (use controller data when present)
 $photoConnections = collect();
 $parentsMap = collect();
 $otherParentConnectionsPrecomputed = collect();
 if (!$interactive) {
-    $childrenForGrouped = $descendants->filter(fn ($item) => $item['generation'] === 1)->pluck('span');
-    $childIdsForGrouped = $childrenForGrouped->pluck('id')->all();
-    $otherParentConnectionsPrecomputed = !empty($childIdsForGrouped)
-        ? \App\Models\Connection::where('type_id', 'family')
-            ->whereIn('child_id', $childIdsForGrouped)
-            ->where('parent_id', '!=', $span->id)
-            ->with('parent')
-            ->get()
-        : collect();
-    $otherParentSpans = $otherParentConnectionsPrecomputed->pluck('parent')->unique('id')->filter();
+    if (isset($familyData['photoConnections']) && isset($familyData['parentConnectionsForMap']) && isset($familyData['otherParentConnectionsPrecomputed']) && isset($familyData['parentsMap'])) {
+        $photoConnections = $familyData['photoConnections'];
+        $parentConnectionsForMap = $familyData['parentConnectionsForMap'];
+        $otherParentConnectionsPrecomputed = $familyData['otherParentConnectionsPrecomputed'];
+        $parentsMap = $familyData['parentsMap'];
+    } else {
+        $childrenForGrouped = $descendants->filter(fn ($item) => $item['generation'] === 1)->pluck('span');
+        $childIdsForGrouped = $childrenForGrouped->pluck('id')->all();
+        $otherParentConnectionsPrecomputed = !empty($childIdsForGrouped)
+            ? \App\Models\Connection::where('type_id', 'family')
+                ->whereIn('child_id', $childIdsForGrouped)
+                ->where('parent_id', '!=', $span->id)
+                ->with('parent')
+                ->get()
+            : collect();
+        $otherParentSpans = $otherParentConnectionsPrecomputed->pluck('parent')->unique('id')->filter();
 
-    $allSpans = $ancestors->pluck('span')
-        ->merge($descendants->pluck('span'))
-        ->merge($siblings)->merge($unclesAndAunts)->merge($cousins)
-        ->merge($nephewsAndNieces)->merge($extraNephewsAndNieces)->merge($stepParents)
-        ->merge($inLawsAndOutLaws)->merge($extraInLawsAndOutLaws)
-        ->merge($childrenInLawsAndOutLaws)->merge($grandchildrenInLawsAndOutLaws)
-        ->merge($otherParentSpans)
-        ->filter(fn ($s) => $s && $s->type_id === 'person')->unique('id');
-    $personIds = $allSpans->pluck('id')->filter()->unique()->values()->all();
-    if (!empty($personIds)) {
-        $photoConnections = \App\Models\Connection::where('type_id', 'features')
-            ->whereIn('child_id', $personIds)
-            ->whereHas('parent', function ($q) {
-                $q->where('type_id', 'thing')->whereJsonContains('metadata->subtype', 'photo');
-            })
-            ->with(['parent'])
-            ->get()
-            ->groupBy('child_id')
-            ->map(fn ($conns) => $conns->first());
-        $parentConnectionsForMap = \App\Models\Connection::where('type_id', 'family')
-            ->whereIn('child_id', $personIds)
-            ->whereHas('parent', function ($q) {
-                $q->where('type_id', 'person');
-            })
-            ->with(['parent'])
-            ->get()
-            ->groupBy('child_id');
-        foreach ($personIds as $personId) {
-            $connections = $parentConnectionsForMap->get($personId);
-            if ($connections && $connections->isNotEmpty()) {
-                $parentSpans = $connections->map(fn ($c) => $c->parent)->filter()->values();
-                if ($parentSpans->isNotEmpty()) {
-                    $parentsMap->put($personId, $parentSpans);
+        $allSpans = $ancestors->pluck('span')
+            ->merge($descendants->pluck('span'))
+            ->merge($siblings)->merge($unclesAndAunts)->merge($cousins)
+            ->merge($nephewsAndNieces)->merge($extraNephewsAndNieces)->merge($stepParents)
+            ->merge($inLawsAndOutLaws)->merge($extraInLawsAndOutLaws)
+            ->merge($childrenInLawsAndOutLaws)->merge($grandchildrenInLawsAndOutLaws)
+            ->merge($otherParentSpans)
+            ->filter(fn ($s) => $s && $s->type_id === 'person')->unique('id');
+        $personIds = $allSpans->pluck('id')->filter()->unique()->values()->all();
+        if (!empty($personIds)) {
+            $photoConnections = \App\Models\Connection::where('type_id', 'features')
+                ->whereIn('child_id', $personIds)
+                ->whereHas('parent', function ($q) {
+                    $q->where('type_id', 'thing')->whereJsonContains('metadata->subtype', 'photo');
+                })
+                ->with(['parent'])
+                ->get()
+                ->groupBy('child_id')
+                ->map(fn ($conns) => $conns->first());
+            $parentConnectionsForMap = \App\Models\Connection::where('type_id', 'family')
+                ->whereIn('child_id', $personIds)
+                ->whereHas('parent', function ($q) {
+                    $q->where('type_id', 'person');
+                })
+                ->with(['parent'])
+                ->get()
+                ->groupBy('child_id');
+            foreach ($personIds as $personId) {
+                $connections = $parentConnectionsForMap->get($personId);
+                if ($connections && $connections->isNotEmpty()) {
+                    $parentSpans = $connections->map(fn ($c) => $c->parent)->filter()->values();
+                    if ($parentSpans->isNotEmpty()) {
+                        $parentsMap->put($personId, $parentSpans);
+                    }
                 }
             }
         }

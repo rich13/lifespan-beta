@@ -1,4 +1,4 @@
-@props(['span', 'eventType', 'eventYear' => null, 'eventDate' => null, 'customEventText' => null])
+@props(['span', 'eventType', 'eventYear' => null, 'eventDate' => null, 'customEventText' => null, 'connectionForSpan' => null])
 
 <x-shared.interactive-card-styles />
 
@@ -7,10 +7,10 @@
     $spanState = $span->state ?? 'unknown';
     $stateLabel = ucfirst($spanState);
     
-    // If this is a connection span, get the connection information
+    // If this is a connection span, get the connection information (use shared connectionForSpan when provided)
     $connectionInfo = null;
     if ($span->type_id === 'connection') {
-        $connection = \App\Models\Connection::where('connection_span_id', $span->id)
+        $connection = $connectionForSpan ?? \App\Models\Connection::where('connection_span_id', $span->id)
             ->with(['parent', 'child', 'type'])
             ->first();
         if ($connection) {
@@ -140,7 +140,7 @@
 
     $creator = null;
     if ($span->type_id === 'thing' && !empty($span->metadata['creator'])) {
-        $creator = \App\Models\Span::find($span->metadata['creator']);
+        $creator = \App\Models\Span::findCached($span->metadata['creator']);
     }
 @endphp
 

@@ -1,17 +1,24 @@
-@props(['span'])
+@props(['span', 'precomputedConnections' => null])
 
 @php
     use App\Helpers\DateHelper;
     
-    // Get all has_name connections for this span
-    $nameConnections = $span->connectionsAsSubject()
-        ->where('type_id', 'has_name')
-        ->with(['child', 'connectionSpan'])
-        ->get()
-        ->sortBy(function($conn) {
-            // Sort by start date, nulls last
-            return $conn->connectionSpan->start_year ?? 9999;
-        });
+    // Get all has_name connections for this span (from precomputed when on span show)
+    if ($precomputedConnections instanceof \App\Support\PrecomputedSpanConnections) {
+        $nameConnections = $precomputedConnections->getParentByType('has_name')
+            ->sortBy(function($conn) {
+                return $conn->connectionSpan->start_year ?? 9999;
+            })
+            ->values();
+    } else {
+        $nameConnections = $span->connectionsAsSubject()
+            ->where('type_id', 'has_name')
+            ->with(['child', 'connectionSpan'])
+            ->get()
+            ->sortBy(function($conn) {
+                return $conn->connectionSpan->start_year ?? 9999;
+            });
+    }
     
     // Build a list of all names with their date ranges
     $names = [];

@@ -630,6 +630,26 @@ class Span extends Model
     }
 
     /**
+     * Request-level cache for find-by-id to avoid N+1 when the same span is loaded repeatedly (e.g. creator in interactive cards).
+     */
+    protected static array $findByIdRequestCache = [];
+
+    /**
+     * Find a span by id, with a per-request cache so repeated lookups for the same id only hit the DB once.
+     */
+    public static function findCached(?string $id): ?static
+    {
+        if ($id === null || $id === '') {
+            return null;
+        }
+        $key = (string) $id;
+        if (!array_key_exists($key, static::$findByIdRequestCache)) {
+            static::$findByIdRequestCache[$key] = static::find($id);
+        }
+        return static::$findByIdRequestCache[$key];
+    }
+
+    /**
      * Load capabilities specific to this span's type
      */
     protected function loadTypeCapabilities()

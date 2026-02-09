@@ -28,7 +28,9 @@ use App\Models\Connection;
 use App\Models\ConnectionType as ConnectionTypeModel;
 use App\Services\WikipediaOnThisDayService;
 use App\Models\ConnectionVersion;
+use App\Support\PrecomputedSpanConnections;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Support\Collection;
 
 /**
  * Handle span viewing and management
@@ -951,9 +953,8 @@ class SpanController extends Controller
                 ]);
             }
 
-            // Cache span show data (eager loads + Desert Island Discs + family data + story)
-            // v3: includes story to avoid generateStory() in view
-            $spanShowCacheKey = 'span_show_data_v3_' . $subject->id;
+            // Cache span show data (eager loads + Desert Island Discs + family data); story is generated after connections so it can use precomputed
+            $spanShowCacheKey = 'span_show_data_v4_' . $subject->id;
             $spanShowCacheTtl = config('app.span_show_cache_ttl', 900);
             $cached = Cache::remember($spanShowCacheKey, $spanShowCacheTtl, function () use ($subject) {
                 $subject->load([
@@ -974,21 +975,46 @@ class SpanController extends Controller
                     }
                     $familyData = $this->getFamilyDataForSpan($subject);
                 }
-                $story = null;
-                try {
-                    $story = app(\App\Services\ConfigurableStoryGeneratorService::class)->generateStory($subject);
-                } catch (\Exception $e) {
-                    $story = ['paragraphs' => [], 'metadata' => [], 'error' => $e->getMessage()];
-                }
-                return ['span' => $subject, 'desertIslandDiscsSet' => $desertIslandDiscsSet, 'familyData' => $familyData, 'story' => $story];
+                return ['span' => $subject, 'desertIslandDiscsSet' => $desertIslandDiscsSet, 'familyData' => $familyData];
             });
             $subject = $cached['span'];
             $desertIslandDiscsSet = $cached['desertIslandDiscsSet'];
             $familyData = $cached['familyData'] ?? null;
-            $story = $cached['story'] ?? null;
 
             // Precompute connections for the connections partial (access-dependent, so not cached)
             [$parentConnections, $childConnections] = $this->getConnectionsForSpanShow($subject);
+
+            // One source of truth: connections grouped by type so cards can slice instead of re-querying
+            $precomputedConnections = new PrecomputedSpanConnections($parentConnections, $childConnections);
+
+            // Story uses precomputed connections so it doesn't re-query (same sentence output, fewer queries)
+            $story = null;
+            try {
+                $story = app(\App\Services\ConfigurableStoryGeneratorService::class)->generateStory($subject, $precomputedConnections);
+            } catch (\Exception $e) {
+                $story = ['paragraphs' => [], 'metadata' => [], 'error' => $e->getMessage()];
+            }
+
+            // Education card: derive connections from precomputed; only run "during" (phases) batch query
+            $educationCardData = $this->getEducationCardData($subject, $precomputedConnections->getParentByType('education'));
+
+            // When viewing a connection span, load the connection once for all view components (avoids repeated Connection::where('connection_span_id', ...))
+            $connectionForSpan = null;
+            if ($subject->type_id === 'connection') {
+                $connectionForSpan = Connection::where('connection_span_id', $subject->id)
+                    ->with(['parent.type', 'child.type', 'type', 'connectionSpan.type'])
+                    ->first();
+            }
+
+            // Precompute data for cards that would otherwise query in the view
+            $annotatingNotes = $this->getAnnotatingNotes($subject);
+            $bluePlaqueCardData = $subject->type_id === 'person' ? $this->getBluePlaqueCardData($subject) : null;
+            $directorConnectionsByFilmId = ($subject->type_id === 'person')
+                ? $this->getDirectorConnectionsByFilmId($precomputedConnections)
+                : collect();
+            if ($familyData !== null) {
+                $familyData = $this->enrichFamilyDataWithConnectionBatches($subject, $familyData);
+            }
 
             // Additional validation: ensure the type relationship is correct
             if ($subject->type && $subject->type->type_id !== $subject->type_id) {
@@ -1028,7 +1054,7 @@ class SpanController extends Controller
                 }
 
                 ViewFacade::share('familyData', $familyData);
-                $response = response()->view('spans.show', compact('span', 'desertIslandDiscsSet', 'familyData', 'parentConnections', 'childConnections', 'story'));
+                $response = response()->view('spans.show', compact('span', 'desertIslandDiscsSet', 'familyData', 'parentConnections', 'childConnections', 'story', 'educationCardData', 'connectionForSpan', 'precomputedConnections', 'annotatingNotes', 'bluePlaqueCardData', 'directorConnectionsByFilmId'));
                 $response->header('ETag', $etag);
                 $response->header('Last-Modified', $lastModified);
                 $response->header('Cache-Control', 'private, max-age=60');
@@ -1036,7 +1062,7 @@ class SpanController extends Controller
             }
 
             ViewFacade::share('familyData', $familyData);
-            return view('spans.show', compact('span', 'desertIslandDiscsSet', 'familyData', 'parentConnections', 'childConnections', 'story'));
+            return view('spans.show', compact('span', 'desertIslandDiscsSet', 'familyData', 'parentConnections', 'childConnections', 'story', 'educationCardData', 'connectionForSpan', 'precomputedConnections', 'annotatingNotes', 'bluePlaqueCardData', 'directorConnectionsByFilmId'));
         } catch (AuthorizationException $e) {
             // Return a 403 forbidden view
             return view('errors.403');
@@ -1087,6 +1113,194 @@ class SpanController extends Controller
     }
 
     /**
+     * Enrich familyData with batched photo and parent connections so family partials don't re-query.
+     *
+     * @param  array<string, mixed>  $familyData
+     * @return array<string, mixed>
+     */
+    private function enrichFamilyDataWithConnectionBatches(Span $span, array $familyData): array
+    {
+        $interactive = false;
+        $descendants = $familyData['descendants'] ?? collect();
+        $childrenForGrouped = $descendants->filter(fn ($item) => $item['generation'] === 1)->pluck('span');
+        $childIdsForGrouped = $childrenForGrouped->pluck('id')->all();
+        $otherParentConnectionsPrecomputed = ! empty($childIdsForGrouped)
+            ? Connection::where('type_id', 'family')
+                ->whereIn('child_id', $childIdsForGrouped)
+                ->where('parent_id', '!=', $span->id)
+                ->with('parent')
+                ->get()
+            : collect();
+
+        $otherParentSpans = $otherParentConnectionsPrecomputed->pluck('parent')->unique('id')->filter();
+        $allSpans = ($familyData['ancestors'] ?? collect())->pluck('span')
+            ->merge($descendants->pluck('span'))
+            ->merge($familyData['siblings'] ?? collect())->merge($familyData['unclesAndAunts'] ?? collect())
+            ->merge($familyData['cousins'] ?? collect())->merge($familyData['nephewsAndNieces'] ?? collect())
+            ->merge($familyData['extraNephewsAndNieces'] ?? collect())->merge($familyData['stepParents'] ?? collect())
+            ->merge($familyData['inLawsAndOutLaws'] ?? collect())->merge($familyData['extraInLawsAndOutLaws'] ?? collect())
+            ->merge($familyData['childrenInLawsAndOutLaws'] ?? collect())->merge($familyData['grandchildrenInLawsAndOutLaws'] ?? collect())
+            ->merge($otherParentSpans)
+            ->filter(fn ($s) => $s && $s->type_id === 'person')->unique('id');
+        $personIds = $allSpans->pluck('id')->filter()->unique()->values()->all();
+
+        $photoConnections = collect();
+        $parentConnectionsForMap = collect();
+        if (! empty($personIds)) {
+            $photoConnections = Connection::where('type_id', 'features')
+                ->whereIn('child_id', $personIds)
+                ->whereHas('parent', function ($q) {
+                    $q->where('type_id', 'thing')->whereJsonContains('metadata->subtype', 'photo');
+                })
+                ->with(['parent'])
+                ->get()
+                ->groupBy('child_id')
+                ->map(fn ($conns) => $conns->first());
+            $parentConnectionsForMap = Connection::where('type_id', 'family')
+                ->whereIn('child_id', $personIds)
+                ->whereHas('parent', function ($q) {
+                    $q->where('type_id', 'person');
+                })
+                ->with(['parent'])
+                ->get()
+                ->groupBy('child_id');
+        }
+
+        $familyData['otherParentConnectionsPrecomputed'] = $otherParentConnectionsPrecomputed;
+        $familyData['photoConnections'] = $photoConnections;
+        $familyData['parentConnectionsForMap'] = $parentConnectionsForMap;
+        $familyData['parentsMap'] = collect();
+        foreach ($personIds as $personId) {
+            $connections = $parentConnectionsForMap->get($personId);
+            if ($connections && $connections->isNotEmpty()) {
+                $parentSpans = $connections->map(fn ($c) => $c->parent)->filter()->values();
+                if ($parentSpans->isNotEmpty()) {
+                    $familyData['parentsMap']->put($personId, $parentSpans);
+                }
+            }
+        }
+
+        return $familyData;
+    }
+
+    /**
+     * Notes that annotate this span (one query, passed to note-spans card).
+     *
+     * @return \Illuminate\Support\Collection<int, \App\Models\Span>
+     */
+    private function getAnnotatingNotes(Span $span): Collection
+    {
+        $user = Auth::user();
+        $notes = Connection::where('type_id', 'annotates')
+            ->where('child_id', $span->id)
+            ->with(['parent' => function ($q) {
+                $q->where('type_id', 'note')->with(['owner.personalSpan']);
+            }])
+            ->get()
+            ->pluck('parent')
+            ->filter();
+        return $notes->filter(function ($note) use ($user) {
+            if (! $note) {
+                return false;
+            }
+            if (! $user) {
+                return $note->access_level === 'public';
+            }
+            if ($note->owner_id === $user->id) {
+                return true;
+            }
+            return $note->isAccessibleBy($user);
+        })->unique('id')->values();
+    }
+
+    /**
+     * Blue plaque card data for person spans: plaque, photo URL, location, metadata (one batch in controller).
+     *
+     * @return array{plaque: \App\Models\Span, photoUrl: string|null, locationName: string|null, plaqueMetadata: array, plaqueColour: string, erectedYear: mixed}|null
+     */
+    private function getBluePlaqueCardData(Span $span): ?array
+    {
+        if ($span->type_id !== 'person') {
+            return null;
+        }
+        $plaqueConnections = Connection::where('type_id', 'features')
+            ->where('child_id', $span->id)
+            ->whereHas('parent', function ($q) {
+                $q->where('type_id', 'thing')->whereJsonContains('metadata->subtype', 'plaque');
+            })
+            ->with(['parent'])
+            ->get();
+        if ($plaqueConnections->isEmpty()) {
+            return null;
+        }
+        $plaque = $plaqueConnections->first()->parent;
+        $plaquePhotoConnections = Connection::where('type_id', 'features')
+            ->where('child_id', $plaque->id)
+            ->whereHas('parent', function ($q) {
+                $q->where('type_id', 'thing')->whereJsonContains('metadata->subtype', 'photo');
+            })
+            ->with(['parent'])
+            ->get();
+        $plaquePhoto = $plaquePhotoConnections->isNotEmpty() ? $plaquePhotoConnections->first()->parent : null;
+        $photoUrl = null;
+        if ($plaquePhoto) {
+            $photoUrl = $plaquePhoto->metadata['thumbnail_url']
+                ?? $plaquePhoto->metadata['medium_url']
+                ?? $plaquePhoto->metadata['large_url']
+                ?? $plaquePhoto->metadata['original_url']
+                ?? null;
+            if (! $photoUrl && ! empty($plaquePhoto->metadata['filename'])) {
+                $photoUrl = route('images.proxy', ['spanId' => $plaquePhoto->id, 'size' => 'thumbnail']);
+            }
+        } else {
+            $photoUrl = $plaque->metadata['main_photo'] ?? $plaque->metadata['thumbnail_url'] ?? null;
+        }
+        $locationConnection = $plaque->connectionsAsSubject()
+            ->where('type_id', 'located')
+            ->with(['child'])
+            ->first();
+        $location = $locationConnection ? $locationConnection->child : null;
+        $locationName = $location ? $location->name : null;
+        $plaqueMetadata = $plaque->metadata ?? [];
+        $plaqueColour = $plaqueMetadata['colour'] ?? 'blue';
+        $erectedYear = $plaqueMetadata['erected'] ?? $plaque->start_year;
+
+        return [
+            'plaque' => $plaque,
+            'photoUrl' => $photoUrl,
+            'locationName' => $locationName,
+            'plaqueMetadata' => $plaqueMetadata,
+            'plaqueColour' => $plaqueColour,
+            'erectedYear' => $erectedYear,
+        ];
+    }
+
+    /**
+     * Batch-load director (created) connections for film spans; keyed by film span id for use in film card.
+     *
+     * @return \Illuminate\Support\Collection<int, \App\Models\Connection> keyed by child_id (film id)
+     */
+    private function getDirectorConnectionsByFilmId(PrecomputedSpanConnections $precomputedConnections): Collection
+    {
+        $filmConnections = $precomputedConnections->getChildByType('features')
+            ->filter(function ($conn) {
+                $film = $conn->parent;
+                return $film && $film->type_id === 'thing'
+                    && isset($film->metadata['subtype']) && $film->metadata['subtype'] === 'film';
+            });
+        $filmIds = $filmConnections->pluck('parent_id')->unique()->filter()->values()->all();
+        if (empty($filmIds)) {
+            return collect();
+        }
+        return Connection::where('type_id', 'created')
+            ->whereIn('child_id', $filmIds)
+            ->with('parent')
+            ->get()
+            ->groupBy('child_id')
+            ->map(fn ($conns) => $conns->first());
+    }
+
+    /**
      * Precompute parent and child connection lists for the connections partial.
      * Uses same logic as the partial; access-dependent so not cached with span.
      *
@@ -1131,6 +1345,53 @@ class SpanController extends Controller
             });
 
         return [$parentConnections, $childConnections];
+    }
+
+    /**
+     * Precompute education card data for person spans (avoids duplicate queries in view).
+     * When $educationConnections is provided (e.g. from PrecomputedSpanConnections), only
+     * the "during" (phases) batch query is run; otherwise connections are queried (fallback).
+     *
+     * @param  Collection<int, \App\Models\Connection>|null  $educationConnections  Optional slice from precomputed connections
+     * @return array{connections: \Illuminate\Support\Collection, duringBySubject: \Illuminate\Support\Collection, duringByObject: \Illuminate\Support\Collection}|null
+     */
+    private function getEducationCardData(Span $span, ?Collection $educationConnections = null): ?array
+    {
+        if ($span->type_id !== 'person') {
+            return null;
+        }
+        if ($educationConnections === null) {
+            $educationConnections = $span->connectionsAsSubject()
+                ->whereHas('type', fn ($q) => $q->where('type', 'education'))
+                ->with(['child', 'connectionSpan'])
+                ->get();
+        }
+        $educationConnections = $educationConnections
+            ->sortBy(function ($conn) {
+                $parts = $conn->getEffectiveSortDate();
+                $y = $parts[0] ?? PHP_INT_MAX;
+                $m = $parts[1] ?? PHP_INT_MAX;
+                $d = $parts[2] ?? PHP_INT_MAX;
+                return sprintf('%08d-%02d-%02d', $y, $m, $d);
+            })
+            ->values();
+
+        $connectionSpanIds = $educationConnections->map(fn ($c) => $c->connectionSpan?->id)->filter()->unique()->values()->all();
+        $duringBySubject = collect();
+        $duringByObject = collect();
+        if (!empty($connectionSpanIds)) {
+            $allDuring = \App\Models\Connection::where(fn ($q) => $q->whereIn('parent_id', $connectionSpanIds)->orWhereIn('child_id', $connectionSpanIds))
+                ->whereHas('type', fn ($q) => $q->where('type', 'during'))
+                ->with(['child', 'parent'])
+                ->get();
+            $duringBySubject = $allDuring->groupBy('parent_id');
+            $duringByObject = $allDuring->groupBy('child_id');
+        }
+        return [
+            'connections' => $educationConnections,
+            'duringBySubject' => $duringBySubject,
+            'duringByObject' => $duringByObject,
+        ];
     }
 
     /**
@@ -3545,8 +3806,10 @@ class SpanController extends Controller
                 ->with('status', session('status')); // Preserve flash message
         }
 
+        [$parentConnections, $childConnections] = $this->getConnectionsForSpanShow($span);
+        $precomputedConnections = new PrecomputedSpanConnections($parentConnections, $childConnections);
         $storyGenerator = app(ConfigurableStoryGeneratorService::class);
-        $story = $storyGenerator->generateStory($span);
+        $story = $storyGenerator->generateStory($span, $precomputedConnections);
 
         return view('spans.story', compact('span', 'story'));
     }
@@ -4258,9 +4521,10 @@ class SpanController extends Controller
             $span = $connectionSpan;
             $familyData = null;
             [$parentConnections, $childConnections] = $this->getConnectionsForSpanShow($connectionSpan);
+            $precomputedConnections = new PrecomputedSpanConnections($parentConnections, $childConnections);
             $story = null;
             try {
-                $story = app(\App\Services\ConfigurableStoryGeneratorService::class)->generateStory($connectionSpan);
+                $story = app(\App\Services\ConfigurableStoryGeneratorService::class)->generateStory($connectionSpan, $precomputedConnections);
             } catch (\Exception $e) {
                 $story = ['paragraphs' => [], 'metadata' => [], 'error' => $e->getMessage()];
             }
@@ -4272,7 +4536,13 @@ class SpanController extends Controller
                     Log::warning('Failed to get Desert Island Discs set for person', ['person_id' => $connectionSpan->id, 'error' => $e->getMessage()]);
                 }
             }
-            return view('spans.show', compact('span', 'desertIslandDiscsSet', 'subject', 'object', 'connectionType', 'familyData', 'parentConnections', 'childConnections', 'story', 'predicate'));
+            $educationCardData = $connectionSpan->type_id === 'person' ? $this->getEducationCardData($connectionSpan, $precomputedConnections->getParentByType('education')) : null;
+            $connection->load(['parent.type', 'child.type', 'type', 'connectionSpan.type']);
+            $connectionForSpan = $connection;
+            $annotatingNotes = $this->getAnnotatingNotes($connectionSpan);
+            $bluePlaqueCardData = $connectionSpan->type_id === 'person' ? $this->getBluePlaqueCardData($connectionSpan) : null;
+            $directorConnectionsByFilmId = ($connectionSpan->type_id === 'person') ? $this->getDirectorConnectionsByFilmId($precomputedConnections) : collect();
+            return view('spans.show', compact('span', 'desertIslandDiscsSet', 'subject', 'object', 'connectionType', 'familyData', 'parentConnections', 'childConnections', 'story', 'predicate', 'educationCardData', 'connectionForSpan', 'precomputedConnections', 'annotatingNotes', 'bluePlaqueCardData', 'directorConnectionsByFilmId'));
         }
 
         // Multiple connections: show disambiguation view
@@ -4357,13 +4627,20 @@ class SpanController extends Controller
         $span = $connectionSpan;
         $familyData = null;
         [$parentConnections, $childConnections] = $this->getConnectionsForSpanShow($connectionSpan);
+        $precomputedConnections = new PrecomputedSpanConnections($parentConnections, $childConnections);
         $story = null;
         try {
-            $story = app(\App\Services\ConfigurableStoryGeneratorService::class)->generateStory($connectionSpan);
+            $story = app(\App\Services\ConfigurableStoryGeneratorService::class)->generateStory($connectionSpan, $precomputedConnections);
         } catch (\Exception $e) {
             $story = ['paragraphs' => [], 'metadata' => [], 'error' => $e->getMessage()];
         }
-        return view('spans.show', compact('span', 'desertIslandDiscsSet', 'subject', 'object', 'connectionType', 'familyData', 'parentConnections', 'childConnections', 'story', 'predicate'));
+        $educationCardData = $connectionSpan->type_id === 'person' ? $this->getEducationCardData($connectionSpan, $precomputedConnections->getParentByType('education')) : null;
+        $connection->load(['parent.type', 'child.type', 'type', 'connectionSpan.type']);
+        $connectionForSpan = $connection;
+        $annotatingNotes = $this->getAnnotatingNotes($connectionSpan);
+        $bluePlaqueCardData = $connectionSpan->type_id === 'person' ? $this->getBluePlaqueCardData($connectionSpan) : null;
+        $directorConnectionsByFilmId = ($connectionSpan->type_id === 'person') ? $this->getDirectorConnectionsByFilmId($precomputedConnections) : collect();
+        return view('spans.show', compact('span', 'desertIslandDiscsSet', 'subject', 'object', 'connectionType', 'familyData', 'parentConnections', 'childConnections', 'story', 'predicate', 'educationCardData', 'connectionForSpan', 'precomputedConnections', 'annotatingNotes', 'bluePlaqueCardData', 'directorConnectionsByFilmId'));
     }
 
     /**

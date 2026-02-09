@@ -1,4 +1,4 @@
-@props(['span'])
+@props(['span', 'connectionForSpan' => null])
 
 @php
     // Only show for connection spans
@@ -12,9 +12,9 @@
         return;
     }
 
-    // Find the connection that uses this span as its connection_span_id
-    $currentConnection = \App\Models\Connection::where('connection_span_id', $span->id)
-        ->with(['subject', 'object', 'type'])
+    // Find the connection that uses this span as its connection_span_id (use shared connectionForSpan when provided)
+    $currentConnection = $connectionForSpan ?? \App\Models\Connection::where('connection_span_id', $span->id)
+        ->with(['parent', 'child', 'type'])
         ->first();
 
     // If no connection found, don't show the component
@@ -23,7 +23,7 @@
     }
 
     // Get the subject (we'll find other connections to the same subject)
-    $subject = $currentConnection->subject;
+    $subject = $currentConnection->parent;
     $user = auth()->user();
     
     // Get the current connection span's temporal range

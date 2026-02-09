@@ -1,4 +1,4 @@
-@props(['span', 'parentConnections' => null, 'childConnections' => null])
+@props(['span', 'parentConnections' => null, 'childConnections' => null, 'connectionForSpan' => null])
 
 @php
     // If connections weren't passed in, fetch them with access control
@@ -34,10 +34,10 @@
             });
     }
     
-    // Special handling for connection spans - find the original connection this span represents
+    // Special handling for connection spans - find the original connection this span represents (use shared connectionForSpan when provided)
     $originalConnection = null;
     if ($span->type_id === 'connection') {
-        $originalConnection = \App\Models\Connection::where('connection_span_id', $span->id)
+        $originalConnection = $connectionForSpan ?? \App\Models\Connection::where('connection_span_id', $span->id)
             ->with([
                 'parent.type',
                 'child.type',
@@ -46,6 +46,23 @@
             ])
             ->first();
     }
+
+    // Preload "original" connections for connection spans that are parent of a connection (avoids 18+ N+1 in interactive-card)
+    $originalConnectionsBySpanId = [];
+    $connectionSpanIdsAsParent = collect($parentConnections ?? [])
+        ->merge($childConnections ?? [])
+        ->filter(fn ($c) => $c->parent && $c->parent->type_id === 'connection')
+        ->pluck('parent.id')
+        ->unique()
+        ->values()
+        ->all();
+    if (!empty($connectionSpanIdsAsParent)) {
+        $originals = \App\Models\Connection::whereIn('connection_span_id', $connectionSpanIdsAsParent)
+            ->with(['parent.type', 'child.type', 'type'])
+            ->get();
+        $originalConnectionsBySpanId = $originals->keyBy(fn ($c) => (string) $c->connection_span_id)->all();
+    }
+    \Illuminate\Support\Facades\View::share('connectionOriginalConnectionsBySpanId', $originalConnectionsBySpanId);
 @endphp
 
 @if($span->type_id === 'connection' && $originalConnection)
@@ -72,7 +89,7 @@
                             <div class="connection-spans">
                                 @foreach($parentConnections as $connection)
                                     @if($connection->connectionSpan)
-                                        <x-connections.interactive-card :connection="$connection" :isIncoming="false" />
+                                        <x-connections.interactive-card :connection="$connection" :isIncoming="false" :originalConnectionsBySpanId="$originalConnectionsBySpanId" />
                                     @endif
                                 @endforeach
                             </div>
@@ -85,7 +102,7 @@
                             <div class="connection-spans">
                                 @foreach($childConnections as $connection)
                                     @if($connection->connectionSpan)
-                                        <x-connections.interactive-card :connection="$connection" :isIncoming="true" />
+                                        <x-connections.interactive-card :connection="$connection" :isIncoming="true" :originalConnectionsBySpanId="$originalConnectionsBySpanId" />
                                     @endif
                                 @endforeach
                             </div>
@@ -132,7 +149,7 @@
             <div class="connection-spans mb-4">
                     @foreach($parentConnections as $connection)
                         @if($connection->connectionSpan)
-                            <x-connections.interactive-card :connection="$connection" :isIncoming="false" />
+                            <x-connections.interactive-card :connection="$connection" :isIncoming="false" :originalConnectionsBySpanId="$originalConnectionsBySpanId" />
                         @endif
                     @endforeach
                 </div>
@@ -143,7 +160,7 @@
                 <div class="connection-spans">
                     @foreach($childConnections as $connection)
                         @if($connection->connectionSpan)
-                            <x-connections.interactive-card :connection="$connection" :isIncoming="true" />
+                            <x-connections.interactive-card :connection="$connection" :isIncoming="true" :originalConnectionsBySpanId="$originalConnectionsBySpanId" />
                         @endif
                     @endforeach
                 </div>

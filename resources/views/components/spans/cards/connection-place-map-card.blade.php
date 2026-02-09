@@ -1,4 +1,4 @@
-@props(['span'])
+@props(['span', 'connectionForSpan' => null])
 
 @php
     $placeConnectionTypes = ['located', 'travel', 'residence'];
@@ -8,12 +8,12 @@
     $mapHeight = 200;
 
     if ($span->type_id === 'connection') {
-        $currentConnection = \App\Models\Connection::where('connection_span_id', $span->id)
-            ->with(['subject', 'object'])
+        $currentConnection = $connectionForSpan ?? \App\Models\Connection::where('connection_span_id', $span->id)
+            ->with(['parent', 'child'])
             ->first();
 
         if ($currentConnection && in_array($currentConnection->type_id, $placeConnectionTypes, true)) {
-            $place = $currentConnection->object;
+            $place = $currentConnection->child;
             if ($place && $place->type_id === 'place') {
                 $coordinates = $place->getCoordinates();
                 if ($coordinates && isset($coordinates['latitude'], $coordinates['longitude'])) {

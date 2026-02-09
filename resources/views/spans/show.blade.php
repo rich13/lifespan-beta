@@ -48,8 +48,8 @@
                 'icon_category' => 'span'
             ];
         } elseif ($span->type_id === 'connection') {
-            // This is a connection span - derive context from the connection
-            $connection = \App\Models\Connection::where('connection_span_id', $span->id)->first();
+            // This is a connection span - derive context from the connection (use shared connectionForSpan when provided by controller)
+            $connection = $connectionForSpan ?? \App\Models\Connection::where('connection_span_id', $span->id)->with(['parent', 'child', 'type'])->first();
             
             if ($connection) {
                 // Add subject to breadcrumb
@@ -164,18 +164,18 @@
                 
                 <!-- Related Connections Card - Show other connections between same subject/object (only for connection spans) -->
                 @if($span->type_id === 'connection')
-                    <x-spans.cards.related-connections-card :span="$span" />
+                    <x-spans.cards.related-connections-card :span="$span" :connectionForSpan="$connectionForSpan ?? null" />
                     <!-- Temporal Relations Card - Show other connections to same subject that overlap in time -->
-                    <x-spans.temporal-relations :span="$span" />
+                    <x-spans.temporal-relations :span="$span" :connectionForSpan="$connectionForSpan ?? null" />
                 @endif
                 
                 <!-- Annotations Card - Show notes that annotate this span -->
-                <x-spans.cards.note-spans-card :span="$span" />
+                <x-spans.cards.note-spans-card :span="$span" :annotatingNotes="$annotatingNotes ?? null" />
                 
                 <!-- Collections Card - Show collections that contain this span -->
                 <x-spans.cards.collections-card :span="$span" />
                 
-                <x-spans.partials.connections :span="$span" :parentConnections="$parentConnections ?? null" :childConnections="$childConnections ?? null" />
+                <x-spans.partials.connections :span="$span" :parentConnections="$parentConnections ?? null" :childConnections="$childConnections ?? null" :connectionForSpan="$connectionForSpan ?? null" />
             </div>
 
             <div class="col-md-4">
@@ -202,39 +202,44 @@
                 @endif
                 
                 <!-- Image Gallery -->
-                <x-spans.partials.image-gallery :span="$span" />
+                <x-spans.partials.image-gallery :span="$span" :precomputedConnections="$precomputedConnections ?? null" />
+                
+                <!-- Featured person for plaque spans (sits under image gallery) -->
+                @if($span->type_id === 'thing' && isset($span->metadata['subtype']) && $span->metadata['subtype'] === 'plaque')
+                    <x-spans.cards.plaque-featured-person-card :span="$span" />
+                @endif
                 
                 <!-- AKA Card - Show alternative names if they exist -->
-                <x-spans.cards.aka-card :span="$span" />
+                <x-spans.cards.aka-card :span="$span" :precomputedConnections="$precomputedConnections ?? null" />
                 
                 <!-- Blue Plaque Card (for people with plaques) - placed under image gallery -->
                 @if($span->type_id === 'person')
-                    <x-spans.cards.blue-plaque-card :span="$span" />
+                    <x-spans.cards.blue-plaque-card :span="$span" :bluePlaqueCardData="$bluePlaqueCardData ?? null" />
                 @endif
                 
-                <!-- Education Card (for people) - placed under photo gallery -->
+                <!-- Education Card (for people) - uses educationCardData derived from precomputedConnections -->
                 @if($span->type_id === 'person')
-                    <x-spans.cards.education-card :span="$span" />
+                    <x-spans.cards.education-card :span="$span" :educationCardData="$educationCardData ?? null" />
                 @endif
                 
-                <!-- Employment Card (for people) - placed under education card -->
+                <!-- Employment Card (for people) - slices from precomputedConnections when present -->
                 @if($span->type_id === 'person')
-                    <x-spans.cards.employment-card :span="$span" />
+                    <x-spans.cards.employment-card :span="$span" :precomputedConnections="$precomputedConnections ?? null" />
                 @endif
                 
-                <!-- Places Lived Card (for people) - placed under employment card -->
+                <!-- Places Lived Card (for people) - slices from precomputedConnections when present -->
                 @if($span->type_id === 'person')
-                    <x-spans.cards.places-lived-card :span="$span" />
+                    <x-spans.cards.places-lived-card :span="$span" :precomputedConnections="$precomputedConnections ?? null" />
                 @endif
                 
-                <!-- Film Card (for people) - placed under places lived card -->
+                <!-- Film Card (for people) - slices from precomputedConnections when present -->
                 @if($span->type_id === 'person')
-                    <x-spans.cards.film-card :span="$span" />
+                    <x-spans.cards.film-card :span="$span" :precomputedConnections="$precomputedConnections ?? null" :directorConnectionsByFilmId="$directorConnectionsByFilmId ?? null" />
                 @endif
                 
-                <!-- Book Card (for people) - placed under film card -->
+                <!-- Book Card (for people) - slices from precomputedConnections when present -->
                 @if($span->type_id === 'person')
-                    <x-spans.cards.book-card :span="$span" />
+                    <x-spans.cards.book-card :span="$span" :precomputedConnections="$precomputedConnections ?? null" />
                 @endif
                 
                 <!-- Employee Card (for organisations) - placed under employment card -->
@@ -301,8 +306,8 @@
                 <!-- User Connection Card -->
                 <x-spans.cards.user-connection-card :span="$span" />
                 
-                <!-- Place Map Card -->
-                <x-spans.cards.unified-location-card :span="$span" />
+                <!-- Place Map Card - slices from precomputedConnections when present -->
+                <x-spans.cards.unified-location-card :span="$span" :precomputedConnections="$precomputedConnections ?? null" />
                 
                 
                 <!-- Band Discography Card -->
@@ -327,7 +332,7 @@
                 @endif
 
                 <!-- Connection place map (located/travelled/residence) - simple map only -->
-                <x-spans.cards.connection-place-map-card :span="$span" />
+                <x-spans.cards.connection-place-map-card :span="$span" :connectionForSpan="$connectionForSpan ?? null" />
 
                 <!-- Related Films Card (only for films) -->
                 @if($span->type_id === 'thing' && isset($span->metadata['subtype']) && $span->metadata['subtype'] === 'film')
@@ -350,7 +355,7 @@
                         <x-guardian-about-person :personName="$span->getDisplayTitle()" />
                     @endif
                 @endif
-                <x-spans.partials.sources :span="$span" />
+                <x-spans.partials.sources :span="$span" :connectionForSpan="$connectionForSpan ?? null" />
                 <x-spans.partials.status :span="$span" />
                 {{-- <x-spans.partials.notes :span="$span" /> --}}
 

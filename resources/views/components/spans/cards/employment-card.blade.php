@@ -1,4 +1,4 @@
-@props(['span'])
+@props(['span', 'precomputedConnections' => null])
 
 @php
     // Only show for person spans
@@ -6,17 +6,21 @@
         return;
     }
 
-    // Get employment connections (direct person -> organisation)
-    $employmentConnections = $span->connectionsAsSubject()
-        ->whereHas('type', function($q) { $q->where('type', 'employment'); })
-        ->with(['child', 'connectionSpan'])
-        ->get();
-
-    // Get has_role connections with nested at_organisation connections
-    $roleConnections = $span->connectionsAsSubject()
-        ->whereHas('type', function($q) { $q->where('type', 'has_role'); })
-        ->with(['child', 'connectionSpan.connectionsAsSubject.child', 'connectionSpan.connectionsAsSubject.parent', 'connectionSpan.connectionsAsSubject.type', 'connectionSpan.connectionsAsSubject.connectionSpan'])
-        ->get();
+    // Use precomputed connections when provided (span show); otherwise query (e.g. when rendered elsewhere)
+    if ($precomputedConnections instanceof \App\Support\PrecomputedSpanConnections) {
+        $allByType = $precomputedConnections->getParentByTypes(['employment', 'has_role']);
+        $employmentConnections = $allByType->where('type_id', 'employment');
+        $roleConnections = $allByType->where('type_id', 'has_role');
+    } else {
+        $employmentConnections = $span->connectionsAsSubject()
+            ->whereHas('type', function($q) { $q->where('type', 'employment'); })
+            ->with(['child', 'connectionSpan'])
+            ->get();
+        $roleConnections = $span->connectionsAsSubject()
+            ->whereHas('type', function($q) { $q->where('type', 'has_role'); })
+            ->with(['child', 'connectionSpan.connectionsAsSubject.child', 'connectionSpan.connectionsAsSubject.parent', 'connectionSpan.connectionsAsSubject.type', 'connectionSpan.connectionsAsSubject.connectionSpan'])
+            ->get();
+    }
 
     // Combine both types into a unified collection with sorting info
     $allEmployment = collect();
@@ -54,7 +58,7 @@
         <h6 class="card-title mb-0">
             <i class="bi bi-briefcase me-2"></i>
             <a href="{{ url('/spans/' . $span->id . '/has-role') }}" class="text-decoration-none">
-                Employment
+                Work
             </a>
         </h6>
         @auth

@@ -1,4 +1,4 @@
-@props(['span'])
+@props(['span', 'precomputedConnections' => null])
 
 @php
     // Only show for person spans
@@ -6,10 +6,15 @@
         return;
     }
 
-    $residenceConnections = $span->connectionsAsSubject()
-        ->whereHas('type', function($q) { $q->where('type', 'residence'); })
-        ->with(['child', 'connectionSpan'])
-        ->get()
+    if ($precomputedConnections instanceof \App\Support\PrecomputedSpanConnections) {
+        $residenceConnections = $precomputedConnections->getParentByType('residence');
+    } else {
+        $residenceConnections = $span->connectionsAsSubject()
+            ->whereHas('type', function($q) { $q->where('type', 'residence'); })
+            ->with(['child', 'connectionSpan'])
+            ->get();
+    }
+    $residenceConnections = $residenceConnections
         ->sortBy(function($conn) {
             // Use effective sort date helper to build a sortable key
             $parts = $conn->getEffectiveSortDate();
@@ -20,7 +25,7 @@
             return sprintf('%08d-%02d-%02d', $y, $m, $d);
         })
         ->values();
-    
+
     // Prepare place data for map view (empty array if no connections)
     $placesForMap = $residenceConnections->isEmpty() 
         ? collect([]) 

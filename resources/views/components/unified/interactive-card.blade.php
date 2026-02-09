@@ -33,7 +33,7 @@
 
     $creator = null;
     if ($isSpan && $span->type_id === 'thing' && !empty($span->metadata['creator'])) {
-        $creator = \App\Models\Span::find($span->metadata['creator']);
+        $creator = \App\Models\Span::findCached($span->metadata['creator']);
     }
     
     // Determine model and description for base component

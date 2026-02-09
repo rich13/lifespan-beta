@@ -1,4 +1,4 @@
-@props(['span'])
+@props(['span', 'educationCardData' => null])
 
 @php
     // Only show for person spans
@@ -6,34 +6,37 @@
         return;
     }
 
-    $educationConnections = $span->connectionsAsSubject()
-        ->whereHas('type', function($q) { $q->where('type', 'education'); })
-        ->with(['child', 'connectionSpan'])
-        ->get()
-        ->sortBy(function($conn) {
-            // Use effective sort date helper to build a sortable key
-            $parts = $conn->getEffectiveSortDate();
-            // Normalise very large values to push unknowns to the end
-            $y = $parts[0] ?? PHP_INT_MAX;
-            $m = $parts[1] ?? PHP_INT_MAX;
-            $d = $parts[2] ?? PHP_INT_MAX;
-            return sprintf('%08d-%02d-%02d', $y, $m, $d);
-        })
-        ->values();
+    if (is_array($educationCardData) && isset($educationCardData['connections'])) {
+        $educationConnections = $educationCardData['connections'];
+        $duringBySubject = $educationCardData['duringBySubject'] ?? collect();
+        $duringByObject = $educationCardData['duringByObject'] ?? collect();
+    } else {
+        $educationConnections = $span->connectionsAsSubject()
+            ->whereHas('type', function($q) { $q->where('type', 'education'); })
+            ->with(['child', 'connectionSpan'])
+            ->get()
+            ->sortBy(function($conn) {
+                $parts = $conn->getEffectiveSortDate();
+                $y = $parts[0] ?? PHP_INT_MAX;
+                $m = $parts[1] ?? PHP_INT_MAX;
+                $d = $parts[2] ?? PHP_INT_MAX;
+                return sprintf('%08d-%02d-%02d', $y, $m, $d);
+            })
+            ->values();
 
-    // Batch-fetch all "during" phase connections for education connection spans (avoids N+1)
-    $connectionSpanIds = $educationConnections->map(fn($c) => $c->connectionSpan?->id)->filter()->unique()->values()->all();
-    $duringBySubject = collect();
-    $duringByObject = collect();
-    if (!empty($connectionSpanIds)) {
-        $allDuring = \App\Models\Connection::where(function($q) use ($connectionSpanIds) {
-            $q->whereIn('parent_id', $connectionSpanIds)->orWhereIn('child_id', $connectionSpanIds);
-        })
-            ->whereHas('type', function($q) { $q->where('type', 'during'); })
-            ->with(['child', 'parent'])
-            ->get();
-        $duringBySubject = $allDuring->groupBy('parent_id');
-        $duringByObject = $allDuring->groupBy('child_id');
+        $connectionSpanIds = $educationConnections->map(fn($c) => $c->connectionSpan?->id)->filter()->unique()->values()->all();
+        $duringBySubject = collect();
+        $duringByObject = collect();
+        if (!empty($connectionSpanIds)) {
+            $allDuring = \App\Models\Connection::where(function($q) use ($connectionSpanIds) {
+                $q->whereIn('parent_id', $connectionSpanIds)->orWhereIn('child_id', $connectionSpanIds);
+            })
+                ->whereHas('type', function($q) { $q->where('type', 'during'); })
+                ->with(['child', 'parent'])
+                ->get();
+            $duringBySubject = $allDuring->groupBy('parent_id');
+            $duringByObject = $allDuring->groupBy('child_id');
+        }
     }
 @endphp
 <div class="card mb-4">

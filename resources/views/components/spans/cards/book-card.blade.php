@@ -1,4 +1,4 @@
-@props(['span'])
+@props(['span', 'precomputedConnections' => null])
 
 @php
     // Only show for person spans
@@ -6,13 +6,16 @@
         return;
     }
 
-    // Get connections where this person created books
-    // Connection type: [person][created][book]
-    // So person is the parent (subject) and book is the child (object)
-    $bookConnections = $span->connectionsAsSubject()
-        ->whereHas('type', function($q) { $q->where('type', 'created'); })
-        ->with(['child', 'connectionSpan'])
-        ->get()
+    // Connection type: [person][created][book] – person is subject (parent), book is child
+    if ($precomputedConnections instanceof \App\Support\PrecomputedSpanConnections) {
+        $bookConnections = $precomputedConnections->getParentByType('created');
+    } else {
+        $bookConnections = $span->connectionsAsSubject()
+            ->whereHas('type', function($q) { $q->where('type', 'created'); })
+            ->with(['child', 'connectionSpan'])
+            ->get();
+    }
+    $bookConnections = $bookConnections
         ->filter(function($conn) {
             // Only include if child is a book (type=thing, subtype=book)
             $book = $conn->child;

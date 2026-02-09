@@ -1,4 +1,4 @@
-@props(['span'])
+@props(['span', 'connectionForSpan' => null])
 
 @php
     // Only show for connection spans
@@ -6,9 +6,9 @@
         return;
     }
 
-    // Find the connection that uses this span as its connection_span_id
-    $currentConnection = \App\Models\Connection::where('connection_span_id', $span->id)
-        ->with(['subject', 'object', 'type'])
+    // Find the connection that uses this span as its connection_span_id (use shared connectionForSpan when provided)
+    $currentConnection = $connectionForSpan ?? \App\Models\Connection::where('connection_span_id', $span->id)
+        ->with(['parent', 'child', 'type'])
         ->first();
 
     // If no connection found, don't show the component
@@ -16,9 +16,9 @@
         return;
     }
 
-    // Get the subject and object
-    $subject = $currentConnection->subject;
-    $object = $currentConnection->object;
+    // Get the subject and object (parent/child are same as subject/object on Connection)
+    $subject = $currentConnection->parent;
+    $object = $currentConnection->child;
     $connectionType = $currentConnection->type_id;
 
     // Find all connections between the same subject and object with the same type

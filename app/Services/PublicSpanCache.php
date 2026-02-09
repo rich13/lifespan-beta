@@ -72,8 +72,8 @@ class PublicSpanCache
 
         Cache::forever($versionKey, $next);
 
-        // Clear per-span show data cache (v3 key used in SpanController::show)
-        Cache::forget('span_show_data_v3_' . $spanId);
+        // Clear per-span show data cache (v4 key used in SpanController::show)
+        Cache::forget('span_show_data_v4_' . $spanId);
     }
 
     /**

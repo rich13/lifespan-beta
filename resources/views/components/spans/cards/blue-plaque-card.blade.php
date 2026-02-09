@@ -1,4 +1,4 @@
-@props(['span'])
+@props(['span', 'bluePlaqueCardData' => null])
 
 @php
     // Only show for person spans
@@ -6,75 +6,63 @@
         return;
     }
 
-    // Find plaques that feature this person
-    // Connection: [plaque (parent)][features][person (child)]
-    // So we need connections where this person is the child (object)
-    $plaqueConnections = \App\Models\Connection::where('type_id', 'features')
-        ->where('child_id', $span->id) // Person is the child
-        ->whereHas('parent', function($query) {
-            $query->where('type_id', 'thing')
-                  ->whereJsonContains('metadata->subtype', 'plaque');
-        })
-        ->with(['parent'])
-        ->get();
-
-    // If no plaques found, don't show the component
-    if ($plaqueConnections->isEmpty()) {
-        return;
-    }
-
-    // Get the first plaque (most people will have one plaque)
-    $plaqueConnection = $plaqueConnections->first();
-    $plaque = $plaqueConnection->parent;
-
-    // Find photos of the plaque
-    // Connection: [photo (parent)][features][plaque (child)]
-    // So we need connections where the plaque is the child (object)
-    $plaquePhotoConnections = \App\Models\Connection::where('type_id', 'features')
-        ->where('child_id', $plaque->id) // Plaque is the child
-        ->whereHas('parent', function($query) {
-            $query->where('type_id', 'thing')
-                  ->whereJsonContains('metadata->subtype', 'photo');
-        })
-        ->with(['parent'])
-        ->get();
-
-    // Get the first photo if available
-    $plaquePhoto = $plaquePhotoConnections->isNotEmpty() ? $plaquePhotoConnections->first()->parent : null;
-
-    // Get plaque photo URL from metadata (use thumbnail for left-side display)
-    $photoUrl = null;
-    if ($plaquePhoto) {
-        $photoUrl = $plaquePhoto->metadata['thumbnail_url'] 
-                 ?? $plaquePhoto->metadata['medium_url'] 
-                 ?? $plaquePhoto->metadata['large_url'] 
-                 ?? $plaquePhoto->metadata['original_url'] 
-                 ?? null;
-        
-        // If we have a filename but no URL, use proxy route
-        if (!$photoUrl && isset($plaquePhoto->metadata['filename']) && $plaquePhoto->metadata['filename']) {
-            $photoUrl = route('images.proxy', ['spanId' => $plaquePhoto->id, 'size' => 'thumbnail']);
-        }
+    // Use precomputed data when passed from controller; otherwise compute here
+    if (is_array($bluePlaqueCardData) && isset($bluePlaqueCardData['plaque'])) {
+        $plaque = $bluePlaqueCardData['plaque'];
+        $photoUrl = $bluePlaqueCardData['photoUrl'] ?? null;
+        $locationName = $bluePlaqueCardData['locationName'] ?? null;
+        $plaqueMetadata = $bluePlaqueCardData['plaqueMetadata'] ?? [];
+        $plaqueColour = $bluePlaqueCardData['plaqueColour'] ?? 'blue';
+        $erectedYear = $bluePlaqueCardData['erectedYear'] ?? null;
     } else {
-        // Fallback to plaque's own main_photo metadata if no photo connection found
-        $photoUrl = $plaque->metadata['main_photo'] 
-                 ?? $plaque->metadata['thumbnail_url'] 
-                 ?? null;
-    }
+        $plaqueConnections = \App\Models\Connection::where('type_id', 'features')
+            ->where('child_id', $span->id)
+            ->whereHas('parent', function($query) {
+                $query->where('type_id', 'thing')
+                      ->whereJsonContains('metadata->subtype', 'plaque');
+            })
+            ->with(['parent'])
+            ->get();
 
-    // Get plaque location if available
-    $locationConnection = $plaque->connectionsAsSubject()
-        ->where('type_id', 'located')
-        ->with(['child'])
-        ->first();
-    
-    $location = $locationConnection ? $locationConnection->child : null;
-    $locationName = $location ? $location->name : null;
-    
-    // Get plaque metadata
-    $plaqueMetadata = $plaque->metadata ?? [];
-    $plaqueColour = $plaqueMetadata['colour'] ?? 'blue';
-    $erectedYear = $plaqueMetadata['erected'] ?? $plaque->start_year;
+        if ($plaqueConnections->isEmpty()) {
+            return;
+        }
+
+        $plaque = $plaqueConnections->first()->parent;
+        $plaquePhotoConnections = \App\Models\Connection::where('type_id', 'features')
+            ->where('child_id', $plaque->id)
+            ->whereHas('parent', function($query) {
+                $query->where('type_id', 'thing')
+                      ->whereJsonContains('metadata->subtype', 'photo');
+            })
+            ->with(['parent'])
+            ->get();
+
+        $plaquePhoto = $plaquePhotoConnections->isNotEmpty() ? $plaquePhotoConnections->first()->parent : null;
+        $photoUrl = null;
+        if ($plaquePhoto) {
+            $photoUrl = $plaquePhoto->metadata['thumbnail_url']
+                ?? $plaquePhoto->metadata['medium_url']
+                ?? $plaquePhoto->metadata['large_url']
+                ?? $plaquePhoto->metadata['original_url']
+                ?? null;
+            if (!$photoUrl && !empty($plaquePhoto->metadata['filename'])) {
+                $photoUrl = route('images.proxy', ['spanId' => $plaquePhoto->id, 'size' => 'thumbnail']);
+            }
+        } else {
+            $photoUrl = $plaque->metadata['main_photo'] ?? $plaque->metadata['thumbnail_url'] ?? null;
+        }
+
+        $locationConnection = $plaque->connectionsAsSubject()
+            ->where('type_id', 'located')
+            ->with(['child'])
+            ->first();
+        $location = $locationConnection ? $locationConnection->child : null;
+        $locationName = $location ? $location->name : null;
+        $plaqueMetadata = $plaque->metadata ?? [];
+        $plaqueColour = $plaqueMetadata['colour'] ?? 'blue';
+        $erectedYear = $plaqueMetadata['erected'] ?? $plaque->start_year;
+    }
 @endphp
 
 <div class="card mb-4">
@@ -102,8 +90,12 @@
                     @if($locationName)
                         <p class="mb-1">
                             <i class="bi bi-geo-alt me-1"></i>
-                            <strong>Location:</strong> 
-                            <x-span-link :span="$location" class="text-decoration-none" />
+                            <strong>Location:</strong>
+                            @isset($location)
+                                <x-span-link :span="$location" class="text-decoration-none" />
+                            @else
+                                {{ $locationName }}
+                            @endisset
                         </p>
                     @endif
                     

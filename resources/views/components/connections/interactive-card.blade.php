@@ -1,13 +1,16 @@
-@props(['connection', 'isIncoming' => false])
+@props(['connection', 'isIncoming' => false, 'originalConnectionsBySpanId' => null])
 
 @php
+    // Use preloaded map when provided (from connections partial) to avoid N+1
+    $originalConnectionsBySpanId = $originalConnectionsBySpanId ?? \Illuminate\Support\Facades\View::shared('connectionOriginalConnectionsBySpanId', []);
+
     // Load nested connections for sophisticated role descriptions
     $nestedOrganisation = null;
     $nestedDates = null;
     
     if ($connection->connectionSpan && $connection->type_id === 'has_role') {
-        // Load nested connections from the connection span
-        $connection->connectionSpan->load([
+        // Load nested connections only when not already eager-loaded (avoids N+1 when controller preloaded)
+        $connection->connectionSpan->loadMissing([
             'connectionsAsSubject.child.type',
             'connectionsAsSubject.type',
             'connectionsAsSubject.connectionSpan'
@@ -71,10 +74,14 @@
             $originalConnection = null;
             
             if ($parentIsConnectionSpan) {
-                // Find the original connection this span represents
-                $originalConnection = \App\Models\Connection::where('connection_span_id', $connection->parent->id)
-                    ->with(['parent', 'child', 'type'])
-                    ->first();
+                $spanId = (string) $connection->parent->id;
+                $originalConnection = $originalConnectionsBySpanId[$spanId] ?? null;
+                if (!$originalConnection) {
+                    // Fallback when not preloaded (e.g. partial used outside connections list)
+                    $originalConnection = \App\Models\Connection::where('connection_span_id', $spanId)
+                        ->with(['parent', 'child', 'type'])
+                        ->first();
+                }
             }
         @endphp
         

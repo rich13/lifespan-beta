@@ -60,19 +60,22 @@ class FamilyTreeService
     }
 
     /**
-     * Get siblings of a person span (spans that share at least one parent)
+     * Get siblings of a person span (spans that share at least one parent).
+     * Cached (like ancestors/descendants) to avoid repeated getParents/getChildren on span show.
      */
     public function getSiblings(Span $span): Collection
     {
-        // Get parents
-        $parents = $this->getParents($span);
-        
-        // Get all children of these parents except the current span
-        return $parents->flatMap(function ($parent) {
-            return $this->getChildren($parent);
-        })->reject(function ($sibling) use ($span) {
-            return $sibling->id === $span->id;
-        })->unique('id')->values();
+        $cachePrefix = app()->environment();
+        $cacheKey = "{$cachePrefix}:siblings_{$span->id}";
+
+        return Cache::remember($cacheKey, 3600, function () use ($span) {
+            $parents = $this->getParents($span);
+            return $parents->flatMap(function ($parent) {
+                return $this->getChildren($parent);
+            })->reject(function ($sibling) use ($span) {
+                return $sibling->id === $span->id;
+            })->unique('id')->values();
+        });
     }
 
     /**
@@ -561,6 +564,9 @@ class FamilyTreeService
         // Clear uncles and aunts cache for this span
         Cache::forget("{$cachePrefix}:uncles_and_aunts_{$span->id}");
 
+        // Clear siblings cache for this span (so getSiblings below returns fresh data)
+        Cache::forget("{$cachePrefix}:siblings_{$span->id}");
+
         // Shallow invalidation for immediate relatives only (no recursion)
         $immediateRelatives = collect()
             ->merge($this->getParents($span))
@@ -573,6 +579,7 @@ class FamilyTreeService
                 Cache::forget("{$cachePrefix}:descendants_{$relative->id}_{$generations}");
             }
             Cache::forget("{$cachePrefix}:uncles_and_aunts_{$relative->id}");
+            Cache::forget("{$cachePrefix}:siblings_{$relative->id}");
         }
     }
 } 
