@@ -50,7 +50,7 @@
 <div class="mb-4">
     <div class="alert alert-warning">
         <p class="mb-0">
-            Coming soon: <a href="https://info.lifespan.dev" target="_blank" class="alert-link">https://info.lifespan.dev</a>
+            Read more: <a href="https://info.lifespan.dev" target="_blank" class="alert-link">https://info.lifespan.dev</a>
         </p>
     </div>
 </div>

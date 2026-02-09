@@ -44,7 +44,7 @@
             @endauth
         </div>
     </div>
-    <div class="card-body p-2">
+    <div class="card-body">
         @if($span->description)
             <!-- View mode -->
             <div id="description-view-mode" class="description-content">               
@@ -72,8 +72,6 @@
                 </div>
             </div>
         @else
-            
-            
             <!-- Add mode (when no description exists) -->
             <div id="description-add-mode" class="d-none">
                 <textarea class="form-control mb-3" id="description-add-textarea" rows="8" placeholder="Enter a description..."></textarea>

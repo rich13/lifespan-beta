@@ -491,7 +491,7 @@
     <div class="card-header">
         <h3 class="h6 mb-0">
             <i class="bi bi-arrow-left-right text-primary me-2"></i>
-            At Your Age Today
+            <a href="{{ route('explore.at-your-age') }}" class="text-decoration-none">At Your Age</a>
         </h3>
     </div>
     <div class="card-body">
@@ -583,12 +583,6 @@
                 </div>
             @endforeach
             
-            <div class="mt-3">
-                <a href="{{ route('explore.at-your-age') }}" class="btn btn-outline-secondary btn-sm">
-                    <i class="bi bi-arrow-right me-2"></i>
-                    More...
-                </a>
-            </div>
         @else
             <p class="text-muted small mb-3">
                 No historical figures found with sufficient data who were alive at your current age.
