@@ -129,12 +129,13 @@ return [
     | Span show page memory limit (optional)
     |--------------------------------------------------------------------------
     |
-    | Set SPAN_SHOW_MEMORY_LIMIT in .env (e.g. 512M) only if span show hits
-    | memory limits; leave unset to use PHP default.
+    | Span show loads connections, story, and view in one request and can exceed
+    | PHP's default 256M. Default 512M gives headroom; set SPAN_SHOW_MEMORY_LIMIT
+    | in .env to override (e.g. 256M to use PHP default, or 768M if still tight).
     |
     */
 
-    'span_show_memory_limit' => env('SPAN_SHOW_MEMORY_LIMIT'),
+    'span_show_memory_limit' => env('SPAN_SHOW_MEMORY_LIMIT', '512M'),
 
     /*
     |--------------------------------------------------------------------------
