@@ -1,38 +1,33 @@
 @extends('layouts.app')
 
 @php
-    // Get the user's personal span for use throughout the template
-    // Note: RequireProfileCompletion middleware ensures user has personal span before reaching this view
-    $personalSpan = auth()->user()->personalSpan;
-    
-    // Load connections once for all components to avoid duplicate queries
-    $userConnectionsAsSubject = collect();
-    $userConnectionsAsObject = collect();
-    $allUserConnections = collect();
-    
-    if ($personalSpan) {
-        // Load connections as subject (outgoing) with eager loading
-        $userConnectionsAsSubject = $personalSpan->connectionsAsSubject()
-            ->whereNotNull('connection_span_id')
-            ->whereHas('connectionSpan', function($query) {
-                $query->whereNotNull('start_year');
-            })
-            ->where('child_id', '!=', $personalSpan->id)
-            ->with(['connectionSpan', 'child', 'type'])
-            ->get();
-        
-        // Load connections as object (incoming) with eager loading
-        $userConnectionsAsObject = $personalSpan->connectionsAsObject()
-            ->whereNotNull('connection_span_id')
-            ->whereHas('connectionSpan', function($query) {
-                $query->whereNotNull('start_year');
-            })
-            ->where('parent_id', '!=', $personalSpan->id)
-            ->with(['connectionSpan', 'parent', 'type'])
-            ->get();
-        
-        // Combine for components that need all connections
-        $allUserConnections = $userConnectionsAsSubject->concat($userConnectionsAsObject);
+    // Use controller-provided data when present (HomeController); otherwise fallback for inclusion elsewhere
+    if (!isset($personalSpan)) {
+        $personalSpan = auth()->user()->personalSpan ?? null;
+    }
+    if (!isset($userConnectionsAsSubject) || !isset($userConnectionsAsObject) || !isset($allUserConnections)) {
+        $userConnectionsAsSubject = collect();
+        $userConnectionsAsObject = collect();
+        $allUserConnections = collect();
+        if ($personalSpan) {
+            $userConnectionsAsSubject = $personalSpan->connectionsAsSubject()
+                ->whereNotNull('connection_span_id')
+                ->whereHas('connectionSpan', function($query) {
+                    $query->whereNotNull('start_year');
+                })
+                ->where('child_id', '!=', $personalSpan->id)
+                ->with(['connectionSpan', 'child', 'type'])
+                ->get();
+            $userConnectionsAsObject = $personalSpan->connectionsAsObject()
+                ->whereNotNull('connection_span_id')
+                ->whereHas('connectionSpan', function($query) {
+                    $query->whereNotNull('start_year');
+                })
+                ->where('parent_id', '!=', $personalSpan->id)
+                ->with(['connectionSpan', 'parent', 'type'])
+                ->get();
+            $allUserConnections = $userConnectionsAsSubject->concat($userConnectionsAsObject);
+        }
     }
 @endphp
 
@@ -489,29 +484,7 @@
             </div>
             
             <div class="mb-4">
-                @php
-                    $today = \App\Helpers\DateHelper::getCurrentDate();
-                    $spansStartingOnDate = \App\Models\Span::where('start_year', $today->year)
-                        ->where('start_month', $today->month)
-                        ->where('start_day', $today->day)
-                        ->where(function($query) {
-                            $query->where('access_level', 'public')
-                                ->orWhere('owner_id', auth()->id());
-                        })
-                        ->get();
-
-                    $spansEndingOnDate = \App\Models\Span::where('end_year', $today->year)
-                        ->where('end_month', $today->month)
-                        ->where('end_day', $today->day)
-                        ->where(function($query) {
-                            $query->where('access_level', 'public')
-                                ->orWhere('owner_id', auth()->id());
-                        })
-                        ->get();
-
-
-                @endphp
-
+                {{-- Previously: Span queries for started/ended today; sections below are commented out so queries removed --}}
                 {{-- Commented out: Started Today section
                 @if($spansStartingOnDate->isNotEmpty())
                     

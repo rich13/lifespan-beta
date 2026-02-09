@@ -162,9 +162,7 @@ Route::middleware('web')->group(function () {
     
     // Home route - public for guests, but requires profile completion for authenticated users
     // The profile.complete middleware checks Auth::check() first, so guests can still access
-    Route::get('/', function () {
-        return view('home');
-    })->middleware('profile.complete')->name('home');
+    Route::get('/', \App\Http\Controllers\HomeController::class)->middleware('profile.complete')->name('home');
     
     // Personal homepage mode (MeController pre-loads connections for heatmap/summary)
     Route::get('/me', \App\Http\Controllers\MeController::class)->middleware('profile.complete')->name('me');
