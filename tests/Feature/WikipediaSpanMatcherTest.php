@@ -153,7 +153,8 @@ class WikipediaSpanMatcherTest extends TestCase
         
         $result = $matcher->highlightMatches($text);
         
-        $nevermindUrl = route('spans.show', $foundNevermind['slug'] ?? $foundNevermind['id']);
+        // Use the span we created for the expected URL (slug can be nevermind or nevermind-2 depending on reserved names)
+        $nevermindUrl = route('spans.show', $nevermind->slug ?? $nevermind->id);
         $this->assertStringContainsString('href="' . $nevermindUrl . '"', $result);
         
         // Count the number of links to the album

@@ -68,15 +68,18 @@ trait PostgresRefreshDatabase
         // Disable foreign key checks
         \DB::statement('SET session_replication_role = replica;');
 
-        // Get all tables except migrations
+        // Get all tables except migrations and reference data populated by migrations
         $tables = \DB::select("SELECT tablename FROM pg_catalog.pg_tables 
                               WHERE schemaname = 'public' 
                               AND tablename != 'migrations'");
 
-        // Truncate all tables
+        $skipTruncate = ['connection_types', 'span_types'];
+
         foreach ($tables as $table) {
-            // Skip certain tables if needed
             $tableName = $table->tablename;
+            if (in_array($tableName, $skipTruncate, true)) {
+                continue;
+            }
             \DB::table($tableName)->truncate();
         }
 

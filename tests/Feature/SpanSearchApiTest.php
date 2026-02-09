@@ -416,17 +416,17 @@ class SpanSearchApiTest extends TestCase
     {
         $this->actingAs($this->user);
 
-        // Search for "London" which is in the place span name
-        $response = $this->getJson('/api/spans/search?q=London');
+        // Search for "London" which is in the place span name (request higher limit so result is not dropped by default 10)
+        $response = $this->getJson('/api/spans/search?q=London&limit=50');
         $response->assertStatus(200);
         $data = $response->json();
         
         $this->assertIsArray($data);
         $this->assertArrayHasKey('spans', $data);
-        $this->assertGreaterThanOrEqual(1, count($data['spans']));
+        $this->assertGreaterThanOrEqual(1, count($data['spans']), 'Search for "London" should return at least one span');
         
         $spanNames = collect($data['spans'])->pluck('name')->toArray();
-        $this->assertContains('London Bridge', $spanNames);
+        $this->assertContains('London Bridge', $spanNames, 'Place span "London Bridge" should appear when searching by name "London". Got: ' . implode(', ', $spanNames));
     }
 
     /**

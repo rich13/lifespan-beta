@@ -7,10 +7,11 @@ use App\Models\Span;
 use App\Models\Connection;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
+use Tests\TestHelpers;
 
 class ConnectionSpanAccessTest extends TestCase
 {
-    use RefreshDatabase;
+    use RefreshDatabase, TestHelpers;
 
     public function test_user_can_access_connection_span_if_they_own_parent_and_child(): void
     {
@@ -40,7 +41,7 @@ class ConnectionSpanAccessTest extends TestCase
             'updater_id' => $otherUser->id,
             'access_level' => 'public',
             'name' => "Richard Northover studied at St Saviour's",
-            'slug' => 'richard-northover-studied-at-st-saviours'
+            'slug' => $this->uniqueSlug('richard-northover-studied-at-st-saviours'),
         ]);
         
         // Create the connection linking the spans
@@ -97,7 +98,7 @@ class ConnectionSpanAccessTest extends TestCase
             'updater_id' => $otherUser->id,
             'access_level' => 'private',
             'name' => "Richard Northover studied at St Saviour's",
-            'slug' => 'richard-northover-studied-at-st-saviours-2'
+            'slug' => $this->uniqueSlug('richard-northover-studied-at-st-saviours'),
         ]);
         
         // Create connection
@@ -151,7 +152,7 @@ class ConnectionSpanAccessTest extends TestCase
             'updater_id' => $otherUser->id,
             'access_level' => 'public',
             'name' => "Richard Northover visited London",
-            'slug' => 'richard-northover-visited-london'
+            'slug' => $this->uniqueSlug('richard-northover-visited-london'),
         ]);
         
         Connection::create([
