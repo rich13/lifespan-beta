@@ -328,7 +328,7 @@
                             <div class="card-content-bottom">
                             <p class="card-text">Roy Batty</p>
                             <!-- <p class="card-text"><a href="/spans/roy-batty">Roy Batty</a></p> -->
-                                <p class="card-text mb-0">8 January 2016 - 10 November 2019</p>
+                                <p class="card-text mb-0">2016 - 2019</p>
                             </div>
                         </div>
                     </div>
@@ -339,7 +339,7 @@
                         <div class="card-body">
                             <div class="card-content-top">
                                 <div class="mb-3">
-                                    <i class="bi bi-leaf" style="font-size: 2.5rem;"></i>
+                                    <i class="bi bi-calendar-heart" style="font-size: 2.5rem;"></i>
                                 </div>
                                 <h3 class="card-title">Look through time</h3>
                                 <p class="card-text">
@@ -361,6 +361,28 @@
                         <div class="card-body">
                             <div class="card-content-top">
                                 <div class="mb-3">
+                                    <i class="bi bi-clock-history" style="font-size: 2.5rem;"></i>
+                                </div>
+                                <h3 class="card-title">Time is an illusion.</h3>
+                                <p class="card-text">
+                                Lunchtime doubly so.
+                                </p>
+                            </div>
+                            <div class="card-content-bottom">
+                                <p class="card-text"><a href="/spans/douglas-adams">Douglas Adams</a></p>
+                                <!--<p class="card-text">Nick Drake</p> -->
+                                <p class="card-text mb-0">1952 - 2001</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+
+                <!-- <div class="carousel-card">
+                    <div class="card h-100 shadow-sm">
+                        <div class="card-body">
+                            <div class="card-content-top">
+                                <div class="mb-3">
                                     <i class="bi bi-car-front" style="font-size: 2.5rem;"></i>
                                 </div>
                                 <h3 class="card-title">Roads?</h3>
@@ -370,25 +392,26 @@
                                 </p>
                             </div>
                             <div class="card-content-bottom">
-                                <!-- <p class="card-text"><a href="/spans/dr-emmett-brown">Dr. Emmett Brown</a></p> -->
+                                <p class="card-text"><a href="/spans/dr-emmett-brown">Dr. Emmett Brown</a></p>
                                 <p class="card-text">Dr. Emmett Brown</p>
-                                <p class="card-text mb-0">11 August 1920 - unknown</p>
+                                <p class="card-text mb-0">1920 - unknown</p>
                             </div>
                         </div>
                     </div>
-                </div>
+                </div> -->
 
                 <div class="carousel-card">
                     <div class="card h-100 shadow-sm">
                         <div class="card-body">
                             <div class="card-content-top">
                                 <div class="mb-3">
-                                    <i class="bi bi-8-circle-fill" style="font-size: 2.5rem;"></i>
+                                    <i class="bi bi-infinity" style="font-size: 2.5rem;"></i>
                                 </div>
-                                <h3 class="card-title">All persons</h3>
+                                <h3 class="card-title">All moments</h3>
                                 <p class="card-text">
-                                    ...living or dead,<br>
-                                    are purely coincidental.
+                                past, present and future,<br>
+                                always have existed,<br>
+                                always will exist.
                                 </p>
                             </div>
                             <div class="card-content-bottom">
@@ -405,7 +428,7 @@
                         <div class="card-body">
                             <div class="card-content-top">
                                 <div class="mb-3">
-                                    <i class="bi bi-journal-text" style="font-size: 2.5rem;"></i>
+                                    <i class="bi bi-airplane" style="font-size: 2.5rem;"></i>
                                 </div>
                                 <h3 class="card-title">This is the time</h3>
                                 <p class="card-text">
