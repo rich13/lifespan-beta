@@ -10,10 +10,12 @@ if ! pgrep -x "nginx" > /dev/null; then
     exit 1
 fi
 
-# Check if PHP-FPM is running
-if ! pgrep -x "php-fpm" > /dev/null; then
-    echo "$DATE - PHP-FPM is not running"
-    exit 1
+# In maintenance mode, only nginx runs (no PHP-FPM)
+if [ "${MAINTENANCE_MODE}" != "true" ] && [ "${MAINTENANCE_MODE}" != "1" ]; then
+    if ! pgrep -x "php-fpm" > /dev/null; then
+        echo "$DATE - PHP-FPM is not running"
+        exit 1
+    fi
 fi
 
 # Check if we can connect to the webserver

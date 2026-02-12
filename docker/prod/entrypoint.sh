@@ -119,6 +119,15 @@ generate_app_key() {
     return 0
 }
 
+# Maintenance mode: serve static page only, no app startup
+if [ "${MAINTENANCE_MODE}" = "true" ] || [ "${MAINTENANCE_MODE}" = "1" ]; then
+    log "MAINTENANCE_MODE enabled – serving static holding page only"
+    mkdir -p /var/log/nginx /var/run/nginx
+    cp /var/www/docker/prod/nginx-maintenance.conf /etc/nginx/nginx.conf
+    log "Starting nginx (maintenance mode)"
+    exec /usr/sbin/nginx -g "daemon off;"
+fi
+
 # Set up environment
 log "Setting up environment..."
 # Set Docker container environment variable for logging
