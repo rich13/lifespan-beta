@@ -223,4 +223,61 @@ class SpanRoutesTest extends TestCase
         $response->assertStatus(302);
         $response->assertRedirect(route('login'));
     }
+
+    public function test_span_json_returns_core_fields_for_public_span(): void
+    {
+        $publicSpan = Span::factory()->create([
+            'access_level' => 'public',
+            'type_id' => 'person',
+            'slug' => 'test-person-json-' . uniqid(),
+        ]);
+
+        $response = $this->getJson("/spans/{$publicSpan->slug}.json");
+        $response->assertStatus(200);
+        $response->assertHeader('Content-Type');
+        $this->assertStringContainsString('application/json', $response->headers->get('Content-Type') ?? '');
+        $response->assertJsonStructure([
+            'id', 'name', 'slug', 'short_id', 'type_id', 'subtype', 'description',
+            'start_year', 'end_year', 'formatted_start_date', 'formatted_end_date',
+            'metadata', 'access_level', 'url',
+        ]);
+        $response->assertJsonPath('id', $publicSpan->id);
+        $response->assertJsonPath('name', $publicSpan->name);
+        $response->assertJsonPath('slug', $publicSpan->slug);
+        $response->assertJsonPath('short_id', $publicSpan->short_id);
+        $response->assertJsonPath('type_id', 'person');
+        $response->assertJsonPath('access_level', 'public');
+        $response->assertJsonPath('url', route('spans.show', ['subject' => $publicSpan]));
+    }
+
+    public function test_span_json_returns_401_for_private_span_when_unauthenticated(): void
+    {
+        $privateSpan = Span::factory()->create([
+            'access_level' => 'private',
+            'slug' => 'test-private-json-' . uniqid(),
+        ]);
+
+        $response = $this->getJson("/spans/{$privateSpan->slug}.json");
+        $response->assertStatus(401);
+        $response->assertHeader('Content-Type');
+        $this->assertStringContainsString('application/json', $response->headers->get('Content-Type') ?? '');
+    }
+
+    public function test_span_json_returns_200_for_private_span_when_authenticated_owner(): void
+    {
+        $privateSpan = Span::factory()->create([
+            'access_level' => 'private',
+            'owner_id' => $this->user->id,
+            'slug' => 'test-private-owner-json-' . uniqid(),
+        ]);
+
+        $response = $this->actingAs($this->user)->getJson("/spans/{$privateSpan->slug}.json");
+        $response->assertStatus(200);
+        $response->assertHeader('Content-Type');
+        $this->assertStringContainsString('application/json', $response->headers->get('Content-Type') ?? '');
+        $response->assertJsonPath('id', $privateSpan->id);
+        $response->assertJsonPath('name', $privateSpan->name);
+        $response->assertJsonPath('slug', $privateSpan->slug);
+        $response->assertJsonPath('access_level', 'private');
+    }
 } 

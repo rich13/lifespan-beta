@@ -173,6 +173,106 @@ class SpanConnectionTypesTest extends TestCase
         // Content assertion removed for now; will be covered by API test later.
     }
 
+    public function test_connection_json_returns_blue_plaque_style_data(): void
+    {
+        $subject = Span::factory()->create([
+            'access_level' => 'public',
+            'slug' => 'test-subject-json-' . uniqid(),
+        ]);
+        $object = Span::factory()->create([
+            'access_level' => 'public',
+            'slug' => 'test-object-json-' . uniqid(),
+        ]);
+
+        $connectionType = ConnectionType::where('forward_predicate', 'lived in')->first();
+        $this->assertNotNull($connectionType, 'Connection type with "lived in" predicate should exist');
+
+        Connection::factory()->create([
+            'parent_id' => $subject->id,
+            'child_id' => $object->id,
+            'type_id' => $connectionType->type,
+        ]);
+
+        $response = $this->getJson(route('spans.connection.json', [
+            'subject' => $subject->slug,
+            'predicate' => 'lived-in',
+            'object' => $object->slug,
+        ]));
+
+        $response->assertStatus(200);
+        $response->assertHeader('Content-Type');
+        $this->assertStringContainsString('application/json', $response->headers->get('Content-Type') ?? '');
+        $response->assertJsonStructure([
+            'subject' => ['id', 'name', 'slug', 'type_id'],
+            'predicate',
+            'object' => ['id', 'name', 'slug', 'type_id'],
+            'connection_span' => ['id', 'name', 'slug', 'short_id', 'type_id', 'subtype', 'description', 'start_year', 'end_year', 'formatted_start_date', 'formatted_end_date', 'metadata'],
+            'connection_type' => ['forward_predicate', 'inverse_predicate'],
+            'inscription',
+            'dates' => ['start_year', 'end_year', 'formatted_start_date', 'formatted_end_date'],
+            'location',
+            'url',
+        ]);
+        $response->assertJsonPath('subject.id', $subject->id);
+        $response->assertJsonPath('subject.slug', $subject->slug);
+        $response->assertJsonPath('object.id', $object->id);
+        $response->assertJsonPath('object.slug', $object->slug);
+        $response->assertJsonPath('predicate', 'lived-in');
+        $response->assertJsonPath('connection_type.forward_predicate', 'lived in');
+    }
+
+    public function test_connection_by_id_json_returns_expected_structure_and_values(): void
+    {
+        $subject = Span::factory()->create([
+            'access_level' => 'public',
+            'slug' => 'test-subject-byid-' . uniqid(),
+        ]);
+        $object = Span::factory()->create([
+            'access_level' => 'public',
+            'slug' => 'test-object-byid-' . uniqid(),
+        ]);
+
+        $connectionType = ConnectionType::where('forward_predicate', 'lived in')->first();
+        $this->assertNotNull($connectionType, 'Connection type with "lived in" predicate should exist');
+
+        $connection = Connection::factory()->create([
+            'parent_id' => $subject->id,
+            'child_id' => $object->id,
+            'type_id' => $connectionType->type,
+        ]);
+        $connection->load('connectionSpan');
+        $connectionSpan = $connection->connectionSpan;
+        $this->assertNotNull($connectionSpan, 'Connection must have a connection span');
+        $this->assertNotNull($connectionSpan->short_id, 'Connection span must have short_id for by-id URL');
+
+        $response = $this->getJson(route('spans.connection.by-id.json', [
+            'subject' => $subject->slug,
+            'predicate' => 'lived-in',
+            'object' => $object->slug,
+            'shortId' => $connectionSpan->short_id,
+        ]));
+
+        $response->assertStatus(200);
+        $response->assertHeader('Content-Type');
+        $this->assertStringContainsString('application/json', $response->headers->get('Content-Type') ?? '');
+        $response->assertJsonStructure([
+            'subject' => ['id', 'name', 'slug', 'type_id'],
+            'predicate',
+            'object' => ['id', 'name', 'slug', 'type_id'],
+            'connection_span' => ['id', 'name', 'slug', 'short_id', 'type_id', 'subtype', 'description', 'start_year', 'end_year', 'formatted_start_date', 'formatted_end_date', 'metadata'],
+            'connection_type' => ['forward_predicate', 'inverse_predicate'],
+            'inscription',
+            'dates' => ['start_year', 'end_year', 'formatted_start_date', 'formatted_end_date'],
+            'location',
+            'url',
+        ]);
+        $response->assertJsonPath('subject.id', $subject->id);
+        $response->assertJsonPath('object.id', $object->id);
+        $response->assertJsonPath('connection_span.id', $connectionSpan->id);
+        $response->assertJsonPath('connection_span.short_id', $connectionSpan->short_id);
+        $response->assertJsonPath('predicate', 'lived-in');
+    }
+
     public function test_invalid_predicate_redirects_to_span_show()
     {
         $span = Span::factory()->create([

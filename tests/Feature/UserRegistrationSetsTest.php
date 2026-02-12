@@ -18,9 +18,9 @@ class UserRegistrationSetsTest extends TestCase
         // Skip the heavy database setup from parent TestCase
         $this->refreshApplication();
         
-        // Minimal setup for these simple tests
+        // Minimal setup for these simple tests - use correct DB (parallel-aware)
         $this->app['config']->set('database.default', 'testing');
-        $this->app['config']->set('database.connections.testing.database', 'lifespan_beta_testing');
+        $this->app['config']->set('database.connections.testing.database', $this->getTestDatabaseName());
     }
 
     /** @test */
