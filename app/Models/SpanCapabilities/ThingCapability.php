@@ -3,6 +3,8 @@
 namespace App\Models\SpanCapabilities;
 
 use App\Models\Span;
+use App\Models\SpanType;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Thing capability for spans.
@@ -27,14 +29,28 @@ class ThingCapability implements SpanCapability
         return $this->span;
     }
 
+    /**
+     * Get allowed thing subtypes from the SpanType (DB) - cached for performance
+     */
+    public static function getSubtypeOptions(): array
+    {
+        return Cache::remember('span_type_thing_subtype_options', 3600, function () {
+            $thingType = SpanType::find('thing');
+
+            return $thingType?->getSubtypeOptions() ?? [];
+        });
+    }
+
     public function getMetadataSchema(): array
     {
+        $options = self::getSubtypeOptions();
+
         return [
             'subtype' => [
                 'type' => 'text',
                 'label' => 'Type of Thing',
                 'component' => 'select',
-                'options' => ['book', 'album', 'painting', 'sculpture', 'recording', 'photo', 'film', 'other'],
+                'options' => empty($options) ? ['other'] : $options,
                 'required' => true
             ]
         ];
@@ -43,9 +59,9 @@ class ThingCapability implements SpanCapability
     public function validateMetadata(): void
     {
         $metadata = $this->span->metadata ?? [];
-        
-        // Validate subtype
-        if (!isset($metadata['subtype']) || !in_array($metadata['subtype'], ['book', 'album', 'painting', 'sculpture', 'recording', 'photo', 'film', 'other'])) {
+        $allowedSubtypes = self::getSubtypeOptions();
+
+        if (!isset($metadata['subtype']) || !in_array($metadata['subtype'], $allowedSubtypes)) {
             throw new \InvalidArgumentException('Invalid thing subtype');
         }
     }
@@ -68,7 +84,9 @@ class ThingCapability implements SpanCapability
      */
     public function setSubtype(string $subtype): void
     {
-        if (!in_array($subtype, ['book', 'album', 'painting', 'sculpture', 'recording', 'photo', 'film', 'other'])) {
+        $allowedSubtypes = self::getSubtypeOptions();
+
+        if (!in_array($subtype, $allowedSubtypes)) {
             throw new \InvalidArgumentException('Invalid thing subtype');
         }
 

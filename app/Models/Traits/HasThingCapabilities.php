@@ -2,6 +2,8 @@
 
 namespace App\Models\Traits;
 
+use App\Models\SpanCapabilities\ThingCapability;
+
 /**
  * Adds thing capabilities to a Span model.
  * This trait should be used by thing spans.
@@ -27,9 +29,9 @@ trait HasThingCapabilities
     protected function validateThingData()
     {
         $metadata = $this->metadata ?? [];
-        
-        // Validate subtype
-        if (!isset($metadata['subtype']) || !in_array($metadata['subtype'], ['book', 'album', 'painting', 'sculpture', 'photo', 'other'])) {
+        $allowedSubtypes = ThingCapability::getSubtypeOptions();
+
+        if (!isset($metadata['subtype']) || !in_array($metadata['subtype'], $allowedSubtypes)) {
             throw new \InvalidArgumentException('Invalid thing subtype');
         }
     }
@@ -47,7 +49,9 @@ trait HasThingCapabilities
      */
     public function setThingSubtype(string $subtype): self
     {
-        if (!in_array($subtype, ['book', 'album', 'painting', 'sculpture', 'photo', 'other'])) {
+        $allowedSubtypes = ThingCapability::getSubtypeOptions();
+
+        if (!in_array($subtype, $allowedSubtypes)) {
             throw new \InvalidArgumentException('Invalid thing subtype');
         }
 

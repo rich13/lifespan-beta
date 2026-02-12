@@ -110,6 +110,8 @@
             'device' => 'cpu',
             'artifact' => 'archive',
             'plaque' => 'award',
+            'series' => 'collection',
+            'episode' => 'tv',
             'other' => 'box',
             
             // Organisation subtypes
