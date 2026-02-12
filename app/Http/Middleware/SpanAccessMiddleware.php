@@ -35,8 +35,8 @@ class SpanAccessMiddleware
             return $next($request);
         }
 
-        // For show route
-        if ($routeName === 'spans.show') {
+        // For show route (including JSON variant)
+        if (in_array($routeName, ['spans.show', 'spans.show.json'])) {
             $span = $request->route('span') ?? $request->route('subject');
             
             // Handle case when span doesn't exist
@@ -47,6 +47,9 @@ class SpanAccessMiddleware
             // For unauthenticated users, redirect to login for non-public spans
             if (!Auth::check()) {
                 if ($span->access_level !== 'public') {
+                    if ($routeName === 'spans.show.json') {
+                        return response()->json(['error' => 'Unauthorized'], 401);
+                    }
                     return redirect()->route('login');
                 }
                 return $next($request);
@@ -123,9 +126,9 @@ class SpanAccessMiddleware
         }
 
         // For connection type routes and history routes (same logic as show route)
-        if (in_array($routeName, ['spans.connection-types.index', 'spans.connection-types.show', 'spans.connection', 'spans.connections', 'spans.history', 'spans.history.version'])) {
+        if (in_array($routeName, ['spans.connection-types.index', 'spans.connection-types.show', 'spans.connection', 'spans.connection.json', 'spans.connection.by-id', 'spans.connection.by-id.json', 'spans.connections', 'spans.history', 'spans.history.version'])) {
             // For the specific connection route, we need to check both subject and object
-            if ($routeName === 'spans.connection') {
+            if (in_array($routeName, ['spans.connection', 'spans.connection.json', 'spans.connection.by-id', 'spans.connection.by-id.json'])) {
                 $subject = $request->route('subject');
                 $object = $request->route('object');
                 
@@ -137,6 +140,9 @@ class SpanAccessMiddleware
                 // For unauthenticated users, both spans must be public
                 if (!Auth::check()) {
                     if ($subject->access_level !== 'public' || $object->access_level !== 'public') {
+                        if (in_array($routeName, ['spans.connection.json', 'spans.connection.by-id.json'])) {
+                            return response()->json(['error' => 'Unauthorized'], 401);
+                        }
                         return redirect()->route('login');
                     }
                     return $next($request);

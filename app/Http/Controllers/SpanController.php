@@ -47,7 +47,7 @@ class SpanController extends Controller
     public function __construct(YamlSpanService $yamlService, RouteReservationService $routeReservationService)
     {
         // Require auth for all routes except show, index, search, explore, desertIslandDiscs, explorePlaques, connectionTypes, connectionsByType, showConnection, and listConnections
-        $this->middleware('auth')->except(['show', 'index', 'search', 'explore', 'desertIslandDiscs', 'explorePlaques', 'connectionTypes', 'connectionsByType', 'showConnection', 'listConnections']);
+        $this->middleware('auth')->except(['show', 'showJson', 'index', 'search', 'explore', 'desertIslandDiscs', 'explorePlaques', 'connectionTypes', 'connectionsByType', 'showConnection', 'showConnectionJson', 'showConnectionBySpanId', 'showConnectionBySpanIdJson', 'listConnections']);
         $this->yamlService = $yamlService;
         $this->routeReservationService = $routeReservationService;
     }
@@ -782,9 +782,14 @@ class SpanController extends Controller
     /**
      * Display the specified span.
      */
-    public function show(Request $request, Span $subject): View|\Illuminate\Http\RedirectResponse|\Illuminate\Http\Response
+    public function show(Request $request, Span $subject): View|\Illuminate\Http\RedirectResponse|\Illuminate\Http\Response|\Illuminate\Http\JsonResponse
     {
         try {
+            // If URL ends with .json, return JSON (handles case when /{subject} route matches before /{span}.json)
+            if (str_ends_with($request->path(), '.json')) {
+                return $this->showJson($subject);
+            }
+
             // If we're accessing via UUID and a slug exists, redirect to slug URL for consistency
             $routeParam = $request->segment(2); // Get the actual URL segment
 
@@ -1083,6 +1088,41 @@ class SpanController extends Controller
                 ]);
             }
         }
+    }
+
+    /**
+     * Return core span fields as JSON.
+     * GET /spans/{span}.json
+     */
+    public function showJson(Span $span): \Illuminate\Http\JsonResponse
+    {
+        // Check access: private span requires auth
+        if ($span->access_level !== 'public' && !Auth::check()) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        if (Auth::check()) {
+            $this->authorize('view', $span);
+        }
+
+        $data = [
+            'id' => $span->id,
+            'name' => $span->name,
+            'slug' => $span->slug,
+            'short_id' => $span->short_id,
+            'type_id' => $span->type_id,
+            'subtype' => $span->subtype,
+            'description' => $span->description,
+            'start_year' => $span->start_year,
+            'end_year' => $span->end_year,
+            'formatted_start_date' => $span->formatted_start_date,
+            'formatted_end_date' => $span->formatted_end_date,
+            'metadata' => $span->metadata,
+            'access_level' => $span->access_level,
+            'url' => route('spans.show', ['subject' => $span]),
+        ];
+
+        return response()->json($data);
     }
 
     /**
@@ -4550,6 +4590,148 @@ class SpanController extends Controller
     }
 
     /**
+     * Return connection span (blue plaque) as JSON.
+     * GET /spans/{subject}/{predicate}/{object}.json
+     */
+    public function showConnectionJson(Span $subject, string $predicate, Span $object): \Illuminate\Http\JsonResponse
+    {
+        // Find the connection type based on the predicate
+        $predicateWithSpaces = str_replace('-', ' ', $predicate);
+        $connectionType = ConnectionType::where('forward_predicate', $predicateWithSpaces)
+            ->orWhere('inverse_predicate', $predicateWithSpaces)
+            ->first();
+
+        if (!$connectionType) {
+            return response()->json(['error' => 'Connection type not found'], 404);
+        }
+
+        // Find all connections between the subject and object of this type
+        $connections = Connection::where('type_id', $connectionType->type)
+            ->where(function ($query) use ($subject, $object) {
+                $query->where(function ($q) use ($subject, $object) {
+                    $q->where('parent_id', $subject->id)->where('child_id', $object->id);
+                })->orWhere(function ($q) use ($subject, $object) {
+                    $q->where('parent_id', $object->id)->where('child_id', $subject->id);
+                });
+            })
+            ->with('connectionSpan')
+            ->get();
+
+        // Filter to connections with accessible connection spans
+        $user = Auth::user();
+        $connections = $connections->filter(function ($connection) use ($user) {
+            $connectionSpan = $connection->connectionSpan;
+            if (!$connectionSpan) {
+                return false;
+            }
+            if ($user) {
+                return $connectionSpan->isAccessibleBy($user);
+            }
+            return $connectionSpan->access_level === 'public';
+        })->values();
+
+        if ($connections->isEmpty()) {
+            return response()->json(['error' => 'Connection not found'], 404);
+        }
+
+        // Multiple connections: return disambiguation payload
+        if ($connections->count() > 1) {
+            return response()->json([
+                'message' => 'Multiple connections found; specify short_id to disambiguate',
+                'subject' => $this->spanToJsonSummary($subject),
+                'predicate' => $predicate,
+                'object' => $this->spanToJsonSummary($object),
+                'connections' => $connections->map(fn ($c) => [
+                    'short_id' => $c->connectionSpan?->short_id,
+                    'url' => $c->connectionSpan?->short_id
+                        ? route('spans.connection.by-id.json', [
+                            'subject' => $subject,
+                            'predicate' => $predicate,
+                            'object' => $object,
+                            'shortId' => $c->connectionSpan->short_id,
+                        ])
+                        : null,
+                ])->all(),
+            ], 300);
+        }
+
+        $connection = $connections->first();
+        $connectionSpan = $connection->connectionSpan;
+
+        // Build blue plaque style response
+        $bluePlaqueCardData = $connectionSpan->type_id === 'person' ? $this->getBluePlaqueCardData($connectionSpan) : null;
+        $plaque = $bluePlaqueCardData['plaque'] ?? null;
+        $location = $plaque
+            ? $plaque->connectionsAsSubject()->where('type_id', 'located')->with('child')->first()?->child
+            : null;
+        $inscription = $connectionSpan->description ?? $plaque?->description;
+
+        $data = [
+            'subject' => $this->spanToJsonSummary($subject),
+            'predicate' => $predicate,
+            'object' => $this->spanToJsonSummary($object),
+            'connection_span' => $this->spanToJsonCore($connectionSpan),
+            'connection_type' => [
+                'forward_predicate' => $connectionType->forward_predicate,
+                'inverse_predicate' => $connectionType->inverse_predicate,
+            ],
+            'inscription' => $inscription,
+            'dates' => [
+                'start_year' => $connectionSpan->start_year,
+                'end_year' => $connectionSpan->end_year,
+                'formatted_start_date' => $connectionSpan->formatted_start_date,
+                'formatted_end_date' => $connectionSpan->formatted_end_date,
+            ],
+            'location' => $location ? [
+                'id' => $location->id,
+                'name' => $location->name,
+                'slug' => $location->slug,
+            ] : null,
+            'url' => route('spans.connection', [
+                'subject' => $subject,
+                'predicate' => $predicate,
+                'object' => $object,
+            ]),
+        ];
+
+        return response()->json($data);
+    }
+
+    /**
+     * Summary of span for JSON (id, name, slug, type_id).
+     */
+    private function spanToJsonSummary(Span $span): array
+    {
+        return [
+            'id' => $span->id,
+            'name' => $span->name,
+            'slug' => $span->slug,
+            'type_id' => $span->type_id,
+        ];
+    }
+
+    /**
+     * Core span fields for JSON.
+     */
+    private function spanToJsonCore(Span $span): array
+    {
+        return [
+            'id' => $span->id,
+            'name' => $span->name,
+            'slug' => $span->slug,
+            'short_id' => $span->short_id,
+            'type_id' => $span->type_id,
+            'subtype' => $span->subtype,
+            'description' => $span->description,
+            'start_year' => $span->start_year,
+            'end_year' => $span->end_year,
+            'formatted_start_date' => $span->formatted_start_date,
+            'formatted_end_date' => $span->formatted_end_date,
+            'metadata' => $span->metadata,
+        ];
+    }
+
+    /**
      * Redirect legacy UUID-based connection URL to canonical short_id URL.
      */
     public function redirectConnectionFromUuidToShortId(Span $subject, string $predicate, Span $object, string $connectionSpanId): \Illuminate\Http\RedirectResponse
@@ -4641,6 +4823,91 @@ class SpanController extends Controller
         $bluePlaqueCardData = $connectionSpan->type_id === 'person' ? $this->getBluePlaqueCardData($connectionSpan) : null;
         $directorConnectionsByFilmId = ($connectionSpan->type_id === 'person') ? $this->getDirectorConnectionsByFilmId($precomputedConnections) : collect();
         return view('spans.show', compact('span', 'desertIslandDiscsSet', 'subject', 'object', 'connectionType', 'familyData', 'parentConnections', 'childConnections', 'story', 'predicate', 'educationCardData', 'connectionForSpan', 'precomputedConnections', 'annotatingNotes', 'bluePlaqueCardData', 'directorConnectionsByFilmId'));
+    }
+
+    /**
+     * Return connection span by short_id as JSON.
+     * GET /spans/{subject}/{predicate}/{object}/{shortId}.json
+     */
+    public function showConnectionBySpanIdJson(Span $subject, string $predicate, Span $object, string $shortId): \Illuminate\Http\JsonResponse
+    {
+        $predicateWithSpaces = str_replace('-', ' ', $predicate);
+        $connectionType = ConnectionType::where('forward_predicate', $predicateWithSpaces)
+            ->orWhere('inverse_predicate', $predicateWithSpaces)
+            ->first();
+
+        if (!$connectionType) {
+            return response()->json(['error' => 'Connection type not found'], 404);
+        }
+
+        $connectionSpan = Span::where('short_id', $shortId)->where('type_id', 'connection')->first();
+        if (!$connectionSpan) {
+            return response()->json(['error' => 'Connection not found'], 404);
+        }
+
+        $connection = Connection::where('type_id', $connectionType->type)
+            ->where('connection_span_id', $connectionSpan->id)
+            ->where(function ($query) use ($subject, $object) {
+                $query->where(function ($q) use ($subject, $object) {
+                    $q->where('parent_id', $subject->id)->where('child_id', $object->id);
+                })->orWhere(function ($q) use ($subject, $object) {
+                    $q->where('parent_id', $object->id)->where('child_id', $subject->id);
+                });
+            })
+            ->with('connectionSpan')
+            ->first();
+
+        if (!$connection || !$connection->connectionSpan) {
+            return response()->json(['error' => 'Connection not found'], 404);
+        }
+
+        $connectionSpan = $connection->connectionSpan;
+        $user = Auth::user();
+        if ($user) {
+            if (!$connectionSpan->isAccessibleBy($user)) {
+                return response()->json(['error' => 'Connection not found'], 404);
+            }
+        } elseif ($connectionSpan->access_level !== 'public') {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $bluePlaqueCardData = $connectionSpan->type_id === 'person' ? $this->getBluePlaqueCardData($connectionSpan) : null;
+        $plaque = $bluePlaqueCardData['plaque'] ?? null;
+        $location = $plaque
+            ? $plaque->connectionsAsSubject()->where('type_id', 'located')->with('child')->first()?->child
+            : null;
+        $inscription = $connectionSpan->description ?? $plaque?->description;
+
+        $data = [
+            'subject' => $this->spanToJsonSummary($subject),
+            'predicate' => $predicate,
+            'object' => $this->spanToJsonSummary($object),
+            'connection_span' => $this->spanToJsonCore($connectionSpan),
+            'connection_type' => [
+                'forward_predicate' => $connectionType->forward_predicate,
+                'inverse_predicate' => $connectionType->inverse_predicate,
+            ],
+            'inscription' => $inscription,
+            'dates' => [
+                'start_year' => $connectionSpan->start_year,
+                'end_year' => $connectionSpan->end_year,
+                'formatted_start_date' => $connectionSpan->formatted_start_date,
+                'formatted_end_date' => $connectionSpan->formatted_end_date,
+            ],
+            'location' => $location ? [
+                'id' => $location->id,
+                'name' => $location->name,
+                'slug' => $location->slug,
+            ] : null,
+            'url' => route('spans.connection.by-id', [
+                'subject' => $subject,
+                'predicate' => $predicate,
+                'object' => $object,
+                'shortId' => $shortId,
+            ]),
+        ];
+
+        return response()->json($data);
     }
 
     /**

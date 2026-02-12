@@ -30,6 +30,9 @@ class RouteServiceProvider extends ServiceProvider
         $this->configureRateLimiting();
 
         Route::bind('span', function ($value) {
+            // Strip .json suffix if present (for /spans/{span}.json routes)
+            $value = preg_replace('/\.json$/', '', $value);
+
             // First try to find by slug since that's what we use in URLs
             $span = Span::where('slug', $value)->with('type')->first();
             
@@ -47,6 +50,9 @@ class RouteServiceProvider extends ServiceProvider
         });
 
         Route::bind('subject', function ($value) {
+            // Strip .json suffix if present (for /spans/{subject}/{predicate}/{object}.json routes)
+            $value = preg_replace('/\.json$/', '', $value);
+
             // First try to find by slug since that's what we use in URLs
             $span = Span::where('slug', $value)->with('type')->first();
             
@@ -60,6 +66,20 @@ class RouteServiceProvider extends ServiceProvider
                 abort(404);
             }
 
+            return $span;
+        });
+
+        Route::bind('object', function ($value) {
+            // Strip .json suffix if present (for /spans/{subject}/{predicate}/{object}.json routes)
+            $value = preg_replace('/\.json$/', '', $value);
+
+            $span = Span::where('slug', $value)->with('type')->first();
+            if (!$span && Str::isUuid($value)) {
+                $span = Span::where('id', $value)->with('type')->first();
+            }
+            if (!$span) {
+                abort(404);
+            }
             return $span;
         });
 
