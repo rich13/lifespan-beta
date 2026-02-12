@@ -72,8 +72,12 @@ Route::get('/health', function () {
     }
 });
 
-// Debug route for troubleshooting
+// Debug route for troubleshooting - disabled in production for security
 Route::get('/debug', function() {
+    if (app()->environment('production')) {
+        abort(404);
+    }
+
     try {
         // Test basic database connection
         $dbStatus = DB::connection()->getPdo() ? 'connected' : 'failed';
@@ -123,8 +127,12 @@ Route::get('/error', function(Request $request) {
     abort((int) $code);
 })->name('error.test');
 
-// Sentry test route - works in all environments
+// Sentry test route - disabled in production to prevent abuse
 Route::post('/sentry-test', function() {
+    if (app()->environment('production')) {
+        abort(404);
+    }
+
     try {
         if (app()->bound('sentry')) {
             // Send a test event to Sentry with proper Severity object
@@ -227,6 +235,11 @@ Route::middleware('web')->group(function () {
             // Search route (works with session auth)
             Route::get('/search', [SpanController::class, 'search'])->name('spans.search');
             
+            // JSON endpoint - MUST come before auth group's /{subject} catch-all so /spans/x.json returns 401 for private spans (not 302 redirect)
+            Route::middleware('span.access')->group(function () {
+                Route::get('/{span}.json', [SpanController::class, 'showJson'])->name('spans.show.json');
+            });
+
             // Timeline routes moved to /api/spans/{span} for better separation of HTML and JSON endpoints
             
             // Types route (public)
@@ -893,9 +906,14 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
             Route::get('/{subject}/{predicate}/{object}/{connectionSpanId}', [SpanController::class, 'redirectConnectionFromUuidToShortId'])
                 ->whereUuid('connectionSpanId')
                 ->name('spans.connection.by-uuid-legacy');
+            Route::get('/{subject}/{predicate}/{object}/{shortId}.json', [SpanController::class, 'showConnectionBySpanIdJson'])
+                ->where('shortId', '[0-9A-Za-z]{8}')
+                ->name('spans.connection.by-id.json');
             Route::get('/{subject}/{predicate}/{object}/{shortId}', [SpanController::class, 'showConnectionBySpanId'])
                 ->where('shortId', '[0-9A-Za-z]{8}')
                 ->name('spans.connection.by-id');
+            // JSON endpoints - must come before HTML routes
+            Route::get('/{subject}/{predicate}/{object}.json', [SpanController::class, 'showConnectionJson'])->name('spans.connection.json');
             Route::get('/{subject}/{predicate}/{object}', [SpanController::class, 'showConnection'])->name('spans.connection');
             
             // Legacy connection type routes

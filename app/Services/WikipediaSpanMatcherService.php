@@ -387,24 +387,24 @@ class WikipediaSpanMatcherService
                     $classes .= ' text-placeholder';
                 }
                 
-                $replacement = "<a href=\"{$link}\" class=\"{$classes}\" title=\"{$span['name']}\">{$entity}</a>";
+                $replacement = '<a href="' . e($link) . '" class="' . e($classes) . '" title="' . e($span['name']) . '">' . e($entity) . '</a>';
             } elseif ($type === 'full_date') {
                 // Full date like "25 August 1862"
                 $date = $match['date'];
                 $link = route('date.explore', ['date' => $date]);
                 
-                $replacement = "<a href=\"{$link}\" class=\"text-decoration-none\" title=\"View events on {$entity}\">{$entity}</a>";
+                $replacement = '<a href="' . e($link) . '" class="text-decoration-none" title="View events on ' . e($entity) . '">' . e($entity) . '</a>';
             } elseif ($type === 'month_year') {
                 // Month and year like "August 1862"
                 $date = $match['date'];
                 $link = route('date.explore', ['date' => $date]);
                 
-                $replacement = "<a href=\"{$link}\" class=\"text-decoration-none\" title=\"View events in {$entity}\">{$entity}</a>";
+                $replacement = '<a href="' . e($link) . '" class="text-decoration-none" title="View events in ' . e($entity) . '">' . e($entity) . '</a>';
             } elseif ($type === 'year') {
                 $year = $match['year'];
                 $link = route('date.explore', ['date' => $year]);
                 
-                $replacement = "<a href=\"{$link}\" class=\"text-decoration-none\">{$entity}</a>";
+                $replacement = '<a href="' . e($link) . '" class="text-decoration-none">' . e($entity) . '</a>';
             } else {
                 continue; // Skip if no valid match
             }
