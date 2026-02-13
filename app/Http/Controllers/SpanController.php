@@ -47,7 +47,7 @@ class SpanController extends Controller
     public function __construct(YamlSpanService $yamlService, RouteReservationService $routeReservationService)
     {
         // Require auth for all routes except show, index, search, explore, desertIslandDiscs, explorePlaques, connectionTypes, connectionsByType, showConnection, and listConnections
-        $this->middleware('auth')->except(['show', 'showJson', 'index', 'search', 'explore', 'desertIslandDiscs', 'explorePlaques', 'connectionTypes', 'connectionsByType', 'showConnection', 'showConnectionJson', 'showConnectionBySpanId', 'showConnectionBySpanIdJson', 'listConnections']);
+        $this->middleware('auth')->except(['show', 'showJson', 'plaque', 'plaqueConnection', 'plaquesIndex', 'plaquesSearch', 'index', 'search', 'explore', 'desertIslandDiscs', 'explorePlaques', 'connectionTypes', 'connectionsByType', 'showConnection', 'showConnectionJson', 'showConnectionBySpanId', 'showConnectionBySpanIdJson', 'listConnections']);
         $this->yamlService = $yamlService;
         $this->routeReservationService = $routeReservationService;
     }
@@ -1088,6 +1088,214 @@ class SpanController extends Controller
                 ]);
             }
         }
+    }
+
+    /**
+     * Display the plaques index with 5 random people.
+     * GET /plaques
+     */
+    public function plaquesIndex(Request $request): View
+    {
+        $query = Span::where('type_id', 'person')
+            ->where(function ($q) {
+                $q->whereHas('connectionsAsSubject', function ($sub) {
+                    $sub->whereHas('object', fn ($o) => $o->where('type_id', 'place'))
+                        ->whereNotNull('connection_span_id')
+                        ->whereHas('connectionSpan', fn ($cs) => $cs->whereNotNull('short_id'));
+                })->orWhereHas('connectionsAsObject', function ($sub) {
+                    $sub->whereHas('subject', fn ($s) => $s->where('type_id', 'place'))
+                        ->whereNotNull('connection_span_id')
+                        ->whereHas('connectionSpan', fn ($cs) => $cs->whereNotNull('short_id'));
+                });
+            });
+
+        if (!Auth::check()) {
+            $query->where('access_level', 'public');
+        } else {
+            $user = Auth::user();
+            if (!$user->getEffectiveAdminStatus()) {
+                $query->where(function ($q) use ($user) {
+                    $q->where('access_level', 'public')
+                        ->orWhere('owner_id', $user->id)
+                        ->orWhere(function ($q) use ($user) {
+                            $q->where('access_level', 'shared')
+                                ->whereExists(function ($subquery) use ($user) {
+                                    $subquery->select('id')
+                                        ->from('span_permissions')
+                                        ->whereColumn('span_permissions.span_id', 'spans.id')
+                                        ->where('span_permissions.user_id', $user->id);
+                                });
+                        });
+                });
+            }
+        }
+
+        $people = $query->inRandomOrder()->limit(5)->get();
+
+        return view('plaques.home', compact('people'));
+    }
+
+    /**
+     * Search for people with place connections (JSON for live search).
+     * GET /plaques/search?q=...
+     */
+    public function plaquesSearch(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $query = Span::where('type_id', 'person')
+            ->where(function ($q) {
+                $q->whereHas('connectionsAsSubject', function ($sub) {
+                    $sub->whereHas('object', fn ($o) => $o->where('type_id', 'place'))
+                        ->whereNotNull('connection_span_id')
+                        ->whereHas('connectionSpan', fn ($cs) => $cs->whereNotNull('short_id'));
+                })->orWhereHas('connectionsAsObject', function ($sub) {
+                    $sub->whereHas('subject', fn ($s) => $s->where('type_id', 'place'))
+                        ->whereNotNull('connection_span_id')
+                        ->whereHas('connectionSpan', fn ($cs) => $cs->whereNotNull('short_id'));
+                });
+            });
+
+        if (!Auth::check()) {
+            $query->where('access_level', 'public');
+        } else {
+            $user = Auth::user();
+            if (!$user->getEffectiveAdminStatus()) {
+                $query->where(function ($q) use ($user) {
+                    $q->where('access_level', 'public')
+                        ->orWhere('owner_id', $user->id)
+                        ->orWhere(function ($q) use ($user) {
+                            $q->where('access_level', 'shared')
+                                ->whereExists(function ($subquery) use ($user) {
+                                    $subquery->select('id')
+                                        ->from('span_permissions')
+                                        ->whereColumn('span_permissions.span_id', 'spans.id')
+                                        ->where('span_permissions.user_id', $user->id);
+                                });
+                        });
+                });
+            }
+        }
+
+        $search = trim($request->get('q', ''));
+        if ($search !== '') {
+            $query->where('name', 'ilike', '%' . $search . '%');
+        }
+
+        $limit = (int) $request->get('limit', 10);
+        $people = $query->orderBy('name')->limit($limit)->get();
+
+        return response()->json([
+            'people' => $people->map(fn ($p) => [
+                'id' => $p->id,
+                'name' => $p->getDisplayTitle(),
+                'url' => route('plaques.show', $p),
+            ]),
+        ]);
+    }
+
+    /**
+     * Display a minimal "plaque" view of a span.
+     * GET /plaques/{span}
+     */
+    public function plaque(Span $span): View
+    {
+        $placeConnections = $this->getPlaceConnectionsForPlaque($span);
+        return view('plaques.show', compact('span', 'placeConnections'));
+    }
+
+    /**
+     * Get connections to places for mini-plaques on a span's plaque view.
+     */
+    private function getPlaceConnectionsForPlaque(Span $span): \Illuminate\Support\Collection
+    {
+        $user = Auth::user();
+        $connections = Connection::where(function ($q) use ($span) {
+            $q->where('parent_id', $span->id)->orWhere('child_id', $span->id);
+        })
+            ->with(['subject', 'object', 'type', 'connectionSpan'])
+            ->get();
+
+        return $connections->filter(function ($conn) use ($span, $user) {
+            $other = $conn->parent_id === $span->id ? $conn->object : $conn->subject;
+            if (!$other || $other->type_id !== 'place') {
+                return false;
+            }
+            $connSpan = $conn->connectionSpan;
+            if (!$connSpan || !$connSpan->short_id) {
+                return false;
+            }
+            if ($user) {
+                return $connSpan->isAccessibleBy($user) && $other->isAccessibleBy($user);
+            }
+            return $connSpan->access_level === 'public' && $other->access_level === 'public';
+        })->values()->map(function ($conn) use ($span) {
+            $connType = $conn->type;
+            $isForward = $conn->parent_id === $span->id;
+            $subject = $conn->subject;
+            $object = $conn->object;
+            $placeSpan = $subject->type_id === 'place' ? $subject : $object;
+            $predicate = str_replace(' ', '-', $isForward ? $connType->forward_predicate : $connType->inverse_predicate);
+            return [
+                'url' => route('plaques.connection', [
+                    'subject' => $subject,
+                    'predicate' => $predicate,
+                    'object' => $object,
+                    'shortId' => $conn->connectionSpan->short_id,
+                ]),
+                'place_name' => $placeSpan->getDisplayTitle(),
+                'predicate' => $isForward ? $connType->forward_predicate : $connType->inverse_predicate,
+            ];
+        });
+    }
+
+    /**
+     * Display a minimal "plaque" view of a connection span.
+     * GET /plaques/{subject}/{predicate}/{object}/{shortId}
+     */
+    public function plaqueConnection(Span $subject, string $predicate, Span $object, string $shortId): View|\Illuminate\Http\RedirectResponse
+    {
+        $predicateWithSpaces = str_replace('-', ' ', $predicate);
+        $connectionType = ConnectionType::where('forward_predicate', $predicateWithSpaces)
+            ->orWhere('inverse_predicate', $predicateWithSpaces)
+            ->first();
+
+        if (!$connectionType) {
+            abort(404, 'Connection type not found');
+        }
+
+        $connectionSpan = Span::where('short_id', $shortId)->where('type_id', 'connection')->first();
+        if (!$connectionSpan) {
+            abort(404, 'Connection not found');
+        }
+
+        $connection = Connection::where('type_id', $connectionType->type)
+            ->where('connection_span_id', $connectionSpan->id)
+            ->where(function ($query) use ($subject, $object) {
+                $query->where(function ($q) use ($subject, $object) {
+                    $q->where('parent_id', $subject->id)->where('child_id', $object->id);
+                })->orWhere(function ($q) use ($subject, $object) {
+                    $q->where('parent_id', $object->id)->where('child_id', $subject->id);
+                });
+            })
+            ->with('connectionSpan')
+            ->first();
+
+        if (!$connection || !$connection->connectionSpan) {
+            abort(404, 'Connection not found');
+        }
+
+        $connectionSpan = $connection->connectionSpan;
+        $user = Auth::user();
+        if ($user) {
+            if (!$connectionSpan->isAccessibleBy($user)) {
+                abort(404, 'Connection not found');
+            }
+        } elseif ($connectionSpan->access_level !== 'public') {
+            return redirect()->route('login');
+        }
+
+        $span = $connectionSpan;
+        $placeConnections = collect();
+        return view('plaques.show', compact('span', 'subject', 'object', 'predicate', 'placeConnections'));
     }
 
     /**

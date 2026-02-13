@@ -208,6 +208,16 @@ Route::middleware('web')->group(function () {
         ->where('date', '[0-9]{4}(-[0-9]{2}(-[0-9]{2})?)?')
         ->name('date.explore');
 
+    // Plaque view - minimal layout for viewing any span as a "plaque"
+    Route::prefix('plaques')->middleware('span.access')->group(function () {
+        Route::get('/', [SpanController::class, 'plaquesIndex'])->name('plaques.index');
+        Route::get('/search', [SpanController::class, 'plaquesSearch'])->name('plaques.search');
+        Route::get('/{subject}/{predicate}/{object}/{shortId}', [SpanController::class, 'plaqueConnection'])
+            ->where('shortId', '[0-9A-Za-z]{8}')
+            ->name('plaques.connection');
+        Route::get('/{span}', [SpanController::class, 'plaque'])->name('plaques.show');
+    });
+
     // Span connection tooltip data (JSON)
     Route::get('/api/spans/{span}/connection-to/{other}', [\App\Http\Controllers\Api\SpanConnectionController::class, 'show'])
         ->name('api.spans.connection');

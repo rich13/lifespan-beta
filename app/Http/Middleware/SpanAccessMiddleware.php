@@ -35,8 +35,8 @@ class SpanAccessMiddleware
             return $next($request);
         }
 
-        // For show route (including JSON variant)
-        if (in_array($routeName, ['spans.show', 'spans.show.json'])) {
+        // For show route (including JSON variant) and plaque view
+        if (in_array($routeName, ['spans.show', 'spans.show.json', 'plaques.show'])) {
             $span = $request->route('span') ?? $request->route('subject');
             
             // Handle case when span doesn't exist
@@ -126,9 +126,9 @@ class SpanAccessMiddleware
         }
 
         // For connection type routes and history routes (same logic as show route)
-        if (in_array($routeName, ['spans.connection-types.index', 'spans.connection-types.show', 'spans.connection', 'spans.connection.json', 'spans.connection.by-id', 'spans.connection.by-id.json', 'spans.connections', 'spans.history', 'spans.history.version'])) {
+        if (in_array($routeName, ['spans.connection-types.index', 'spans.connection-types.show', 'spans.connection', 'spans.connection.json', 'spans.connection.by-id', 'spans.connection.by-id.json', 'plaques.connection', 'spans.connections', 'spans.history', 'spans.history.version'])) {
             // For the specific connection route, we need to check both subject and object
-            if (in_array($routeName, ['spans.connection', 'spans.connection.json', 'spans.connection.by-id', 'spans.connection.by-id.json'])) {
+            if (in_array($routeName, ['spans.connection', 'spans.connection.json', 'spans.connection.by-id', 'spans.connection.by-id.json', 'plaques.connection'])) {
                 $subject = $request->route('subject');
                 $object = $request->route('object');
                 
