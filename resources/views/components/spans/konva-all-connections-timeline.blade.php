@@ -180,11 +180,56 @@
             </div>
         </div>
     </div>
-    <div class="card-body" style="overflow-x: auto;">
+    <div class="card-body" style="overflow-x: auto; position: relative;">
         <div
             id="{{ $containerId }}"
             style="height: auto; min-height: 220px; width: 100%;"
         ></div>
+
+        {{-- Inline edit panel (shown when a connection bar is clicked) --}}
+        <div id="{{ $containerId }}-edit-panel" class="lifespanner-edit-panel" style="display:none;">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+                <strong class="edit-panel-title" style="font-size:13px; max-width:210px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></strong>
+                <button type="button" class="btn-close edit-panel-close ms-2" style="font-size:10px; flex-shrink:0;" aria-label="Close"></button>
+            </div>
+            <div class="mb-2">
+                <label class="form-label mb-1" style="font-size:11px; color:#666; font-weight:600;">Start Date</label>
+                <div class="d-flex gap-1">
+                    <input type="number" class="form-control form-control-sm edit-start-year" placeholder="Year" min="1000" max="2100" style="font-size:11px; width:70px;">
+                    <input type="number" class="form-control form-control-sm edit-start-month" placeholder="MM" min="1" max="12" style="font-size:11px; width:52px;">
+                    <input type="number" class="form-control form-control-sm edit-start-day" placeholder="DD" min="1" max="31" style="font-size:11px; width:52px;">
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label mb-1" style="font-size:11px; color:#666; font-weight:600;">End Date <span class="fw-normal text-muted">(blank = ongoing)</span></label>
+                <div class="d-flex gap-1">
+                    <input type="number" class="form-control form-control-sm edit-end-year" placeholder="Year" min="1000" max="2100" style="font-size:11px; width:70px;">
+                    <input type="number" class="form-control form-control-sm edit-end-month" placeholder="MM" min="1" max="12" style="font-size:11px; width:52px;">
+                    <input type="number" class="form-control form-control-sm edit-end-day" placeholder="DD" min="1" max="31" style="font-size:11px; width:52px;">
+                </div>
+            </div>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-primary edit-panel-apply flex-fill">Apply</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary edit-panel-revert" title="Revert this bar to original dates">Revert</button>
+            </div>
+        </div>
+    </div>
+
+    {{-- Save / discard toolbar (shown when there are pending edits) --}}
+    <div id="{{ $containerId }}-save-bar" class="lifespanner-save-bar d-none">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <i class="bi bi-pencil-fill text-warning"></i>
+            <span class="save-bar-label fw-semibold" style="font-size:13px;">Unsaved changes</span>
+            <span class="save-bar-count badge bg-warning text-dark">0</span>
+            <div class="ms-auto d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-success save-bar-save">
+                    <i class="bi bi-check-lg me-1"></i>Save all
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary save-bar-discard">
+                    Discard all
+                </button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -217,6 +262,27 @@
     .konva-connections-timeline-card .connection-type-filter-buttons .btn.connection-type-inactive {
         opacity: 0.5;
     }
+
+    /* Inline edit panel */
+    .lifespanner-edit-panel {
+        position: absolute;
+        z-index: 200;
+        background: #fff;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        padding: 12px 14px;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+        min-width: 240px;
+        max-width: 320px;
+    }
+
+    /* Save / discard toolbar */
+    .lifespanner-save-bar {
+        border-top: 1px solid #ffc107;
+        background: #fff8e1;
+        padding: 8px 16px;
+        border-radius: 0 0 4px 4px;
+    }
 </style>
 @endpush
 
@@ -241,11 +307,11 @@
 
                     // Basic geometry (symmetric horizontal margins inside the card)
                     var marginTop = 20;
-                    var marginLeft = 40;
+                    var marginLeft = 170; // wider left margin for track header labels
                     var marginRight = 40;
                     var marginBottom = 40;
-                    var laneHeight = 16;
-                    var laneSpacing = 1;
+                    var laneHeight = 20; // slightly taller lanes to accommodate labels
+                    var laneSpacing = 2;
 
                     var timelineData = @json($timelineData);
                     var timeRange = @json($timeRange);
@@ -288,10 +354,12 @@
                     var backgroundLayer = new Konva.Layer();
                     var barLayer = new Konva.Layer();
                     var axisLayer = new Konva.Layer();
+                    var headerLayer = new Konva.Layer(); // frozen left track-header panel
 
                     stage.add(backgroundLayer);
                     stage.add(barLayer);
                     stage.add(axisLayer);
+                    stage.add(headerLayer); // added last so it renders on top
 
                     var viewportWidth = Math.max(50, width - marginLeft - marginRight);
                     var zoomScale = 1;
@@ -350,6 +418,8 @@
                     backgroundLayer.clip({ x: 0, y: 0, width: width, height: height });
                     barLayer.clip({ x: 0, y: 0, width: width, height: height });
                     axisLayer.clip({ x: 0, y: 0, width: width, height: height });
+                    // Header layer clips to the left margin only (frozen, not panned)
+                    headerLayer.clip({ x: 0, y: 0, width: marginLeft, height: height });
 
                     function clampPan() {
                         var maxPanX = Math.max(0, contentTimelineWidth - viewportWidth);
@@ -692,7 +762,11 @@
                             bgRect: bg,
                             barRect: null,      // kept for backward compatibility (unused)
                             mainBarRect: null,  // primary bar rect for hit-testing
-                            connection: swimlane.connection || null
+                            connection: swimlane.connection || null,
+                            // Header panel items (set by renderHeaders)
+                            headerBg: null,
+                            headerDot: null,
+                            headerLabel: null
                         };
 
                         if (lane.type === 'life') {
@@ -701,6 +775,85 @@
 
                         lanes.push(lane);
                     });
+
+                    // ---- Track header panel (frozen left column) ----
+                    // Panel background (non-panning, direct on headerLayer)
+                    var headerPanelBg = new Konva.Rect({
+                        x: 0, y: 0,
+                        width: marginLeft - 4,
+                        height: height,
+                        fill: '#f8f9fa',
+                        stroke: '#dee2e6',
+                        strokeWidth: 1
+                    });
+                    headerLayer.add(headerPanelBg);
+
+                    function renderHeaders() {
+                        // Remove old header items from lanes
+                        lanes.forEach(function(lane) {
+                            if (lane.headerBg) { lane.headerBg.destroy(); lane.headerBg = null; }
+                            if (lane.headerDot) { lane.headerDot.destroy(); lane.headerDot = null; }
+                            if (lane.headerLabel) { lane.headerLabel.destroy(); lane.headerLabel = null; }
+                        });
+
+                        lanes.forEach(function(lane) {
+                            var isLife = lane.type === 'life';
+                            var typeId = lane.type;
+                            var color = isLife ? '#0d6efd' : getConnectionColor(typeId);
+                            var y = lane.bgRect.y();
+                            var opacity = lane.visible === false ? 0 : 1;
+
+                            var bg = new Konva.Rect({
+                                x: 0, y: y,
+                                width: marginLeft - 4,
+                                height: laneHeight,
+                                fill: isLife ? '#e8f0fe' : '#f8f9fa',
+                                opacity: opacity,
+                                listening: false
+                            });
+
+                            var dot = new Konva.Circle({
+                                x: 10, y: y + laneHeight / 2,
+                                radius: 4,
+                                fill: color,
+                                opacity: opacity,
+                                listening: false
+                            });
+
+                            var labelText = isLife
+                                ? (subjectName || 'Life')
+                                : (function() {
+                                    var conn = lane.connection;
+                                    if (!conn) return 'Unknown';
+                                    var other = conn.other_span || conn.otherSpan || {};
+                                    var predicate = conn.predicate || '';
+                                    return (predicate ? predicate + ': ' : '') + (other.name || '');
+                                })();
+
+                            var label = new Konva.Text({
+                                x: 20, y: y + Math.floor((laneHeight - 11) / 2),
+                                width: marginLeft - 28,
+                                text: labelText,
+                                fontSize: 11,
+                                fontFamily: 'system-ui, -apple-system, sans-serif',
+                                fill: isLife ? '#0a58ca' : '#333',
+                                ellipsis: true,
+                                wrap: 'none',
+                                opacity: opacity,
+                                listening: false
+                            });
+
+                            headerLayer.add(bg);
+                            headerLayer.add(dot);
+                            headerLayer.add(label);
+
+                            lane.headerBg = bg;
+                            lane.headerDot = dot;
+                            lane.headerLabel = label;
+                        });
+
+                        headerLayer.batchDraw();
+                    }
 
                     var now = new Date();
                     var currentYear = now.getFullYear();
@@ -1197,6 +1350,7 @@
                     backgroundLayer.draw();
                     barLayer.draw();
                     axisLayer.draw();
+                    renderHeaders(); // initial header render (must come after lanes & bars are built)
 
                     // ---- Filtering & layout (inspired by existing D3 behaviour) ----
                     var $buttons = $root.find('.connection-type-filter-buttons a');
@@ -1265,6 +1419,10 @@
                             if (lane.barRects && lane.barRects.length) {
                                 lane.barRects.forEach(function(r) { r.visible(visible); });
                             }
+                            // Header panel items visibility
+                            if (lane.headerBg) lane.headerBg.visible(visible);
+                            if (lane.headerDot) lane.headerDot.visible(visible);
+                            if (lane.headerLabel) lane.headerLabel.visible(visible);
                         });
 
                         // Helper to animate a lane's background and all of its bars to a new Y position
@@ -1288,6 +1446,16 @@
                                         easing: Konva.Easings.EaseInOut
                                     });
                                 });
+                            }
+                            // Also animate header panel items
+                            if (lane.headerBg) {
+                                lane.headerBg.to({ y: targetBaseY, duration: 0.25, easing: Konva.Easings.EaseInOut });
+                            }
+                            if (lane.headerDot) {
+                                lane.headerDot.to({ y: targetBaseY + laneHeight / 2, duration: 0.25, easing: Konva.Easings.EaseInOut });
+                            }
+                            if (lane.headerLabel) {
+                                lane.headerLabel.to({ y: targetBaseY + Math.floor((laneHeight - 11) / 2), duration: 0.25, easing: Konva.Easings.EaseInOut });
                             }
                         }
 
@@ -1343,6 +1511,10 @@
                         // Update stage & container sizes
                         stage.height(height);
                         container.style.height = height + 'px';
+                        // Resize header panel background and layer clip to match new height
+                        headerPanelBg.height(height);
+                        headerLayer.clip({ x: 0, y: 0, width: marginLeft, height: height });
+                        headerLayer.batchDraw();
 
                         applyZoomPan();
 
@@ -1521,11 +1693,255 @@
                         barLayer.batchDraw();
                     });
 
+                    // ---- Edit panel + dirty state + save/discard ----
+
+                    var $editPanel = $('#' + containerId + '-edit-panel');
+                    var $saveBar  = $('#' + containerId + '-save-bar');
+                    var editingLane = null;
+                    // Map of connectionId → { lane, originalDates, newDates }
+                    var dirtyLanes = {};
+
+                    function showSaveBar() {
+                        var count = Object.keys(dirtyLanes).length;
+                        $saveBar.find('.save-bar-count').text(count);
+                        $saveBar.removeClass('d-none');
+                    }
+
+                    function hideSaveBar() {
+                        $saveBar.addClass('d-none');
+                    }
+
+                    // Revert a single bar to its stored original dates
+                    function revertLane(lane) {
+                        var conn = lane.connection;
+                        var connId = conn && (conn.id || conn.short_id);
+                        if (!connId || !dirtyLanes[connId]) return;
+                        var orig = dirtyLanes[connId].originalDates;
+                        var origStartFrac = fractionalYearFromStart(
+                            orig.start_year, orig.start_month || 0, orig.start_day || 0
+                        ) || orig.start_year;
+                        var origEndFrac = orig.end_year
+                            ? (fractionalYearToEnd(orig.end_year, orig.end_month || 0, orig.end_day || 0) || orig.end_year)
+                            : nowFrac;
+                        origStartFrac = Math.min(Math.max(origStartFrac, timeRange.start), timeRange.end);
+                        origEndFrac   = Math.min(Math.max(origEndFrac, origStartFrac), timeRange.end);
+                        var mainBar = lane.mainBarRect;
+                        if (mainBar) {
+                            mainBar.setAttr('startFrac', origStartFrac);
+                            mainBar.setAttr('endFrac', origEndFrac);
+                            mainBar.stroke('#e9ecef');
+                            mainBar.strokeWidth(1);
+                        }
+                        delete dirtyLanes[connId];
+                        updateTimelinePositions();
+                    }
+
+                    // Open the edit panel for a lane
+                    function openEditPanel(lane, nativeEvt) {
+                        editingLane = lane;
+                        var conn = lane.connection;
+                        var cSpan = normaliseConnectionSpan(conn);
+                        var other = conn ? (conn.other_span || conn.otherSpan || {}) : {};
+                        var predicate = conn ? (conn.predicate || '') : '';
+                        var title = (predicate ? predicate + ': ' : '') + (other.name || '');
+
+                        $editPanel.find('.edit-panel-title').text(title || 'Connection');
+
+                        // Populate with current (possibly already-edited) dates from dirtyLanes,
+                        // or fall back to the raw connection span dates
+                        var connId = conn && (conn.id || conn.short_id);
+                        var dates = connId && dirtyLanes[connId]
+                            ? dirtyLanes[connId].newDates
+                            : (cSpan || {});
+
+                        $editPanel.find('.edit-start-year').val(dates.start_year || '');
+                        $editPanel.find('.edit-start-month').val(dates.start_month || '');
+                        $editPanel.find('.edit-start-day').val(dates.start_day || '');
+                        $editPanel.find('.edit-end-year').val(dates.end_year || '');
+                        $editPanel.find('.edit-end-month').val(dates.end_month || '');
+                        $editPanel.find('.edit-end-day').val(dates.end_day || '');
+
+                        // Position near the click, clamped inside the card body
+                        var cardBodyRect = container.parentElement.getBoundingClientRect();
+                        var panelW = 250;
+                        var panelH = 200; // approximate
+                        var left = (nativeEvt.clientX - cardBodyRect.left) + 8;
+                        var top  = (nativeEvt.clientY - cardBodyRect.top)  + 8;
+                        if (left + panelW > cardBodyRect.width - 4) {
+                            left = Math.max(0, cardBodyRect.width - panelW - 4);
+                        }
+                        $editPanel.css({ left: left + 'px', top: top + 'px' }).show();
+                    }
+
                     stage.on('click', function(evt) {
+                        // Clear dim-spotlight when clicking off a bar
                         if (dimShape.visible() && (!evt.target || evt.target.getAttr('startFrac') == null)) {
                             dimShape.visible(false);
                             barLayer.batchDraw();
                         }
+
+                        // Detect click on a main bar (not the life bar, not a phase bar)
+                        var clickedLane = null;
+                        lanes.forEach(function(lane) {
+                            if (lane.type !== 'life' && lane.mainBarRect && lane.mainBarRect === evt.target) {
+                                clickedLane = lane;
+                            }
+                        });
+
+                        if (!clickedLane) {
+                            $editPanel.hide();
+                            editingLane = null;
+                            return;
+                        }
+
+                        openEditPanel(clickedLane, evt.evt);
+                    });
+
+                    // Apply button: update bar position and mark dirty
+                    $editPanel.find('.edit-panel-apply').on('click', function() {
+                        if (!editingLane) return;
+                        var newSY = parseInt($editPanel.find('.edit-start-year').val()) || null;
+                        var newSM = parseInt($editPanel.find('.edit-start-month').val()) || null;
+                        var newSD = parseInt($editPanel.find('.edit-start-day').val()) || null;
+                        var newEY = parseInt($editPanel.find('.edit-end-year').val()) || null;
+                        var newEM = parseInt($editPanel.find('.edit-end-month').val()) || null;
+                        var newED = parseInt($editPanel.find('.edit-end-day').val()) || null;
+
+                        if (!newSY) {
+                            $editPanel.find('.edit-start-year').addClass('is-invalid').focus();
+                            return;
+                        }
+                        $editPanel.find('.edit-start-year').removeClass('is-invalid');
+
+                        var conn = editingLane.connection;
+                        var connId = conn && (conn.id || conn.short_id);
+                        if (!connId) return;
+
+                        // Store original dates if this is the first edit on this lane
+                        if (!dirtyLanes[connId]) {
+                            var cSpan = normaliseConnectionSpan(conn) || {};
+                            dirtyLanes[connId] = {
+                                lane: editingLane,
+                                originalDates: {
+                                    start_year: cSpan.start_year || null,
+                                    start_month: cSpan.start_month || null,
+                                    start_day: cSpan.start_day || null,
+                                    end_year: cSpan.end_year || null,
+                                    end_month: cSpan.end_month || null,
+                                    end_day: cSpan.end_day || null
+                                },
+                                newDates: {}
+                            };
+                        }
+
+                        // Update stored new dates
+                        dirtyLanes[connId].newDates = {
+                            start_year: newSY, start_month: newSM, start_day: newSD,
+                            end_year: newEY,   end_month: newEM,   end_day: newED
+                        };
+
+                        // Move bar to new position
+                        var newStartFrac = fractionalYearFromStart(newSY, newSM || 0, newSD || 0) || newSY;
+                        var newEndFrac   = newEY
+                            ? (fractionalYearToEnd(newEY, newEM || 0, newED || 0) || newEY)
+                            : nowFrac;
+                        newStartFrac = Math.min(Math.max(newStartFrac, timeRange.start), timeRange.end);
+                        newEndFrac   = Math.min(Math.max(newEndFrac, newStartFrac), timeRange.end);
+
+                        var mainBar = editingLane.mainBarRect;
+                        if (mainBar) {
+                            mainBar.setAttr('startFrac', newStartFrac);
+                            mainBar.setAttr('endFrac', newEndFrac);
+                            // Yellow border = dirty indicator
+                            mainBar.stroke('#ffc107');
+                            mainBar.strokeWidth(2);
+                        }
+                        updateTimelinePositions();
+                        showSaveBar();
+                        $editPanel.hide();
+                    });
+
+                    // Revert this single bar
+                    $editPanel.find('.edit-panel-revert').on('click', function() {
+                        if (!editingLane) return;
+                        revertLane(editingLane);
+                        $editPanel.hide();
+                        editingLane = null;
+                        if (Object.keys(dirtyLanes).length === 0) hideSaveBar();
+                        else showSaveBar();
+                    });
+
+                    $editPanel.find('.edit-panel-close').on('click', function() {
+                        $editPanel.hide();
+                        editingLane = null;
+                    });
+
+                    // Discard ALL pending edits
+                    $saveBar.find('.save-bar-discard').on('click', function() {
+                        Object.keys(dirtyLanes).forEach(function(id) {
+                            revertLane(dirtyLanes[id].lane);
+                        });
+                        dirtyLanes = {};
+                        hideSaveBar();
+                        $editPanel.hide();
+                        editingLane = null;
+                    });
+
+                    // Save ALL pending edits via API
+                    $saveBar.find('.save-bar-save').on('click', function() {
+                        var $btn = $(this).prop('disabled', true).text('Saving…');
+                        var csrfToken = $('meta[name="csrf-token"]').attr('content');
+                        var ids = Object.keys(dirtyLanes);
+                        var remaining = ids.length;
+                        var failed = 0;
+
+                        if (remaining === 0) { hideSaveBar(); return; }
+
+                        ids.forEach(function(connId) {
+                            var d = dirtyLanes[connId].newDates;
+                            var lane = dirtyLanes[connId].lane;
+                            var state = deriveConnectionState(lane.connection);
+
+                            $.ajax({
+                                url: '/spans/api/connections/' + connId + '/update',
+                                method: 'PUT',
+                                headers: {
+                                    'X-CSRF-TOKEN': csrfToken,
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json'
+                                },
+                                data: JSON.stringify({
+                                    state: state || 'placeholder',
+                                    start_year:  d.start_year  || null,
+                                    start_month: d.start_month || null,
+                                    start_day:   d.start_day   || null,
+                                    end_year:    d.end_year    || null,
+                                    end_month:   d.end_month   || null,
+                                    end_day:     d.end_day     || null
+                                }),
+                                success: function() {
+                                    // Remove dirty indicator on the bar
+                                    var mainBar = lane.mainBarRect;
+                                    if (mainBar) { mainBar.stroke('#e9ecef'); mainBar.strokeWidth(1); }
+                                    delete dirtyLanes[connId];
+                                    remaining--;
+                                    if (remaining <= 0 && failed === 0) {
+                                        barLayer.batchDraw();
+                                        hideSaveBar();
+                                        $btn.prop('disabled', false).html('<i class="bi bi-check-lg me-1"></i>Save all');
+                                    }
+                                },
+                                error: function(xhr) {
+                                    failed++;
+                                    remaining--;
+                                    if (remaining <= 0) {
+                                        $btn.prop('disabled', false).html('<i class="bi bi-check-lg me-1"></i>Save all');
+                                        var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Save failed';
+                                        alert('Error saving changes: ' + msg);
+                                    }
+                                }
+                            });
+                        });
                     });
 
                     function fractionalYearFromContentX(contentX) {
