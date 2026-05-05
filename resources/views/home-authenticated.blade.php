@@ -38,7 +38,7 @@
     @if(request()->cookie('time_travel_date'))
         Time Travel: {{ $currentDate->format('F j, Y') }}
     @else
-        Today is {{ $currentDate->format('F j, Y') }}
+        <span id="home-title-datetime"></span>
     @endif
 @endsection
 
@@ -50,6 +50,11 @@
 
 @section('scripts')
 <style>
+    /* Prevent clock from shifting layout as digits change */
+    #home-title-datetime {
+        font-variant-numeric: tabular-nums;
+    }
+
     /* Comparison input dropdown styles for missing connections prompt */
     .comparison-input-container {
         position: relative;
@@ -178,6 +183,21 @@
 
 <script>
     $(document).ready(function() {
+        // Live clock in page title
+        var $clock = $('#home-title-datetime');
+        if ($clock.length) {
+            function pad(n) { return (n < 10 ? '0' : '') + n; }
+            function updateClock() {
+                var d = new Date();
+                var months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+                var dateStr = months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+                var timeStr = pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+                $clock.text(dateStr + ' ' + timeStr);
+            }
+            updateClock();
+            setInterval(updateClock, 1000);
+        }
+
         // Missing connections functionality
         let searchTimeout;
         

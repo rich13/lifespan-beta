@@ -9,27 +9,15 @@
 @section('content')
 <div class="container-fluid">
     <div class="row">
-        <div class="col-md-8 col-lg-6 mx-auto">
-            <!-- Lifespan Summary Card -->
-            <x-home.lifespan-summary-card />
-            
-            <!-- Missing Connections Prompt -->
-            <x-home.missing-connections-prompt 
-                :personalSpan="$personalSpan" 
-                :userConnectionsAsSubject="$userConnectionsAsSubject"
-                :userConnectionsAsObject="$userConnectionsAsObject"
-                :allUserConnections="$allUserConnections"
-            />
-            
-            <!-- Life Activity Heatmap -->
-            <x-home.life-heatmap-card 
-                :userConnectionsAsSubject="$userConnectionsAsSubject"
-                :userConnectionsAsObject="$userConnectionsAsObject"
-                :allUserConnections="$allUserConnections"
-            />
-            
+        <div class="col-12">
             <!-- Lifespan Stats -->
             <x-home.lifespan-stats-card />
+            
+            <!-- Connection Matrix -->
+            <x-home.span-connection-matrix-card />
+
+            <!-- Connections per span histogram -->
+            <x-home.span-connection-degree-histogram-card />
         </div>
     </div>
 </div>
