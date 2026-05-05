@@ -190,6 +190,122 @@ class LeadershipRoleService
     }
 
     /**
+     * Get role terms (bars) overlapping a period.
+     *
+     * Returns one item per qualifying connection term, clipped to the requested
+     * period. This is suitable for timeline overlays.
+     *
+     * @param string $roleName
+     * @param Carbon $periodStart
+     * @param Carbon $periodEnd
+     * @return array<int, array{
+     *     person_id: string,
+     *     person_name: string,
+     *     start_year: int,
+     *     end_year: int,
+     *     source_type: string
+     * }>
+     */
+    public function getRoleTermsInPeriod(string $roleName, Carbon $periodStart, Carbon $periodEnd): array
+    {
+        $terms = collect();
+
+        $pushTerm = function (Connection $connection, string $sourceType) use ($periodStart, $periodEnd, $terms): void {
+            $person = $connection->parent;
+            $connectionSpan = $connection->connectionSpan;
+
+            if (!$person || !$connectionSpan) {
+                return;
+            }
+
+            if (!$person->isAccessibleBy(auth()->user())) {
+                return;
+            }
+
+            if (!$this->connectionOverlapsPeriod($connection, $periodStart, $periodEnd)) {
+                return;
+            }
+
+            $startRange = $connectionSpan->getStartDateRange();
+            $endRange = $connectionSpan->getEndDateRange();
+
+            $connStart = $startRange[0] ?? null;
+            $connEnd = $endRange[1] ?? null;
+
+            if (!$connStart) {
+                return;
+            }
+
+            $clippedStart = $connStart->copy()->lt($periodStart) ? $periodStart->copy() : $connStart->copy();
+            $effectiveConnEnd = $connEnd ? $connEnd->copy() : $periodEnd->copy();
+            $clippedEnd = $effectiveConnEnd->gt($periodEnd) ? $periodEnd->copy() : $effectiveConnEnd->copy();
+
+            if ($clippedStart->gt($clippedEnd)) {
+                return;
+            }
+
+            $terms->push([
+                'person_id' => $person->id,
+                'person_name' => $person->name,
+                'start_year' => (int) $clippedStart->year,
+                'end_year' => (int) $clippedEnd->year,
+                'source_type' => $sourceType,
+                'sort_date' => $clippedStart->copy(),
+            ]);
+        };
+
+        // has_role connections
+        $roleSpan = Span::where('type_id', 'role')
+            ->where('name', $roleName)
+            ->first();
+
+        if ($roleSpan) {
+            $connections = Connection::where('type_id', 'has_role')
+                ->where('child_id', $roleSpan->id)
+                ->whereHas('parent', function ($query) {
+                    $query->where('type_id', 'person');
+                })
+                ->with(['parent', 'connectionSpan'])
+                ->get();
+
+            foreach ($connections as $connection) {
+                $pushTerm($connection, 'has_role');
+            }
+        }
+
+        // employment fallback with role in metadata
+        $employmentConnections = Connection::where('type_id', 'employment')
+            ->whereHas('parent', function ($query) {
+                $query->where('type_id', 'person');
+            })
+            ->whereHas('connectionSpan', function ($query) use ($periodEnd) {
+                $query->where(function ($q) use ($periodEnd) {
+                    $q->whereNull('start_year')->orWhere('start_year', '<=', $periodEnd->year);
+                });
+            })
+            ->with(['parent', 'connectionSpan'])
+            ->get();
+
+        foreach ($employmentConnections as $connection) {
+            $metadata = $connection->connectionSpan->metadata ?? [];
+            $connectionRole = $metadata['role'] ?? $metadata['position'] ?? null;
+            if ($connectionRole !== $roleName) {
+                continue;
+            }
+            $pushTerm($connection, 'employment');
+        }
+
+        return $terms
+            ->sortBy('sort_date')
+            ->values()
+            ->map(function ($term) {
+                unset($term['sort_date']);
+                return $term;
+            })
+            ->toArray();
+    }
+
+    /**
      * Get leadership (PM and President) for a period. Returns arrays of holders in chronological order.
      *
      * @param Carbon $periodStart

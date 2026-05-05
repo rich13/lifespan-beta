@@ -19,11 +19,16 @@ class SpanPolicy
     /**
      * Determine whether the user can view the model.
      */
-    public function view(User $user, Span $span): bool
+    public function view(?User $user, Span $span): bool
     {
-        // Public spans can be viewed by anyone
+        // Public spans can be viewed by anyone (including guests)
         if ($span->access_level === 'public') {
             return true;
+        }
+
+        // Guests cannot view non-public spans
+        if (!$user) {
+            return false;
         }
 
         // Owner can always view

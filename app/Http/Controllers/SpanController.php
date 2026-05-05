@@ -46,8 +46,8 @@ class SpanController extends Controller
      */
     public function __construct(YamlSpanService $yamlService, RouteReservationService $routeReservationService)
     {
-        // Require auth for all routes except show, index, search, explore, desertIslandDiscs, explorePlaques, connectionTypes, connectionsByType, showConnection, and listConnections
-        $this->middleware('auth')->except(['show', 'showJson', 'plaque', 'plaqueConnection', 'plaquesIndex', 'plaquesSearch', 'index', 'search', 'explore', 'desertIslandDiscs', 'explorePlaques', 'connectionTypes', 'connectionsByType', 'showConnection', 'showConnectionJson', 'showConnectionBySpanId', 'showConnectionBySpanIdJson', 'listConnections']);
+        // Require auth for all routes except show, index, search, explore, desertIslandDiscs, explorePlaques, connectionTypes, connectionsByType, showConnection, listConnections, and showTimeline
+        $this->middleware('auth')->except(['show', 'showJson', 'plaque', 'plaqueConnection', 'plaquesIndex', 'plaquesSearch', 'index', 'search', 'explore', 'desertIslandDiscs', 'explorePlaques', 'connectionTypes', 'connectionsByType', 'showConnection', 'showConnectionJson', 'showConnectionBySpanId', 'showConnectionBySpanIdJson', 'listConnections', 'showTimeline']);
         $this->yamlService = $yamlService;
         $this->routeReservationService = $routeReservationService;
     }
@@ -1079,6 +1079,46 @@ class SpanController extends Controller
                 'route_param' => $request->segment(2)
             ]);
             // Return error page
+            if (app()->environment('production')) {
+                return view('errors.500');
+            } else {
+                return view('errors.500', [
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString()
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Display the scroll-controlled timeline view for a span.
+     * GET /s/{subject}
+     */
+    public function showTimeline(Request $request, Span $subject): View
+    {
+        try {
+            // If we're accessing via UUID and a slug exists, redirect to slug URL for consistency
+            $routeParam = $request->segment(2);
+
+            if (Str::isUuid($routeParam) && $subject->slug) {
+                return redirect()
+                    ->route('spans.timeline-view', ['subject' => $subject->slug], 301);
+            }
+
+            // Authorize view access
+            $this->authorize('view', $subject);
+
+            $span = $subject;
+
+            return view('spans.timeline-view', compact('span'));
+        } catch (AuthorizationException $e) {
+            return view('errors.403');
+        } catch (\Exception $e) {
+            Log::error('Error in timeline view', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'route_param' => $request->segment(2)
+            ]);
             if (app()->environment('production')) {
                 return view('errors.500');
             } else {

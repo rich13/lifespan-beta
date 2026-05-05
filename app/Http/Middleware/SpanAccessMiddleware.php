@@ -35,8 +35,8 @@ class SpanAccessMiddleware
             return $next($request);
         }
 
-        // For show route (including JSON variant) and plaque view
-        if (in_array($routeName, ['spans.show', 'spans.show.json', 'plaques.show'])) {
+        // For show route (including JSON variant), plaque view, and timeline view
+        if (in_array($routeName, ['spans.show', 'spans.show.json', 'plaques.show', 'spans.timeline-view'])) {
             $span = $request->route('span') ?? $request->route('subject');
             
             // Handle case when span doesn't exist

@@ -709,17 +709,13 @@
                     // Fractional "now" (for precise alignment of ongoing spans and the NOW marker)
                     var nowFrac = dateToFractionalYear(currentYear, currentMonth, currentDay);
 
-                    // Arrow-headed bar: 45° corners meeting at a point at each end (pointer left/right)
-                    var arrowSize = Math.min(5, (laneHeight - 4) / 2);
-                    function arrowBarPoints(fullWidth, h) {
-                        var as = arrowSize;
+                    // Flat-ended bar: simple rectangle
+                    function flatBarPoints(fullWidth, h) {
                         return [
-                            0, h / 2,
-                            as, h,
-                            as + fullWidth, h,
-                            fullWidth + 2 * as, h / 2,
-                            as + fullWidth, 0,
-                            as, 0
+                            0, 0,
+                            fullWidth, 0,
+                            fullWidth, h,
+                            0, h
                         ];
                     }
 
@@ -763,9 +759,9 @@
                             var lifeFullWidth = Math.max(2, x2 - x1);
 
                             var lifeBar = new Konva.Line({
-                                x: x1 - arrowSize,
+                                x: x1,
                                 y: y,
-                                points: arrowBarPoints(lifeFullWidth, rectHeight),
+                                points: flatBarPoints(lifeFullWidth, rectHeight),
                                 closed: true,
                                 fill: '#ffffff',
                                 stroke: '#e9ecef',
@@ -856,11 +852,11 @@
 
                             var coreColour = barColor;
 
-                            // Arrow-headed bar with white stroke
+                            // Flat-ended bar with white stroke
                             var barRect = new Konva.Line({
-                                x: xStart - arrowSize,
+                                x: xStart,
                                 y: y,
-                                points: arrowBarPoints(fullWidth, rectHeight),
+                                points: flatBarPoints(fullWidth, rectHeight),
                                 closed: true,
                                 fill: coreColour,
                                 opacity: 0.9,
@@ -877,7 +873,6 @@
                             // Phase spans (during) drawn inside the connection bar
                             var phaseSpans = swimlane.phaseSpans || [];
                             var phaseBarHeight = Math.max(4, rectHeight - 6);
-                            var phaseArrowSize = Math.min(4, phaseBarHeight / 2);
                             var phaseY = y + (rectHeight - phaseBarHeight) / 2;
                             phaseSpans.forEach(function(phase) {
                                 var pStart = fractionalYearFromStart(
@@ -898,15 +893,13 @@
                                 var pxEnd = xForYear(pEnd);
                                 var pWidth = Math.max(2, pxEnd - pxStart);
                                 var phasePoints = [
-                                    0, phaseBarHeight / 2,
-                                    phaseArrowSize, phaseBarHeight,
-                                    phaseArrowSize + pWidth, phaseBarHeight,
-                                    pWidth + 2 * phaseArrowSize, phaseBarHeight / 2,
-                                    phaseArrowSize + pWidth, 0,
-                                    phaseArrowSize, 0
+                                    0, 0,
+                                    pWidth, 0,
+                                    pWidth, phaseBarHeight,
+                                    0, phaseBarHeight
                                 ];
                                 var phaseBar = new Konva.Line({
-                                    x: pxStart - phaseArrowSize,
+                                    x: pxStart,
                                     y: phaseY,
                                     points: phasePoints,
                                     closed: true,
@@ -920,7 +913,6 @@
                                 phaseBar.setAttr('endFrac', pEnd);
                                 phaseBar.setAttr('isPhase', true);
                                 phaseBar.setAttr('phaseBarHeight', phaseBarHeight);
-                                phaseBar.setAttr('phaseArrowSize', phaseArrowSize);
                                 lane.barRects.push(phaseBar);
                                 barGroup.add(phaseBar);
                             });
@@ -958,13 +950,13 @@
                             barRect.on('mousemove', function() {});
                             barRect.on('mouseout', function() {});
                         } else {
-                            // Placeholder / unknown dates: faint arrow-headed bar across full visible range
+                            // Placeholder / unknown dates: faint flat bar across full visible range
                             var barX = xForYear(timeRange.start);
                             var barWidth = Math.max(2, xForYear(timeRange.end) - barX);
                             var placeholderRect = new Konva.Line({
-                                x: barX - arrowSize,
+                                x: barX,
                                 y: y,
-                                points: arrowBarPoints(barWidth, rectHeight),
+                                points: flatBarPoints(barWidth, rectHeight),
                                 closed: true,
                                 fill: barColor,
                                 opacity: 0.25
@@ -1149,21 +1141,18 @@
                                         var fullWidth = Math.max(2, xEnd - xStart);
                                         if (bar.getAttr('isPhase')) {
                                             var ph = bar.getAttr('phaseBarHeight');
-                                            var pas = bar.getAttr('phaseArrowSize');
-                                            if (ph != null && pas != null) {
-                                                bar.x(xStart - pas);
+                                            if (ph != null) {
+                                                bar.x(xStart);
                                                 bar.points([
-                                                    0, ph / 2,
-                                                    pas, ph,
-                                                    pas + fullWidth, ph,
-                                                    fullWidth + 2 * pas, ph / 2,
-                                                    pas + fullWidth, 0,
-                                                    pas, 0
+                                                    0, 0,
+                                                    fullWidth, 0,
+                                                    fullWidth, ph,
+                                                    0, ph
                                                 ]);
                                             }
                                         } else {
-                                            bar.x(xStart - arrowSize);
-                                            bar.points(arrowBarPoints(fullWidth, rectHeight));
+                                            bar.x(xStart);
+                                            bar.points(flatBarPoints(fullWidth, rectHeight));
                                         }
                                     }
                                 });
@@ -1509,9 +1498,9 @@
                         panX = Math.max(0, Math.min(panX, contentTimelineWidth - viewportWidth));
                         applyZoomPan();
 
-                        var holeX = xStart - arrowSize;
+                        var holeX = xStart;
                         var holeY = target.y();
-                        var holeW = (xEnd - xStart) + 2 * arrowSize;
+                        var holeW = xEnd - xStart;
                         var holeH = laneHeight - 4;
                         dimShape.setAttr('holeX', holeX);
                         dimShape.setAttr('holeY', holeY);

@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Connection;
 use App\Models\Span;
+use App\Services\LeadershipRoleService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
@@ -479,6 +481,236 @@ class SpanSearchController extends Controller
                     'end_year' => $span->end_year
                 ],
                 'connections' => $connections
+            ];
+        });
+
+        return response()->json($data)->header('Cache-Control', 'private, max-age=300');
+    }
+
+    /**
+     * Get timeline data for subject connections (where span is the parent/subject)
+     */
+    public function timelineSubjectConnections(Span $span)
+    {
+        // Check access permissions
+        $user = Auth::user();
+        if (!$span->isPublic() && (!$user || !$span->hasPermission($user, 'view'))) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        // Cache key includes user ID for proper access control
+        $cacheKey = "timeline_subject_{$span->id}_" . ($user?->id ?? 'guest');
+
+        $data = Cache::remember($cacheKey, 300, function () use ($span) {
+            $connections = $span->connectionsAsSubjectWithAccess()
+                ->where('type_id', '!=', 'during')
+                ->with([
+                    'child:id,name,type_id,start_year,end_year,metadata',
+                    'connectionSpan:id,start_year,start_month,start_day,end_year,end_month,end_day',
+                    'type:type,forward_predicate'
+                ])
+                ->whereHas('connectionSpan', function ($query) {
+                    $query->whereNotNull('start_year');
+                })
+                ->get()
+                ->map(function ($connection) {
+                    $connectionSpan = $connection->connectionSpan;
+                    return [
+                        'id' => $connection->id,
+                        'type_id' => $connection->type_id,
+                        'type_name' => $connection->type->forward_predicate ?? $connection->type_id,
+                        'target_name' => $connection->child->name,
+                        'target_id' => $connection->child->id,
+                        'target_type' => $connection->child->type_id,
+                        'target_metadata' => $connection->child->metadata ?? [],
+                        'start_year' => $connectionSpan ? $connectionSpan->start_year : null,
+                        'start_month' => $connectionSpan ? $connectionSpan->start_month : null,
+                        'start_day' => $connectionSpan ? $connectionSpan->start_day : null,
+                        'end_year' => $connectionSpan ? $connectionSpan->end_year : null,
+                        'end_month' => $connectionSpan ? $connectionSpan->end_month : null,
+                        'end_day' => $connectionSpan ? $connectionSpan->end_day : null,
+                        'metadata' => $connection->metadata ?? []
+                    ];
+                })
+                ->filter(function ($connection) {
+                    return $connection['start_year'] !== null;
+                })
+                ->sortBy('start_year')
+                ->values();
+
+            return [
+                'span' => [
+                    'id' => $span->id,
+                    'name' => $span->name,
+                    'start_year' => $span->start_year,
+                    'end_year' => $span->end_year
+                ],
+                'connections' => $connections
+            ];
+        });
+
+        return response()->json($data)->header('Cache-Control', 'private, max-age=300');
+    }
+
+    /**
+     * Get leadership overlay bars for a requested year range.
+     */
+    public function timelineLeadershipOverlay(Request $request, Span $span, LeadershipRoleService $leadershipRoleService)
+    {
+        // Check access permissions
+        $user = Auth::user();
+        if (!$span->isPublic() && (!$user || !$span->hasPermission($user, 'view'))) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        $validated = $request->validate([
+            'role' => ['nullable', 'string', 'in:prime_minister,president'],
+            'start_year' => ['required', 'integer', 'min:1000', 'max:3000'],
+            'end_year' => ['required', 'integer', 'min:1000', 'max:3000'],
+        ]);
+
+        $role = $validated['role'] ?? 'prime_minister';
+        $startYear = (int) $validated['start_year'];
+        $endYear = (int) $validated['end_year'];
+
+        if ($endYear < $startYear) {
+            return response()->json([
+                'error' => 'Invalid range',
+                'message' => 'end_year must be greater than or equal to start_year',
+            ], 422);
+        }
+
+        // Keep requests bounded for predictable response sizes
+        if (($endYear - $startYear) > 1000) {
+            return response()->json([
+                'error' => 'Range too large',
+                'message' => 'Requested range is too large',
+            ], 422);
+        }
+
+        $roleMap = [
+            'prime_minister' => 'Prime Minister of the United Kingdom',
+            'president' => 'President of the United States',
+        ];
+        $roleName = $roleMap[$role] ?? $roleMap['prime_minister'];
+
+        $cacheKey = "timeline_leadership_{$span->id}_{$role}_{$startYear}_{$endYear}_" . ($user?->id ?? 'guest');
+
+        $data = Cache::remember($cacheKey, 300, function () use (
+            $leadershipRoleService,
+            $role,
+            $roleName,
+            $startYear,
+            $endYear
+        ) {
+            $periodStart = Carbon::create($startYear, 1, 1, 0, 0, 0);
+            $periodEnd = Carbon::create($endYear, 12, 31, 23, 59, 59);
+
+            $bars = $leadershipRoleService->getRoleTermsInPeriod($roleName, $periodStart, $periodEnd);
+
+            return [
+                'role' => $role,
+                'role_name' => $roleName,
+                'start_year' => $startYear,
+                'end_year' => $endYear,
+                'bars' => $bars,
+            ];
+        });
+
+        return response()->json($data)->header('Cache-Control', 'private, max-age=300');
+    }
+
+    /**
+     * Return true if the span has date precision that implies duration and that duration is less than one month.
+     */
+    private function eventDurationLessThanOneMonth(Span $s): bool
+    {
+        $startYear = (int) $s->start_year;
+        $endYear = $s->end_year ? (int) $s->end_year : (int) date('Y');
+        $startMonth = $s->start_month ? (int) $s->start_month : 1;
+        $startDay = $s->start_day ? (int) $s->start_day : 1;
+        $endMonth = $s->end_month ? (int) $s->end_month : 12;
+        $endDay = $s->end_day ? (int) $s->end_day : 31;
+
+        try {
+            $start = Carbon::create($startYear, $startMonth, $startDay, 0, 0, 0);
+            $end = Carbon::create($endYear, $endMonth, $endDay, 23, 59, 59);
+            if ($end->lt($start)) {
+                return false;
+            }
+            $days = $start->diffInDays($end);
+            return $days < 30;
+        } catch (\Exception $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Get event spans overlapping a year range for the context overlay (type_id = event).
+     */
+    public function timelineContextOverlayEvents(Request $request, Span $span)
+    {
+        $user = Auth::user();
+        if (! $span->isPublic() && (! $user || ! $span->hasPermission($user, 'view'))) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        $validated = $request->validate([
+            'start_year' => ['required', 'integer', 'min:1000', 'max:3000'],
+            'end_year' => ['required', 'integer', 'min:1000', 'max:3000'],
+        ]);
+
+        $startYear = (int) $validated['start_year'];
+        $endYear = (int) $validated['end_year'];
+
+        if ($endYear < $startYear) {
+            return response()->json([
+                'error' => 'Invalid range',
+                'message' => 'end_year must be greater than or equal to start_year',
+            ], 422);
+        }
+
+        if (($endYear - $startYear) > 1000) {
+            return response()->json([
+                'error' => 'Range too large',
+                'message' => 'Requested range is too large',
+            ], 422);
+        }
+
+        $cacheKey = "timeline_context_events_{$span->id}_{$startYear}_{$endYear}_".($user?->id ?? 'guest');
+
+        $data = Cache::remember($cacheKey, 300, function () use ($startYear, $endYear, $user) {
+            $query = Span::query()
+                ->where('type_id', 'event')
+                ->whereNotNull('start_year')
+                ->where('start_year', '<=', $endYear)
+                ->where(function ($q) use ($startYear) {
+                    $q->whereNull('end_year')
+                        ->orWhere('end_year', '>=', $startYear);
+                })
+                ->orderBy('start_year');
+
+            $spans = $query->get()->filter(function (Span $s) use ($user) {
+                return $s->isAccessibleBy($user);
+            })->values();
+
+            $bars = $spans->map(function (Span $s) {
+                $endYear = $s->end_year ? (int) $s->end_year : (int) date('Y');
+                $isShort = $this->eventDurationLessThanOneMonth($s);
+
+                return [
+                    'event_id' => $s->id,
+                    'event_name' => $s->name,
+                    'start_year' => (int) $s->start_year,
+                    'end_year' => $endYear,
+                    'is_short' => $isShort,
+                ];
+            })->values()->all();
+
+            return [
+                'start_year' => $startYear,
+                'end_year' => $endYear,
+                'bars' => $bars,
             ];
         });
 
