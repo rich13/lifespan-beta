@@ -93,6 +93,8 @@
                 'icon_category' => 'span'
             ];
         }
+        // Current page (last breadcrumb item): show name with dates
+        $breadcrumbItems[count($breadcrumbItems) - 1]['text'] = $span->getDisplayTitleWithDates();
     @endphp
     
     <x-breadcrumb :items="$breadcrumbItems" />
@@ -135,7 +137,7 @@
         @if($showCombinedTimeline)
         <div class="row mb-4">
             <div class="col-12">
-                <x-spans.timeline-combined-group :span="$span" />
+                <x-spans.timeline-combined-group-konva :span="$span" />
             </div>
         </div>
         @endif
@@ -203,6 +205,11 @@
                 
                 <!-- Image Gallery -->
                 <x-spans.partials.image-gallery :span="$span" :precomputedConnections="$precomputedConnections ?? null" />
+                
+                <!-- Episodes list for programme spans -->
+                @if($span->type_id === 'thing' && ($span->metadata['subtype'] ?? null) === 'programme')
+                    <x-spans.cards.programme-episodes-card :span="$span" />
+                @endif
                 
                 <!-- Featured person for plaque spans (sits under image gallery) -->
                 @if($span->type_id === 'thing' && isset($span->metadata['subtype']) && $span->metadata['subtype'] === 'plaque')

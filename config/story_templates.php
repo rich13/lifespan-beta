@@ -269,6 +269,37 @@ return [
             ],
         ],
     ],
+    'thing_programme' => [
+        'story_template' => '{programme_overview}',
+        'sentences' => [
+            'programme_overview' => [
+                'template' => '{name} is a programme with {episode_count} episodes.',
+                'single_template' => '{name} is a programme with one episode.',
+                'empty_template' => '{name} is a programme. We have not imported any episodes yet.',
+                'data_methods' => [
+                    'name' => 'getName',
+                    'episode_count' => 'getProgrammeEpisodeCount',
+                ],
+                'condition' => 'isProgramme',
+            ],
+        ],
+    ],
+    'thing_episode' => [
+        'story_template' => '{episode_overview}',
+        'sentences' => [
+            'episode_overview' => [
+                'template' => '{name} is an episode of {programme_name}, first broadcast on {episode_date}.',
+                'fallback_template' => '{name} is an episode first broadcast on {episode_date}.',
+                'no_date_template' => '{name} is an episode of {programme_name}.',
+                'data_methods' => [
+                    'name' => 'getName',
+                    'programme_name' => 'getEpisodeProgrammeName',
+                    'episode_date' => 'getEpisodeBroadcastDate',
+                ],
+                'condition' => 'isEpisode',
+            ],
+        ],
+    ],
     'thing_photo' => [
         'story_template' => '{photo_subject}{photo_date}{photo_age}{photo_role}{photo_membership}{photo_residence}{photo_education}{photo_employment}',
         'sentences' => [

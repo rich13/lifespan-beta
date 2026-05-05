@@ -857,6 +857,22 @@ class Span extends Model
     {
         return $this->getTimeAwareName($asOfDate);
     }
+
+    /**
+     * Get display title with date range appended when the span has start/end dates.
+     * e.g. "Winston Churchill (1874–1965)" or "Battle of Britain (Jul 1940 – Oct 1940)"
+     */
+    public function getDisplayTitleWithDates(): string
+    {
+        $name = $this->getDisplayTitle();
+        $start = $this->human_readable_start_date;
+        $end = $this->human_readable_end_date;
+        if ($start || $end) {
+            $range = trim(($start ?? '…') . ' – ' . ($end ?? 'now'));
+            return $name . ' (' . $range . ')';
+        }
+        return $name;
+    }
     
     /**
      * Get the raw database name without time-aware resolution

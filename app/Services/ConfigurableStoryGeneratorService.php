@@ -984,6 +984,8 @@ class ConfigurableStoryGeneratorService
             'hasCurrentRoleHolders' => $span->type_id === 'role', // Always true for roles so we can show vacant message
             'isRole' => $span->type_id === 'role',
             'hasTotalRoleHolders' => $span->type_id === 'role', // Always true for roles so we can show "hasn't been held" message
+            'isProgramme' => $this->isProgramme($span),
+            'isEpisode' => $this->isEpisode($span),
             default => false,
         };
     }
@@ -1056,10 +1058,13 @@ class ConfigurableStoryGeneratorService
             'getArtistNames' => $this->getArtistNames($span),
             'getFirstArtistName' => $this->getFirstArtistName($span),
             'getDuration' => $this->getDuration($span),
+            'getProgrammeEpisodeCount' => $this->getProgrammeEpisodeCount($span),
             'getAge' => $this->getAge($span),
             'getTrackArtist' => $this->getTrackArtist($span),
             'getTrackReleaseDate' => $this->getTrackReleaseDate($span),
             'getTrackAlbum' => $this->getTrackAlbum($span),
+            'getEpisodeProgrammeName' => $this->getEpisodeProgrammeName($span),
+            'getEpisodeBroadcastDate' => $this->getEpisodeBroadcastDate($span),
             'getFeaturedSpanName' => $this->getFeaturedSpanName($span),
             'getPhotoDate' => $this->getPhotoDate($span),
             'getPhotoDatePreposition' => $this->getPhotoDatePreposition($span),
@@ -2386,6 +2391,103 @@ class ConfigurableStoryGeneratorService
         }
 
         return implode(' ', $parts);
+    }
+
+    /**
+     * Check if span is a programme (thing with subtype programme).
+     */
+    protected function isProgramme(Span $span): bool
+    {
+        if ($span->type_id !== 'thing') {
+            return false;
+        }
+
+        $subtype = $span->subtype ?? ($span->metadata['subtype'] ?? null);
+
+        return $subtype === 'programme';
+    }
+
+    /**
+     * Count episodes contained by this programme (thing/programme → thing/episode connections).
+     */
+    protected function getProgrammeEpisodeCount(Span $span): int
+    {
+        if (!$this->isProgramme($span)) {
+            return 0;
+        }
+
+        return $span->connectionsAsSubject()
+            ->where('type_id', 'contains')
+            ->whereHas('child', function ($q) {
+                $q->where('type_id', 'thing')
+                  ->whereRaw("metadata->>'subtype' = ?", ['episode']);
+            })
+            ->count();
+    }
+
+    /**
+     * Check if span is an episode (thing with subtype episode).
+     */
+    protected function isEpisode(Span $span): bool
+    {
+        if ($span->type_id !== 'thing') {
+            return false;
+        }
+
+        $subtype = $span->subtype ?? ($span->metadata['subtype'] ?? null);
+
+        return $subtype === 'episode';
+    }
+
+    /**
+     * Get the programme name (as a link) for an episode via contains connection.
+     */
+    protected function getEpisodeProgrammeName(Span $span): ?string
+    {
+        if (!$this->isEpisode($span)) {
+            return null;
+        }
+
+        $programmeConnection = $span->connectionsAsObjectWithAccess($this->currentUser)
+            ->where('type_id', 'contains')
+            ->whereHas('parent', function ($query) {
+                $query->where('type_id', 'thing');
+            })
+            ->with('parent')
+            ->first();
+
+        if ($programmeConnection && $programmeConnection->parent) {
+            return $this->makeSpanLink($programmeConnection->parent->name, $programmeConnection->parent);
+        }
+
+        return null;
+    }
+
+    /**
+     * Get human-readable broadcast date for an episode.
+     */
+    protected function getEpisodeBroadcastDate(Span $span): ?string
+    {
+        if (!$this->isEpisode($span)) {
+            return null;
+        }
+
+        if ($span->start_year) {
+            return $this->formatHumanReadableDate($span->start_year, $span->start_month, $span->start_day);
+        }
+
+        $published = $span->metadata['published'] ?? null;
+        if (!$published) {
+            return null;
+        }
+
+        try {
+            $date = Carbon::parse($published);
+
+            return $date->format('j F, Y');
+        } catch (\Throwable $e) {
+            return $published;
+        }
     }
 
     /**
