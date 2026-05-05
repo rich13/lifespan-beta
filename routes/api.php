@@ -671,6 +671,9 @@ Route::get('/places/{span}/lived-here-card', [\App\Http\Controllers\PlacesContro
 // when user views their own span and Sanctum does not treat the request as stateful).
 Route::get('/spans/{span}', [SpanSearchController::class, 'timeline'])->middleware(['web', 'timeout.prevention']);
 Route::get('/spans/{span}/object-connections', [SpanSearchController::class, 'timelineObjectConnections'])->middleware(['web', 'timeout.prevention']);
+Route::get('/spans/{span}/subject-connections', [SpanSearchController::class, 'timelineSubjectConnections'])->middleware(['web', 'timeout.prevention']);
+Route::get('/spans/{span}/leadership-overlay', [SpanSearchController::class, 'timelineLeadershipOverlay'])->middleware(['web', 'timeout.prevention']);
+Route::get('/spans/{span}/context-overlay-events', [SpanSearchController::class, 'timelineContextOverlayEvents'])->middleware(['web', 'timeout.prevention']);
 Route::get('/spans/{span}/during-connections', [SpanSearchController::class, 'timelineDuringConnections'])->middleware(['web', 'timeout.prevention']);
 Route::post('/spans/batch-timeline', [SpanSearchController::class, 'batchTimeline'])->middleware(['web', 'timeout.prevention']);
 

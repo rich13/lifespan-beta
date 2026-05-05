@@ -240,6 +240,12 @@ Route::middleware('web')->group(function () {
         });
     });
 
+    // Short timeline view route (/s/:span)
+    Route::prefix('s')->middleware('span.access')->group(function () {
+        Route::get('/{subject}', [SpanController::class, 'showTimeline'])
+            ->name('spans.timeline-view');
+    });
+
     // Span routes
     Route::prefix('spans')->group(function () {
             // Search route (works with session auth)
@@ -1341,6 +1347,28 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                     Route::get('/stats', [App\Http\Controllers\Admin\BluePlaqueImportController::class, 'stats'])
                         ->name('stats');
                 });
+
+                // Braggoscope episodes import
+                Route::prefix('braggoscope')->name('braggoscope.')->group(function () {
+                    Route::get('/', [App\Http\Controllers\Admin\BraggoscopeImportController::class, 'index'])
+                        ->name('index');
+                    Route::post('/search-episode', [App\Http\Controllers\Admin\BraggoscopeImportController::class, 'searchEpisode'])
+                        ->name('search-episode');
+                    Route::post('/process-single', [App\Http\Controllers\Admin\BraggoscopeImportController::class, 'processSingle'])
+                        ->name('process-single');
+                    Route::post('/process-batch', [App\Http\Controllers\Admin\BraggoscopeImportController::class, 'processBatch'])
+                        ->name('process-batch');
+                    Route::post('/process-all', [App\Http\Controllers\Admin\BraggoscopeImportController::class, 'processAll'])
+                        ->name('process-all');
+                    Route::post('/import-background', [App\Http\Controllers\Admin\BraggoscopeImportController::class, 'startBackgroundImport'])
+                        ->name('import-background');
+                    Route::post('/cancel-background', [App\Http\Controllers\Admin\BraggoscopeImportController::class, 'cancelBackgroundImport'])
+                        ->name('cancel-background');
+                    Route::get('/status', [App\Http\Controllers\Admin\BraggoscopeImportController::class, 'status'])
+                        ->name('status');
+                    Route::get('/stats', [App\Http\Controllers\Admin\BraggoscopeImportController::class, 'stats'])
+                        ->name('stats');
+                });
                 
                 // Wikimedia Commons Import
                 Route::prefix('wikimedia-commons')->name('wikimedia-commons.')->group(function () {
@@ -1872,6 +1900,12 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                 ->name('visualizer.index');
             Route::get('/visualizer/temporal', [VisualizerController::class, 'temporal'])
                 ->name('visualizer.temporal');
+            Route::post('/visualizer/nodes', [VisualizerController::class, 'getNodes'])
+                ->name('visualizer.nodes');
+            Route::post('/visualizer/connections', [VisualizerController::class, 'getConnections'])
+                ->name('visualizer.connections');
+            Route::post('/visualizer/graph-data', [VisualizerController::class, 'getGraphData'])
+                ->name('visualizer.graph-data');
 
             // Admin Tools
             Route::get('/tools', [App\Http\Controllers\Admin\ToolsController::class, 'index'])

@@ -529,6 +529,22 @@
                         </div>
                     </div>
                 </div>
+                <div class="col-md-3 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-3">
+                                <i class="bi bi-broadcast fs-2 text-primary me-3"></i>
+                                <div>
+                                    <h5 class="card-title mb-1">Braggoscope Episodes</h5>
+                                    <p class="card-text text-muted">Import In Our Time episodes from Braggoscope</p>
+                                </div>
+                            </div>
+                            <a href="{{ route('admin.import.braggoscope.index') }}" class="btn btn-outline-primary btn-sm w-100">
+                                <i class="bi bi-arrow-right"></i> Import
+                            </a>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 

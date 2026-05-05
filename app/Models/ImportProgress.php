@@ -65,6 +65,16 @@ class ImportProgress extends Model
     }
 
     /**
+     * Find Braggoscope episodes import progress for the given user.
+     */
+    public static function forBraggoscopeEpisodes(string $userId): ?self
+    {
+        return self::where('import_type', 'braggoscope_episodes')
+            ->where('user_id', $userId)
+            ->first();
+    }
+
+    /**
      * Update progress with merge semantics for metadata fields.
      */
     public function mergeProgress(array $data): void
