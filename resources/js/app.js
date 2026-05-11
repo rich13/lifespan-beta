@@ -86,6 +86,9 @@ import './admin-mode-toggle';
 import './spans/show';
 import './spans/index';
 import './spans/edit';
+import './types-explorer-infinite';
+import './types-explorer-json-highlight';
+import './types-explorer-connections';
 import './layouts/user-dropdown';
 
 // Import component enhancements

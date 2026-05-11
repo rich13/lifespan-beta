@@ -20,6 +20,7 @@ class RouteHealthTest extends \Tests\TestCase
     protected $testConnection;
     protected $testConnectionType;
     protected $testSpanType;
+    protected $testTypesExplorerSpan;
 
     protected function setUp(): void
     {
@@ -55,6 +56,13 @@ class RouteHealthTest extends \Tests\TestCase
             'name' => 'Test Type',
             'description' => 'A test span type'
         ]);
+
+        $this->testTypesExplorerSpan = Span::factory()->create([
+            'name' => 'Types explorer health span',
+            'type_id' => 'test_type',
+            'slug' => 'types-explorer-health-' . uniqid('', true),
+            'access_level' => 'public',
+        ]);
         
         // Create test connection
         $this->testConnection = Connection::factory()->create([
@@ -82,6 +90,9 @@ class RouteHealthTest extends \Tests\TestCase
             '/spans/types',
             '/spans/types/' . $this->testSpanType->type_id,
             '/spans/types/' . $this->testSpanType->type_id . '/subtypes',
+            '/spans/types/' . $this->testSpanType->type_id . '/__no_subtype__',
+            '/spans/types/' . $this->testSpanType->type_id . '/__no_subtype__/' . $this->testTypesExplorerSpan->slug,
+            '/spans/' . $this->testTypesExplorerSpan->id . '/connections.json',
             '/spans/' . $this->testSpan->id,
             '/spans/' . $this->testSpan->id . '/story',
             '/history/' . $this->testSpan->id,

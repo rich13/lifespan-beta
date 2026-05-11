@@ -445,6 +445,8 @@ class Span extends Model
                     // Clear connections_all_v3 cache for guest and all user IDs
                     Cache::forget("connections_all_v3_{$connectedSpanId}_guest");
                     Cache::forget("connections_all_v4_{$connectedSpanId}_guest");
+                    Cache::forget("connections_all_v5_{$connectedSpanId}_guest");
+                    Cache::forget("connections_all_v6_{$connectedSpanId}_guest");
                     Cache::forget("connections_all_{$connectedSpanId}_guest");
                     Cache::forget("connection_types_{$connectedSpanId}");
                     
@@ -452,6 +454,8 @@ class Span extends Model
                     for ($userId = 1; $userId <= 1000; $userId++) {
                         Cache::forget("connections_all_v3_{$connectedSpanId}_{$userId}");
                         Cache::forget("connections_all_v4_{$connectedSpanId}_{$userId}");
+                        Cache::forget("connections_all_v5_{$connectedSpanId}_{$userId}");
+                        Cache::forget("connections_all_v6_{$connectedSpanId}_{$userId}");
                         Cache::forget("connections_all_{$connectedSpanId}_{$userId}");
                     }
                     
@@ -460,6 +464,8 @@ class Span extends Model
                         $currentUserId = auth()->id();
                         Cache::forget("connections_all_v3_{$connectedSpanId}_{$currentUserId}");
                         Cache::forget("connections_all_v4_{$connectedSpanId}_{$currentUserId}");
+                        Cache::forget("connections_all_v5_{$connectedSpanId}_{$currentUserId}");
+                        Cache::forget("connections_all_v6_{$connectedSpanId}_{$currentUserId}");
                         Cache::forget("connections_all_{$connectedSpanId}_{$currentUserId}");
                     }
                 }
@@ -710,8 +716,8 @@ class Span extends Model
                    $isTimeless;
         }
 
-        // Validate year range
-        if ($year < 1 || $year > 9999) {
+        // Allow astronomical year numbering and deep time values.
+        if (!is_int($year)) {
             return false;
         }
 
@@ -3167,6 +3173,145 @@ class Span extends Model
                 \Carbon\Carbon::create($year, $month, $day, 23, 59, 59)
             ];
         }
+    }
+
+    public function toTemporalDatePayload(string $prefix): ?array
+    {
+        $year = $this->{$prefix . '_year'};
+        if ($year === null) {
+            return null;
+        }
+
+        return [
+            'year' => $year,
+            'month' => $this->{$prefix . '_month'},
+            'day' => $this->{$prefix . '_day'},
+            'precision' => $this->{$prefix . '_precision'} ?? $this->inferPrecisionLevel(
+                $this->{$prefix . '_year'},
+                $this->{$prefix . '_month'},
+                $this->{$prefix . '_day'}
+            ),
+        ];
+    }
+
+    public function getTemporalStateAtDateParts(?int $year, ?int $month, ?int $day): array
+    {
+        if ($year === null || $month === null || $day === null) {
+            return [
+                'status' => $this->end_year === null ? 'active' : 'ended',
+                'starts' => null,
+                'ended' => $this->end_year === null ? null : $this->formatTemporalDateString('end'),
+            ];
+        }
+
+        $target = [$year, $month, $day];
+        $startRange = $this->dateRangeForPrefix('start');
+        $endRange = $this->dateRangeForPrefix('end');
+
+        if ($startRange !== null && $this->compareDateTuple($target, $startRange[0]) < 0) {
+            return [
+                'status' => 'not-yet',
+                'starts' => $this->formatTemporalDateString('start'),
+                'ended' => null,
+            ];
+        }
+
+        if ($endRange !== null && $this->compareDateTuple($target, $endRange[1]) > 0) {
+            return [
+                'status' => 'ended',
+                'starts' => null,
+                'ended' => $this->formatTemporalDateString('end'),
+            ];
+        }
+
+        return [
+            'status' => 'active',
+            'starts' => null,
+            'ended' => null,
+        ];
+    }
+
+    public function isKnownByDateParts(int $year, int $month, int $day): bool
+    {
+        if ($this->created_at === null) {
+            return true;
+        }
+
+        $created = [
+            (int) $this->created_at->format('Y'),
+            (int) $this->created_at->format('m'),
+            (int) $this->created_at->format('d'),
+        ];
+
+        return $this->compareDateTuple([$year, $month, $day], $created) >= 0;
+    }
+
+    private function dateRangeForPrefix(string $prefix): ?array
+    {
+        $year = $this->{$prefix . '_year'};
+        if ($year === null) {
+            return null;
+        }
+
+        $month = $this->{$prefix . '_month'};
+        $day = $this->{$prefix . '_day'};
+        $precision = $this->{$prefix . '_precision'} ?? $this->inferPrecisionLevel($year, $month, $day);
+
+        if ($precision === 'day' && $month !== null && $day !== null) {
+            return [[$year, $month, $day], [$year, $month, $day]];
+        }
+
+        if ($precision === 'month' && $month !== null) {
+            return [[$year, $month, 1], [$year, $month, $this->daysInMonth($year, $month)]];
+        }
+
+        return [[$year, 1, 1], [$year, 12, 31]];
+    }
+
+    private function formatTemporalDateString(string $prefix): ?string
+    {
+        $year = $this->{$prefix . '_year'};
+        if ($year === null) {
+            return null;
+        }
+
+        $month = $this->{$prefix . '_month'} ?? 1;
+        $day = $this->{$prefix . '_day'} ?? 1;
+
+        return sprintf('%d-%02d-%02d', $year, $month, $day);
+    }
+
+    private function compareDateTuple(array $left, array $right): int
+    {
+        foreach ([0, 1, 2] as $index) {
+            if ($left[$index] < $right[$index]) {
+                return -1;
+            }
+            if ($left[$index] > $right[$index]) {
+                return 1;
+            }
+        }
+
+        return 0;
+    }
+
+    private function daysInMonth(int $year, int $month): int
+    {
+        if (in_array($month, [1, 3, 5, 7, 8, 10, 12], true)) {
+            return 31;
+        }
+        if (in_array($month, [4, 6, 9, 11], true)) {
+            return 30;
+        }
+
+        if ($year % 400 === 0) {
+            return 29;
+        }
+        if ($year % 100 === 0) {
+            return 28;
+        }
+
+        return $year % 4 === 0 ? 29 : 28;
     }
 
     /**

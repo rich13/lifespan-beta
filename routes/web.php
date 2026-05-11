@@ -253,6 +253,7 @@ Route::middleware('web')->group(function () {
             
             // JSON endpoint - MUST come before auth group's /{subject} catch-all so /spans/x.json returns 401 for private spans (not 302 redirect)
             Route::middleware('span.access')->group(function () {
+                Route::get('/{span}/connections.json', [SpanController::class, 'connectionsJson'])->name('spans.show.connections.json');
                 Route::get('/{span}.json', [SpanController::class, 'showJson'])->name('spans.show.json');
             });
 
@@ -260,10 +261,16 @@ Route::middleware('web')->group(function () {
             
             // Types route (public)
             Route::get('/types', [SpanController::class, 'types'])->name('spans.types');
-            Route::get('/types/{type}', [SpanController::class, 'showType'])->name('spans.types.show');
             Route::get('/types/{type}/subtype-options', [SpanController::class, 'subtypeOptions'])->name('spans.types.subtype-options');
-            Route::get('/types/{type}/subtypes', [SpanController::class, 'showSubtypes'])->name('spans.types.subtypes');
-            Route::get('/types/{type}/subtypes/{subtype}', [SpanController::class, 'showTypeSubtype'])->name('spans.types.subtypes.show');
+            Route::get('/types/{type}/subtypes', function (string $type) {
+                return redirect()->route('spans.types.show', $type, 301);
+            });
+            Route::get('/types/{type}/subtypes/{subtype}', function (string $type, string $subtype) {
+                return redirect()->route('spans.types.subtypes.show', ['type' => $type, 'subtype' => $subtype], 301);
+            });
+            Route::get('/types/{type}/{subtype}/{span}', [SpanController::class, 'showTypeSubtypeSpan'])->name('spans.types.explorer.span');
+            Route::get('/types/{type}/{subtype}', [SpanController::class, 'showTypeSubtype'])->name('spans.types.subtypes.show');
+            Route::get('/types/{type}', [SpanController::class, 'showType'])->name('spans.types.show');
             
             // Protected routes
             Route::middleware(['auth', 'verified', 'profile.complete'])->group(function () {
@@ -699,6 +706,10 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                     Cache::forget("connections_all_v3_{$childId}_guest");
                     Cache::forget("connections_all_v4_{$parentId}_guest");
                     Cache::forget("connections_all_v4_{$childId}_guest");
+                    Cache::forget("connections_all_v5_{$parentId}_guest");
+                    Cache::forget("connections_all_v5_{$childId}_guest");
+                    Cache::forget("connections_all_v6_{$parentId}_guest");
+                    Cache::forget("connections_all_v6_{$childId}_guest");
                     
                     if (auth()->check()) {
                         $currentUserId = auth()->id();
@@ -706,6 +717,10 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                         Cache::forget("connections_all_v3_{$childId}_{$currentUserId}");
                         Cache::forget("connections_all_v4_{$parentId}_{$currentUserId}");
                         Cache::forget("connections_all_v4_{$childId}_{$currentUserId}");
+                        Cache::forget("connections_all_v5_{$parentId}_{$currentUserId}");
+                        Cache::forget("connections_all_v5_{$childId}_{$currentUserId}");
+                        Cache::forget("connections_all_v6_{$parentId}_{$currentUserId}");
+                        Cache::forget("connections_all_v6_{$childId}_{$currentUserId}");
                     }
 
                     return response()->json([
@@ -904,15 +919,57 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
             
             // Specific span routes (must come before general span route to avoid conflicts)
             Route::get('/{span}/story', [SpanController::class, 'story'])->name('spans.story');
+
+            // Lifespan temporal URL grammar (non-breaking; placed before catch-all triple routes)
+            $lifespanDatePattern = '-?[0-9]+(?:-[0-9]{2})?(?:-[0-9]{2})?';
+            $lifespanDayPattern = '-?[0-9]+-[0-9]{2}-[0-9]{2}';
+            $lifespanPartialDatePattern = '-?[0-9]+(?:-[0-9]{2})?';
+            Route::get('/@{atDate}/{span}/@{asOfDate}', [SpanController::class, 'showAtDateWithAsOf'])
+                ->where(['atDate' => $lifespanDatePattern, 'asOfDate' => $lifespanDatePattern]);
+            // Canonical UI time-travel URL (day precision)
+            Route::get('/@{date}/{span}', [SpanController::class, 'showAtDateCanonical'])
+                ->where('date', $lifespanDayPattern)
+                ->name('spans.at-date');
+
+            // Partial-date shorthand snaps to period start and redirects to canonical day URL
+            Route::get('/@{atDate}/{subjectSlug}', function (string $atDate, string $subjectSlug) {
+                $parsedDate = app(\App\Services\Lifespan\UrlDateParser::class)->parseAnchor($atDate);
+                if ($parsedDate === null) {
+                    abort(400, 'Invalid date format');
+                }
+
+                return redirect()->route('spans.at-date', [
+                    'span' => $subjectSlug,
+                    'date' => $parsedDate['iso'],
+                ], 301);
+            })->where('atDate', $lifespanPartialDatePattern);
+            Route::get('/{span}/@{asOfDate}', [SpanController::class, 'showAsOfDate'])
+                ->where('asOfDate', $lifespanDatePattern)
+                ->name('spans.as-of');
+            Route::get('/@{atDate}/{subjectSlug}/{predicateSlug}/{objectSlug}/@{asOfDate}', function (\Illuminate\Http\Request $request, string $atDate, string $subjectSlug, string $predicateSlug, string $objectSlug, string $asOfDate) {
+                $path = sprintf('@%s/%s/%s/%s/@%s', $atDate, $subjectSlug, $predicateSlug, $objectSlug, $asOfDate);
+                return app(\App\Http\Controllers\Api\LifespanUrlController::class)->resolve($request, $path);
+            })->where(['atDate' => $lifespanDatePattern, 'asOfDate' => $lifespanDatePattern]);
+            Route::get('/@{atDate}/{subjectSlug}/{predicateSlug}/{objectSlug}', function (\Illuminate\Http\Request $request, string $atDate, string $subjectSlug, string $predicateSlug, string $objectSlug) {
+                $path = sprintf('@%s/%s/%s/%s', $atDate, $subjectSlug, $predicateSlug, $objectSlug);
+                return app(\App\Http\Controllers\Api\LifespanUrlController::class)->resolve($request, $path);
+            })->where('atDate', $lifespanDatePattern);
+            Route::get('/{subjectSlug}/{predicateSlug}/{objectSlug}/@{asOfDate}', function (\Illuminate\Http\Request $request, string $subjectSlug, string $predicateSlug, string $objectSlug, string $asOfDate) {
+                $path = sprintf('%s/%s/%s/@%s', $subjectSlug, $predicateSlug, $objectSlug, $asOfDate);
+                return app(\App\Http\Controllers\Api\LifespanUrlController::class)->resolve($request, $path);
+            })->where('asOfDate', $lifespanDatePattern);
             
             // Time travel exit route - clear cookie and return to present
             Route::get('/{span}/at/exit', [SpanController::class, 'exitTimeTravel'])
                 ->name('spans.at-date-exit');
             
-            // Time travel route - show span at specific date
-            Route::get('/{span}/at/{date}', [SpanController::class, 'showAtDate'])
-                ->where('date', '[0-9]{4}-[0-9]{2}-[0-9]{2}')
-                ->name('spans.at-date');
+            // Legacy time travel URL redirects to canonical @date URL
+            Route::get('/{span}/at/{date}', function (\App\Models\Span $span, string $date) {
+                return redirect()->route('spans.at-date', [
+                    'span' => $span,
+                    'date' => $date,
+                ], 301);
+            })->where('date', $lifespanDayPattern);
             
             // Connection routes (must come before general span route)
             Route::get('/{subject}/connections', [SpanController::class, 'allConnections'])->name('spans.all-connections');

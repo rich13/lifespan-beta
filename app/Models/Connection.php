@@ -239,7 +239,7 @@ class Connection extends Model
         // Clear web view connection caches
         Cache::forget("connection_types_{$spanId}");
         
-        // Get all connection types for this span to clear type-specific caches
+        // Connection types that may have per-type list caches for this span (schema + actually stored edges)
         $connectionTypes = \App\Models\ConnectionType::where(function($query) use ($spanId) {
             $span = \App\Models\Span::find($spanId);
             if ($span) {
@@ -247,6 +247,12 @@ class Connection extends Model
                       ->orWhereJsonContains('allowed_span_types->child', $span->type_id);
             }
         })->pluck('type');
+        $actualTypeIds = \App\Models\Connection::where('parent_id', $spanId)
+            ->orWhere('child_id', $spanId)
+            ->pluck('type_id')
+            ->unique()
+            ->filter();
+        $connectionTypes = $connectionTypes->merge($actualTypeIds)->unique()->values();
         
         // Clear caches for all users (we'll use a pattern-based approach)
         // Note: In a production environment, you might want to use Redis SCAN or similar
@@ -259,6 +265,8 @@ class Connection extends Model
             Cache::forget("connections_all_{$spanId}_{$userId}");
             Cache::forget("connections_all_v3_{$spanId}_{$userId}");
             Cache::forget("connections_all_v4_{$spanId}_{$userId}");
+            Cache::forget("connections_all_v5_{$spanId}_{$userId}");
+            Cache::forget("connections_all_v6_{$spanId}_{$userId}");
             
             // Clear per-type connection list caches
             foreach ($connectionTypes as $type) {
@@ -271,6 +279,8 @@ class Connection extends Model
         Cache::forget("connections_all_{$spanId}_guest");
         Cache::forget("connections_all_v3_{$spanId}_guest");
         Cache::forget("connections_all_v4_{$spanId}_guest");
+        Cache::forget("connections_all_v5_{$spanId}_guest");
+        Cache::forget("connections_all_v6_{$spanId}_guest");
         foreach ($connectionTypes as $type) {
             Cache::forget("connections_list_{$spanId}_{$type}_guest");
         }
@@ -285,6 +295,8 @@ class Connection extends Model
             Cache::forget("connections_all_{$spanId}_{$currentUserId}");
             Cache::forget("connections_all_v3_{$spanId}_{$currentUserId}");
             Cache::forget("connections_all_v4_{$spanId}_{$currentUserId}");
+            Cache::forget("connections_all_v5_{$spanId}_{$currentUserId}");
+            Cache::forget("connections_all_v6_{$spanId}_{$currentUserId}");
             
             foreach ($connectionTypes as $type) {
                 Cache::forget("connections_list_{$spanId}_{$type}_{$currentUserId}");
