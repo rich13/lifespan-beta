@@ -3005,24 +3005,7 @@ class YamlSpanService
      */
     private function getEntityIcon(string $type): string
     {
-        switch ($type) {
-            case 'person':
-                return 'bi-person-fill';
-            case 'organisation':
-                return 'bi-building';
-            case 'place':
-                return 'bi-geo-alt-fill';
-            case 'event':
-                return 'bi-calendar-event-fill';
-            case 'thing':
-                return 'bi-box';
-            case 'band':
-                return 'bi-cassette';
-            case 'role':
-                return 'bi-person-badge';
-            default:
-                return 'bi-question-circle';
-        }
+        return \App\Support\BootstrapIconMap::biClass('span', $type);
     }
 
     /**

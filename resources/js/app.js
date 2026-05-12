@@ -1,4 +1,5 @@
 import './bootstrap';
+import './bootstrap-icon-map';
 import 'bootstrap';
 import './dropdown-debug';
 import './debug';
