@@ -232,6 +232,17 @@ document.addEventListener('DOMContentLoaded', function() {
         return `${monthNames[month - 1]} ${day}, ${year}`;
     }
 
+    function spanTemporalFieldsIdentical(span) {
+        if (!span || span.start_year == null || span.end_year == null) {
+            return false;
+        }
+        const sm = span.start_month != null && span.start_month !== '' ? Number(span.start_month) : 0;
+        const em = span.end_month != null && span.end_month !== '' ? Number(span.end_month) : 0;
+        const sd = span.start_day != null && span.start_day !== '' ? Number(span.start_day) : 0;
+        const ed = span.end_day != null && span.end_day !== '' ? Number(span.end_day) : 0;
+        return Number(span.start_year) === Number(span.end_year) && sm === em && sd === ed;
+    }
+
     // Helper function to check if a bar's row is visible (not filtered out)
     function isBarRowVisible(barElement) {
         // Get the SVG element and find the parent row group
@@ -429,6 +440,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 const subjectName = swimlane.label || 'Life';
                 const startDateStr = formatDate(subjectStartYear, null, null);
                 const endDateStr = subjectEndYear ? formatDate(subjectEndYear, null, null) : 'ongoing';
+                const lifeDateLine = subjectEndYear && String(subjectStartYear) === String(subjectEndYear)
+                    ? startDateStr
+                    : `${startDateStr} - ${endDateStr}`;
                 
                 lifeBar.on('mouseover', function(event) {
                     // Check if the bar's row is visible before showing tooltip
@@ -452,7 +466,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                     lifeTooltip.html(`
                         <strong>${subjectName}</strong><br/>
-                        ${startDateStr} - ${endDateStr}
+                        ${lifeDateLine}
                     `);
                     
                     // Position tooltip with overflow detection
@@ -616,6 +630,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Format dates for display - pass null for missing month/day, not current values
                     const startDateStr = formatDate(startYear, startMonth, startDay);
                     const endDateStr = isOngoing ? 'ongoing' : formatDate(endYear, endMonth, endDay);
+                    const connectionDateLine = isOngoing
+                        ? `${startDateStr} (ongoing)`
+                        : (spanTemporalFieldsIdentical(connectionSpan)
+                            ? startDateStr
+                            : `${startDateStr} - ${endDateStr}`);
                     
                     // Build tooltip text with predicate
                     const tooltipTitle = predicate ? `${predicate} ${otherSpan.name}` : otherSpan.name;
@@ -668,7 +687,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                     tooltip.html(`
                         <strong>${tooltipTitle}</strong><br/>
-                        ${startDateStr}${isOngoing ? ' (ongoing)' : ` - ${endDateStr}`}
+                        ${connectionDateLine}
                         ${footerHtml}
                     `);
                     

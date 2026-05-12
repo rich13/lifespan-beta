@@ -57,17 +57,7 @@
             
             // Get dates from connection span
             $dates = $connection->connectionSpan;
-            $hasDates = $dates && ($dates->start_year || $dates->end_year);
-            $dateText = null;
-            if ($hasDates) {
-                if ($dates->start_year && $dates->end_year) {
-                    $dateText = ($dates->formatted_start_date ?? $dates->start_year) . ' – ' . ($dates->formatted_end_date ?? $dates->end_year);
-                } elseif ($dates->start_year) {
-                    $dateText = 'from ' . ($dates->formatted_start_date ?? $dates->start_year);
-                } elseif ($dates->end_year) {
-                    $dateText = 'until ' . ($dates->formatted_end_date ?? $dates->end_year);
-                }
-            }
+            $dateText = $dates ? $dates->formatted_date_range : null;
             
             $allResidents->put($person->id, [
                 'person' => $person,
@@ -123,17 +113,7 @@
             
             // Get dates from connection span
             $dates = $connection->connectionSpan;
-            $hasDates = $dates && ($dates->start_year || $dates->end_year);
-            $dateText = null;
-            if ($hasDates) {
-                if ($dates->start_year && $dates->end_year) {
-                    $dateText = ($dates->formatted_start_date ?? $dates->start_year) . ' – ' . ($dates->formatted_end_date ?? $dates->end_year);
-                } elseif ($dates->start_year) {
-                    $dateText = 'from ' . ($dates->formatted_start_date ?? $dates->start_year);
-                } elseif ($dates->end_year) {
-                    $dateText = 'until ' . ($dates->formatted_end_date ?? $dates->end_year);
-                }
-            }
+            $dateText = $dates ? $dates->formatted_date_range : null;
             
             $allLocated->put($item->id, [
                 'item' => $item,

@@ -64,6 +64,18 @@
             <i class="bi bi-body-text me-1"></i> <span>Timeline</span>
         </a>
     </li>-->
+
+    <li class="nav-item">
+        <a class="nav-link {{ request()->routeIs(
+            'spans.types',
+            'spans.types.show',
+            'spans.types.subtypes.show',
+            'spans.types.explorer.span',
+            'spans.types.subtype-options',
+        ) ? 'active' : '' }}" href="{{ route('spans.types') }}">
+            <i class="bi bi-columns-gap me-1"></i> <span>Browse</span>
+        </a>
+    </li>
     
     <li class="nav-item">
         <a class="nav-link {{ request()->routeIs('explore.*') ? 'active' : '' }}" href="{{ route('explore.index') }}">

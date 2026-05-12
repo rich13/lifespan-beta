@@ -70,17 +70,7 @@
                     if (!$connectionSpan) {
                         continue;
                     }
-                    $hasDates = $connectionSpan->start_year || $connectionSpan->end_year;
-                    $dateText = null;
-                    if ($hasDates) {
-                        if ($connectionSpan->start_year && $connectionSpan->end_year) {
-                            $dateText = ($connectionSpan->formatted_start_date ?? $connectionSpan->start_year) . ' – ' . ($connectionSpan->formatted_end_date ?? $connectionSpan->end_year);
-                        } elseif ($connectionSpan->start_year) {
-                            $dateText = 'from ' . ($connectionSpan->formatted_start_date ?? $connectionSpan->start_year);
-                        } elseif ($connectionSpan->end_year) {
-                            $dateText = 'until ' . ($connectionSpan->formatted_end_date ?? $connectionSpan->end_year);
-                        }
-                    }
+                    $dateText = $connectionSpan->formatted_date_range;
                 @endphp
                 <div class="list-group-item px-0 py-2 border-0 border-bottom">
                     <div class="d-flex align-items-center justify-content-between">

@@ -65,6 +65,7 @@ use App\Services\SetFilterService;
  * @property-read SpanType $type The type definition for this span
  * @property-read string $formatted_start_date Formatted start date based on precision
  * @property-read string $formatted_end_date Formatted end date based on precision
+ * @property-read string|null $formatted_date_range Compact range with en dash, or one date when start and end match
  * @property-read bool $is_ongoing Whether the span has no end date
  */
 class Span extends Model
@@ -446,7 +447,7 @@ class Span extends Model
                     Cache::forget("connections_all_v3_{$connectedSpanId}_guest");
                     Cache::forget("connections_all_v4_{$connectedSpanId}_guest");
                     Cache::forget("connections_all_v5_{$connectedSpanId}_guest");
-                    Cache::forget("connections_all_v6_{$connectedSpanId}_guest");
+                    Cache::forget("connections_all_v7_{$connectedSpanId}_guest");
                     Cache::forget("connections_all_{$connectedSpanId}_guest");
                     Cache::forget("connection_types_{$connectedSpanId}");
                     
@@ -455,7 +456,7 @@ class Span extends Model
                         Cache::forget("connections_all_v3_{$connectedSpanId}_{$userId}");
                         Cache::forget("connections_all_v4_{$connectedSpanId}_{$userId}");
                         Cache::forget("connections_all_v5_{$connectedSpanId}_{$userId}");
-                        Cache::forget("connections_all_v6_{$connectedSpanId}_{$userId}");
+                        Cache::forget("connections_all_v7_{$connectedSpanId}_{$userId}");
                         Cache::forget("connections_all_{$connectedSpanId}_{$userId}");
                     }
                     
@@ -465,7 +466,7 @@ class Span extends Model
                         Cache::forget("connections_all_v3_{$connectedSpanId}_{$currentUserId}");
                         Cache::forget("connections_all_v4_{$connectedSpanId}_{$currentUserId}");
                         Cache::forget("connections_all_v5_{$connectedSpanId}_{$currentUserId}");
-                        Cache::forget("connections_all_v6_{$connectedSpanId}_{$currentUserId}");
+                        Cache::forget("connections_all_v7_{$connectedSpanId}_{$currentUserId}");
                         Cache::forget("connections_all_{$connectedSpanId}_{$currentUserId}");
                     }
                 }
@@ -874,8 +875,12 @@ class Span extends Model
         $start = $this->human_readable_start_date;
         $end = $this->human_readable_end_date;
         if ($start || $end) {
-            $range = trim(($start ?? '…') . ' – ' . ($end ?? 'now'));
-            return $name . ' (' . $range . ')';
+            if ($start && $end && $this->hasIdenticalStartAndEndDates()) {
+                $range = (string) $start;
+            } else {
+                $range = trim(($start ?? '…').' – '.($end ?? 'now'));
+            }
+            return $name.' ('.$range.')';
         }
         return $name;
     }
@@ -1337,6 +1342,48 @@ class Span extends Model
             return null;
         }
         return $this->formatDateForDisplay($this->end_year, $this->end_month, $this->end_day);
+    }
+
+    /**
+     * True when start and end use the same year, month, and day fields (null month/day treated as 0 for comparison).
+     */
+    public function hasIdenticalStartAndEndDates(): bool
+    {
+        if (!$this->start_year || !$this->end_year) {
+            return false;
+        }
+
+        return (int) $this->start_year === (int) $this->end_year
+            && (int) ($this->start_month ?? 0) === (int) ($this->end_month ?? 0)
+            && (int) ($this->start_day ?? 0) === (int) ($this->end_day ?? 0);
+    }
+
+    /**
+     * Single-line range using formatted_start/end (e.g. 1990-06 or 1990-06-01), or "from"/"until" when one side is missing.
+     * When start and end match at the same precision, returns one value only.
+     */
+    public function getFormattedDateRangeAttribute(): ?string
+    {
+        $hasStart = (bool) $this->start_year;
+        $hasEnd = (bool) $this->end_year;
+
+        if (!$hasStart && !$hasEnd) {
+            return null;
+        }
+
+        if ($hasStart && $hasEnd) {
+            if ($this->hasIdenticalStartAndEndDates()) {
+                return (string) ($this->formatted_start_date ?? $this->start_year);
+            }
+
+            return ($this->formatted_start_date ?? $this->start_year).' – '.($this->formatted_end_date ?? $this->end_year);
+        }
+
+        if ($hasStart) {
+            return 'from '.($this->formatted_start_date ?? $this->start_year);
+        }
+
+        return 'until '.($this->formatted_end_date ?? $this->end_year);
     }
 
     /**

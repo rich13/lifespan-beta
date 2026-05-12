@@ -59,7 +59,7 @@
             {{ $startDate }}
         @endif
         
-        @if($hasEndDate)
+        @if($hasEndDate && !$span->hasIdenticalStartAndEndDates())
             <i class="bi bi-dash"></i>
 
             @php

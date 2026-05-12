@@ -12,6 +12,35 @@
             <div class="modal-body">
                 @php
                     $currentTimeTravelDate = request()->cookie('time_travel_date');
+                    $parseTemporalDate = function (?string $rawDate): ?array {
+                        if (!$rawDate || !preg_match('/^-?\d{1,20}(?:-\d{2})?(?:-\d{2})?$/', $rawDate)) {
+                            return null;
+                        }
+                        $parts = explode('-', ltrim($rawDate, '-'));
+                        $negative = str_starts_with($rawDate, '-');
+                        $year = (int) ($parts[0] ?? 0);
+                        if ($negative) {
+                            $year *= -1;
+                        }
+                        $month = isset($parts[1]) ? (int) $parts[1] : 1;
+                        $day = isset($parts[2]) ? (int) $parts[2] : 1;
+                        if ($month < 1 || $month > 12 || $day < 1 || $day > 31) {
+                            return null;
+                        }
+                        return ['year' => $year, 'month' => $month, 'day' => $day];
+                    };
+                    $formatTemporalDate = function (?string $rawDate) use ($parseTemporalDate): ?string {
+                        $parsed = $parseTemporalDate($rawDate);
+                        if (!$parsed) {
+                            return null;
+                        }
+                        $monthNames = [
+                            1 => 'January', 2 => 'February', 3 => 'March', 4 => 'April',
+                            5 => 'May', 6 => 'June', 7 => 'July', 8 => 'August',
+                            9 => 'September', 10 => 'October', 11 => 'November', 12 => 'December',
+                        ];
+                        return sprintf('%d %s %d', $parsed['day'], $monthNames[$parsed['month']], $parsed['year']);
+                    };
                     
                     // Check if we're on a date exploration page
                     $route = request()->route();
@@ -35,14 +64,14 @@
                 
                 @if($currentTimeTravelDate)
                     <p class="mb-3">
-                        <strong>Currently in time travel mode:</strong> {{ date('j F Y', strtotime($currentTimeTravelDate)) }}
+                        <strong>Currently in time travel mode:</strong> {{ $formatTemporalDate($currentTimeTravelDate) ?? $currentTimeTravelDate }}
                     </p>
                     <p class="mb-3">
                         Choose a different date to travel to, or modify the current date.
                     </p>
                 @elseif($currentDateBeingViewed)
                     <p class="mb-3">
-                        <strong>Currently viewing:</strong> {{ date('j F Y', strtotime($currentDateBeingViewed)) }}
+                        <strong>Currently viewing:</strong> {{ $formatTemporalDate($currentDateBeingViewed) ?? $currentDateBeingViewed }}
                     </p>
                     <p class="mb-3">
                         Choose a date to travel to from this point, or modify the current date.
@@ -82,15 +111,15 @@
                             
                             // Use current date being viewed, then time travel cookie, then today
                             if ($currentDateBeingViewed) {
-                                $currentDate = new DateTime($currentDateBeingViewed);
-                                $defaultDay = $currentDate->format('j');
-                                $defaultMonth = $currentDate->format('n');
-                                $defaultYear = $currentDate->format('Y');
+                                $parsedDate = $parseTemporalDate($currentDateBeingViewed);
+                                $defaultDay = $parsedDate['day'] ?? (int) date('j');
+                                $defaultMonth = $parsedDate['month'] ?? (int) date('n');
+                                $defaultYear = $parsedDate['year'] ?? (int) date('Y');
                             } elseif ($currentTimeTravelDate) {
-                                $currentDate = new DateTime($currentTimeTravelDate);
-                                $defaultDay = $currentDate->format('j');
-                                $defaultMonth = $currentDate->format('n');
-                                $defaultYear = $currentDate->format('Y');
+                                $parsedDate = $parseTemporalDate($currentTimeTravelDate);
+                                $defaultDay = $parsedDate['day'] ?? (int) date('j');
+                                $defaultMonth = $parsedDate['month'] ?? (int) date('n');
+                                $defaultYear = $parsedDate['year'] ?? (int) date('Y');
                             } else {
                                 $defaultDay = date('j');
                                 $defaultMonth = date('n');
@@ -130,8 +159,8 @@
                                        id="travel_year" 
                                        name="travel_year" 
                                        value="{{ $defaultYear }}"
-                                       min="1000" 
-                                       max="9999" 
+                                       min="-20000000000" 
+                                       max="20000000000" 
                                        placeholder="YYYY"
                                        required>
                             </div>

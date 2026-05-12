@@ -171,11 +171,18 @@ class ConfigurableStoryGeneratorTest extends TestCase
 
     public function test_story_generates_band_member_names(): void
     {
-        // Create a band
+        // Create a band (clear end dates — factory can otherwise supply end < merged start_year)
         $band = Span::factory()->create([
             'type_id' => 'band',
             'name' => 'The Beatles',
-            'start_year' => 1960
+            'start_year' => 1960,
+            'start_month' => 1,
+            'start_day' => 1,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
+            'start_precision' => 'day',
+            'end_precision' => null,
         ]);
 
         // Create some band members

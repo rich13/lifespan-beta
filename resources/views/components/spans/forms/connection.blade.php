@@ -33,52 +33,104 @@
         <input type="hidden" name="connection_type" value="{{ $connection?->type?->type }}">
         <input type="hidden" name="object_id" id="object_id" value="{{ old('object_id', $object?->id) }}">
 
-        <!-- SPO Sentence -->
-        <div class="mb-4">
-            <label class="form-label">Connection</label>
-            <div class="input-group">
-                <input type="text" 
-                       class="form-control" 
-                       value="{{ $subject?->name ?? 'No subject' }}" 
+        <div class="row g-3 mb-4">
+            <div class="col-12 col-lg-4">
+                <label class="form-label fw-semibold mb-1 d-block" for="connection_subject_display">
+                    Subject <span class="fw-normal text-muted">(parent)</span>
+                </label>
+                <input type="text"
+                       id="connection_subject_display"
+                       class="form-control"
+                       value="{{ $subject?->name ?? 'No subject' }}"
                        readonly
-                       title="The subject (parent) of this connection cannot be changed here. To change it, edit the connection from the subject's page.">
-                
-                <input type="text" 
-                       class="form-control" 
-                       value="{{ $connection?->type?->forward_predicate ?? 'No predicate' }}" 
+                       title="The subject is the parent end of this connection (parent_id). It cannot be changed here; edit from the subject span if you need to replace it.">
+            </div>
+            <div class="col-12 col-lg-4">
+                <label class="form-label fw-semibold mb-1 d-block" for="connection_predicate_display">
+                    Predicate
+                </label>
+                <input type="text"
+                       id="connection_predicate_display"
+                       class="form-control"
+                       value="{{ $connection?->type?->forward_predicate ?? 'No predicate' }}"
                        readonly
-                       title="The connection type (predicate) cannot be changed here. To change it, delete and recreate the connection with a different type.">
-
-                <input type="text" 
-                       class="form-control @error('object_id') is-invalid @enderror" 
-                       id="object_name" 
-                       name="object_name" 
-                       value="{{ old('object_name', $object?->name ?? '') }}" 
-                       placeholder="Search for object..."
+                       title="The connection type cannot be changed here. To use a different type, remove this connection and create a new one.">
+            </div>
+            <div class="col-12 col-lg-4">
+                <label class="form-label fw-semibold mb-1 d-block" for="object_name">
+                    Object <span class="fw-normal text-muted">(child)</span>
+                </label>
+                <input type="text"
+                       class="form-control @error('object_id') is-invalid @enderror"
+                       id="object_name"
+                       name="object_name"
+                       value="{{ old('object_name', $object?->name ?? '') }}"
+                       placeholder="Search or type object span name…"
                        autocomplete="off"
-                       required>
+                       required
+                       title="The object is the child end of this connection (child_id). You can point this edge at a different span.">
                 @error('object_id')
                     <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
-            </div>
-            <div class="form-text">
-                <small class="text-muted">
-                    You can change the object (child) of this connection. The subject and connection type are fixed and cannot be changed here.
-                </small>
             </div>
         </div>
 
         <!-- Preview -->
         <div class="alert alert-info mb-0">
-            <strong>Preview:</strong> 
-            <span id="connection-preview">
+            <strong>Preview (subject → predicate → object):</strong>
+            <span id="connection-preview" class="d-block mt-1">
                 @if($subject && $connection && $object)
                     {{ $subject->name }} {{ $connection->type->forward_predicate }} {{ $object->name }}
                 @else
-                    Select an object to see preview
+                    Enter the object (child) name to see the full sentence.
                 @endif
             </span>
         </div>
+
+        @if($span->type_id === 'connection' && $connection && $connection->type_id === 'family')
+            <div class="mt-3 pt-3 border-top">
+                <button type="button"
+                        class="btn btn-outline-warning btn-sm"
+                        data-bs-toggle="modal"
+                        data-bs-target="#swap-family-ends-modal">
+                    Swap subject and object…
+                </button>
+            </div>
+
+            @push('span-edit-modals')
+            <div class="modal fade"
+                 id="swap-family-ends-modal"
+                 tabindex="-1"
+                 aria-labelledby="swap-family-ends-modal-label"
+                 aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h2 class="modal-title h5" id="swap-family-ends-modal-label">Swap subject and object?</h2>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p>
+                                This exchanges who is stored as the <strong>parent</strong> (subject) and who is stored as the
+                                <strong>child</strong> (object) for this <strong>family</strong> link.
+                            </p>
+                            <p class="mb-0 text-muted small">
+                                Only use this if the relationship was saved the wrong way round. Any directional metadata on the connection
+                                (for example relationship labels) will be cleared so you can set it again correctly.
+                            </p>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <form method="post" action="{{ route('spans.connection.swap-family-ends', $span) }}">
+                                @csrf
+                                <button type="submit" class="btn btn-warning">Swap subject and object</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            @endpush
+        @endif
     </div>
 </div>
 
@@ -97,7 +149,7 @@ $(document).ready(function() {
         if (subject && predicate && object) {
             preview.text(`${subject} ${predicate} ${object}`);
         } else {
-            preview.text('Enter an object name to see preview');
+            preview.text('Enter the object (child) name to see the full sentence.');
         }
     }
     

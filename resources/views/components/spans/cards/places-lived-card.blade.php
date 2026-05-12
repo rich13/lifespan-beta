@@ -33,16 +33,7 @@
         $place = $conn->child;
         $coords = $place->getCoordinates();
         $dates = $conn->connectionSpan;
-        $dateText = null;
-        if ($dates && ($dates->start_year || $dates->end_year)) {
-            if ($dates->start_year && $dates->end_year) {
-                $dateText = ($dates->formatted_start_date ?? $dates->start_year) . ' – ' . ($dates->formatted_end_date ?? $dates->end_year);
-            } elseif ($dates->start_year) {
-                $dateText = 'from ' . ($dates->formatted_start_date ?? $dates->start_year);
-            } elseif ($dates->end_year) {
-                $dateText = 'until ' . ($dates->formatted_end_date ?? $dates->end_year);
-            }
-        }
+        $dateText = $dates ? $dates->formatted_date_range : null;
         return [
             'id' => $place->id,
             'name' => $place->name,
@@ -87,17 +78,7 @@
                 @php
                     $place = $connection->child;
                     $dates = $connection->connectionSpan;
-                    $hasDates = $dates && ($dates->start_year || $dates->end_year);
-                    $dateText = null;
-                    if ($hasDates) {
-                        if ($dates->start_year && $dates->end_year) {
-                            $dateText = ($dates->formatted_start_date ?? $dates->start_year) . ' – ' . ($dates->formatted_end_date ?? $dates->end_year);
-                        } elseif ($dates->start_year) {
-                            $dateText = 'from ' . ($dates->formatted_start_date ?? $dates->start_year);
-                        } elseif ($dates->end_year) {
-                            $dateText = 'until ' . ($dates->formatted_end_date ?? $dates->end_year);
-                        }
-                    }
+                    $dateText = $dates ? $dates->formatted_date_range : null;
                 @endphp
                 <div class="list-group-item px-0 py-2 border-0 border-bottom">
                     <div class="d-flex align-items-center">

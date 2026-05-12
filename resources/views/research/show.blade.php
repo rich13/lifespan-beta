@@ -562,16 +562,7 @@
                                                             $dateText = null;
                                                             if ($connection && $connection->connectionSpan) {
                                                                 $connectionSpan = $connection->connectionSpan;
-                                                                $hasDates = $connectionSpan->start_year || $connectionSpan->end_year;
-                                                                if ($hasDates) {
-                                                                    if ($connectionSpan->start_year && $connectionSpan->end_year) {
-                                                                        $dateText = ($connectionSpan->formatted_start_date ?? $connectionSpan->start_year) . ' – ' . ($connectionSpan->formatted_end_date ?? $connectionSpan->end_year);
-                                                                    } elseif ($connectionSpan->start_year) {
-                                                                        $dateText = 'from ' . ($connectionSpan->formatted_start_date ?? $connectionSpan->start_year);
-                                                                    } elseif ($connectionSpan->end_year) {
-                                                                        $dateText = 'until ' . ($connectionSpan->formatted_end_date ?? $connectionSpan->end_year);
-                                                                    }
-                                                                }
+                                                                $dateText = $connectionSpan->formatted_date_range;
                                                             }
                                                         @endphp
                                                         
@@ -643,16 +634,7 @@
                                                                                     $secondDateText = null;
                                                                                     if ($secondConnection && $secondConnection->connectionSpan) {
                                                                                         $secondConnectionSpan = $secondConnection->connectionSpan;
-                                                                                        $hasSecondDates = $secondConnectionSpan->start_year || $secondConnectionSpan->end_year;
-                                                                                        if ($hasSecondDates) {
-                                                                                            if ($secondConnectionSpan->start_year && $secondConnectionSpan->end_year) {
-                                                                                                $secondDateText = ($secondConnectionSpan->formatted_start_date ?? $secondConnectionSpan->start_year) . ' – ' . ($secondConnectionSpan->formatted_end_date ?? $secondConnectionSpan->end_year);
-                                                                                            } elseif ($secondConnectionSpan->start_year) {
-                                                                                                $secondDateText = 'from ' . ($secondConnectionSpan->formatted_start_date ?? $secondConnectionSpan->start_year);
-                                                                                            } elseif ($secondConnectionSpan->end_year) {
-                                                                                                $secondDateText = 'until ' . ($secondConnectionSpan->formatted_end_date ?? $secondConnectionSpan->end_year);
-                                                                                            }
-                                                                                        }
+                                                                                        $secondDateText = $secondConnectionSpan->formatted_date_range;
                                                                                     }
                                                                                 @endphp
                                                                                 <a href="{{ route('spans.show', $secondSpan) }}" 

@@ -1443,10 +1443,24 @@ class SpanController extends Controller
             $connectionSpan = $conn->connectionSpan ?? null;
             $subtypeKey = $this->typesExplorerSubtypeKeyForSpan($other);
 
+            $connectionTypeRow = ($conn->relationLoaded('type') && $conn->type)
+                ? $conn->type
+                : ConnectionType::query()->where('type', $conn->type_id)->first();
+            $forwardPred = trim((string) ($connectionTypeRow?->forward_predicate ?? ''));
+            $inversePred = trim((string) ($connectionTypeRow?->inverse_predicate ?? ''));
+            $symmetricPredicate = $forwardPred !== '' && strcasecmp($forwardPred, $inversePred) === 0;
+
+            $genealogyOtherRole = null;
+            if ($conn->type_id === 'family') {
+                $genealogyOtherRole = !empty($conn->is_parent) ? 'child' : 'parent';
+            }
+
             $items[] = [
                 'id' => $conn->id,
                 'predicate_type_id' => $conn->connection_type_id ?? $conn->type_id,
                 'predicate' => $conn->predicate ?? '',
+                'symmetric_predicate' => $symmetricPredicate,
+                'genealogy_other_role' => $genealogyOtherRole,
                 'direction' => !empty($conn->is_parent) ? 'outgoing' : 'incoming',
                 'other' => [
                     'id' => $other->id,
@@ -1454,6 +1468,7 @@ class SpanController extends Controller
                     'slug' => $other->slug,
                     'short_id' => $other->short_id,
                     'type_id' => $other->type_id,
+                    'subtype_key' => $subtypeKey,
                     'url' => route('spans.show', ['subject' => $other]),
                     'explorer_url' => !empty($other->type_id)
                         ? route('spans.types.explorer.span', [
@@ -1504,6 +1519,7 @@ class SpanController extends Controller
                         'slug' => $participant->slug,
                         'short_id' => $participant->short_id,
                         'type_id' => $participant->type_id,
+                        'subtype_key' => $participantSubtypeKey,
                         'url' => route('spans.show', ['subject' => $participant]),
                         'explorer_url' => !empty($participant->type_id)
                             ? route('spans.types.explorer.span', [
@@ -2573,6 +2589,87 @@ class SpanController extends Controller
         }
 
         return view('spans.edit', compact('span', 'spanTypes', 'connectionTypes', 'availableSpans', 'spanType'));
+    }
+
+    /**
+     * Swap subject (parent_id) and object (child_id) for a family connection when the edge was stored the wrong way round.
+     */
+    public function swapFamilyConnectionEnds(Request $request, Span $span): \Illuminate\Http\RedirectResponse
+    {
+        $this->authorize('update', $span);
+
+        if ($span->type_id !== 'connection') {
+            return redirect()->route('spans.edit', $span)
+                ->withErrors(['error' => 'Only connection spans can swap connection ends.']);
+        }
+
+        $connection = Connection::query()
+            ->where('connection_span_id', $span->id)
+            ->with(['subject', 'object', 'type'])
+            ->first();
+
+        if (!$connection) {
+            return redirect()->route('spans.edit', $span)
+                ->withErrors(['error' => 'No connection record is linked to this span.']);
+        }
+
+        if ($connection->type_id !== 'family') {
+            return redirect()->route('spans.edit', $span)
+                ->withErrors(['error' => 'Swapping ends is only available for family connections.']);
+        }
+
+        $personAId = $connection->parent_id;
+        $personBId = $connection->child_id;
+
+        try {
+            DB::transaction(function () use ($connection, $span) {
+                $oldParentId = $connection->parent_id;
+                $oldChildId = $connection->child_id;
+
+                $metadata = $connection->metadata ?? [];
+                if (is_array($metadata)) {
+                    unset($metadata['relationship_type'], $metadata['relationship']);
+                } else {
+                    $metadata = [];
+                }
+
+                $connection->update([
+                    'parent_id' => $oldChildId,
+                    'child_id' => $oldParentId,
+                    'metadata' => $metadata,
+                ]);
+
+                $connection->refresh();
+                $connection->load(['subject', 'object', 'type']);
+                $type = $connection->type;
+                if (!$type || !$connection->subject || !$connection->object) {
+                    throw new \RuntimeException('Connection missing type or ends after swap.');
+                }
+
+                $span->update([
+                    'name' => "{$connection->subject->name} {$type->forward_predicate} {$connection->object->name}",
+                ]);
+            });
+        } catch (\Throwable $e) {
+            Log::channel('spans')->error('swapFamilyConnectionEnds failed', [
+                'span_id' => $span->id,
+                'message' => $e->getMessage(),
+            ]);
+
+            $span->refresh();
+
+            return redirect()->route('spans.edit', $span)
+                ->withErrors(['error' => 'Could not swap connection ends. Please try again.']);
+        }
+
+        $span->refresh();
+
+        // Clear span show cache for both person spans so the family card reflects the new direction immediately.
+        Cache::forget('span_show_data_v4_' . $personAId);
+        Cache::forget('span_show_data_v4_' . $personBId);
+
+        return redirect()->route('spans.edit', $span)
+            ->with('status', 'Subject and object have been swapped. The connection name has been updated to match.');
     }
 
     /**
@@ -4203,7 +4300,8 @@ class SpanController extends Controller
         } elseif ($subtype === self::TYPES_INDEX_NO_SUBTYPE_KEY) {
             $query->whereRaw("NULLIF(TRIM(metadata->>'subtype'), '') IS NULL");
         } else {
-            $query->where('metadata->subtype', $subtype);
+            // Match subtype_stats bucketing (trimmed text) so counts and pagination use the same set
+            $query->whereRaw("NULLIF(TRIM(metadata->>'subtype'), '') = ?", [$subtype]);
         }
 
         $query->whereIn('state', ['complete', 'draft', 'placeholder']);
@@ -4293,9 +4391,34 @@ class SpanController extends Controller
     }
 
     /**
+     * JSON fragment for types explorer column 3 (spans list + infinite scroll + live search).
+     */
+    private function typesExplorerPartialSpansJson(Request $request, SpanType $spanType, string $subtype): JsonResponse
+    {
+        $selectedSpanId = $request->input('selected_span_id');
+        $spans = $this->paginateSpansForTypeSubtype(
+            $request,
+            $spanType->type_id,
+            $subtype,
+            $selectedSpanId !== null && $selectedSpanId !== '' ? (string) $selectedSpanId : null
+        );
+
+        return response()->json([
+            'html' => view('spans.partials.types-explorer-span-rows', [
+                'spans' => $spans,
+                'explorerTypeId' => $spanType->type_id,
+                'explorerSubtype' => $subtype,
+                'selectedExplorerSpanId' => $selectedSpanId,
+            ])->render(),
+            'next_page_url' => $spans->nextPageUrl(),
+            'has_more' => $spans->hasMorePages(),
+        ]);
+    }
+
+    /**
      * Types explorer: fourth column — JSON for one span (URL uses slug or UUID).
      */
-    public function showTypeSubtypeSpan(Request $request, string $type, string $subtype, Span $span): View|Response
+    public function showTypeSubtypeSpan(Request $request, string $type, string $subtype, Span $span): View|Response|JsonResponse
     {
         try {
             $spanType = SpanType::where('type_id', $type)->first();
@@ -4310,6 +4433,15 @@ class SpanController extends Controller
 
             if (!$span->isAccessibleBy(Auth::user())) {
                 abort(404);
+            }
+
+            if ($request->boolean('partial_spans')) {
+                $hasSearch = $request->filled('search') && trim((string) $request->search) !== '';
+                if (! $hasSearch && ($request->input('selected_span_id') === null || $request->input('selected_span_id') === '')) {
+                    $request->merge(['selected_span_id' => (string) $span->id]);
+                }
+
+                return $this->typesExplorerPartialSpansJson($request, $spanType, $subtype);
             }
 
             $spans = $this->paginateSpansForTypeSubtype($request, $type, $subtype, (string) $span->id);
@@ -4362,19 +4494,7 @@ class SpanController extends Controller
             }
 
             if ($request->boolean('partial_spans')) {
-                $spans = $this->paginateSpansForTypeSubtype($request, $type, $subtype, (string) $selectedSpanId);
-                $selectedSpanId = $request->input('selected_span_id');
-
-                return response()->json([
-                    'html' => view('spans.partials.types-explorer-span-rows', [
-                        'spans' => $spans,
-                        'explorerTypeId' => $type,
-                        'explorerSubtype' => $subtype,
-                        'selectedExplorerSpanId' => $selectedSpanId,
-                    ])->render(),
-                    'next_page_url' => $spans->nextPageUrl(),
-                    'has_more' => $spans->hasMorePages(),
-                ]);
+                return $this->typesExplorerPartialSpansJson($request, $spanType, $subtype);
             }
 
             $spans = $this->paginateSpansForTypeSubtype($request, $type, $subtype);
@@ -6015,8 +6135,8 @@ class SpanController extends Controller
     /**
      * Build and cache the "all connections" data for a span.
      *
-     * Lists every stored connection for this span (except the `features` type), regardless of
-     * connection-type allowed span lists, so display matches persisted data.
+     * Lists every stored connection for this span (including `features`, e.g. photos → people),
+     * regardless of connection-type allowed span lists, so display matches persisted data.
      *
      * Shared between the traditional /connections view and the experimental /all view.
      */
@@ -6025,16 +6145,15 @@ class SpanController extends Controller
         $userId = $user?->id ?? 'guest';
 
         // Cache key includes user ID for proper access control
-        // Version 6: includes connectionSpan.type_id so explorer URLs can be built from cached rows
-        $cacheKey = "connections_all_v6_{$subject->id}_{$userId}";
+        // Version 7: include `features` connections (e.g. photo → person); types explorer column 5 needs them
+        $cacheKey = "connections_all_v7_{$subject->id}_{$userId}";
 
         return Cache::remember($cacheKey, 300, function () use ($subject, $user) {
             $query = Connection::query()
                 ->where(function ($q) use ($subject) {
                     $q->where('parent_id', $subject->id)
                         ->orWhere('child_id', $subject->id);
-                })
-                ->where('type_id', '!=', 'features');
+                });
 
             $this->constrainConnectionsQueryForViewer($query, $user);
 

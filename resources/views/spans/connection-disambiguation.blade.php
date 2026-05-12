@@ -65,16 +65,7 @@
                         @foreach($connections as $connection)
                             @php
                                 $connectionSpan = $connection->connectionSpan;
-                                $dateText = null;
-                                if ($connectionSpan) {
-                                    if ($connectionSpan->start_year && $connectionSpan->end_year) {
-                                        $dateText = ($connectionSpan->formatted_start_date ?? $connectionSpan->start_year) . ' – ' . ($connectionSpan->formatted_end_date ?? $connectionSpan->end_year);
-                                    } elseif ($connectionSpan->start_year) {
-                                        $dateText = 'from ' . ($connectionSpan->formatted_start_date ?? $connectionSpan->start_year);
-                                    } elseif ($connectionSpan->end_year) {
-                                        $dateText = 'until ' . ($connectionSpan->formatted_end_date ?? $connectionSpan->end_year);
-                                    }
-                                }
+                                $dateText = $connectionSpan ? $connectionSpan->formatted_date_range : null;
                             @endphp
                             <a href="{{ $connectionSpan->short_id ? route('spans.connection.by-id', ['subject' => $subject, 'predicate' => $predicateForUrl, 'object' => $object, 'shortId' => $connectionSpan->short_id]) : route('spans.connection.by-uuid-legacy', ['subject' => $subject, 'predicate' => $predicateForUrl, 'object' => $object, 'connectionSpanId' => $connectionSpan->id]) }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
                                 <span>{{ $connectionSpan->name }}</span>

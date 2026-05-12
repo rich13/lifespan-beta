@@ -187,7 +187,7 @@ $(document).ready(function() {
         spans.forEach((span, index) => {
             console.log('Processing span', index, ':', span);
             const itemClass = span.is_placeholder ? 'dropdown-item text-muted' : 'dropdown-item';
-            const icon = span.is_placeholder ? 'bi-plus-circle' : 'bi-' + getTypeIcon(span.type_id);
+            const icon = span.is_placeholder ? 'bi-plus-circle' : 'bi-' + window.lifespanSpanTypeIconSuffix(span.type_id);
             const badge = span.is_placeholder ? '<span class="badge bg-secondary ms-2">New</span>' : '';
             
             const item = $(`
@@ -344,20 +344,6 @@ $(document).ready(function() {
         `;
         
         container.html(connectionHtml);
-    }
-    
-    function getTypeIcon(typeId) {
-        const iconMap = {
-            'person': 'person',
-            'place': 'geo-alt',
-            'organisation': 'building',
-            'event': 'calendar-event',
-            'thing': 'box',
-            'band': 'music-note',
-            'role': 'person-badge'
-        };
-        
-        return iconMap[typeId] || 'question-circle';
     }
     
     function getAllowedSpanTypes(connectionType) {

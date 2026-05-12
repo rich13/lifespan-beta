@@ -279,6 +279,8 @@ Route::middleware('web')->group(function () {
             Route::get('/create', [SpanController::class, 'create'])->name('spans.create');
             Route::post('/', [SpanController::class, 'store'])->name('spans.store');
             Route::get('/{span}/edit', [SpanController::class, 'edit'])->name('spans.edit');
+            Route::post('/{span}/connection/swap-family-ends', [SpanController::class, 'swapFamilyConnectionEnds'])
+                ->name('spans.connection.swap-family-ends');
             Route::get('/{span}/yaml', [SpanController::class, 'getYaml'])->name('spans.yaml')->middleware('timeout.prevention');
             Route::get('/{span}/editor', [SpanController::class, 'yamlEditor'])->name('spans.yaml-editor')->middleware('timeout.prevention');
             Route::get('/{span}/spanner', [SpanController::class, 'spreadsheetEditor'])->name('spans.spanner')->middleware('timeout.prevention');
@@ -708,8 +710,8 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                     Cache::forget("connections_all_v4_{$childId}_guest");
                     Cache::forget("connections_all_v5_{$parentId}_guest");
                     Cache::forget("connections_all_v5_{$childId}_guest");
-                    Cache::forget("connections_all_v6_{$parentId}_guest");
-                    Cache::forget("connections_all_v6_{$childId}_guest");
+                    Cache::forget("connections_all_v7_{$parentId}_guest");
+                    Cache::forget("connections_all_v7_{$childId}_guest");
                     
                     if (auth()->check()) {
                         $currentUserId = auth()->id();
@@ -719,8 +721,8 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                         Cache::forget("connections_all_v4_{$childId}_{$currentUserId}");
                         Cache::forget("connections_all_v5_{$parentId}_{$currentUserId}");
                         Cache::forget("connections_all_v5_{$childId}_{$currentUserId}");
-                        Cache::forget("connections_all_v6_{$parentId}_{$currentUserId}");
-                        Cache::forget("connections_all_v6_{$childId}_{$currentUserId}");
+                        Cache::forget("connections_all_v7_{$parentId}_{$currentUserId}");
+                        Cache::forget("connections_all_v7_{$childId}_{$currentUserId}");
                     }
 
                     return response()->json([

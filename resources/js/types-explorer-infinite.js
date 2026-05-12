@@ -208,4 +208,24 @@ $(function () {
         ensureSelectedVisible();
         scrollSelectedIntoView();
     }, 0);
+
+    const sentinel = document.getElementById('types-explorer-spans-sentinel');
+    const scrollEl = $scroll[0];
+    if (sentinel && scrollEl && 'IntersectionObserver' in window) {
+        const io = new IntersectionObserver(
+            function (entries) {
+                entries.forEach(function (entry) {
+                    if (entry.isIntersecting && !loading && nextPageUrl) {
+                        loadMore();
+                    }
+                });
+            },
+            {
+                root: scrollEl,
+                rootMargin: '160px 0px 240px 0px',
+                threshold: 0,
+            }
+        );
+        io.observe(sentinel);
+    }
 });

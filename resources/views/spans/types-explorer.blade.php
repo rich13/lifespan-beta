@@ -176,7 +176,18 @@
                                 @endphp
                                 <a href="{{ route('spans.types.subtypes.show', ['type' => $spanType->type_id, 'subtype' => $row->subtype_key]) }}"
                                    class="list-group-item list-group-item-action types-explorer__link d-flex justify-content-between align-items-center gap-2 @if($selectedSubtype === $row->subtype_key) types-explorer__link--active @endif">
-                                    <span class="text-truncate min-w-0">{{ $stLabel }}</span>
+                                    <span class="d-flex align-items-center gap-2 min-w-0">
+                                        <span class="flex-shrink-0">
+                                            @if($row->subtype_key === $noKey)
+                                                <x-icon type="no_subtype" category="action" />
+                                            @elseif($isConnectionExplorer)
+                                                <x-icon type="{{ $row->subtype_key }}" category="connection" />
+                                            @else
+                                                <x-icon type="{{ $row->subtype_key }}" category="subtype" />
+                                            @endif
+                                        </span>
+                                        <span class="text-truncate">{{ $stLabel }}</span>
+                                    </span>
                                     @if($row->subtype_key === $noKey)
                                         <span class="badge bg-secondary rounded-pill flex-shrink-0">{{ number_format($row->count) }}</span>
                                     @else
@@ -235,6 +246,7 @@
                         <div id="types-explorer-spans-loading" class="d-none text-center small text-muted border-top py-2">
                             Loading…
                         </div>
+                        <div id="types-explorer-spans-sentinel" class="types-explorer__spans-sentinel" aria-hidden="true"></div>
                     @else
                         <p class="text-muted small px-3 py-3 mb-0">
                             No spans in this selection.
@@ -254,7 +266,9 @@
                     <div class="card-header py-2 small fw-semibold">
                         <span class="text-body">JSON</span>
                         @if(isset($selectedExplorerSpan) && $selectedExplorerSpan)
-                            <span class="fw-normal text-body-secondary">· {{ $selectedExplorerSpan->name }}</span>
+                            <span class="fw-normal text-body-secondary"> · </span>
+                            <a href="{{ route('spans.show', ['subject' => $selectedExplorerSpan]) }}"
+                               class="link-primary fw-normal">{{ $selectedExplorerSpan->name }}</a>
                         @endif
                     </div>
                     <div class="card-body types-explorer__column-body p-0">
@@ -283,6 +297,7 @@
                                 <div id="types-explorer-connections-sort" class="btn-group btn-group-sm" role="group" aria-label="Sort connections">
                                     <button type="button" class="btn btn-outline-secondary types-explorer__sort-btn active" data-sort-mode="chronological">Chronological</button>
                                     <button type="button" class="btn btn-outline-secondary types-explorer__sort-btn" data-sort-mode="type">By type</button>
+                                    <button type="button" class="btn btn-outline-secondary types-explorer__sort-btn" data-sort-mode="direction">By direction</button>
                                 </div>
                             </div>
                         </div>

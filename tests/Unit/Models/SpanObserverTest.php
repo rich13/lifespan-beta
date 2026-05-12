@@ -7,6 +7,7 @@ use App\Models\Connection;
 use App\Models\ConnectionType;
 use App\Models\User;
 use App\Observers\SpanObserver;
+use App\Services\Lifespan\EpistemicRevisionRecorder;
 use App\Services\PublicSpanCache;
 use App\Services\SlackNotificationService;
 use Tests\TestCase;
@@ -27,7 +28,8 @@ class SpanObserverTest extends TestCase
         // Create a mock SlackNotificationService and resolve PublicSpanCache from container
         $slackService = $this->createMock(SlackNotificationService::class);
         $publicSpanCache = app(PublicSpanCache::class);
-        $this->observer = new SpanObserver($slackService, $publicSpanCache);
+        $epistemicRevisionRecorder = $this->createMock(EpistemicRevisionRecorder::class);
+        $this->observer = new SpanObserver($slackService, $publicSpanCache, $epistemicRevisionRecorder);
     }
 
     /** @test */

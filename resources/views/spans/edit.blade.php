@@ -45,4 +45,7 @@
         </div>
     </div>
 </form>
+
+{{-- Modals that POST to their own routes must live OUTSIDE the edit form (HTML forbids nested forms) --}}
+@stack('span-edit-modals')
 @endsection 

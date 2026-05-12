@@ -324,17 +324,7 @@
                         $spanForDisplay = $connectionSpan;
                     }
                     
-                    $hasDates = $spanForDisplay->start_year || $spanForDisplay->end_year;
-                    $dateText = null;
-                    if ($hasDates) {
-                        if ($spanForDisplay->start_year && $spanForDisplay->end_year) {
-                            $dateText = ($spanForDisplay->formatted_start_date ?? $spanForDisplay->start_year) . ' – ' . ($spanForDisplay->formatted_end_date ?? $spanForDisplay->end_year);
-                        } elseif ($spanForDisplay->start_year) {
-                            $dateText = 'from ' . ($spanForDisplay->formatted_start_date ?? $spanForDisplay->start_year);
-                        } elseif ($spanForDisplay->end_year) {
-                            $dateText = 'until ' . ($spanForDisplay->formatted_end_date ?? $spanForDisplay->end_year);
-                        }
-                    }
+                    $dateText = $spanForDisplay->formatted_date_range;
                     
                     // Determine the predicate direction
                     // For phase spans, use "contains" (connection span contains phase)

@@ -356,7 +356,7 @@
             // Always show existing results if any
             spans.forEach((span, index) => {
                 const itemClass = span.is_placeholder ? 'dropdown-item text-muted' : 'dropdown-item';
-                const icon = span.is_placeholder ? 'bi-plus-circle' : 'bi-' + getTypeIcon(span.type_id);
+                const icon = span.is_placeholder ? 'bi-plus-circle' : 'bi-' + window.lifespanSpanTypeIconSuffix(span.type_id);
                 const badge = span.is_placeholder ? '<span class="badge bg-secondary ms-2">New</span>' : '';
                 
                 const item = $(`
@@ -477,18 +477,6 @@
             return nameMap[connectionType] || 'span';
         }
         
-        function getTypeIcon(typeId) {
-            const icons = {
-                'person': 'person-fill',
-                'organisation': 'building',
-                'place': 'geo-alt-fill',
-                'event': 'calendar-event-fill',
-                'connection': 'link-45deg',
-                'band': 'cassette',
-                'thing': 'box'
-            };
-            return icons[typeId] || 'box';
-        }
     });
 </script>
 @endsection

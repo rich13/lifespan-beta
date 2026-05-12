@@ -719,12 +719,22 @@ $(document).ready(function() {
         const adjustedLeft = spanStartsOffscreen ? 0 : left;
         const adjustedWidth = spanStartsOffscreen ? Math.max(width + left, 20) : Math.max(width, 20);
         const labelClass = spanStartsOffscreen ? 'span-offscreen' : '';
+
+        const sm = span.start_month != null && span.start_month !== '' ? Number(span.start_month) : 0;
+        const em = span.end_month != null && span.end_month !== '' ? Number(span.end_month) : 0;
+        const sd = span.start_day != null && span.start_day !== '' ? Number(span.start_day) : 0;
+        const ed = span.end_day != null && span.end_day !== '' ? Number(span.end_day) : 0;
+        const sameStartEnd = !span.is_ongoing && span.start_year != null && span.end_year != null
+            && Number(span.start_year) === Number(span.end_year) && sm === em && sd === ed;
+        const titleDatePart = sameStartEnd
+            ? formatDate(spanStart)
+            : `${formatDate(spanStart)} - ${span.is_ongoing ? 'Present' : formatDate(spanEnd)}`;
         
         return `
             <div class="timeline-span ${span.type_id} ${span.is_ongoing ? 'ongoing' : ''} ${labelClass}" 
                  style="left: ${adjustedLeft}px; width: ${adjustedWidth}px;"
                  data-span-id="${span.id}"
-                 title="${span.name} (${formatDate(spanStart)} - ${span.is_ongoing ? 'Present' : formatDate(spanEnd)})">
+                 title="${span.name} (${titleDatePart})">
                 ${displayName}
             </div>
         `;
@@ -825,18 +835,6 @@ $(document).ready(function() {
     function updateViewportInfo() {
         const info = `${timelineState.viewport.start_year} - ${timelineState.viewport.end_year}`;
         $('#viewportInfo').text(info);
-    }
-
-    function getTypeIcon(typeId) {
-        const icons = {
-            person: 'person-fill',
-            organisation: 'building',
-            place: 'geo-alt-fill',
-            event: 'calendar-event-fill',
-            band: 'cassette',
-            thing: 'box'
-        };
-        return icons[typeId] || 'question-circle';
     }
 
     function formatDate(date) {

@@ -78,17 +78,7 @@
                     $connection = $item['connection'];
                     $connectionType = $item['type'];
                     $dates = $connection->connectionSpan;
-                    $hasDates = $dates && ($dates->start_year || $dates->end_year);
-                    $dateText = null;
-                    if ($hasDates) {
-                        if ($dates->start_year && $dates->end_year) {
-                            $dateText = ($dates->formatted_start_date ?? $dates->start_year) . ' – ' . ($dates->formatted_end_date ?? $dates->end_year);
-                        } elseif ($dates->start_year) {
-                            $dateText = 'from ' . ($dates->formatted_start_date ?? $dates->start_year);
-                        } elseif ($dates->end_year) {
-                            $dateText = 'until ' . ($dates->formatted_end_date ?? $dates->end_year);
-                        }
-                    }
+                    $dateText = $dates ? $dates->formatted_date_range : null;
                     
                     // Determine what to display based on connection type
                     $role = null;

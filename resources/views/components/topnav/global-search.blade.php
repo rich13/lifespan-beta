@@ -321,7 +321,7 @@ $(document).ready(function() {
                 // Add type header
                 const header = $(`
                     <div class="dropdown-header d-flex align-items-center gap-2 py-1 px-3 text-uppercase fw-bold" style="font-size: 0.75rem; background-color: #f8f9fa;">
-                        <i class="bi bi-${getTypeIcon(typeId)} text-muted"></i>
+                        <i class="bi bi-${window.lifespanSpanTypeIconSuffix(typeId)} text-muted"></i>
                         ${group.type_name}
                     </div>
                 `);
@@ -411,18 +411,5 @@ $(document).ready(function() {
         selectedIndex = -1;
     }
 
-    // Get icon for span type
-    function getTypeIcon(typeId) {
-        const icons = {
-            'person': 'person-fill',
-            'organisation': 'building',
-            'place': 'geo-alt-fill',
-            'event': 'calendar-event-fill',
-            'connection': 'link-45deg',
-            'band': 'cassette',
-            'thing': 'box'
-        };
-        return icons[typeId] || 'box';
-    }
 });
 </script> 

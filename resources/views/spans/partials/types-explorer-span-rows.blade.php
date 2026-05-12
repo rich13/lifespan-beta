@@ -16,7 +16,9 @@
         if ($span->start_year || $span->end_year) {
             $startText = $formatExplorerDate($span->start_year, $span->start_month, $span->start_day);
             $endText = $formatExplorerDate($span->end_year, $span->end_month, $span->end_day);
-            if ($startText) {
+            if ($startText && $endText && $span->hasIdenticalStartAndEndDates()) {
+                $dateLine = $startText;
+            } elseif ($startText) {
                 $dateLine = $startText . ' – ' . ($endText ?: 'now');
             } else {
                 $dateLine = $endText;

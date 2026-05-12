@@ -63,17 +63,7 @@
                 @php
                     $org = $connection->child;
                     $dates = $connection->connectionSpan;
-                    $hasDates = $dates && ($dates->start_year || $dates->end_year);
-                    $dateText = null;
-                    if ($hasDates) {
-                        if ($dates->start_year && $dates->end_year) {
-                            $dateText = ($dates->formatted_start_date ?? $dates->start_year) . ' – ' . ($dates->formatted_end_date ?? $dates->end_year);
-                        } elseif ($dates->start_year) {
-                            $dateText = 'from ' . ($dates->formatted_start_date ?? $dates->start_year);
-                        } elseif ($dates->end_year) {
-                            $dateText = 'until ' . ($dates->formatted_end_date ?? $dates->end_year);
-                        }
-                    }
+                    $dateText = $dates ? $dates->formatted_date_range : null;
                 @endphp
                 <div class="card">
                     <div class="card-body py-2">
@@ -105,7 +95,9 @@
                                     $parts = $c->getEffectiveSortDate();
                                     $y = $parts[0] ?? PHP_INT_MAX; $m = $parts[1] ?? PHP_INT_MAX; $d = $parts[2] ?? PHP_INT_MAX;
                                     $range = ($phaseSpan->start_year || $phaseSpan->end_year)
-                                        ? trim(($phaseSpan->start_year ?? '') . '–' . ($phaseSpan->end_year ?? ''))
+                                        ? ($phaseSpan->hasIdenticalStartAndEndDates()
+                                            ? (string) ($phaseSpan->start_year ?? '')
+                                            : trim(($phaseSpan->start_year ?? '').'–'.($phaseSpan->end_year ?? '')))
                                         : null;
                                     $phaseChips[$phaseSpan->id] = [
                                         'id' => $phaseSpan->id,
@@ -121,7 +113,9 @@
                                     $parts = $c->getEffectiveSortDate();
                                     $y = $parts[0] ?? PHP_INT_MAX; $m = $parts[1] ?? PHP_INT_MAX; $d = $parts[2] ?? PHP_INT_MAX;
                                     $range = ($phaseSpan->start_year || $phaseSpan->end_year)
-                                        ? trim(($phaseSpan->start_year ?? '') . '–' . ($phaseSpan->end_year ?? ''))
+                                        ? ($phaseSpan->hasIdenticalStartAndEndDates()
+                                            ? (string) ($phaseSpan->start_year ?? '')
+                                            : trim(($phaseSpan->start_year ?? '').'–'.($phaseSpan->end_year ?? '')))
                                         : null;
                                     $phaseChips[$phaseSpan->id] = [
                                         'id' => $phaseSpan->id,
@@ -243,16 +237,7 @@
                   @php
                     $org = $connection->child;
                     $dates = $connection->connectionSpan;
-                    $dateText = null;
-                    if ($dates && ($dates->start_year || $dates->end_year)) {
-                      if ($dates->start_year && $dates->end_year) {
-                        $dateText = ($dates->formatted_start_date ?? $dates->start_year) . ' – ' . ($dates->formatted_end_date ?? $dates->end_year);
-                      } elseif ($dates->start_year) {
-                        $dateText = 'from ' . ($dates->formatted_start_date ?? $dates->start_year);
-                      } elseif ($dates->end_year) {
-                        $dateText = 'until ' . ($dates->formatted_end_date ?? $dates->end_year);
-                      }
-                    }
+                    $dateText = $dates ? $dates->formatted_date_range : null;
                   @endphp
                   <div class="card mb-2">
                     <div class="card-body py-2">

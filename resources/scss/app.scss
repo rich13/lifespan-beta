@@ -494,7 +494,8 @@ main {
 }
 
 // Fallback badge color for any undefined badge classes
-.badge:not([class*="bg-"]) {
+// Exclude types-explorer connection predicates: background comes from inline --connection-*-colour
+.badge:not([class*="bg-"]):not(.types-explorer__connection-badge--predicate) {
     background-color: #6c757d !important; // Bootstrap secondary color
     color: #ffffff !important;
 }
@@ -778,7 +779,7 @@ main {
     }
 
     &.types-explorer__grid--5 {
-      grid-template-columns: 2fr 2fr 2fr 3fr 3fr;
+      grid-template-columns: 1.5fr 1.5fr 2.5fr 3.25fr 3.25fr;
     }
   }
 }
@@ -834,6 +835,12 @@ main {
   }
 }
 
+.types-explorer__spans-sentinel {
+  height: 1px;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
 .types-explorer__span-row {
   .small {
     font-size: 0.72rem;
@@ -855,13 +862,44 @@ main {
   }
 }
 
+.types-explorer__connection-dir {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  flex-shrink: 0;
+  margin-top: 0.15rem;
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--bs-secondary-color);
+}
+
+.types-explorer__connection-role-chip {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  border: 1px solid var(--bs-border-color);
+  box-shadow: none;
+}
+
+.types-explorer__connection-meta-chip {
+  font-size: 0.65rem;
+  font-weight: 500;
+  border-color: var(--bs-border-color);
+}
+
 .types-explorer__connection-badge {
   font-weight: 500;
   border: 1px solid transparent;
+  box-shadow: none;
 }
 
 .types-explorer__connection-badge--predicate {
   color: #fff;
+  // When connection colour CSS vars are missing, match previous grey badge look
+  background-color: #6c757d;
+  border-color: #6c757d;
 }
 
 .types-explorer__header-search {

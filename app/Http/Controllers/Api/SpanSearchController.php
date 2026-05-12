@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Connection;
 use App\Models\Span;
 use App\Services\LeadershipRoleService;
+use App\Support\ApiEnvelope;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -187,8 +188,17 @@ class SpanSearchController extends Controller
         // Note: We no longer add placeholder suggestions with null IDs
         // All spans must have IDs. If a placeholder span exists, it will be in $existingResults
 
-        return response()->json([
-            'spans' => $results->take($limit)->values()
+        $spanPayload = $results->take($limit)->values();
+
+        return ApiEnvelope::success([
+            'spans' => $spanPayload,
+            'data' => [
+                'spans' => $spanPayload,
+            ],
+            'meta' => [
+                'query' => $query,
+                'type' => $type,
+            ],
         ]);
     }
 

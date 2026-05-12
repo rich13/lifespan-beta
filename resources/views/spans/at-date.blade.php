@@ -112,7 +112,11 @@
                                                         <div class="mt-2">
                                                             <small class="text-muted">
                                                                 @if($startDate && $endDate)
-                                                                    {{ $startDate }} - {{ $endDate }}
+                                                                    @if($connection->connectionSpan->hasIdenticalStartAndEndDates())
+                                                                        {{ $startDate }}
+                                                                    @else
+                                                                        {{ $startDate }} - {{ $endDate }}
+                                                                    @endif
                                                                 @elseif($startDate)
                                                                     From {{ $startDate }}
                                                                 @elseif($endDate)

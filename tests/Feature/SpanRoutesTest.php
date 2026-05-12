@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Models\Connection;
+use App\Models\ConnectionType;
 use App\Models\Span;
 use App\Models\User;
 use Tests\TestCase;
@@ -237,17 +239,31 @@ class SpanRoutesTest extends TestCase
         $response->assertHeader('Content-Type');
         $this->assertStringContainsString('application/json', $response->headers->get('Content-Type') ?? '');
         $response->assertJsonStructure([
-            'id', 'name', 'slug', 'short_id', 'type_id', 'subtype', 'description',
-            'start_year', 'end_year', 'formatted_start_date', 'formatted_end_date',
-            'metadata', 'access_level', 'url',
+            'data' => [
+                'id', 'name', 'slug', 'short_id', 'type_id', 'subtype', 'state', 'description', 'notes',
+                'is_personal_span',
+                'start_year', 'start_month', 'start_day', 'start_precision',
+                'end_year', 'end_month', 'end_day', 'end_precision',
+                'formatted_start_date', 'formatted_end_date',
+                'metadata', 'sources',
+                'access_level', 'owner_id', 'updater_id', 'created_at', 'updated_at', 'url',
+            ],
+            'meta',
         ]);
-        $response->assertJsonPath('id', $publicSpan->id);
-        $response->assertJsonPath('name', $publicSpan->name);
-        $response->assertJsonPath('slug', $publicSpan->slug);
-        $response->assertJsonPath('short_id', $publicSpan->short_id);
-        $response->assertJsonPath('type_id', 'person');
-        $response->assertJsonPath('access_level', 'public');
-        $response->assertJsonPath('url', route('spans.show', ['subject' => $publicSpan]));
+        $response->assertJsonPath('data.id', $publicSpan->id);
+        $response->assertJsonPath('data.name', $publicSpan->name);
+        $response->assertJsonPath('data.slug', $publicSpan->slug);
+        $response->assertJsonPath('data.short_id', $publicSpan->short_id);
+        $response->assertJsonPath('data.type_id', 'person');
+        $response->assertJsonPath('data.access_level', 'public');
+        $response->assertJsonPath('data.url', route('spans.show', ['subject' => $publicSpan]));
+        $response->assertJsonPath(
+            'meta.links.connections',
+            route('spans.show.connections.json', ['span' => $publicSpan])
+        );
+        $data = $response->json('data');
+        $this->assertIsArray($data);
+        $this->assertArrayNotHasKey('connection', $data);
     }
 
     public function test_span_json_returns_401_for_private_span_when_unauthenticated(): void
@@ -275,9 +291,46 @@ class SpanRoutesTest extends TestCase
         $response->assertStatus(200);
         $response->assertHeader('Content-Type');
         $this->assertStringContainsString('application/json', $response->headers->get('Content-Type') ?? '');
-        $response->assertJsonPath('id', $privateSpan->id);
-        $response->assertJsonPath('name', $privateSpan->name);
-        $response->assertJsonPath('slug', $privateSpan->slug);
-        $response->assertJsonPath('access_level', 'private');
+        $response->assertJsonPath('data.id', $privateSpan->id);
+        $response->assertJsonPath('data.name', $privateSpan->name);
+        $response->assertJsonPath('data.slug', $privateSpan->slug);
+        $response->assertJsonPath('data.access_level', 'private');
+    }
+
+    public function test_span_json_includes_connection_triple_for_connection_span(): void
+    {
+        $connectionType = ConnectionType::factory()->create();
+        $subject = Span::factory()->create([
+            'access_level' => 'public',
+            'type_id' => 'person',
+            'slug' => 'json-conn-subject-' . uniqid('', true),
+        ]);
+        $object = Span::factory()->create([
+            'access_level' => 'public',
+            'type_id' => 'organisation',
+            'slug' => 'json-conn-object-' . uniqid('', true),
+        ]);
+        $connectionSpan = Span::factory()->create([
+            'access_level' => 'public',
+            'type_id' => 'connection',
+            'metadata' => ['subtype' => $connectionType->type],
+            'slug' => 'json-conn-span-' . uniqid('', true),
+        ]);
+
+        Connection::create([
+            'type_id' => $connectionType->type,
+            'parent_id' => $subject->id,
+            'child_id' => $object->id,
+            'connection_span_id' => $connectionSpan->id,
+        ]);
+
+        $response = $this->getJson("/spans/{$connectionSpan->slug}.json");
+        $response->assertStatus(200);
+        $response->assertJsonPath('data.type_id', 'connection');
+        $response->assertJsonPath('data.connection.predicate', $connectionType->type);
+        $response->assertJsonPath('data.connection.subject.id', $subject->id);
+        $response->assertJsonPath('data.connection.object.id', $object->id);
+        $response->assertJsonPath('data.connection.subject.url', route('spans.show', ['subject' => $subject]));
+        $response->assertJsonPath('data.connection.object.url', route('spans.show', ['subject' => $object]));
     }
 } 
