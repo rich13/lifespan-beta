@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Http;
 use App\Http\Controllers\Api\SpanSearchController;
+use App\Http\Controllers\Api\LifespanUrlController;
 
 /*
 |--------------------------------------------------------------------------
@@ -660,6 +661,8 @@ Route::middleware(['auth', 'admin'])->group(function () {
 
 // Span search API
 Route::get('/spans/search', [SpanSearchController::class, 'search']);
+Route::get('/lifespan/{path?}', [LifespanUrlController::class, 'resolve'])
+    ->where('path', '.*');
 
 // Places API - get places within map bounds
 Route::get('/places', [\App\Http\Controllers\PlacesController::class, 'getPlacesInBounds'])->name('api.places.bounds');
