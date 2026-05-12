@@ -4,6 +4,7 @@ namespace App\Observers;
 
 use App\Jobs\WarmPublicSpanPagesJob;
 use App\Models\Span;
+use App\Services\Lifespan\EpistemicRevisionRecorder;
 use App\Services\PublicSpanCache;
 use App\Services\SlackNotificationService;
 use Carbon\Carbon;
@@ -14,7 +15,8 @@ class SpanObserver
 {
     public function __construct(
         protected SlackNotificationService $slackService,
-        protected PublicSpanCache $publicSpanCache
+        protected PublicSpanCache $publicSpanCache,
+        protected EpistemicRevisionRecorder $epistemicRevisionRecorder
     ) {}
 
     /**
@@ -76,6 +78,8 @@ class SpanObserver
      */
     public function saved(Span $span): void
     {
+        $this->epistemicRevisionRecorder->recordSpanIfChanged($span);
+
         // If this is a personal span, update the user's personal_span_id
         if ($span->is_personal_span) {
             DB::table('users')

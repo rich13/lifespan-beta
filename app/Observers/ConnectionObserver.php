@@ -4,13 +4,15 @@ namespace App\Observers;
 
 use App\Jobs\WarmPublicSpanPagesJob;
 use App\Models\Connection;
+use App\Services\Lifespan\EpistemicRevisionRecorder;
 use App\Services\PublicSpanCache;
 use Illuminate\Support\Facades\Log;
 
 class ConnectionObserver
 {
     public function __construct(
-        protected PublicSpanCache $publicSpanCache
+        protected PublicSpanCache $publicSpanCache,
+        protected EpistemicRevisionRecorder $epistemicRevisionRecorder
     ) {}
 
     /**
@@ -18,6 +20,7 @@ class ConnectionObserver
      */
     public function created(Connection $connection): void
     {
+        $this->epistemicRevisionRecorder->recordConnectionIfChanged($connection);
         $this->invalidateAndRewarmAffectedSpans($connection);
     }
 
@@ -27,6 +30,8 @@ class ConnectionObserver
      */
     public function updated(Connection $connection): void
     {
+        $this->epistemicRevisionRecorder->recordConnectionIfChanged($connection);
+
         if (Connection::$skipCacheClearingDuringImport) {
             return;
         }
