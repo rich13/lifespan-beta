@@ -639,6 +639,33 @@ class FlickrImportController extends Controller
     }
 
     /**
+     * Resolve spans that may be linked as Flickr tag subjects (deterministic order; avoids flaky LIMIT without ORDER BY).
+     *
+     * @return \Illuminate\Database\Eloquent\Collection<int, Span>
+     */
+    private function spansMatchingFlickrImportSubjectTag(Span $photoSpan, string $tag): \Illuminate\Database\Eloquent\Collection
+    {
+        $escapedTag = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $tag);
+        $needle = '%' . $escapedTag . '%';
+
+        return Span::query()
+            ->where('id', '!=', $photoSpan->id)
+            ->where('type_id', '!=', 'connection')
+            ->where(function ($q) use ($tag, $needle) {
+                $q->where('name', 'ILIKE', $needle)
+                    ->orWhereJsonContains('metadata->tags', $tag);
+            })
+            ->where(function ($q) {
+                $q->where('type_id', '!=', 'thing')
+                    ->orWhereRaw("COALESCE(metadata->>'subtype', '') <> ?", ['photo']);
+            })
+            ->orderByRaw('CASE WHEN owner_id = ? THEN 0 ELSE 1 END', [$photoSpan->owner_id])
+            ->orderBy('name')
+            ->limit(50)
+            ->get();
+    }
+
+    /**
      * Create or update subject connections based on photo tags
      */
     private function createOrUpdateSubjectConnections(Span $photoSpan, string $tags): void
@@ -655,13 +682,11 @@ class FlickrImportController extends Controller
         // Find spans that match the new tags
         $newSubjectSpans = collect();
         foreach ($newTags as $tag) {
-            if (empty($tag)) continue;
+            if (empty($tag)) {
+                continue;
+            }
 
-            $matchingSpans = Span::where('name', 'ILIKE', "%{$tag}%")
-                ->orWhereJsonContains('metadata->tags', $tag)
-                ->limit(5)
-                ->get();
-
+            $matchingSpans = $this->spansMatchingFlickrImportSubjectTag($photoSpan, $tag);
             $newSubjectSpans = $newSubjectSpans->merge($matchingSpans);
         }
 
@@ -690,15 +715,19 @@ class FlickrImportController extends Controller
             }
         }
 
-        // Create new connections for subjects that aren't already connected
-        foreach ($newSubjectSpans as $subjectSpan) {
-            $existingConnection = $existingSubjectConnections->first(function($conn) use ($subjectSpan) {
-                return $conn->child_id === $subjectSpan->id;
-            });
+        // Use live rows: the in-memory collection still holds deleted models, which would skip needed creates.
+        $connectedSubjectChildIds = Connection::query()
+            ->where('parent_id', $photoSpan->id)
+            ->where('type_id', 'features')
+            ->pluck('child_id')
+            ->all();
 
-            if (!$existingConnection) {
-                $this->createSubjectConnection($photoSpan, $subjectSpan);
+        foreach ($newSubjectSpans as $subjectSpan) {
+            if (in_array($subjectSpan->id, $connectedSubjectChildIds, true)) {
+                continue;
             }
+            $this->createSubjectConnection($photoSpan, $subjectSpan);
+            $connectedSubjectChildIds[] = $subjectSpan->id;
         }
 
         Log::info('Updated subject connections for photo', [
@@ -721,11 +750,7 @@ class FlickrImportController extends Controller
             $tag = trim($tag);
             if (empty($tag)) continue;
 
-            // Try to find existing spans that match this tag
-            $matchingSpans = Span::where('name', 'ILIKE', "%{$tag}%")
-                ->orWhereJsonContains('metadata->tags', $tag)
-                ->limit(5)
-                ->get();
+            $matchingSpans = $this->spansMatchingFlickrImportSubjectTag($photoSpan, $tag);
 
             foreach ($matchingSpans as $matchingSpan) {
                 // Skip self (no "features" connection from photo to itself)
