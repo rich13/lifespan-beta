@@ -236,33 +236,7 @@ class SpanController extends Controller
                         break;
                 }
             } else {
-                // Default access filtering when no visibility filter is applied
-                // For unauthenticated users, only show public spans
-                if (!Auth::check()) {
-                    $query->where('access_level', 'public');
-                } else {
-                    // For authenticated users
-                    $user = Auth::user();
-                    if (!$user->is_admin) {
-                        // Show:
-                        // 1. Public spans
-                        // 2. User's own spans
-                        // 3. Shared spans where user has permission
-                        $query->where(function ($query) use ($user) {
-                            $query->where('access_level', 'public')
-                                ->orWhere('owner_id', $user->id)
-                                ->orWhere(function ($query) use ($user) {
-                                    $query->where('access_level', 'shared')
-                                        ->whereExists(function ($subquery) use ($user) {
-                                            $subquery->select('id')
-                                                ->from('span_permissions')
-                                                ->whereColumn('span_permissions.span_id', 'spans.id')
-                                                ->where('span_permissions.user_id', $user->id);
-                                        });
-                                });
-                        });
-                    }
-                }
+                $query->viewableBy(Auth::user());
             }
 
             $spans = $query->paginate(20);
@@ -1429,7 +1403,7 @@ class SpanController extends Controller
             if (!$viewer) {
                 return $candidate->access_level === 'public';
             }
-            if ($viewer->is_admin) {
+            if ($viewer->getEffectiveAdminStatus()) {
                 return true;
             }
             return $candidate->isAccessibleBy($viewer);
@@ -3114,32 +3088,7 @@ class SpanController extends Controller
                 }
             });
 
-        // For unauthenticated users, only show public spans
-        if (!Auth::check()) {
-            $query->where('access_level', 'public');
-        } else {
-            // For authenticated users
-            $user = Auth::user();
-            if (!$user->is_admin) {
-                // Show:
-                // 1. Public spans
-                // 2. User's own spans
-                // 3. Shared spans where user has permission
-                $query->where(function ($query) use ($user) {
-                    $query->where('access_level', 'public')
-                        ->orWhere('owner_id', $user->id)
-                        ->orWhere(function ($query) use ($user) {
-                            $query->where('access_level', 'shared')
-                                ->whereExists(function ($subquery) use ($user) {
-                                    $subquery->select('id')
-                                        ->from('span_permissions')
-                                        ->whereColumn('span_permissions.span_id', 'spans.id')
-                                        ->where('span_permissions.user_id', $user->id);
-                                });
-                        });
-                });
-            }
-        }
+        $query->viewableBy(Auth::user());
 
         // Get all spans and separate them into different lists based on precision
         $allSpans = $query->get();
@@ -3377,36 +3326,7 @@ class SpanController extends Controller
 
         // Start with spans the user can see, excluding connections
         $spans = Span::query()->whereNot('type_id', 'connection');
-        
-        if ($user) {
-            // Admins can see all spans
-            if (!$user->is_admin) {
-                // Authenticated user - can see public, owned, and shared spans (including group permissions)
-                $spans->where(function ($q) use ($user) {
-                    $q->where('access_level', 'public')
-                        ->orWhere('owner_id', $user->id)
-                        ->orWhere(function ($q) use ($user) {
-                            $q->where('access_level', 'shared')
-                                ->whereHas('spanPermissions', function ($q) use ($user) {
-                                    $q->where(function($subQ) use ($user) {
-                                        // Direct user permissions
-                                        $subQ->where('user_id', $user->id)
-                                             // Group permissions
-                                             ->orWhereHas('group', function($groupQ) use ($user) {
-                                                 $groupQ->whereHas('users', function($userQ) use ($user) {
-                                                     $userQ->where('users.id', $user->id);
-                                                 });
-                                             });
-                                    });
-                                });
-                        });
-                });
-            }
-            // If admin, no restrictions - can see all spans
-        } else {
-            // Unauthenticated user - can only see public spans
-            $spans->where('access_level', 'public');
-        }
+        $spans->viewableBy($user);
 
         // Add type restriction if specified
         if ($type) {
@@ -4007,34 +3927,11 @@ class SpanController extends Controller
     }
 
     /**
-     * Visibility rules for /spans/types (matches spans index-style access).
+     * Visibility rules for /spans/types (matches {@see Span::hasPermission} view rules).
      */
     private function applyTypesIndexSpanVisibility(Builder $query): void
     {
-        if (!Auth::check()) {
-            $query->where('access_level', 'public');
-
-            return;
-        }
-
-        $user = Auth::user();
-        if ($user->is_admin) {
-            return;
-        }
-
-        $query->where(function ($query) use ($user) {
-            $query->where('access_level', 'public')
-                ->orWhere('owner_id', $user->id)
-                ->orWhere(function ($query) use ($user) {
-                    $query->where('access_level', 'shared')
-                        ->whereExists(function ($subquery) use ($user) {
-                            $subquery->select('id')
-                                ->from('span_permissions')
-                                ->whereColumn('span_permissions.span_id', 'spans.id')
-                                ->where('span_permissions.user_id', $user->id);
-                        });
-                });
-        });
+        $query->viewableBy(Auth::user());
     }
 
     /**
@@ -4306,26 +4203,7 @@ class SpanController extends Controller
 
         $query->whereIn('state', ['complete', 'draft', 'placeholder']);
 
-        if (!Auth::check()) {
-            $query->where('access_level', 'public');
-        } else {
-            $user = Auth::user();
-            if (!$user->is_admin) {
-                $query->where(function ($query) use ($user) {
-                    $query->where('access_level', 'public')
-                        ->orWhere('owner_id', $user->id)
-                        ->orWhere(function ($query) use ($user) {
-                            $query->where('access_level', 'shared')
-                                ->whereExists(function ($subquery) use ($user) {
-                                    $subquery->select('id')
-                                        ->from('span_permissions')
-                                        ->whereColumn('span_permissions.span_id', 'spans.id')
-                                        ->where('span_permissions.user_id', $user->id);
-                                });
-                        });
-                });
-            }
-        }
+        $this->applyTypesIndexSpanVisibility($query);
 
         if ($request->has('search')) {
             $searchTerms = preg_split('/\s+/', trim((string) $request->search));
@@ -4707,28 +4585,7 @@ class SpanController extends Controller
         // Get all films (public or accessible to user)
         $filmsQuery = Span::where('type_id', 'thing')
             ->whereJsonContains('metadata->subtype', 'film');
-        
-        // Apply access filtering
-        if (!Auth::check()) {
-            $filmsQuery->where('access_level', 'public');
-        } else {
-            $user = Auth::user();
-            if (!$user->is_admin) {
-                $filmsQuery->where(function ($query) use ($user) {
-                    $query->where('access_level', 'public')
-                        ->orWhere('owner_id', $user->id)
-                        ->orWhere(function ($query) use ($user) {
-                            $query->where('access_level', 'shared')
-                                ->whereExists(function ($subquery) use ($user) {
-                                    $subquery->select('id')
-                                        ->from('span_permissions')
-                                        ->whereColumn('span_permissions.span_id', 'spans.id')
-                                        ->where('span_permissions.user_id', $user->id);
-                                });
-                        });
-                });
-            }
-        }
+        $filmsQuery->viewableBy(Auth::user());
         
         $films = $filmsQuery->with([
             'connectionsAsSubject' => function($q) {
@@ -4851,27 +4708,7 @@ class SpanController extends Controller
             })
             ->orderBy('name');
 
-        // Apply access filtering
-        if (!Auth::check()) {
-            $query->where('access_level', 'public');
-        } else {
-            $user = Auth::user();
-            if (!$user->is_admin) {
-                $query->where(function ($query) use ($user) {
-                    $query->where('access_level', 'public')
-                        ->orWhere('owner_id', $user->id)
-                        ->orWhere(function ($query) use ($user) {
-                            $query->where('access_level', 'shared')
-                                ->whereExists(function ($subquery) use ($user) {
-                                    $subquery->select('id')
-                                        ->from('span_permissions')
-                                        ->whereColumn('span_permissions.span_id', 'spans.id')
-                                        ->where('span_permissions.user_id', $user->id);
-                                });
-                        });
-                });
-            }
-        }
+        $query->viewableBy(Auth::user());
 
         $sets = $query->paginate(20);
 
@@ -4914,27 +4751,7 @@ class SpanController extends Controller
             ->whereJsonContains('metadata->subtype', 'plaque')
             ->orderBy('name');
 
-        // Apply access filtering
-        if (!Auth::check()) {
-            $query->where('access_level', 'public');
-        } else {
-            $user = Auth::user();
-            if (!$user->is_admin) {
-                $query->where(function ($query) use ($user) {
-                    $query->where('access_level', 'public')
-                        ->orWhere('owner_id', $user->id)
-                        ->orWhere(function ($query) use ($user) {
-                            $query->where('access_level', 'shared')
-                                ->whereExists(function ($subquery) use ($user) {
-                                    $subquery->select('id')
-                                        ->from('span_permissions')
-                                        ->whereColumn('span_permissions.span_id', 'spans.id')
-                                        ->where('span_permissions.user_id', $user->id);
-                                });
-                        });
-                });
-            }
-        }
+        $query->viewableBy(Auth::user());
 
         $plaques = $query->get();
 
@@ -5260,61 +5077,12 @@ class SpanController extends Controller
         // Get connections of this type involving the span with access control
         $user = auth()->user();
         $connections = Connection::where('type_id', $connectionType->type)
-            ->where(function($query) use ($span) {
+            ->where(function ($query) use ($span) {
                 $query->where('parent_id', $span->id)
-                      ->orWhere('child_id', $span->id);
-            })
-            ->where(function($query) use ($user) {
-                if (!$user) {
-                    // Guest users can only see connections involving public spans
-                    $query->whereHas('subject', function($q) {
-                        $q->where('access_level', 'public');
-                    })->whereHas('object', function($q) {
-                        $q->where('access_level', 'public');
-                    });
-                } elseif (!$user->is_admin) {
-                    // Regular users can see connections involving spans they have permission to view
-                    $query->where(function($subQ) use ($user) {
-                        $subQ->whereHas('subject', function($q) use ($user) {
-                            $q->where(function($spanQ) use ($user) {
-                                $spanQ->where('access_level', 'public')
-                                    ->orWhere('owner_id', $user->id)
-                                    ->orWhereHas('spanPermissions', function($permQ) use ($user) {
-                                        $permQ->where('user_id', $user->id)
-                                              ->whereIn('permission_type', ['view', 'edit']);
-                                    })
-                                    ->orWhereHas('spanPermissions', function($permQ) use ($user) {
-                                        $permQ->whereNotNull('group_id')
-                                              ->whereIn('permission_type', ['view', 'edit'])
-                                              ->whereHas('group', function($groupQ) use ($user) {
-                                                  $groupQ->whereHas('users', function($userQ) use ($user) {
-                                                      $userQ->where('user_id', $user->id);
-                                                  });
-                                              });
-                                    });
-                            });
-                        })->whereHas('object', function($q) use ($user) {
-                            $q->where(function($spanQ) use ($user) {
-                                $spanQ->where('access_level', 'public')
-                                    ->orWhere('owner_id', $user->id)
-                                    ->orWhereHas('spanPermissions', function($permQ) use ($user) {
-                                        $permQ->where('user_id', $user->id)
-                                              ->whereIn('permission_type', ['view', 'edit']);
-                                    })
-                                    ->orWhereHas('spanPermissions', function($permQ) use ($user) {
-                                        $permQ->whereNotNull('group_id')
-                                              ->whereIn('permission_type', ['view', 'edit'])
-                                              ->whereHas('group', function($groupQ) use ($user) {
-                                                  $groupQ->whereHas('users', function($userQ) use ($user) {
-                                                      $userQ->where('user_id', $user->id);
-                                                  });
-                                              });
-                                    });
-                            });
-                        });
-                    });
-                }
-            })
+                    ->orWhere('child_id', $span->id);
+            });
+        $this->constrainConnectionsQueryForViewer($connections, $user);
+        $connections = $connections
             ->with(['subject', 'object', 'connectionSpan'])
             ->orderBy('created_at', 'desc')
             ->paginate(20);
@@ -5924,63 +5692,16 @@ class SpanController extends Controller
                 }
                 
                 $connections = Connection::where('type_id', $connectionType->type)
-                    ->where(function($query) use ($subject) {
+                    ->where(function ($query) use ($subject) {
                         $query->where('parent_id', $subject->id)
-                              ->orWhere('child_id', $subject->id);
-                    })
-                    ->where(function($query) use ($user) {
-                        if (!$user) {
-                            $query->whereHas('subject', function($q) {
-                                $q->where('access_level', 'public');
-                            })->whereHas('object', function($q) {
-                                $q->where('access_level', 'public');
-                            });
-                        } elseif (!$user->is_admin) {
-                            $query->where(function($subQ) use ($user) {
-                                $subQ->whereHas('subject', function($q) use ($user) {
-                                    $q->where(function($spanQ) use ($user) {
-                                        $spanQ->where('access_level', 'public')
-                                            ->orWhere('owner_id', $user->id)
-                                            ->orWhereHas('spanPermissions', function($permQ) use ($user) {
-                                                $permQ->where('user_id', $user->id)
-                                                      ->whereIn('permission_type', ['view', 'edit']);
-                                            })
-                                            ->orWhereHas('spanPermissions', function($permQ) use ($user) {
-                                                $permQ->whereNotNull('group_id')
-                                                      ->whereIn('permission_type', ['view', 'edit'])
-                                                      ->whereHas('group', function($groupQ) use ($user) {
-                                                          $groupQ->whereHas('users', function($userQ) use ($user) {
-                                                              $userQ->where('user_id', $user->id);
-                                                          });
-                                                      });
-                                            });
-                                    });
-                                })->whereHas('object', function($q) use ($user) {
-                                    $q->where(function($spanQ) use ($user) {
-                                        $spanQ->where('access_level', 'public')
-                                            ->orWhere('owner_id', $user->id)
-                                            ->orWhereHas('spanPermissions', function($permQ) use ($user) {
-                                                $permQ->where('user_id', $user->id)
-                                                      ->whereIn('permission_type', ['view', 'edit']);
-                                            })
-                                            ->orWhereHas('spanPermissions', function($permQ) use ($user) {
-                                                $permQ->whereNotNull('group_id')
-                                                      ->whereIn('permission_type', ['view', 'edit'])
-                                                      ->whereHas('group', function($groupQ) use ($user) {
-                                                          $groupQ->whereHas('users', function($userQ) use ($user) {
-                                                              $userQ->where('user_id', $user->id);
-                                                          });
-                                                      });
-                                            });
-                                    });
-                                });
-                            });
-                        }
-                    })
+                            ->orWhere('child_id', $subject->id);
+                    });
+                $this->constrainConnectionsQueryForViewer($connections, $user);
+                $connections = $connections
                     ->with([
                         'subject:id,name,type_id,metadata,access_level,owner_id',
                         'object:id,name,type_id,metadata,access_level,owner_id',
-                        'connectionSpan:id,slug,start_year,start_month,start_day,end_year,end_month,end_day,state'
+                        'connectionSpan:id,slug,start_year,start_month,start_day,end_year,end_month,end_day,state',
                     ])
                     ->get();
 
@@ -6077,58 +5798,16 @@ class SpanController extends Controller
     }
 
     /**
-     * Guests and non-admins only see connections where both endpoint spans are visible to them.
+     * Only include connections whose subject and object spans are each viewable by the viewer.
+     *
+     * @see Span::scopeViewableBy
      */
     private function constrainConnectionsQueryForViewer(Builder $query, ?User $user): void
     {
-        $query->where(function ($q) use ($user) {
-            if (!$user) {
-                $q->whereHas('subject', function ($s) {
-                    $s->where('access_level', 'public');
-                })->whereHas('object', function ($o) {
-                    $o->where('access_level', 'public');
-                });
-            } elseif (!$user->is_admin) {
-                $q->where(function ($subQ) use ($user) {
-                    $subQ->whereHas('subject', function ($q) use ($user) {
-                        $q->where(function ($spanQ) use ($user) {
-                            $spanQ->where('access_level', 'public')
-                                ->orWhere('owner_id', $user->id)
-                                ->orWhereHas('spanPermissions', function ($permQ) use ($user) {
-                                    $permQ->where('user_id', $user->id)
-                                        ->whereIn('permission_type', ['view', 'edit']);
-                                })
-                                ->orWhereHas('spanPermissions', function ($permQ) use ($user) {
-                                    $permQ->whereNotNull('group_id')
-                                        ->whereIn('permission_type', ['view', 'edit'])
-                                        ->whereHas('group', function ($groupQ) use ($user) {
-                                            $groupQ->whereHas('users', function ($userQ) use ($user) {
-                                                $userQ->where('user_id', $user->id);
-                                            });
-                                        });
-                                });
-                        });
-                    })->whereHas('object', function ($q) use ($user) {
-                        $q->where(function ($spanQ) use ($user) {
-                            $spanQ->where('access_level', 'public')
-                                ->orWhere('owner_id', $user->id)
-                                ->orWhereHas('spanPermissions', function ($permQ) use ($user) {
-                                    $permQ->where('user_id', $user->id)
-                                        ->whereIn('permission_type', ['view', 'edit']);
-                                })
-                                ->orWhereHas('spanPermissions', function ($permQ) use ($user) {
-                                    $permQ->whereNotNull('group_id')
-                                        ->whereIn('permission_type', ['view', 'edit'])
-                                        ->whereHas('group', function ($groupQ) use ($user) {
-                                            $groupQ->whereHas('users', function ($userQ) use ($user) {
-                                                $userQ->where('user_id', $user->id);
-                                            });
-                                        });
-                                });
-                        });
-                    });
-                });
-            }
+        $query->whereHas('subject', function ($s) use ($user) {
+            $s->viewableBy($user);
+        })->whereHas('object', function ($o) use ($user) {
+            $o->viewableBy($user);
         });
     }
 
@@ -6145,8 +5824,8 @@ class SpanController extends Controller
         $userId = $user?->id ?? 'guest';
 
         // Cache key includes user ID for proper access control
-        // Version 7: include `features` connections (e.g. photo → person); types explorer column 5 needs them
-        $cacheKey = "connections_all_v7_{$subject->id}_{$userId}";
+        // Version 8: endpoint visibility uses Span::viewableBy (hasPermission view + effective admin)
+        $cacheKey = "connections_all_v8_{$subject->id}_{$userId}";
 
         return Cache::remember($cacheKey, 300, function () use ($subject, $user) {
             $query = Connection::query()

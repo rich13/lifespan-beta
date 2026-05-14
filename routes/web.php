@@ -710,8 +710,8 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                     Cache::forget("connections_all_v4_{$childId}_guest");
                     Cache::forget("connections_all_v5_{$parentId}_guest");
                     Cache::forget("connections_all_v5_{$childId}_guest");
-                    Cache::forget("connections_all_v7_{$parentId}_guest");
-                    Cache::forget("connections_all_v7_{$childId}_guest");
+                    Cache::forget("connections_all_v8_{$parentId}_guest");
+                    Cache::forget("connections_all_v8_{$childId}_guest");
                     
                     if (auth()->check()) {
                         $currentUserId = auth()->id();
@@ -721,8 +721,8 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                         Cache::forget("connections_all_v4_{$childId}_{$currentUserId}");
                         Cache::forget("connections_all_v5_{$parentId}_{$currentUserId}");
                         Cache::forget("connections_all_v5_{$childId}_{$currentUserId}");
-                        Cache::forget("connections_all_v7_{$parentId}_{$currentUserId}");
-                        Cache::forget("connections_all_v7_{$childId}_{$currentUserId}");
+                        Cache::forget("connections_all_v8_{$parentId}_{$currentUserId}");
+                        Cache::forget("connections_all_v8_{$childId}_{$currentUserId}");
                     }
 
                     return response()->json([

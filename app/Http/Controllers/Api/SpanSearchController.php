@@ -29,51 +29,29 @@ class SpanSearchController extends Controller
 
         // Start with spans the user can see, excluding connections
         $spans = Span::query()->whereNot('type_id', 'connection');
-        
+
         // Exclude sets if requested
         if ($excludeSets) {
             $spans->whereNot('type_id', 'set');
         }
-        
-        if ($user) {
-            // Authenticated user - can see public, owned, and shared spans
-            $spans->where(function ($q) use ($user) {
-                $q->where('access_level', 'public')
-                    ->orWhere('owner_id', $user->id)
-                    ->orWhere(function ($q) use ($user) {
-                        $q->where('access_level', 'shared')
-                            ->whereHas('spanPermissions', function ($q) use ($user) {
-                                $q->where(function($subQ) use ($user) {
-                                    $subQ->where('user_id', $user->id)
-                                         ->orWhereHas('group', function($groupQ) use ($user) {
-                                             $groupQ->whereHas('users', function($userQ) use ($user) {
-                                                 $userQ->where('users.id', $user->id);
-                                             });
-                                         });
-                                });
-                            });
-                    });
-            });
-            
-            // Exclude people already connected to the current user
-            if ($excludeConnected && $user->personalSpan) {
-                $connectedPersonIds = collect();
-                
-                // Get friends
-                $friends = $user->personalSpan->friends()->pluck('id');
-                $connectedPersonIds = $connectedPersonIds->merge($friends);
-                
-                // Get relationships
-                $relationships = $user->personalSpan->relationships()->pluck('id');
-                $connectedPersonIds = $connectedPersonIds->merge($relationships);
-                
-                if ($connectedPersonIds->isNotEmpty()) {
-                    $spans->whereNotIn('id', $connectedPersonIds->unique());
-                }
+
+        $spans->viewableBy($user);
+
+        // Exclude people already connected to the current user
+        if ($user && $excludeConnected && $user->personalSpan) {
+            $connectedPersonIds = collect();
+
+            // Get friends
+            $friends = $user->personalSpan->friends()->pluck('id');
+            $connectedPersonIds = $connectedPersonIds->merge($friends);
+
+            // Get relationships
+            $relationships = $user->personalSpan->relationships()->pluck('id');
+            $connectedPersonIds = $connectedPersonIds->merge($relationships);
+
+            if ($connectedPersonIds->isNotEmpty()) {
+                $spans->whereNotIn('id', $connectedPersonIds->unique());
             }
-        } else {
-            // Unauthenticated user - can only see public spans
-            $spans->where('access_level', 'public');
         }
 
         // Support multiple types (comma-separated) - takes precedence over single type

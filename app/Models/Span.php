@@ -23,6 +23,7 @@ use App\Traits\Versionable;
 use App\Models\User;
 use App\Models\Connection;
 use App\Services\SetFilterService;
+use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Represents a span of time or an entity that exists in time.
@@ -447,7 +448,7 @@ class Span extends Model
                     Cache::forget("connections_all_v3_{$connectedSpanId}_guest");
                     Cache::forget("connections_all_v4_{$connectedSpanId}_guest");
                     Cache::forget("connections_all_v5_{$connectedSpanId}_guest");
-                    Cache::forget("connections_all_v7_{$connectedSpanId}_guest");
+                    Cache::forget("connections_all_v8_{$connectedSpanId}_guest");
                     Cache::forget("connections_all_{$connectedSpanId}_guest");
                     Cache::forget("connection_types_{$connectedSpanId}");
                     
@@ -456,7 +457,7 @@ class Span extends Model
                         Cache::forget("connections_all_v3_{$connectedSpanId}_{$userId}");
                         Cache::forget("connections_all_v4_{$connectedSpanId}_{$userId}");
                         Cache::forget("connections_all_v5_{$connectedSpanId}_{$userId}");
-                        Cache::forget("connections_all_v7_{$connectedSpanId}_{$userId}");
+                        Cache::forget("connections_all_v8_{$connectedSpanId}_{$userId}");
                         Cache::forget("connections_all_{$connectedSpanId}_{$userId}");
                     }
                     
@@ -466,7 +467,7 @@ class Span extends Model
                         Cache::forget("connections_all_v3_{$connectedSpanId}_{$currentUserId}");
                         Cache::forget("connections_all_v4_{$connectedSpanId}_{$currentUserId}");
                         Cache::forget("connections_all_v5_{$connectedSpanId}_{$currentUserId}");
-                        Cache::forget("connections_all_v7_{$connectedSpanId}_{$currentUserId}");
+                        Cache::forget("connections_all_v8_{$connectedSpanId}_{$currentUserId}");
                         Cache::forget("connections_all_{$connectedSpanId}_{$currentUserId}");
                     }
                 }
@@ -1960,42 +1961,61 @@ class Span extends Model
     }
 
     /**
-     * Apply access control to a query
-     * 
-     * @param \Illuminate\Database\Eloquent\Builder $query
-     * @param User|null $user
+     * Limit a spans query to rows the user may view.
+     *
+     * Matches {@see hasPermission} with {@code 'view'}: guests see public spans only;
+     * users with {@see User::getEffectiveAdminStatus()} have no extra constraint; others
+     * see public spans, spans they own, and spans with a matching {@code span_permissions}
+     * grant (direct user or via group membership).
      */
-    protected function applyAccessControl(\Illuminate\Database\Eloquent\Builder $query, ?User $user): void
+    public function scopeViewableBy(Builder $query, ?User $user): void
     {
-        if (!$user) {
-            // Guest users can only see public spans
+        static::constrainQueryForViewer($query, $user);
+    }
+
+    /**
+     * @see scopeViewableBy
+     */
+    public static function constrainQueryForViewer(Builder $query, ?User $user): void
+    {
+        if ($user === null) {
             $query->where('access_level', 'public');
+
             return;
         }
-        
-        // Admins can see all spans
-        if ($user->is_admin) {
+
+        if ($user->getEffectiveAdminStatus()) {
             return;
         }
-        
-        // Regular users can see public spans, their own spans, and spans they have permission to view
+
         $query->where(function ($q) use ($user) {
             $q->where('access_level', 'public')
-              ->orWhere('owner_id', $user->id)
-              ->orWhereHas('spanPermissions', function ($permQ) use ($user) {
-                  $permQ->where('user_id', $user->id)
+                ->orWhere('owner_id', $user->id)
+                ->orWhereHas('spanPermissions', function ($permQ) use ($user) {
+                    $permQ->where('user_id', $user->id)
                         ->whereIn('permission_type', ['view', 'edit']);
-              })
-              ->orWhereHas('spanPermissions', function ($permQ) use ($user) {
-                  $permQ->whereNotNull('group_id')
+                })
+                ->orWhereHas('spanPermissions', function ($permQ) use ($user) {
+                    $permQ->whereNotNull('group_id')
                         ->whereIn('permission_type', ['view', 'edit'])
                         ->whereHas('group', function ($groupQ) use ($user) {
                             $groupQ->whereHas('users', function ($userQuery) use ($user) {
                                 $userQuery->where('user_id', $user->id);
                             });
                         });
-              });
+                });
         });
+    }
+
+    /**
+     * Apply access control to a query
+     *
+     * @param Builder $query
+     * @param User|null $user
+     */
+    protected function applyAccessControl(Builder $query, ?User $user): void
+    {
+        static::constrainQueryForViewer($query, $user);
     }
 
     /**
