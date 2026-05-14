@@ -3,9 +3,10 @@
     <div class="d-flex align-items-center">
         <x-brand variant="default" />
     </div>
-    
-    <!-- Spacer -->
-    <div class="flex-grow-1"></div>
+
+    <div class="d-flex align-items-center min-w-0 ms-2 me-2 flex-grow-1">
+        @stack('page_title_prefix')
+    </div>
     
     <!-- Guest Actions (only show if user is not authenticated) -->
     @guest

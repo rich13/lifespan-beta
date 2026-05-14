@@ -190,6 +190,12 @@ Route::middleware('web')->group(function () {
     Route::get('/places/{span}', [\App\Http\Controllers\PlacesController::class, 'show'])
         ->name('places.show');
 
+    // Public time-series datasets (admin-imported metrics)
+    Route::get('/datasets', [\App\Http\Controllers\DatasetExplorerController::class, 'index'])->name('datasets.index');
+    Route::get('/datasets/combined-points', [\App\Http\Controllers\DatasetExplorerController::class, 'combinedPoints'])->name('datasets.combined-points');
+    Route::get('/datasets/{dataset}/points', [\App\Http\Controllers\DatasetExplorerController::class, 'points'])->name('datasets.points');
+    Route::get('/datasets/{dataset}', [\App\Http\Controllers\DatasetExplorerController::class, 'show'])->name('datasets.show');
+
     // Explore routes
     Route::prefix('explore')->group(function () {
         Route::get('/', [SpanController::class, 'explore'])->name('explore.index');
@@ -2060,6 +2066,15 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                     ->name('export-selected');
                 Route::get('/stats', [App\Http\Controllers\Admin\DataExportController::class, 'getStats'])
                     ->name('get-stats');
+            });
+
+            // Time series datasets (OWID-style CSV import)
+            Route::prefix('datasets')->name('datasets.')->group(function () {
+                Route::get('/', [\App\Http\Controllers\Admin\DatasetAdminController::class, 'index'])->name('index');
+                Route::get('/create', [\App\Http\Controllers\Admin\DatasetAdminController::class, 'create'])->name('create');
+                Route::post('/', [\App\Http\Controllers\Admin\DatasetAdminController::class, 'store'])->name('store');
+                Route::delete('/{dataset}', [\App\Http\Controllers\Admin\DatasetAdminController::class, 'destroy'])->name('destroy');
+                Route::get('/{dataset}', [\App\Http\Controllers\Admin\DatasetAdminController::class, 'show'])->name('show');
             });
 
             // Data Import

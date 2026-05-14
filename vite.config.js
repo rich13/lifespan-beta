@@ -9,13 +9,16 @@ export default defineConfig({
                 'resources/scss/app.scss',
                 'resources/js/app.js',
                 'resources/js/routes.js',
-                'resources/js/tools-button-functions.js'
+                'resources/js/tools-button-functions.js',
+                'resources/js/datasets-explorer.js',
+                'resources/js/datasets-index-combined.js',
+                'resources/js/admin-datasets.js'
             ],
             refresh: true,
         }),
     ],
-    // Force HTTPS in production and set proper base path
-    base: process.env.APP_ENV === 'production' ? 'https://lifespan-beta-production.up.railway.app/' : '/',
+    // Same-origin assets; use ASSET_URL in Laravel if you need a CDN or absolute host.
+    base: '/',
     server: {
         https: false, // Use HTTP for development server
         host: '0.0.0.0',
