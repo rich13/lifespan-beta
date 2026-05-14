@@ -33,6 +33,29 @@ class AnniversaryHelper
         
         return 10; // Regular anniversaries
     }
+
+    /**
+     * Weight used only for ordering the anniversaries list. Birthdays (especially today
+     * and family) should not be buried beneath high milestone scores for unrelated people.
+     */
+    private static function sortWeight(array $event): int
+    {
+        $weight = (int) ($event['significance'] ?? 0);
+        $type = $event['type'] ?? '';
+        $daysUntil = (int) ($event['days_until'] ?? 999);
+        $isFamily = (bool) ($event['is_family_member'] ?? false);
+
+        if ($type === 'birthday') {
+            if ($isFamily) {
+                $weight += 500;
+            }
+            if ($daysUntil === 0) {
+                $weight += 400;
+            }
+        }
+
+        return $weight;
+    }
     
     /**
      * Get upcoming anniversaries within a date range
@@ -47,7 +70,7 @@ class AnniversaryHelper
         int $daysAhead = 30,
         array $options = []
     ): array {
-        $targetDate = $targetDate ?? DateHelper::getCurrentDate();
+        $targetDate = ($targetDate ?? DateHelper::getCurrentDate())->copy()->startOfDay();
         $startDateForQuery = $targetDate->copy();
         $endDateForQuery = $targetDate->copy()->addDays($daysAhead);
         
@@ -335,7 +358,7 @@ class AnniversaryHelper
             }
         }
         
-        // Sort by: 1) Is today (today first), 2) Family member (family first), 3) Significance (highest first), 4) Days until (soonest first)
+        // Sort by: 1) Today first, 2) Family first, 3) Sort weight (milestones + birthday boosts), 4) Prefer birthdays on ties, 5) Sooner first
         usort($significantDates, function($a, $b) {
             // First priority: events happening TODAY (days_until === 0) come first
             $aIsToday = $a['days_until'] === 0;
@@ -351,13 +374,25 @@ class AnniversaryHelper
                 return $bIsFamily <=> $aIsFamily; // true (1) comes before false (0)
             }
             
-            // Third priority: significance (higher is better)
-            $significanceCompare = $b['significance'] <=> $a['significance'];
-            if ($significanceCompare !== 0) {
-                return $significanceCompare;
+            // Third priority: sort weight (significance plus birthday / family boosts)
+            $weightCompare = self::sortWeight($b) <=> self::sortWeight($a);
+            if ($weightCompare !== 0) {
+                return $weightCompare;
+            }
+
+            // Fourth: birthdays before other types when still tied
+            $typeRank = fn ($type) => match ($type) {
+                'birthday' => 0,
+                'death_anniversary' => 1,
+                'album_anniversary' => 2,
+                default => 3,
+            };
+            $typeCompare = $typeRank($a['type'] ?? '') <=> $typeRank($b['type'] ?? '');
+            if ($typeCompare !== 0) {
+                return $typeCompare;
             }
             
-            // Fourth priority: days until (sooner is better)
+            // Fifth priority: days until (sooner is better)
             return $a['days_until'] <=> $b['days_until'];
         });
         
@@ -365,31 +400,21 @@ class AnniversaryHelper
     }
     
     /**
-     * Get the highest-scoring person from upcoming anniversaries
-     * Returns the person with the most significant anniversary
-     * No photo requirement - placeholder will be shown if no photo available
-     * 
-     * @param Carbon|null $targetDate The target date
-     * @param int $maxDaysUntil Maximum days until anniversary (default 7)
-     * @param int $minSignificance Minimum significance score (default 50)
-     * @return Span|null The highest-scoring person span, or null if no anniversaries found
+     * Person to feature on the homepage: first entry in the same ordered list as the
+     * Anniversaries card that is a living person's birthday or a death anniversary.
+     * Album release anniversaries are skipped (non-person spans).
      */
-    public static function getHighestScoringPerson(
-        ?Carbon $targetDate = null,
-        int $maxDaysUntil = 7,
-        int $minSignificance = 50
-    ): ?Span {
-        // Use the same call as the anniversaries list component
+    public static function getHighestScoringPerson(?Carbon $targetDate = null): ?Span
+    {
         $targetDate = $targetDate ?? DateHelper::getCurrentDate();
         $anniversaries = self::getUpcomingAnniversaries($targetDate, 60);
-        
-        // Filter to only death anniversaries and find the first one
+
         foreach ($anniversaries as $event) {
-            if ($event['type'] === 'death_anniversary') {
+            if (($event['type'] ?? null) === 'birthday' || ($event['type'] ?? null) === 'death_anniversary') {
                 return $event['span'];
             }
         }
-        
+
         return null;
     }
 }

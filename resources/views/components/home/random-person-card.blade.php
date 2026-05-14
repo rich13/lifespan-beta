@@ -1,6 +1,5 @@
 @php
-    // First, try to find a person with a significant anniversary
-    // Uses the same anniversaries list, just takes the first death anniversary
+    // First person in the same ordered anniversaries list as the homepage card (birthdays and death anniversaries)
     $featuredPerson = \App\Helpers\AnniversaryHelper::getHighestScoringPerson();
     
     // Otherwise, fall back to random selection
