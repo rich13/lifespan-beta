@@ -649,7 +649,7 @@ class AddConnectionModalTest extends TestCase
         ]);
 
         if ($response->status() !== 200) {
-            $this->fail('Response failed with status ' . $response->status() . ': ' . $response->getContent());
+            $this->failWithResponseSummary($response, 'Response failed');
         }
         
         $response->assertStatus(200);

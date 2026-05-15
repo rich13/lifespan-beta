@@ -57,7 +57,7 @@ class PublicSpanPageCacheRedisTest extends TestCase
         $response2 = $this->get(route('spans.show', ['subject' => $span->slug]));
         $response2->assertStatus(200);
         $response2->assertHeader('X-Public-Span-Cache', 'HIT');
-        $this->assertSame($response1->getContent(), $response2->getContent());
+        $this->assertSameResponseContent($response1->getContent(), $response2->getContent());
     }
 
     public function test_authenticated_user_bypasses_public_cache(): void

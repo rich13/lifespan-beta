@@ -11,10 +11,26 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Notification;
 use Exception;
+use Tests\Support\Concerns\TruncatesResponseBodies;
+use Tests\Support\Testing\TestResponse as TruncatingTestResponse;
 
 abstract class TestCase extends BaseTestCase
 {
-    use CreatesApplication, PostgresRefreshDatabase;
+    use CreatesApplication, PostgresRefreshDatabase, TruncatesResponseBodies;
+
+    /**
+     * Use a test response that truncates HTML bodies in SeeInOrder failure messages.
+     */
+    protected function createTestResponse($response)
+    {
+        return tap(TruncatingTestResponse::fromBaseResponse($response), function ($testResponse) {
+            if ($this->app->bound(\Illuminate\Testing\LoggedExceptionCollection::class)) {
+                $testResponse->withExceptions(
+                    $this->app->make(\Illuminate\Testing\LoggedExceptionCollection::class)
+                );
+            }
+        });
+    }
 
     /**
      * The base name of the test database (without parallel token suffix).

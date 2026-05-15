@@ -127,18 +127,12 @@ class RouteHealthTest extends \Tests\TestCase
             $this->assertNotEquals(0, $response->getStatusCode(), 
                 "Route {$route} returned 0 status code");
             
-            // Check for common error strings in response content
-            if ($response->getStatusCode() === 200) {
-                $content = $response->getContent();
-                $this->assertStringNotContainsString('Call to undefined method', $content,
-                    "Route {$route} contains 'Call to undefined method' error");
-                $this->assertStringNotContainsString('Fatal error', $content,
-                    "Route {$route} contains fatal error");
-                $this->assertStringNotContainsString('Parse error', $content,
-                    "Route {$route} contains parse error");
-                $this->assertStringNotContainsString('Class not found', $content,
-                    "Route {$route} contains 'Class not found' error");
-            }
+            $this->assertResponseBodyHasNoErrorMarkers($response, [
+                'Call to undefined method',
+                'Fatal error',
+                'Parse error',
+                'Class not found',
+            ], "Route {$route}");
         }
     }
 
@@ -211,18 +205,12 @@ class RouteHealthTest extends \Tests\TestCase
             $this->assertNotEquals(0, $response->getStatusCode(), 
                 "Admin route {$route} returned 0 status code");
             
-            // Check for common error strings in response content
-            if ($response->getStatusCode() === 200) {
-                $content = $response->getContent();
-                $this->assertStringNotContainsString('Call to undefined method', $content,
-                    "Admin route {$route} contains 'Call to undefined method' error");
-                $this->assertStringNotContainsString('Fatal error', $content,
-                    "Admin route {$route} contains fatal error");
-                $this->assertStringNotContainsString('Parse error', $content,
-                    "Admin route {$route} contains parse error");
-                $this->assertStringNotContainsString('Class not found', $content,
-                    "Admin route {$route} contains 'Class not found' error");
-            }
+            $this->assertResponseBodyHasNoErrorMarkers($response, [
+                'Call to undefined method',
+                'Fatal error',
+                'Parse error',
+                'Class not found',
+            ], "Admin route {$route}");
         }
     }
 
@@ -280,13 +268,10 @@ class RouteHealthTest extends \Tests\TestCase
         $this->assertNotEquals(500, $response->getStatusCode(), 
             "Route /spans/types returned 500 error");
         
-        if ($response->getStatusCode() === 200) {
-            $content = $response->getContent();
-            $this->assertStringNotContainsString('getCreator', $content,
-                "Route /spans/types contains 'getCreator' error");
-            $this->assertStringNotContainsString('Call to undefined method', $content,
-                "Route /spans/types contains 'Call to undefined method' error");
-        }
+        $this->assertResponseBodyHasNoErrorMarkers($response, [
+            'getCreator',
+            'Call to undefined method',
+        ], 'Route /spans/types');
     }
 
     /**
