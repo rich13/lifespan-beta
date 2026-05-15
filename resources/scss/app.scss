@@ -339,6 +339,22 @@ $lifespan-colors: (
   }
 }
 
+// Upcoming anniversaries card (aligned with home spans-of-type-card thumbnails)
+.upcoming-anniversary-thumb {
+  width: 75px;
+  height: 75px;
+  object-fit: cover;
+}
+
+.upcoming-anniversary-thumb-placeholder {
+  width: 75px;
+  height: 75px;
+
+  i {
+    font-size: 2rem;
+  }
+}
+
 // Custom colors (keeping existing ones for backward compatibility)
 $subject: #0d6efd;  // Bootstrap primary
 $object: #0dcaf0;   // Bootstrap info

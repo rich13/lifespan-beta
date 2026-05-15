@@ -33,33 +33,14 @@ class AnniversaryHelper
         
         return 10; // Regular anniversaries
     }
-
-    /**
-     * Weight used only for ordering the anniversaries list. Birthdays (especially today
-     * and family) should not be buried beneath high milestone scores for unrelated people.
-     */
-    private static function sortWeight(array $event): int
-    {
-        $weight = (int) ($event['significance'] ?? 0);
-        $type = $event['type'] ?? '';
-        $daysUntil = (int) ($event['days_until'] ?? 999);
-        $isFamily = (bool) ($event['is_family_member'] ?? false);
-
-        if ($type === 'birthday') {
-            if ($isFamily) {
-                $weight += 500;
-            }
-            if ($daysUntil === 0) {
-                $weight += 400;
-            }
-        }
-
-        return $weight;
-    }
     
     /**
      * Get upcoming anniversaries within a date range
-     * 
+     *
+     * Results are sorted by `days_until` ascending (soonest first). When two events share
+     * the same offset, family members come before non-family, then birthday before death
+     * before album, then span name for a stable tie-break.
+     *
      * @param Carbon|null $targetDate The target date (defaults to current date)
      * @param int $daysAhead Number of days ahead to look (default 30)
      * @param array $options Options to filter results
@@ -358,42 +339,34 @@ class AnniversaryHelper
             }
         }
         
-        // Sort by: 1) Today first, 2) Family first, 3) Sort weight (milestones + birthday boosts), 4) Prefer birthdays on ties, 5) Sooner first
-        usort($significantDates, function($a, $b) {
-            // First priority: events happening TODAY (days_until === 0) come first
-            $aIsToday = $a['days_until'] === 0;
-            $bIsToday = $b['days_until'] === 0;
-            if ($aIsToday !== $bIsToday) {
-                return $bIsToday <=> $aIsToday; // true (1) comes before false (0)
-            }
-            
-            // Second priority: family members come before non-family members
-            $aIsFamily = $a['is_family_member'] ?? false;
-            $bIsFamily = $b['is_family_member'] ?? false;
-            if ($aIsFamily !== $bIsFamily) {
-                return $bIsFamily <=> $aIsFamily; // true (1) comes before false (0)
-            }
-            
-            // Third priority: sort weight (significance plus birthday / family boosts)
-            $weightCompare = self::sortWeight($b) <=> self::sortWeight($a);
-            if ($weightCompare !== 0) {
-                return $weightCompare;
+        // Sort by days until soonest first; same offset: family before non-family, then type, then name
+        usort($significantDates, function ($a, $b) {
+            $dayCmp = ((int) ($a['days_until'] ?? 999)) <=> ((int) ($b['days_until'] ?? 999));
+            if ($dayCmp !== 0) {
+                return $dayCmp;
             }
 
-            // Fourth: birthdays before other types when still tied
+            $aFamily = (bool) ($a['is_family_member'] ?? false);
+            $bFamily = (bool) ($b['is_family_member'] ?? false);
+            if ($aFamily !== $bFamily) {
+                return $bFamily <=> $aFamily;
+            }
+
             $typeRank = fn ($type) => match ($type) {
                 'birthday' => 0,
                 'death_anniversary' => 1,
                 'album_anniversary' => 2,
                 default => 3,
             };
-            $typeCompare = $typeRank($a['type'] ?? '') <=> $typeRank($b['type'] ?? '');
-            if ($typeCompare !== 0) {
-                return $typeCompare;
+            $typeCmp = $typeRank($a['type'] ?? '') <=> $typeRank($b['type'] ?? '');
+            if ($typeCmp !== 0) {
+                return $typeCmp;
             }
-            
-            // Fifth priority: days until (sooner is better)
-            return $a['days_until'] <=> $b['days_until'];
+
+            $nameA = (string) (($a['span'] ?? null)?->name ?? '');
+            $nameB = (string) (($b['span'] ?? null)?->name ?? '');
+
+            return strcmp($nameA, $nameB);
         });
         
         return $significantDates;

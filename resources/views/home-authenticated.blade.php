@@ -484,11 +484,11 @@
 @section('content')
 <div class="container-fluid">
     <div class="row">
-        <!-- Column 1: Today's Events -->
+        <!-- Column 1: Anniversaries and At Your Age -->
         <div class="col-md-4">
-            <!-- At Your Age Card -->
+            <!-- Anniversaries -->
             <div class="mb-4">
-                <x-home.at-your-age-card />
+                <x-upcoming-anniversaries />
             </div>
             
             <div class="mb-4">
@@ -541,7 +541,7 @@
                 @endif
                 --}}
 
-                <x-upcoming-anniversaries />
+                <x-home.at-your-age-card />
             </div>
         </div>
 

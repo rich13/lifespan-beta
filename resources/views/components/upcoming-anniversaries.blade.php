@@ -1,186 +1,229 @@
 @props(['date' => null])
 
 @php
-    // Use provided date or default to current date (respecting time travel mode)
     $targetDate = $date ? \Carbon\Carbon::parse($date) : \App\Helpers\DateHelper::getCurrentDate();
-    
-    // Get upcoming anniversaries using shared helper
-    $significantDates = \App\Helpers\AnniversaryHelper::getUpcomingAnniversaries($targetDate, 60);
-    
-    // Take only the first 5
-    $significantDates = array_slice($significantDates, 0, 5);
+
+    $allAnniversaries = \App\Helpers\AnniversaryHelper::getUpcomingAnniversaries($targetDate, 60);
+
+    $startsEvents = [];
+    $endsEvents = [];
+    foreach ($allAnniversaries as $event) {
+        $type = $event['type'] ?? null;
+        if ($type === 'birthday' || $type === 'album_anniversary') {
+            $startsEvents[] = $event;
+        } elseif ($type === 'death_anniversary') {
+            $endsEvents[] = $event;
+        }
+    }
+    $startsEvents = array_slice($startsEvents, 0, 5);
+    $endsEvents = array_slice($endsEvents, 0, 5);
+
+    $resolvePhotoUrl = function ($span) {
+        $photoConnection = \App\Models\Connection::where('type_id', 'features')
+            ->where('child_id', $span->id)
+            ->whereHas('parent', function ($query) {
+                $query->where('type_id', 'thing')
+                    ->whereJsonContains('metadata->subtype', 'photo');
+            })
+            ->with(['parent'])
+            ->first();
+
+        if (!$photoConnection || !$photoConnection->parent) {
+            return null;
+        }
+
+        $photoSpan = $photoConnection->parent;
+        $metadata = $photoSpan->metadata ?? [];
+        $url = $metadata['thumbnail_url']
+            ?? $metadata['medium_url']
+            ?? $metadata['large_url']
+            ?? null;
+
+        if (!$url && !empty($metadata['filename'])) {
+            $url = route('images.proxy', ['spanId' => $photoSpan->id, 'size' => 'medium']);
+        }
+
+        return $url;
+    };
+
+    $nameLink = function ($span) {
+        return '<a href="' . e(route('spans.show', $span)) . '" class="text-decoration-none fw-bold">'
+            . e($span->name) . '</a>';
+    };
+
+    $dateLink = function (\Carbon\Carbon $d) {
+        $slug = $d->format('Y-m-d');
+
+        return '<a href="' . e(url('/date/' . $slug)) . '" class="text-decoration-none">'
+            . e($d->format('j F Y')) . '</a>';
+    };
+
+    $todayLink = function (\Carbon\Carbon $d) {
+        $slug = $d->format('Y-m-d');
+
+        return '<a href="' . e(url('/date/' . $slug)) . '" class="text-decoration-none fw-semibold">today</a>';
+    };
+
+    $rowFromEvent = function (array $event) use ($resolvePhotoUrl, $nameLink, $dateLink, $todayLink) {
+        $span = $event['span'];
+        $type = $event['type'];
+        $days = (int) $event['days_until'];
+        $date = $event['date'];
+        $photoUrl = $resolvePhotoUrl($span);
+        $milestone = ($event['significance'] ?? 0) >= 50;
+        $isToday = $days === 0;
+
+        $name = $nameLink($span);
+        $when = $dateLink($date);
+        $today = $todayLink($date);
+
+        if ($type === 'birthday') {
+            $age = (int) $event['age'];
+            $ageHtml = $milestone
+                ? '<strong class="text-warning">' . e((string) $age) . '</strong>'
+                : '<strong>' . e((string) $age) . '</strong>';
+
+            if ($isToday && $age === 0) {
+                $sentence = $name . ' was born ' . $today . '.';
+            } elseif ($isToday) {
+                $sentence = $name . ' turns ' . $ageHtml . ' ' . $today . '.';
+            } elseif ($age === 0) {
+                $sentence = 'In ' . $days . ' ' . \Illuminate\Support\Str::plural('day', $days) . ' — '
+                    . $name . ' will be born on ' . $when . '.';
+            } else {
+                $sentence = 'In ' . $days . ' ' . \Illuminate\Support\Str::plural('day', $days) . ' — '
+                    . $name . ' turns ' . $ageHtml . ' on ' . $when . '.';
+            }
+        } elseif ($type === 'death_anniversary') {
+            $years = (int) $event['years'];
+            $yearsHtml = $milestone
+                ? '<strong class="text-warning">' . e((string) $years) . '</strong>'
+                : '<strong>' . e((string) $years) . '</strong>';
+            $ys = $yearsHtml . ' ' . \Illuminate\Support\Str::plural('year', $years);
+
+            $deathOccurred = null;
+            if ($span->end_year && $span->end_month && $span->end_day) {
+                try {
+                    $deathOccurred = \Carbon\Carbon::createFromDate(
+                        (int) $span->end_year,
+                        (int) $span->end_month,
+                        (int) $span->end_day
+                    );
+                } catch (\Throwable $e) {
+                    $deathOccurred = null;
+                }
+            }
+            $deathWhen = $deathOccurred ? $dateLink($deathOccurred) : $when;
+
+            if ($isToday) {
+                $sentence = $ys . ' since ' . $name . '\'s death on ' . $deathWhen . ' — today.';
+            } else {
+                $sentence = 'In ' . $days . ' ' . \Illuminate\Support\Str::plural('day', $days) . ' — '
+                    . $ys . ' since ' . $name . '\'s death on ' . $deathWhen . '.';
+            }
+        } elseif ($type === 'album_anniversary') {
+            $years = (int) $event['years'];
+            $yearsHtml = $milestone
+                ? '<strong class="text-warning">' . e((string) $years) . '</strong>'
+                : '<strong>' . e((string) $years) . '</strong>';
+            $ys = $yearsHtml . ' ' . \Illuminate\Support\Str::plural('year', $years);
+
+            $artist = null;
+            if ($span->type_id === 'thing' && !empty($span->metadata['creator'])) {
+                $artist = \App\Models\Span::find($span->metadata['creator']);
+            }
+
+            $who = $name;
+            if ($artist) {
+                $who .= ' by ' . $nameLink($artist);
+            }
+
+            if ($isToday) {
+                $sentence = $ys . ' since ' . $who . ' was released ' . $today . '.';
+            } else {
+                $sentence = $ys . ' since ' . $who . ' was released — in ' . $days . ' ' . \Illuminate\Support\Str::plural('day', $days) . ' (' . $when . ').';
+            }
+        } else {
+            $sentence = $name;
+        }
+
+        return [
+            'span' => $span,
+            'photoUrl' => $photoUrl,
+            'sentenceHtml' => $sentence,
+            'is_today' => $isToday,
+        ];
+    };
+
+    $startsEntries = array_map($rowFromEvent, $startsEvents);
+    $endsEntries = array_map($rowFromEvent, $endsEvents);
+
+    $hasAny = count($startsEntries) > 0 || count($endsEntries) > 0;
 @endphp
 
-@if(!empty($significantDates))
-    <div class="card mb-4">
+@if($hasAny)
+    <div class="card mb-3">
         <div class="card-header">
-            <h5 class="card-title mb-0">
-                <i class="bi bi-calendar-check text-primary me-2"></i>
+            <h3 class="h6 mb-0">
+                <i class="bi bi-calendar-check text-info me-2"></i>
                 Anniversaries
-            </h5>
+            </h3>
         </div>
         <div class="card-body">
-            <div class="spans-list">
-                @foreach($significantDates as $event)
-                    <div class="interactive-card-base mb-3 position-relative">
-                        <div class="btn-group btn-group-sm" role="group">
-                            @if($event['type'] === 'birthday')
-                                @php
-                                    $isSignificant = $event['significance'] >= 50; // 5th, 10th, 25th, 50th, 100th birthday, etc.
-                                @endphp
-                                @if($event['days_until'] === 0)
-                                    @if($event['age'] === 0)
-                                        <!-- Born today -->
-                                        <button type="button" class="btn btn-outline-{{ $event['span']->type_id }} disabled" style="min-width: 40px;">
-                                            <x-icon :span="$event['span']" />
-                                        </button>
-                                        <a href="{{ route('spans.show', $event['span']) }}" 
-                                           class="btn {{ $event['span']->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $event['span']->type_id }}">
-                                            {{ $event['span']->name }}
-                                        </a>
-                                        <button type="button" class="btn btn-outline-light text-dark inactive" disabled>was born</button>
-                                        <button type="button" class="btn btn-outline-light text-dark inactive" disabled>today</button>
-                                    @else
-                                        <!-- Birthday today -->
-                                        <button type="button" class="btn btn-outline-{{ $event['span']->type_id }} disabled" style="min-width: 40px;">
-                                            <x-icon :span="$event['span']" />
-                                        </button>
-                                        <a href="{{ route('spans.show', $event['span']) }}" 
-                                           class="btn {{ $event['span']->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $event['span']->type_id }}">
-                                            {{ $event['span']->name }}
-                                        </a>
-                                        <button type="button" class="btn btn-outline-light text-dark inactive" disabled>turns</button>
-                                        @if($isSignificant)
-                                            <button type="button" class="btn btn-warning text-dark fw-bold">{{ $event['age'] }}</button>
-                                        @else
-                                            <button type="button" class="btn btn-outline-age">{{ $event['age'] }}</button>
-                                        @endif
-                                        <button type="button" class="btn btn-outline-light text-dark inactive" disabled>today</button>
-                                    @endif
+            <div class="row g-2">
+                <div class="col-md-6">
+                    @forelse($startsEntries as $row)
+                        <div class="card mb-2{{ !empty($row['is_today']) ? ' border-primary bg-primary-subtle shadow-sm' : '' }}">
+                            <div class="card-body py-2">
+                                @if($row['photoUrl'])
+                                    <a href="{{ route('spans.show', $row['span']) }}" class="text-decoration-none float-start me-3 mb-2">
+                                        <img src="{{ $row['photoUrl'] }}"
+                                             alt="{{ $row['span']->name }}"
+                                             class="rounded upcoming-anniversary-thumb"
+                                             loading="lazy">
+                                    </a>
                                 @else
-                                    @if($event['age'] === 0)
-                                        <!-- Will be born -->
-                                        <button type="button" class="btn btn-outline-{{ $event['span']->type_id }} disabled" style="min-width: 40px;">
-                                            <x-icon :span="$event['span']" />
-                                        </button>
-                                        <a href="{{ route('spans.show', $event['span']) }}" 
-                                           class="btn {{ $event['span']->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $event['span']->type_id }}">
-                                            {{ $event['span']->name }}
-                                        </a>
-                                        <button type="button" class="btn btn-outline-light text-dark inactive" disabled>will be born in {{ $event['days_until'] }} days</button>
-                                    @else
-                                        <!-- Birthday in future -->
-                                        <button type="button" class="btn btn-outline-{{ $event['span']->type_id }} disabled" style="min-width: 40px;">
-                                            <x-icon :span="$event['span']" />
-                                        </button>
-                                        <a href="{{ route('spans.show', $event['span']) }}" 
-                                           class="btn {{ $event['span']->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $event['span']->type_id }}">
-                                            {{ $event['span']->name }}
-                                        </a>
-                                        <button type="button" class="btn btn-outline-light text-dark inactive" disabled>will be</button>
-                                        @if($isSignificant)
-                                            <button type="button" class="btn btn-warning text-dark fw-bold">{{ $event['age'] }}</button>
-                                        @else
-                                            <button type="button" class="btn btn-outline-age">{{ $event['age'] }}</button>
-                                        @endif
-                                        <button type="button" class="btn btn-outline-light text-dark inactive" disabled>in {{ $event['days_until'] }} days</button>
-                                    @endif
+                                    <a href="{{ route('spans.show', $row['span']) }}" class="text-decoration-none float-start me-3 mb-2">
+                                        <div class="rounded bg-light d-flex align-items-center justify-content-center upcoming-anniversary-thumb-placeholder">
+                                            <x-icon :span="$row['span']" />
+                                        </div>
+                                    </a>
                                 @endif
-                            @elseif($event['type'] === 'death_anniversary')
-                                @php
-                                    $isSignificant = $event['significance'] >= 50; // 5th, 10th, 25th, etc.
-                                    $yearLabel = $event['years'] . ' years since';
-                                @endphp
-                                @if($event['days_until'] === 0)
-                                    <!-- Death anniversary today -->
-                                    @if($isSignificant)
-                                        <button type="button" class="btn btn-warning text-dark fw-bold" disabled>{{ $yearLabel }}</button>
-                                    @else
-                                        <button type="button" class="btn btn-outline-light text-dark inactive" disabled>{{ $yearLabel }}</button>
-                                    @endif
-                                    <button type="button" class="btn btn-outline-{{ $event['span']->type_id }} disabled" style="min-width: 40px;">
-                                        <x-icon :span="$event['span']" />
-                                    </button>
-                                    <a href="{{ route('spans.show', $event['span']) }}" 
-                                       class="btn {{ $event['span']->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $event['span']->type_id }}">
-                                        {{ $event['span']->name }}
-                                    </a>
-                                    <button type="button" class="btn btn-outline-light text-dark inactive" disabled>'s death</button>
-                                @else
-                                    <!-- Death anniversary in future -->
-                                    @if($isSignificant)
-                                        <button type="button" class="btn btn-warning text-dark fw-bold" disabled>{{ $yearLabel }}</button>
-                                    @else
-                                        <button type="button" class="btn btn-outline-light text-dark inactive" disabled>{{ $yearLabel }}</button>
-                                    @endif
-                                    <button type="button" class="btn btn-outline-{{ $event['span']->type_id }} disabled" style="min-width: 40px;">
-                                        <x-icon :span="$event['span']" />
-                                    </button>
-                                    <a href="{{ route('spans.show', $event['span']) }}" 
-                                       class="btn {{ $event['span']->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $event['span']->type_id }}">
-                                        {{ $event['span']->name }}
-                                    </a>
-                                    <button type="button" class="btn btn-outline-light text-dark inactive" disabled>'s death in {{ $event['days_until'] }} days</button>
-                                @endif
-                            @elseif($event['type'] === 'album_anniversary')
-                                @php
-                                    $artist = null;
-                                    if ($event['span']->type_id === 'thing' && !empty($event['span']->metadata['creator'])) {
-                                        $artist = \App\Models\Span::find($event['span']->metadata['creator']);
-                                    }
-                                    $isSignificant = $event['significance'] >= 50; // 5th, 10th, 25th, etc.
-                                    $yearLabel = $event['years'] . ' years since';
-                                @endphp
-                                @if($event['days_until'] === 0)
-                                    <!-- Album anniversary today -->
-                                    @if($isSignificant)
-                                        <button type="button" class="btn btn-warning text-dark fw-bold" disabled>{{ $yearLabel }}</button>
-                                    @else
-                                        <button type="button" class="btn btn-outline-light text-dark inactive" disabled>{{ $yearLabel }}</button>
-                                    @endif
-                                    <button type="button" class="btn btn-outline-{{ $event['span']->type_id }} disabled" style="min-width: 40px;">
-                                        <x-icon :span="$event['span']" />
-                                    </button>
-                                    <a href="{{ route('spans.show', $event['span']) }}" 
-                                       class="btn {{ $event['span']->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $event['span']->type_id }}">
-                                        {{ $event['span']->name }}
-                                    </a>
-                                    @if($artist)
-                                        <button type="button" class="btn btn-outline-light text-dark inactive" disabled>by</button>
-                                        <a href="{{ route('spans.show', $artist) }}" 
-                                           class="btn {{ $artist->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $artist->type_id }}">
-                                            {{ $artist->name }}
-                                        </a>
-                                    @endif
-                                    <button type="button" class="btn btn-outline-light text-dark inactive" disabled>was released</button>
-                                @else
-                                    <!-- Album anniversary in future -->
-                                    @if($isSignificant)
-                                        <button type="button" class="btn btn-warning text-dark fw-bold" disabled>{{ $yearLabel }}</button>
-                                    @else
-                                        <button type="button" class="btn btn-outline-light text-dark inactive" disabled>{{ $yearLabel }}</button>
-                                    @endif
-                                    <button type="button" class="btn btn-outline-{{ $event['span']->type_id }} disabled" style="min-width: 40px;">
-                                        <x-icon :span="$event['span']" />
-                                    </button>
-                                    <a href="{{ route('spans.show', $event['span']) }}" 
-                                       class="btn {{ $event['span']->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $event['span']->type_id }}">
-                                        {{ $event['span']->name }}
-                                    </a>
-                                    @if($artist)
-                                        <button type="button" class="btn btn-outline-light text-dark inactive" disabled>by</button>
-                                        <a href="{{ route('spans.show', $artist) }}" 
-                                           class="btn {{ $artist->state === 'placeholder' ? 'btn-placeholder' : 'btn-' . $artist->type_id }}">
-                                            {{ $artist->name }}
-                                        </a>
-                                    @endif
-                                    <button type="button" class="btn btn-outline-light text-dark inactive" disabled>was released in {{ $event['days_until'] }} days</button>
-                                @endif
-                            @endif
+                                <p class="mb-0 small">{!! $row['sentenceHtml'] !!}</p>
+                                <div class="clearfix"></div>
+                            </div>
                         </div>
-                    </div>
-                @endforeach
+                    @empty
+                        <p class="small text-muted mb-0">None in the next 60 days.</p>
+                    @endforelse
+                </div>
+                <div class="col-md-6">
+                    @forelse($endsEntries as $row)
+                        <div class="card mb-2{{ !empty($row['is_today']) ? ' border-primary bg-primary-subtle shadow-sm' : '' }}">
+                            <div class="card-body py-2">
+                                @if($row['photoUrl'])
+                                    <a href="{{ route('spans.show', $row['span']) }}" class="text-decoration-none float-start me-3 mb-2">
+                                        <img src="{{ $row['photoUrl'] }}"
+                                             alt="{{ $row['span']->name }}"
+                                             class="rounded upcoming-anniversary-thumb"
+                                             loading="lazy">
+                                    </a>
+                                @else
+                                    <a href="{{ route('spans.show', $row['span']) }}" class="text-decoration-none float-start me-3 mb-2">
+                                        <div class="rounded bg-light d-flex align-items-center justify-content-center upcoming-anniversary-thumb-placeholder">
+                                            <x-icon :span="$row['span']" />
+                                        </div>
+                                    </a>
+                                @endif
+                                <p class="mb-0 small">{!! $row['sentenceHtml'] !!}</p>
+                                <div class="clearfix"></div>
+                            </div>
+                        </div>
+                    @empty
+                        <p class="small text-muted mb-0">None in the next 60 days.</p>
+                    @endforelse
+                </div>
             </div>
         </div>
     </div>
-@endif 
+@endif
