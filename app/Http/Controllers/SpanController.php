@@ -59,8 +59,13 @@ class SpanController extends Controller
      */
     public function __construct(YamlSpanService $yamlService, RouteReservationService $routeReservationService)
     {
-        // Require auth for all routes except show, index, search, explore, desertIslandDiscs, explorePlaques, connectionTypes, connectionsByType, showConnection, listConnections, and showTimeline
-        $this->middleware('auth')->except(['show', 'showJson', 'connectionsJson', 'plaque', 'plaqueConnection', 'plaquesIndex', 'plaquesSearch', 'index', 'search', 'explore', 'desertIslandDiscs', 'explorePlaques', 'connectionTypes', 'connectionsByType', 'showConnection', 'showConnectionJson', 'showConnectionBySpanId', 'showConnectionBySpanIdJson', 'listConnections', 'showTimeline']);
+        // Require auth for all routes except public span viewing, connections, explore, and time-travel pages
+        $this->middleware('auth')->except([
+            'show', 'showJson', 'connectionsJson', 'plaque', 'plaqueConnection', 'plaquesIndex', 'plaquesSearch',
+            'index', 'search', 'explore', 'desertIslandDiscs', 'explorePlaques', 'connectionTypes', 'connectionsByType',
+            'showConnection', 'showConnectionJson', 'showConnectionBySpanId', 'showConnectionBySpanIdJson', 'listConnections',
+            'showTimeline', 'showAtDate', 'showAtDateCanonical', 'showAtDateWithAsOf', 'showAsOfDate',
+        ]);
         $this->yamlService = $yamlService;
         $this->routeReservationService = $routeReservationService;
     }
