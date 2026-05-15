@@ -106,13 +106,19 @@
                     </a>
                 @endif
                 @php
-                    // Get the first paragraph and clean it
+                    // Full plaque description (periods and other punctuation kept as stored)
+                    $plaqueDescriptionText = trim(strip_tags((string) ($plaque->description ?? '')));
                     $firstParagraph = $story['paragraphs'][0];
                     $cleanParagraph = preg_replace_callback('/href="([^"]*)"/', function ($matches) {
                         $cleanUrl = preg_replace('/\s+/', '', $matches[1]);
                         return 'href="' . $cleanUrl . '"';
                     }, $firstParagraph);
                 @endphp
+                @if($plaqueDescriptionText !== '')
+                    <blockquote class="mb-3 border-start border-3 ps-3 fst-italic text-body-secondary border-secondary-subtle">
+                        <p class="small mb-0">{{ $plaqueDescriptionText }}</p>
+                    </blockquote>
+                @endif
                 <p class="small mb-0">{!! $cleanParagraph !!}</p>
                 <div class="clearfix"></div>
             </div>
