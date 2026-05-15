@@ -355,6 +355,19 @@ $lifespan-colors: (
   }
 }
 
+.upcoming-anniversary-days-badge {
+  background-color: var(--bs-light, #f8f9fa);
+  color: var(--bs-secondary-color, #6c757d);
+  font-weight: 500;
+  vertical-align: middle;
+
+  &:hover,
+  &:focus {
+    color: var(--bs-secondary-color, #6c757d);
+    background-color: var(--bs-gray-200, #e9ecef);
+  }
+}
+
 // Custom colors (keeping existing ones for backward compatibility)
 $subject: #0d6efd;  // Bootstrap primary
 $object: #0dcaf0;   // Bootstrap info

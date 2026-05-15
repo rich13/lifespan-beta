@@ -58,13 +58,19 @@
             . e($d->format('j F Y')) . '</a>';
     };
 
-    $todayLink = function (\Carbon\Carbon $d) {
-        $slug = $d->format('Y-m-d');
+    $daysBadge = function (int $days) {
+        $label = 'In ' . $days . ' ' . \Illuminate\Support\Str::plural('day', $days);
 
-        return '<a href="' . e(url('/date/' . $slug)) . '" class="text-decoration-none fw-semibold">today</a>';
+        return '<span class="badge upcoming-anniversary-days-badge me-2">' . e($label) . '</span>';
     };
 
-    $rowFromEvent = function (array $event) use ($resolvePhotoUrl, $nameLink, $dateLink, $todayLink) {
+    $todayBadge = function (\Carbon\Carbon $d) {
+        $slug = $d->format('Y-m-d');
+
+        return '<a href="' . e(url('/date/' . $slug)) . '" class="badge upcoming-anniversary-days-badge me-2 text-decoration-none">Today</a>';
+    };
+
+    $rowFromEvent = function (array $event) use ($resolvePhotoUrl, $nameLink, $dateLink, $daysBadge, $todayBadge) {
         $span = $event['span'];
         $type = $event['type'];
         $days = (int) $event['days_until'];
@@ -75,7 +81,7 @@
 
         $name = $nameLink($span);
         $when = $dateLink($date);
-        $today = $todayLink($date);
+        $whenBadgeHtml = $isToday ? $todayBadge($date) : $daysBadge($days);
 
         if ($type === 'birthday') {
             $age = (int) $event['age'];
@@ -84,15 +90,13 @@
                 : '<strong>' . e((string) $age) . '</strong>';
 
             if ($isToday && $age === 0) {
-                $sentence = $name . ' was born ' . $today . '.';
+                $sentence = $name . ' was born.';
             } elseif ($isToday) {
-                $sentence = $name . ' turns ' . $ageHtml . ' ' . $today . '.';
+                $sentence = $name . ' turns ' . $ageHtml . '.';
             } elseif ($age === 0) {
-                $sentence = 'In ' . $days . ' ' . \Illuminate\Support\Str::plural('day', $days) . ' — '
-                    . $name . ' will be born on ' . $when . '.';
+                $sentence = $name . ' will be born on ' . $when . '.';
             } else {
-                $sentence = 'In ' . $days . ' ' . \Illuminate\Support\Str::plural('day', $days) . ' — '
-                    . $name . ' turns ' . $ageHtml . ' on ' . $when . '.';
+                $sentence = $name . ' turns ' . $ageHtml . ' on ' . $when . '.';
             }
         } elseif ($type === 'death_anniversary') {
             $years = (int) $event['years'];
@@ -116,10 +120,9 @@
             $deathWhen = $deathOccurred ? $dateLink($deathOccurred) : $when;
 
             if ($isToday) {
-                $sentence = $ys . ' since ' . $name . '\'s death on ' . $deathWhen . ' — today.';
+                $sentence = $ys . ' since ' . $name . '\'s death on ' . $deathWhen . '.';
             } else {
-                $sentence = 'In ' . $days . ' ' . \Illuminate\Support\Str::plural('day', $days) . ' — '
-                    . $ys . ' since ' . $name . '\'s death on ' . $deathWhen . '.';
+                $sentence = $ys . ' since ' . $name . '\'s death on ' . $deathWhen . '.';
             }
         } elseif ($type === 'album_anniversary') {
             $years = (int) $event['years'];
@@ -139,9 +142,9 @@
             }
 
             if ($isToday) {
-                $sentence = $ys . ' since ' . $who . ' was released ' . $today . '.';
+                $sentence = $ys . ' since ' . $who . ' was released.';
             } else {
-                $sentence = $ys . ' since ' . $who . ' was released — in ' . $days . ' ' . \Illuminate\Support\Str::plural('day', $days) . ' (' . $when . ').';
+                $sentence = $ys . ' since ' . $who . ' was released on ' . $when . '.';
             }
         } else {
             $sentence = $name;
@@ -150,6 +153,7 @@
         return [
             'span' => $span,
             'photoUrl' => $photoUrl,
+            'whenBadgeHtml' => $whenBadgeHtml,
             'sentenceHtml' => $sentence,
             'is_today' => $isToday,
         ];
@@ -189,7 +193,7 @@
                                         </div>
                                     </a>
                                 @endif
-                                <p class="mb-0 small">{!! $row['sentenceHtml'] !!}</p>
+                                <p class="mb-0 small">{!! $row['whenBadgeHtml'] !!}{!! $row['sentenceHtml'] !!}</p>
                                 <div class="clearfix"></div>
                             </div>
                         </div>
@@ -215,7 +219,7 @@
                                         </div>
                                     </a>
                                 @endif
-                                <p class="mb-0 small">{!! $row['sentenceHtml'] !!}</p>
+                                <p class="mb-0 small">{!! $row['whenBadgeHtml'] !!}{!! $row['sentenceHtml'] !!}</p>
                                 <div class="clearfix"></div>
                             </div>
                         </div>
