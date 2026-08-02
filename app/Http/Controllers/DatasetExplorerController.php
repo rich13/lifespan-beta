@@ -18,7 +18,25 @@ class DatasetExplorerController extends Controller
             ->orderBy('name')
             ->get(['id', 'name', 'slug', 'value_label', 'unit', 'updated_at']);
 
-        return view('datasets.index', compact('datasets'));
+        $defaultSeriesByDatasetId = DatasetSeries::query()
+            ->whereIn('dataset_id', $datasets->pluck('id'))
+            ->orderBy('series_key')
+            ->get(['dataset_id', 'series_key'])
+            ->groupBy('dataset_id')
+            ->map(static fn (Collection $rows) => (string) $rows->first()->series_key);
+
+        $datasets->each(function (Dataset $dataset) use ($defaultSeriesByDatasetId): void {
+            $dataset->setAttribute('default_series_key', $defaultSeriesByDatasetId->get($dataset->id, ''));
+        });
+
+        $minT = DatasetObservation::query()->min('t_start');
+        $chartYearMin = $minT !== null ? (int) floor((float) $minT) : 1900;
+        $chartYearMax = (int) now()->year;
+        if ($chartYearMin > $chartYearMax) {
+            $chartYearMax = $chartYearMin;
+        }
+
+        return view('datasets.index', compact('datasets', 'chartYearMin', 'chartYearMax'));
     }
 
     public function show(Dataset $dataset): View

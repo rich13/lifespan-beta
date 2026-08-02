@@ -57,14 +57,46 @@ class DatasetsFeatureTest extends TestCase
 
     public function test_datasets_index_renders_combined_chart_markup_once(): void
     {
-        Dataset::factory()->create();
+        $dataset = Dataset::factory()->create(['slug' => 'panel-test-a', 'name' => 'Panel A']);
+        DatasetSeries::query()->create([
+            'dataset_id' => $dataset->id,
+            'series_key' => 'GBR',
+            'label' => 'United Kingdom',
+        ]);
 
         $html = $this->get(route('datasets.index'))->assertOk()->getContent();
 
-        $this->assertSame(1, substr_count($html, 'js-datasets-combined-root'));
-        $this->assertSame(1, substr_count($html, 'js-datasets-combined-form'));
+        $this->assertSame(1, substr_count($html, 'js-datasets-index-root'));
+        $this->assertSame(1, substr_count($html, 'js-datasets-index-form'));
+        $this->assertGreaterThanOrEqual(1, substr_count($html, 'js-dataset-panel"'));
+        $this->assertStringContainsString('data-slug="panel-test-a"', $html);
+        $this->assertStringContainsString('value="GBR"', $html);
+        $this->assertSame(0, substr_count($html, 'js-index-series-key'));
+        $this->assertSame(0, substr_count($html, 'js-datasets-combined-root'));
         $this->assertSame(0, substr_count($html, 'id="datasets-combined-controls"'));
-        $this->assertSame(0, substr_count($html, 'id="datasets-combined-chart"'));
+    }
+
+    public function test_datasets_index_defaults_year_range_from_data(): void
+    {
+        $dataset = Dataset::factory()->create();
+        $series = DatasetSeries::query()->create([
+            'dataset_id' => $dataset->id,
+            'series_key' => 'AA',
+            'label' => 'A',
+        ]);
+        DatasetObservation::query()->create([
+            'series_id' => $series->id,
+            't_start' => 1988.0,
+            't_end' => 1989.0,
+            'value' => 1.0,
+        ]);
+
+        $calendarYear = (int) now()->year;
+
+        $this->get(route('datasets.index'))
+            ->assertOk()
+            ->assertViewHas('chartYearMin', 1988)
+            ->assertViewHas('chartYearMax', $calendarYear);
     }
 
     public function test_admin_can_view_admin_datasets_index(): void
