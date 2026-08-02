@@ -26,61 +26,6 @@ class TemporalConstraintTest extends TestCase
     }
 
     /** @test */
-    public function it_allows_valid_date_ranges()
-    {
-        $this->markTestSkipped('Span model validation rejects placeholder thing with null start_year; test expects old behaviour');
-
-        // Test creating spans with valid date ranges
-        $span1 = Span::create([
-            'name' => 'Test Span 1',
-            'type_id' => 'thing',
-            'start_year' => 1990,
-            'end_year' => 2000,
-            'owner_id' => $this->user->id,
-            'updater_id' => $this->user->id,
-        ]);
-        
-        $this->assertDatabaseHas('spans', [
-            'id' => $span1->id,
-            'start_year' => 1990,
-            'end_year' => 2000,
-        ]);
-
-        // Test span with null end year
-        $span2 = Span::create([
-            'name' => 'Test Span 2',
-            'type_id' => 'thing',
-            'start_year' => 1990,
-            'end_year' => null,
-            'owner_id' => $this->user->id,
-            'updater_id' => $this->user->id,
-        ]);
-        
-        $this->assertDatabaseHas('spans', [
-            'id' => $span2->id,
-            'start_year' => 1990,
-            'end_year' => null,
-        ]);
-
-        // Test span with null start year (for placeholder state)
-        $span3 = Span::create([
-            'name' => 'Test Span 3',
-            'type_id' => 'thing',
-            'state' => 'placeholder', // Placeholder allows null start_year
-            'start_year' => null,
-            'end_year' => 2000,
-            'owner_id' => $this->user->id,
-            'updater_id' => $this->user->id,
-        ]);
-        
-        $this->assertDatabaseHas('spans', [
-            'id' => $span3->id,
-            'start_year' => null,
-            'end_year' => 2000,
-        ]);
-    }
-
-    /** @test */
     public function it_prevents_invalid_date_ranges_on_creation()
     {
         $this->expectException(\Illuminate\Database\QueryException::class);

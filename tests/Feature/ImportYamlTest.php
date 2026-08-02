@@ -200,11 +200,6 @@ class ImportYamlTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_imports_yaml_file_successfully(): void
-    {
-        $this->markTestSkipped('YAML import functionality needs to be implemented');
-    }
-
     public function test_handles_invalid_yaml_file(): void
     {
         $this->expectException(\InvalidArgumentException::class);
@@ -239,13 +234,4 @@ class ImportYamlTest extends TestCase
         $importer->import($this->testYamlPath);
     }
 
-    public function test_updates_existing_span(): void
-    {
-        $this->markTestSkipped('YAML import functionality needs to be implemented');
-    }
-
-    public function test_imports_band_yaml_file_successfully(): void
-    {
-        $this->markTestSkipped('YAML import functionality needs to be implemented');
-    }
 }

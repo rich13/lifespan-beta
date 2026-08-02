@@ -76,20 +76,6 @@ class DesertIslandDiscsImportTest extends TestCase
         app()->instance(\App\Services\AiYamlCreatorService::class, $mock);
     }
 
-    /**
-     * Skipped: Complex feature test for full Desert Island Discs import flow.
-     *
-     * Reason: This test requires extensive mocking of external APIs (MusicBrainz, OpenAI), session data, and Laravel container resolution,
-     * making it brittle and hard to maintain. The core logic (e.g., rejecting today's date) is covered by service/unit tests.
-     *
-     * Suggestion: For true end-to-end coverage, consider adding a Gherkin BDD test (e.g., with Behat or Pest BDD) that can orchestrate
-     * the full flow with proper dependency injection and scenario setup.
-     */
-    public function test_does_not_create_spans_with_todays_date()
-    {
-        $this->markTestSkipped('Skipped: See comment above. Covered by service/unit tests.');
-    }
-
     public function test_does_not_create_spans_with_todays_date_in_service(): void
     {
         $today = now()->format('Y-m-d');

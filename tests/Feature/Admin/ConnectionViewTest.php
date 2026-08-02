@@ -44,11 +44,6 @@ class ConnectionViewTest extends TestCase
         ]);
     }
 
-    public function test_index_view_loads_with_empty_connections(): void
-    {
-        $this->markTestSkipped('This test is not a high priority.');
-    }
-
     public function test_index_view_loads_with_connections(): void
     {
         // Create the connection first

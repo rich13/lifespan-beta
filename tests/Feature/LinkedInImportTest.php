@@ -188,111 +188,6 @@ class LinkedInImportTest extends TestCase
     }
 
     /**
-     * Test LinkedIn import preview functionality
-     */
-    public function test_linkedin_import_preview()
-    {
-        $this->markTestSkipped('Returns 403 in test (route/CSRF or OAuth restriction in test env)');
-
-        $user = User::factory()->create();
-        $this->actingAs($user);
-
-        // Create a personal span for the user
-        Span::create([
-            'name' => $user->name,
-            'type_id' => 'person',
-            'owner_id' => $user->id,
-            'updater_id' => $user->id,
-            'state' => 'placeholder',
-            'access_level' => 'private'
-        ]);
-
-        // Create a test organisation span
-        $existingOrg = Span::factory()->create([
-            'name' => 'Existing Company',
-            'type_id' => 'organisation',
-            'owner_id' => $user->id,
-        ]);
-
-        // Create test CSV content
-        $csvContent = "Company Name,Title,Description,Location,Started On,Finished On\n" .
-                     "Existing Company,Software Engineer,Developed web applications,London,2020-01-01,2022-01-01\n" .
-                     "New Company,Senior Developer,Built APIs,Manchester,2022-01-01,\n" .
-                     ",Invalid Position,No company,Location,2023-01-01,2023-12-31\n";
-
-        $file = UploadedFile::fake()->createWithContent('positions.csv', $csvContent);
-
-        $response = $this->postJson(route('settings.import.linkedin.preview'), [
-            'csv_file' => $file,
-        ]);
-
-        $response->assertStatus(200);
-        $response->assertJsonStructure([
-            'success',
-            'preview' => [
-                'total_rows',
-                'preview_rows',
-                'headers',
-                'sample_data',
-                'import_preview' => [
-                    'person',
-                    'positions',
-                    'organisations',
-                    'roles'
-                ]
-            ]
-        ]);
-
-        $preview = $response->json('preview.import_preview');
-
-        // Check person preview
-        $this->assertEquals($user->name, $preview['person']['name']);
-        $this->assertTrue($preview['person']['exists']);
-        $this->assertEquals('connect', $preview['person']['action']);
-
-        // Check positions summary
-        $this->assertEquals(3, $preview['positions']['total']);
-        $this->assertEquals(2, $preview['positions']['valid']);
-        $this->assertEquals(1, $preview['positions']['invalid']);
-
-        // Check organisations
-        $this->assertEquals(1, $preview['organisations']['total_new']);
-        $this->assertEquals(1, $preview['organisations']['total_existing']);
-        $this->assertContains('New Company', $preview['organisations']['will_create']);
-        $this->assertContains('Existing Company', $preview['organisations']['will_connect']);
-
-        // Check roles
-        $this->assertEquals(2, $preview['roles']['total_new']);
-        $this->assertEquals(0, $preview['roles']['total_existing']);
-        $this->assertContains('Software Engineer', $preview['roles']['will_create']);
-        $this->assertContains('Senior Developer', $preview['roles']['will_create']);
-
-        // Check position details
-        $this->assertCount(3, $preview['positions']['details']);
-        
-        // Check first position (valid)
-        $firstPosition = $preview['positions']['details'][0];
-        $this->assertTrue($firstPosition['valid']);
-        $this->assertEquals('Existing Company', $firstPosition['company']);
-        $this->assertEquals('Software Engineer', $firstPosition['title']);
-        $this->assertEquals('connect', $firstPosition['organisation_action']);
-        $this->assertEquals('create', $firstPosition['role_action']);
-
-        // Check second position (valid)
-        $secondPosition = $preview['positions']['details'][1];
-        $this->assertTrue($secondPosition['valid']);
-        $this->assertEquals('New Company', $secondPosition['company']);
-        $this->assertEquals('Senior Developer', $secondPosition['title']);
-        $this->assertEquals('create', $secondPosition['organisation_action']);
-        $this->assertEquals('create', $secondPosition['role_action']);
-
-        // Check third position (invalid)
-        $thirdPosition = $preview['positions']['details'][2];
-        $this->assertFalse($thirdPosition['valid']);
-        $this->assertContains('Company name is required', $thirdPosition['errors']);
-    }
-
-    /**
      * Test LinkedIn import preview with non-existent person
      */
     public function test_linkedin_import_preview_with_non_existent_person()
@@ -386,19 +281,6 @@ class LinkedInImportTest extends TestCase
         // Verify the connections were created with correct dates
         $personSpan = Span::where('name', $user->name)->where('type_id', 'person')->first();
         $this->assertNotNull($personSpan);
-
-        // Debug: Check what connections were actually created
-        $allConnections = Connection::where('parent_id', $personSpan->id)
-            ->where('type_id', 'has_role')
-            ->with(['child', 'connectionSpan'])
-            ->get();
-        
-        echo "Debug: Found " . $allConnections->count() . " connections\n";
-        foreach ($allConnections as $conn) {
-            echo "Debug: Connection to role: " . $conn->child->name . "\n";
-            echo "Debug: Start date: " . $conn->connectionSpan->start_year . "-" . $conn->connectionSpan->start_month . "-" . $conn->connectionSpan->start_day . "\n";
-            echo "Debug: End date: " . $conn->connectionSpan->end_year . "-" . $conn->connectionSpan->end_month . "-" . $conn->connectionSpan->end_day . "\n";
-        }
 
         // Check ongoing connection
         $ongoingConnection = Connection::where('parent_id', $personSpan->id)
@@ -847,8 +729,7 @@ class LinkedInImportTest extends TestCase
         
         foreach ($testCases as $input => $expected) {
             $result = $connectionImporter->parseLinkedInDate($input);
-            echo "Input: '$input' -> Result: " . json_encode($result) . " (Expected: " . json_encode($expected) . ")\n";
-            
+
             if ($result) {
                 $this->assertEquals($expected['year'], $result['year'], "Year mismatch for input: $input");
                 if (isset($expected['month'])) {

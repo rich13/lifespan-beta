@@ -89,27 +89,6 @@ class AdminRoutesTest extends TestCase
         $response->assertViewIs('admin.spans.index');
     }
 
-    public function test_span_permissions_edit_requires_admin(): void
-    {
-        $this->markTestSkipped('Using old permissions model - test needs to be rewritten for new access model');
-        
-        $response = $this->actingAs($this->user)
-            ->get("/admin/spans/{$this->span->id}/permissions");
-
-        $response->assertStatus(403);
-    }
-
-    public function test_span_permissions_edit_loads_for_admin(): void
-    {
-        $this->markTestSkipped('Using old permissions model - test needs to be rewritten for new access model');
-        
-        $response = $this->actingAs($this->admin)
-            ->get("/admin/spans/{$this->span->id}/permissions");
-
-        $response->assertStatus(200);
-        $response->assertViewIs('admin.spans.permissions');
-    }
-
     public function test_users_index_requires_admin(): void
     {
         $response = $this->actingAs($this->user)

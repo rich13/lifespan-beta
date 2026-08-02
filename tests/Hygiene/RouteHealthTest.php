@@ -192,9 +192,6 @@ class RouteHealthTest extends \Tests\TestCase
             '/admin/dev/components',
         ];
 
-        // Skip /admin/spans/{id} route until group support is implemented
-        $this->markTestSkipped('Skipping /admin/spans/{id} route until group support is implemented.');
-
         foreach ($adminRoutes as $route) {
             $response = $this->get($route);
             

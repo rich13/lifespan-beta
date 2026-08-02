@@ -181,12 +181,6 @@ class ScienceMuseumGroupImportBasicTest extends TestCase
         ]);
     }
 
-    public function test_handles_api_errors_gracefully(): void
-    {
-        // Skip this test for now since HTTP mocking isn't working properly with the real SMG API
-        $this->markTestSkipped('HTTP mocking not working properly with real SMG API');
-    }
-
     public function test_validates_required_fields_for_import(): void
     {
         $response = $this->actingAs($this->user)
