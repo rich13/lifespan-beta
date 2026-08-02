@@ -56,6 +56,9 @@
             <div class="position-relative h-100">
                 <!-- Map Container -->
                 <div id="map" style="height: 100%; width: 100%;"></div>
+                @if(auth()->check() && auth()->user()->getEffectiveAdminStatus())
+                <div id="mainMapPlaquePositioned" class="main-map-plaque-positioned d-none"></div>
+                @endif
                 
                 <!-- Map Info Panel -->
                 <div class="position-absolute top-0 start-0 m-3">
@@ -108,7 +111,7 @@
                 </div>
                 
                 <!-- Details Content -->
-                <div class="flex-grow-1 overflow-auto">
+                <div class="flex-grow-1 overflow-auto" style="min-height: 0;">
                     <div id="plaqueDetails" class="p-3">
                         <div class="text-center text-muted py-5">
                             <i class="bi bi-geo-alt display-4 mb-3"></i>
@@ -116,11 +119,19 @@
                             <p class="small">Click on any marker or list item to view detailed information</p>
                         </div>
                     </div>
+
+                    @if(auth()->check() && auth()->user()->getEffectiveAdminStatus())
+                    @include('plaques.partials.virtual-plaque-admin-card')
+                    @endif
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+@if(auth()->check() && auth()->user()->getEffectiveAdminStatus())
+@include('plaques.partials.virtual-plaque-admin-script')
+@endif
 
 <!-- Leaflet CSS -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -140,6 +151,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Plaque data from the server
     const plaques = @json($plaquesWithLocations);
+    const isExplorePlaquesAdmin = @json(auth()->check() && auth()->user()->getEffectiveAdminStatus());
     
     // Store markers and list items for highlighting
     const markers = new Map(); // Map of plaque ID to marker
@@ -166,6 +178,9 @@ document.addEventListener('DOMContentLoaded', function() {
         // Remove previous highlight
         if (selectedMarker) {
             selectedMarker.setIcon(defaultIcon);
+            if (selectedMarker.getElement()) {
+                selectedMarker.getElement().style.visibility = '';
+            }
         }
         if (selectedListItem) {
             selectedListItem.classList.remove('active');
@@ -178,29 +193,27 @@ document.addEventListener('DOMContentLoaded', function() {
         selectedMarker = markers.get(plaqueId);
         selectedListItem = listItems.get(plaqueId);
         
-        // Highlight marker with different icon
+        // Highlight marker (admins get virtual plaque on map instead of a pin)
         if (selectedMarker) {
-            // Create a highlighted icon
-            const highlightedIcon = L.icon({
-                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
-                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-                iconSize: [25, 41],
-                iconAnchor: [12, 41],
-                popupAnchor: [1, -34],
-                shadowSize: [41, 41]
-            });
-            selectedMarker.setIcon(highlightedIcon);
-            
-            // Center map on marker and zoom in
             map.setView([plaque.latitude, plaque.longitude], 16);
-            
-            // Open popup briefly
-            selectedMarker.openPopup();
-            setTimeout(() => {
-                if (selectedMarker) {
-                    selectedMarker.closePopup();
-                }
-            }, 2000);
+
+            if (!isExplorePlaquesAdmin) {
+                const highlightedIcon = L.icon({
+                    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+                    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                    iconSize: [25, 41],
+                    iconAnchor: [12, 41],
+                    popupAnchor: [1, -34],
+                    shadowSize: [41, 41]
+                });
+                selectedMarker.setIcon(highlightedIcon);
+                selectedMarker.openPopup();
+                setTimeout(() => {
+                    if (selectedMarker) {
+                        selectedMarker.closePopup();
+                    }
+                }, 2000);
+            }
         }
         
         // Highlight list item
@@ -215,6 +228,10 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Show details
         showPlaqueDetails(plaque);
+
+        if (typeof window.loadVirtualPlaqueForPlaque === 'function') {
+            window.loadVirtualPlaqueForPlaque(plaqueId);
+        }
     }
     
     // Default marker icon
@@ -332,143 +349,53 @@ document.addEventListener('DOMContentLoaded', function() {
                     <div class="card-header bg-primary text-white">
                         <h6 class="card-title mb-0">
                             <i class="bi bi-geo-alt me-2"></i>
-                            ${plaque.name}
+                            <a href="${escapeHtml(plaque.url)}" class="text-white text-decoration-none">${escapeHtml(plaque.name)}</a>
                         </h6>
                     </div>
                     <div class="card-body">
             `;
-        
-        // Description
-        if (plaque.description) {
-            html += `
-                <div class="mb-3">
-                    <h6 class="text-muted mb-2">Description</h6>
-                    <p class="mb-0">${plaque.description}</p>
-                </div>
-            `;
-        }
-        
-        // Location information
-        if (plaque.location) {
-            html += `
-                <div class="mb-3">
-                    <h6 class="text-muted mb-2">Location</h6>
-                    <p class="mb-1"><strong>Address:</strong> ${plaque.location.name || 'Unknown'}</p>
-                    <p class="mb-0"><strong>Coordinates:</strong> ${plaque.latitude.toFixed(6)}, ${plaque.longitude.toFixed(6)}</p>
-                </div>
-            `;
-        }
-        
-        // Plaque information
-        if (plaque.plaque) {
-            const plaqueData = plaque.plaque;
-            
-            // Dates
-            if (plaqueData.start_year || plaqueData.end_year) {
+
+            if (plaque.photo_url) {
                 html += `
                     <div class="mb-3">
-                        <h6 class="text-muted mb-2">Dates</h6>
-                `;
-                
-                if (plaqueData.start_year) {
-                    html += `<p class="mb-1"><strong>From:</strong> ${formatDate(plaqueData.start_year, plaqueData.start_month, plaqueData.start_day)}</p>`;
-                }
-                
-                if (plaqueData.end_year) {
-                    html += `<p class="mb-0"><strong>To:</strong> ${formatDate(plaqueData.end_year, plaqueData.end_month, plaqueData.end_day)}</p>`;
-                }
-                
-                html += `</div>`;
-            }
-            
-            // Metadata
-            if (plaqueData.metadata) {
-                const metadata = plaqueData.metadata;
-                const metadataItems = [];
-                
-                if (metadata.subtype) metadataItems.push(`<strong>Type:</strong> ${metadata.subtype}`);
-                if (metadata.colour) metadataItems.push(`<strong>Colour:</strong> ${metadata.colour}`);
-                if (metadata.organisation) metadataItems.push(`<strong>Organisation:</strong> ${metadata.organisation}`);
-                if (metadata.erected_by) metadataItems.push(`<strong>Erected by:</strong> ${metadata.erected_by}`);
-                if (metadata.erected_date) metadataItems.push(`<strong>Erected:</strong> ${metadata.erected_date}`);
-                
-                if (metadataItems.length > 0) {
-                    html += `
-                        <div class="mb-3">
-                            <h6 class="text-muted mb-2">Details</h6>
-                            ${metadataItems.map(item => `<p class="mb-1">${item}</p>`).join('')}
-                        </div>
-                    `;
-                }
-            }
-        }
-        
-        // Person connections
-        if (plaque.person_connections && plaque.person_connections.length > 0) {
-            html += `
-                <div class="mb-3">
-                    <h6 class="text-muted mb-2">People Featured</h6>
-                    <div class="list-group list-group-flush">
-            `;
-            
-            plaque.person_connections.forEach(function(person) {
-                html += `
-                    <a href="${person.url}" class="list-group-item list-group-item-action py-2">
-                        <i class="bi bi-person me-2"></i>
-                        ${person.name}
-                    </a>
-                `;
-            });
-            
-            html += `
-                    </div>
-                </div>
-            `;
-        }
-        
-        // Organisation connections
-        if (plaque.organisation_connections && plaque.organisation_connections.length > 0) {
-            html += `
-                <div class="mb-3">
-                    <h6 class="text-muted mb-2">Organisations Featured</h6>
-                    <div class="list-group list-group-flush">
-            `;
-            
-            plaque.organisation_connections.forEach(function(org) {
-                html += `
-                    <a href="${org.url}" class="list-group-item list-group-item-action py-2">
-                        <i class="bi bi-building me-2"></i>
-                        ${org.name}
-                    </a>
-                `;
-            });
-            
-            html += `
-                    </div>
-                </div>
-            `;
-        }
-        
-        // Action buttons
-        html += `
-                    <div class="mt-4">
-                        <a href="${plaque.url}" class="btn btn-primary btn-sm me-2">
-                            <i class="bi bi-eye me-1"></i>
-                            View Full Details
+                        <a href="${plaque.url}">
+                            <img src="${escapeHtml(plaque.photo_url)}"
+                                 alt="${escapeHtml(plaque.name)}"
+                                 class="img-fluid rounded w-100"
+                                 style="max-height: 240px; object-fit: cover;"
+                                 loading="lazy">
                         </a>
-                        <button class="btn btn-outline-secondary btn-sm" onclick="centerMapOnPlaque(${plaque.latitude}, ${plaque.longitude})">
-                            <i class="bi bi-geo-alt me-1"></i>
-                            Center Map
-                        </button>
+                    </div>
+                `;
+            }
+
+            if (plaque.description) {
+                html += `
+                    <div class="mb-3">
+                        <h6 class="text-muted mb-2">Description</h6>
+                        <p class="mb-0">${escapeHtml(plaque.description)}</p>
+                    </div>
+                `;
+            }
+
+            if (plaque.location) {
+                html += `
+                    <div class="mb-0">
+                        <h6 class="text-muted mb-2">Location</h6>
+                        <p class="mb-0"><a href="${escapeHtml(plaque.location.url)}">${escapeHtml(plaque.location.name || 'Unknown')}</a></p>
+                    </div>
+                `;
+            }
+
+            html += `
                     </div>
                 </div>
-            </div>
-        `;
-        
+            `;
+
             detailsContainer.innerHTML = html;
-        }, 100); // Brief delay for better UX
+        }, 100);
     }
-    
+
     // Function to center map on plaque
     window.centerMapOnPlaque = function(lat, lng) {
         map.setView([lat, lng], 16);
@@ -530,13 +457,43 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Fit map to show all markers if there are any
     if (plaques.length > 0) {
-        const group = new L.featureGroup(plaques.map(p => L.latLng(p.latitude, p.longitude)));
-        map.fitBounds(group.getBounds().pad(0.1));
+        const bounds = L.latLngBounds(plaques.map(function(p) {
+            return [p.latitude, p.longitude];
+        }));
+        map.fitBounds(bounds.pad(0.1));
     }
+
+    window.explorePlaquesMap = map;
+    window.explorePlaquesHideSelectedMarker = function() {
+        if (selectedMarker && selectedMarker.getElement()) {
+            selectedMarker.getElement().style.visibility = 'hidden';
+        }
+    };
+    window.explorePlaquesRestoreSelectedMarker = function() {
+        if (selectedMarker && selectedMarker.getElement()) {
+            selectedMarker.getElement().style.visibility = '';
+        }
+    };
 });
 </script>
 
 <style>
+.main-map-plaque-positioned {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 50%;
+    z-index: 1000;
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+}
+.main-map-plaque-positioned .virtual-plaque-svg {
+    width: 100%;
+    height: auto;
+    display: block;
+    filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.25));
+}
+
 /* Custom styles for the map */
 .leaflet-popup-content {
     margin: 8px 12px;

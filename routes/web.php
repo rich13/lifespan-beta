@@ -201,6 +201,12 @@ Route::middleware('web')->group(function () {
         Route::get('/', [SpanController::class, 'explore'])->name('explore.index');
         Route::get('/desert-island-discs', [SpanController::class, 'desertIslandDiscs'])->name('explore.desert-island-discs');
         Route::get('/plaques', [SpanController::class, 'explorePlaques'])->name('explore.plaques');
+        Route::middleware(['auth', 'admin'])->group(function () {
+            Route::get('/plaques/{span}/virtual-plaque', [\App\Http\Controllers\ExplorePlaqueVirtualPlaqueController::class, 'status'])
+                ->name('explore.plaques.virtual-plaque.status');
+            Route::post('/plaques/{span}/virtual-plaque', [\App\Http\Controllers\ExplorePlaqueVirtualPlaqueController::class, 'store'])
+                ->name('explore.plaques.virtual-plaque.store');
+        });
         Route::get('/family', [SpanController::class, 'exploreFamily'])->name('explore.family');
         Route::get('/journeys', [JourneyController::class, 'index'])->name('explore.journeys');
         Route::post('/journeys/discover', [JourneyController::class, 'discover'])->name('explore.journeys.discover');
