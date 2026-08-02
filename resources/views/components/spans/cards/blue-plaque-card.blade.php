@@ -1,8 +1,8 @@
 @props(['span', 'bluePlaqueCardData' => null])
 
 @php
-    // Only show for person spans
-    if ($span->type_id !== 'person') {
+    // Show when this span is featured on a plaque (person, event, organisation, etc.)
+    if ($span->type_id === 'connection') {
         return;
     }
 

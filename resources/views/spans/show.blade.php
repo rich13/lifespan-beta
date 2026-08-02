@@ -213,16 +213,14 @@
                 
                 <!-- Featured person for plaque spans (sits under image gallery) -->
                 @if($span->type_id === 'thing' && isset($span->metadata['subtype']) && $span->metadata['subtype'] === 'plaque')
-                    <x-spans.cards.plaque-featured-person-card :span="$span" />
+                    <x-spans.cards.plaque-featured-subject-card :span="$span" />
                 @endif
                 
                 <!-- AKA Card - Show alternative names if they exist -->
                 <x-spans.cards.aka-card :span="$span" :precomputedConnections="$precomputedConnections ?? null" />
                 
-                <!-- Blue Plaque Card (for people with plaques) - placed under image gallery -->
-                @if($span->type_id === 'person')
-                    <x-spans.cards.blue-plaque-card :span="$span" :bluePlaqueCardData="$bluePlaqueCardData ?? null" />
-                @endif
+                <!-- Plaque card when this span is featured on a blue plaque -->
+                <x-spans.cards.blue-plaque-card :span="$span" :bluePlaqueCardData="$bluePlaqueCardData ?? null" />
                 
                 <!-- Education Card (for people) - uses educationCardData derived from precomputedConnections -->
                 @if($span->type_id === 'person')

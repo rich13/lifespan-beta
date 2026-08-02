@@ -1031,7 +1031,7 @@ class SpanController extends Controller
 
             // Precompute data for cards that would otherwise query in the view
             $annotatingNotes = $this->getAnnotatingNotes($subject);
-            $bluePlaqueCardData = $subject->type_id === 'person' ? $this->getBluePlaqueCardData($subject) : null;
+            $bluePlaqueCardData = $this->getBluePlaqueCardData($subject);
             $directorConnectionsByFilmId = ($subject->type_id === 'person')
                 ? $this->getDirectorConnectionsByFilmId($precomputedConnections)
                 : collect();
@@ -1692,9 +1692,10 @@ class SpanController extends Controller
      */
     private function getBluePlaqueCardData(Span $span): ?array
     {
-        if ($span->type_id !== 'person') {
+        if ($span->type_id === 'connection') {
             return null;
         }
+
         $plaqueConnections = $this->applyAsOfConnectionFilter(
             Connection::where('type_id', 'features')
             ->where('child_id', $span->id)
@@ -1707,28 +1708,7 @@ class SpanController extends Controller
             return null;
         }
         $plaque = $plaqueConnections->first()->parent;
-        $plaquePhotoConnections = $this->applyAsOfConnectionFilter(
-            Connection::where('type_id', 'features')
-            ->where('child_id', $plaque->id)
-            ->whereHas('parent', function ($q) {
-                $q->where('type_id', 'thing')->whereJsonContains('metadata->subtype', 'photo');
-            })
-            ->with(['parent'])
-        )->get();
-        $plaquePhoto = $plaquePhotoConnections->isNotEmpty() ? $plaquePhotoConnections->first()->parent : null;
-        $photoUrl = null;
-        if ($plaquePhoto) {
-            $photoUrl = $plaquePhoto->metadata['thumbnail_url']
-                ?? $plaquePhoto->metadata['medium_url']
-                ?? $plaquePhoto->metadata['large_url']
-                ?? $plaquePhoto->metadata['original_url']
-                ?? null;
-            if (! $photoUrl && ! empty($plaquePhoto->metadata['filename'])) {
-                $photoUrl = route('images.proxy', ['spanId' => $plaquePhoto->id, 'size' => 'thumbnail']);
-            }
-        } else {
-            $photoUrl = $plaque->metadata['main_photo'] ?? $plaque->metadata['thumbnail_url'] ?? null;
-        }
+        $photoUrl = $this->resolvePlaquePhotoUrl($plaque);
         $locationConnection = $this->applyAsOfConnectionFilter(
             Connection::where('parent_id', $plaque->id)
             ->where('type_id', 'located')
@@ -1748,6 +1728,40 @@ class SpanController extends Controller
             'plaqueColour' => $plaqueColour,
             'erectedYear' => $erectedYear,
         ];
+    }
+
+    /**
+     * Resolve a display URL for a plaque photograph (linked photo thing or metadata fallback).
+     */
+    private function resolvePlaquePhotoUrl(Span $plaque): ?string
+    {
+        $plaquePhotoConnection = Connection::where('type_id', 'features')
+            ->where('child_id', $plaque->id)
+            ->whereHas('parent', function ($q) {
+                $q->where('type_id', 'thing')->whereJsonContains('metadata->subtype', 'photo');
+            })
+            ->with(['parent'])
+            ->first();
+
+        if ($plaquePhotoConnection?->parent) {
+            $plaquePhoto = $plaquePhotoConnection->parent;
+            $metadata = $plaquePhoto->metadata ?? [];
+            $photoUrl = $metadata['thumbnail_url']
+                ?? $metadata['medium_url']
+                ?? $metadata['large_url']
+                ?? $metadata['original_url']
+                ?? null;
+
+            if (! $photoUrl && ! empty($metadata['filename'])) {
+                return route('images.proxy', ['spanId' => $plaquePhoto->id, 'size' => 'medium']);
+            }
+
+            return $photoUrl;
+        }
+
+        $plaqueMetadata = $plaque->metadata ?? [];
+
+        return $plaqueMetadata['main_photo'] ?? $plaqueMetadata['thumbnail_url'] ?? null;
     }
 
     /**
@@ -4797,11 +4811,15 @@ class SpanController extends Controller
                     $plaquesWithLocations[] = [
                         'id' => $plaque->id, // Add ID at top level for easier access
                         'plaque' => $plaque,
-                        'location' => $location,
+                        'location' => [
+                            'name' => $location->name,
+                            'url' => route('spans.show', $location),
+                        ],
                         'latitude' => (float) $coordinates['latitude'],
                         'longitude' => (float) $coordinates['longitude'],
                         'name' => $plaque->name,
                         'description' => $plaque->description,
+                        'photo_url' => $this->resolvePlaquePhotoUrl($plaque),
                         'url' => route('spans.show', $plaque),
                         'person_connections' => $personConnections->map(function($conn) {
                             return [
@@ -5190,7 +5208,7 @@ class SpanController extends Controller
             $connection->load(['parent.type', 'child.type', 'type', 'connectionSpan.type']);
             $connectionForSpan = $connection;
             $annotatingNotes = $this->getAnnotatingNotes($connectionSpan);
-            $bluePlaqueCardData = $connectionSpan->type_id === 'person' ? $this->getBluePlaqueCardData($connectionSpan) : null;
+            $bluePlaqueCardData = $this->getBluePlaqueCardData($connectionSpan);
             $directorConnectionsByFilmId = ($connectionSpan->type_id === 'person') ? $this->getDirectorConnectionsByFilmId($precomputedConnections) : collect();
             return view('spans.show', compact('span', 'desertIslandDiscsSet', 'subject', 'object', 'connectionType', 'familyData', 'parentConnections', 'childConnections', 'story', 'predicate', 'educationCardData', 'connectionForSpan', 'precomputedConnections', 'annotatingNotes', 'bluePlaqueCardData', 'directorConnectionsByFilmId'));
         }
@@ -5269,7 +5287,7 @@ class SpanController extends Controller
         $connectionSpan = $connection->connectionSpan;
 
         // Build blue plaque style response
-        $bluePlaqueCardData = $connectionSpan->type_id === 'person' ? $this->getBluePlaqueCardData($connectionSpan) : null;
+        $bluePlaqueCardData = $this->getBluePlaqueCardData($connectionSpan);
         $plaque = $bluePlaqueCardData['plaque'] ?? null;
         $location = $plaque
             ? $plaque->connectionsAsSubject()->where('type_id', 'located')->with('child')->first()?->child
@@ -5433,7 +5451,7 @@ class SpanController extends Controller
         $connection->load(['parent.type', 'child.type', 'type', 'connectionSpan.type']);
         $connectionForSpan = $connection;
         $annotatingNotes = $this->getAnnotatingNotes($connectionSpan);
-        $bluePlaqueCardData = $connectionSpan->type_id === 'person' ? $this->getBluePlaqueCardData($connectionSpan) : null;
+        $bluePlaqueCardData = $this->getBluePlaqueCardData($connectionSpan);
         $directorConnectionsByFilmId = ($connectionSpan->type_id === 'person') ? $this->getDirectorConnectionsByFilmId($precomputedConnections) : collect();
         return view('spans.show', compact('span', 'desertIslandDiscsSet', 'subject', 'object', 'connectionType', 'familyData', 'parentConnections', 'childConnections', 'story', 'predicate', 'educationCardData', 'connectionForSpan', 'precomputedConnections', 'annotatingNotes', 'bluePlaqueCardData', 'directorConnectionsByFilmId'));
     }
@@ -5484,7 +5502,7 @@ class SpanController extends Controller
             return ApiEnvelope::error('unauthorised', 'Unauthorised', 401);
         }
 
-        $bluePlaqueCardData = $connectionSpan->type_id === 'person' ? $this->getBluePlaqueCardData($connectionSpan) : null;
+        $bluePlaqueCardData = $this->getBluePlaqueCardData($connectionSpan);
         $plaque = $bluePlaqueCardData['plaque'] ?? null;
         $location = $plaque
             ? $plaque->connectionsAsSubject()->where('type_id', 'located')->with('child')->first()?->child
