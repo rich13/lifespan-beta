@@ -19,7 +19,7 @@ abstract class TestCase extends BaseTestCase
     use CreatesApplication, PostgresRefreshDatabase, TruncatesResponseBodies;
 
     /**
-     * Use a test response that truncates HTML bodies in SeeInOrder failure messages.
+     * Use a test response that truncates HTML bodies in See* failure messages.
      */
     protected function createTestResponse($response)
     {
