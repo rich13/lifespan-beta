@@ -9,7 +9,7 @@
     $endsEvents = [];
     foreach ($allAnniversaries as $event) {
         $type = $event['type'] ?? null;
-        if ($type === 'birthday' || $type === 'album_anniversary') {
+        if ($type === 'birthday' || $type === 'album_anniversary' || $type === 'film_anniversary') {
             $startsEvents[] = $event;
         } elseif ($type === 'death_anniversary') {
             $endsEvents[] = $event;
@@ -17,6 +17,27 @@
     }
     $startsEvents = array_slice($startsEvents, 0, 5);
     $endsEvents = array_slice($endsEvents, 0, 5);
+
+    $resolveCreatedBy = function (\App\Models\Span $thingSpan) {
+        $creator = $thingSpan->connectionsAsObject()
+            ->where('type_id', 'created')
+            ->whereHas('parent', function ($query) {
+                $query->whereIn('type_id', ['person', 'band', 'organisation']);
+            })
+            ->with('parent')
+            ->first()
+            ?->parent;
+
+        if ($creator) {
+            return $creator;
+        }
+
+        if (! empty($thingSpan->metadata['creator'])) {
+            return \App\Models\Span::find($thingSpan->metadata['creator']);
+        }
+
+        return null;
+    };
 
     $resolvePhotoUrl = function ($span) {
         $photoConnection = \App\Models\Connection::where('type_id', 'features')
@@ -70,7 +91,7 @@
         return '<a href="' . e(url('/date/' . $slug)) . '" class="badge upcoming-anniversary-days-badge me-2 text-decoration-none">Today</a>';
     };
 
-    $rowFromEvent = function (array $event) use ($resolvePhotoUrl, $nameLink, $dateLink, $daysBadge, $todayBadge) {
+    $rowFromEvent = function (array $event) use ($resolvePhotoUrl, $resolveCreatedBy, $nameLink, $dateLink, $daysBadge, $todayBadge) {
         $span = $event['span'];
         $type = $event['type'];
         $days = (int) $event['days_until'];
@@ -131,15 +152,29 @@
                 : '<strong>' . e((string) $years) . '</strong>';
             $ys = $yearsHtml . ' ' . \Illuminate\Support\Str::plural('year', $years);
 
-            $artist = null;
-            if ($span->type_id === 'thing' && !empty($span->metadata['creator'])) {
-                $artist = \App\Models\Span::find($span->metadata['creator']);
-            }
+            $creator = $resolveCreatedBy($span);
 
-            $who = $name;
-            if ($artist) {
-                $who .= ' by ' . $nameLink($artist);
+            $who = $creator
+                ? $name . ' by ' . $nameLink($creator)
+                : $name;
+
+            if ($isToday) {
+                $sentence = $ys . ' since ' . $who . ' was released.';
+            } else {
+                $sentence = $ys . ' since ' . $who . ' was released on ' . $when . '.';
             }
+        } elseif ($type === 'film_anniversary') {
+            $years = (int) $event['years'];
+            $yearsHtml = $milestone
+                ? '<strong class="text-warning">' . e((string) $years) . '</strong>'
+                : '<strong>' . e((string) $years) . '</strong>';
+            $ys = $yearsHtml . ' ' . \Illuminate\Support\Str::plural('year', $years);
+
+            $director = $resolveCreatedBy($span);
+
+            $who = $director
+                ? $name . ', directed by ' . $nameLink($director)
+                : $name;
 
             if ($isToday) {
                 $sentence = $ys . ' since ' . $who . ' was released.';

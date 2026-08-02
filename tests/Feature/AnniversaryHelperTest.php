@@ -95,4 +95,46 @@ class AnniversaryHelperTest extends TestCase
 
         $this->assertSame($expectedId, $featured?->id);
     }
+
+    public function test_film_release_anniversary_appears_in_upcoming_anniversaries(): void
+    {
+        if (! DB::table('span_types')->where('type_id', 'thing')->exists()) {
+            DB::table('span_types')->insert([
+                'type_id' => 'thing',
+                'name' => 'Thing',
+                'description' => 'A thing',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        $target = Carbon::create(2090, 9, 15, 12, 0, 0, config('app.timezone'));
+        $owner = User::factory()->create();
+
+        $film = Span::create([
+            'name' => 'Film Anniversary Today',
+            'slug' => 'film-anniversary-today-' . uniqid(),
+            'type_id' => 'thing',
+            'state' => 'complete',
+            'access_level' => 'public',
+            'owner_id' => $owner->id,
+            'updater_id' => $owner->id,
+            'metadata' => ['subtype' => 'film'],
+            'start_year' => 1990,
+            'start_month' => 9,
+            'start_day' => 15,
+            'end_year' => null,
+            'end_month' => null,
+            'end_day' => null,
+        ]);
+
+        $events = AnniversaryHelper::getUpcomingAnniversaries($target, 60);
+
+        $filmEvent = collect($events)->first(fn ($event) => ($event['span']->id ?? null) === $film->id);
+
+        $this->assertNotNull($filmEvent, 'Film should appear in upcoming anniversaries');
+        $this->assertSame('film_anniversary', $filmEvent['type']);
+        $this->assertSame(0, $filmEvent['days_until']);
+        $this->assertSame(100, $filmEvent['years']);
+    }
 }

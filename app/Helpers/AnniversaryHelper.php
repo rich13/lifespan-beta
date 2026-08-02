@@ -39,7 +39,7 @@ class AnniversaryHelper
      *
      * Results are sorted by `days_until` ascending (soonest first). When two events share
      * the same offset, family members come before non-family, then birthday before death
-     * before album, then span name for a stable tie-break.
+     * before album/film release, then span name for a stable tie-break.
      *
      * @param Carbon|null $targetDate The target date (defaults to current date)
      * @param int $daysAhead Number of days ahead to look (default 30)
@@ -58,6 +58,7 @@ class AnniversaryHelper
         $includeBirthdays = $options['include_birthdays'] ?? true;
         $includeDeathAnniversaries = $options['include_death_anniversaries'] ?? true;
         $includeAlbumAnniversaries = $options['include_album_anniversaries'] ?? true;
+        $includeFilmAnniversaries = $options['include_film_anniversaries'] ?? true;
         $minSignificance = $options['min_significance'] ?? null;
         $maxDaysUntil = $options['max_days_until'] ?? null;
         $requirePhoto = $options['require_photo'] ?? false;
@@ -267,76 +268,32 @@ class AnniversaryHelper
             }
         }
         
-        // Get albums with release anniversaries in the next X days
         if ($includeAlbumAnniversaries) {
-            $albumAnniversarySpans = Span::where('type_id', 'thing')
-                ->whereJsonContains('metadata->subtype', 'album')
-                ->where(function($query) {
-                    $query->where('access_level', 'public')
-                        ->orWhere('owner_id', auth()->id());
-                })
-                ->whereNotNull('start_year')
-                ->whereNotNull('start_month')
-                ->whereNotNull('start_day')
-                ->where('start_year', '<=', $targetDate->year)
-                ->get()
-                ->filter(function($span) use ($targetDate, $startDateForQuery, $endDateForQuery) {
-                    try {
-                        $thisYearsAnniversary = Carbon::createFromDate(
-                            $targetDate->year,
-                            $span->start_month,
-                            $span->start_day
-                        );
-                        
-                        $anniversaryDate = $thisYearsAnniversary->copy();
-                        if ($thisYearsAnniversary->lt($targetDate)) {
-                            $anniversaryDate->addYear();
-                        }
-                        
-                        return $anniversaryDate->gte($startDateForQuery) && 
-                               $anniversaryDate->lte($endDateForQuery);
-                    } catch (\Exception $e) {
-                        return false;
-                    }
-                });
-            
-            foreach ($albumAnniversarySpans as $span) {
-                try {
-                    $thisYearsAnniversary = Carbon::createFromDate(
-                        $targetDate->year,
-                        $span->start_month,
-                        $span->start_day
-                    );
-                    
-                    $nextAnniversary = $thisYearsAnniversary->copy();
-                    if ($thisYearsAnniversary->lt($targetDate)) {
-                        $nextAnniversary->addYear();
-                    }
-                    
-                    $yearsSinceRelease = $nextAnniversary->year - $span->start_year;
-                    $daysUntilAnniversary = $targetDate->diffInDays($nextAnniversary);
-                    $significance = self::calculateSignificance($yearsSinceRelease);
-                    
-                    if ($daysUntilAnniversary <= $daysAhead && $daysUntilAnniversary >= 0) {
-                        if ($minSignificance === null || $significance >= $minSignificance) {
-                            if ($maxDaysUntil === null || $daysUntilAnniversary <= $maxDaysUntil) {
-                                // Albums are not family members, but we include the flag for consistency
-                                $significantDates[] = [
-                                    'span' => $span,
-                                    'type' => 'album_anniversary',
-                                    'date' => $nextAnniversary,
-                                    'years' => $yearsSinceRelease,
-                                    'days_until' => $daysUntilAnniversary,
-                                    'significance' => $significance,
-                                    'is_family_member' => false
-                                ];
-                            }
-                        }
-                    }
-                } catch (\Exception $e) {
-                    continue;
-                }
-            }
+            self::addReleaseAnniversaries(
+                $significantDates,
+                $targetDate,
+                $startDateForQuery,
+                $endDateForQuery,
+                $daysAhead,
+                'album',
+                'album_anniversary',
+                $minSignificance,
+                $maxDaysUntil
+            );
+        }
+
+        if ($includeFilmAnniversaries) {
+            self::addReleaseAnniversaries(
+                $significantDates,
+                $targetDate,
+                $startDateForQuery,
+                $endDateForQuery,
+                $daysAhead,
+                'film',
+                'film_anniversary',
+                $minSignificance,
+                $maxDaysUntil
+            );
         }
         
         // Sort by days until soonest first; same offset: family before non-family, then type, then name
@@ -355,7 +312,7 @@ class AnniversaryHelper
             $typeRank = fn ($type) => match ($type) {
                 'birthday' => 0,
                 'death_anniversary' => 1,
-                'album_anniversary' => 2,
+                'album_anniversary', 'film_anniversary' => 2,
                 default => 3,
             };
             $typeCmp = $typeRank($a['type'] ?? '') <=> $typeRank($b['type'] ?? '');
@@ -375,7 +332,7 @@ class AnniversaryHelper
     /**
      * Person to feature on the homepage: first entry in the same ordered list as the
      * Anniversaries card that is a living person's birthday or a death anniversary.
-     * Album release anniversaries are skipped (non-person spans).
+     * Album and film release anniversaries are skipped (non-person spans).
      */
     public static function getHighestScoringPerson(?Carbon $targetDate = null): ?Span
     {
@@ -389,5 +346,88 @@ class AnniversaryHelper
         }
 
         return null;
+    }
+
+    /**
+     * Add release anniversaries for thing spans of a given subtype (album, film, etc.).
+     */
+    private static function addReleaseAnniversaries(
+        array &$significantDates,
+        Carbon $targetDate,
+        Carbon $startDateForQuery,
+        Carbon $endDateForQuery,
+        int $daysAhead,
+        string $subtype,
+        string $eventType,
+        ?int $minSignificance,
+        ?int $maxDaysUntil
+    ): void {
+        $releaseSpans = Span::where('type_id', 'thing')
+            ->where('metadata->subtype', $subtype)
+            ->where(function ($query) {
+                $query->where('access_level', 'public')
+                    ->orWhere('owner_id', auth()->id());
+            })
+            ->whereNotNull('start_year')
+            ->whereNotNull('start_month')
+            ->whereNotNull('start_day')
+            ->where('start_year', '<=', $targetDate->year)
+            ->get()
+            ->filter(function ($span) use ($targetDate, $startDateForQuery, $endDateForQuery) {
+                try {
+                    $thisYearsAnniversary = Carbon::createFromDate(
+                        $targetDate->year,
+                        $span->start_month,
+                        $span->start_day
+                    );
+
+                    $anniversaryDate = $thisYearsAnniversary->copy();
+                    if ($thisYearsAnniversary->lt($targetDate)) {
+                        $anniversaryDate->addYear();
+                    }
+
+                    return $anniversaryDate->gte($startDateForQuery) &&
+                           $anniversaryDate->lte($endDateForQuery);
+                } catch (\Exception $e) {
+                    return false;
+                }
+            });
+
+        foreach ($releaseSpans as $span) {
+            try {
+                $thisYearsAnniversary = Carbon::createFromDate(
+                    $targetDate->year,
+                    $span->start_month,
+                    $span->start_day
+                );
+
+                $nextAnniversary = $thisYearsAnniversary->copy();
+                if ($thisYearsAnniversary->lt($targetDate)) {
+                    $nextAnniversary->addYear();
+                }
+
+                $yearsSinceRelease = $nextAnniversary->year - $span->start_year;
+                $daysUntilAnniversary = $targetDate->diffInDays($nextAnniversary);
+                $significance = self::calculateSignificance($yearsSinceRelease);
+
+                if ($daysUntilAnniversary <= $daysAhead && $daysUntilAnniversary >= 0) {
+                    if ($minSignificance === null || $significance >= $minSignificance) {
+                        if ($maxDaysUntil === null || $daysUntilAnniversary <= $maxDaysUntil) {
+                            $significantDates[] = [
+                                'span' => $span,
+                                'type' => $eventType,
+                                'date' => $nextAnniversary,
+                                'years' => $yearsSinceRelease,
+                                'days_until' => $daysUntilAnniversary,
+                                'significance' => $significance,
+                                'is_family_member' => false,
+                            ];
+                        }
+                    }
+                }
+            } catch (\Exception $e) {
+                continue;
+            }
+        }
     }
 }
