@@ -5,14 +5,14 @@ namespace Tests\Feature;
 use App\Models\Span;
 use App\Models\User;
 use Illuminate\Foundation\Testing\WithFaker;
-use Tests\PostgresRefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Tests\RequiresPerTestIsolation;
 use Tests\TestCase;
 use Tests\TestHelpers;
-use Illuminate\Support\Facades\DB;
 
 class SpanSearchApiTest extends TestCase
 {
-    use PostgresRefreshDatabase, WithFaker, TestHelpers;
+    use RequiresPerTestIsolation, WithFaker, TestHelpers;
 
     protected $user;
     protected $otherUser;
@@ -205,20 +205,22 @@ class SpanSearchApiTest extends TestCase
      */
     public function test_multiple_type_filtering(): void
     {
-        $this->markTestSkipped('API type filter response does not include expected types when run in full suite');
-
         $this->actingAs($this->user);
 
-        // Test multiple types
-        $response = $this->getJson('/api/spans/search?types=person,organisation');
+        $response = $this->getJson('/api/spans/search?types=person,organisation&limit=100');
         $response->assertStatus(200);
         $data = $response->json();
-        
+
         $this->assertIsArray($data);
         $this->assertArrayHasKey('spans', $data);
         $this->assertGreaterThanOrEqual(2, count($data['spans']));
-        
-        $typeIds = collect($data['spans'])->pluck('type_id')->toArray();
+
+        $spans = collect($data['spans']);
+        $this->assertTrue($spans->contains('id', $this->personSpan->id));
+        $this->assertTrue($spans->contains('id', $this->organisationSpan->id));
+        $this->assertFalse($spans->contains('id', $this->placeSpan->id));
+
+        $typeIds = $spans->pluck('type_id')->unique()->values()->all();
         $this->assertContains('person', $typeIds);
         $this->assertContains('organisation', $typeIds);
         $this->assertNotContains('place', $typeIds);

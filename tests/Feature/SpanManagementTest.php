@@ -5,10 +5,12 @@ namespace Tests\Feature;
 use App\Models\User;
 use App\Models\Span;
 use Illuminate\Support\Facades\DB;
+use Tests\RequiresPerTestIsolation;
 use Tests\TestCase;
 
 class SpanManagementTest extends TestCase
 {
+    use RequiresPerTestIsolation;
 
     protected function setUp(): void
     {
@@ -52,54 +54,58 @@ class SpanManagementTest extends TestCase
 
     public function test_spans_index_shows_appropriate_spans(): void
     {
-        $this->markTestSkipped('Test fails due to test isolation issues - other tests create spans that interfere with this test when run as part of the full suite. Test passes when run in isolation.');
-        
         $owner = User::factory()->create();
         $otherUser = User::factory()->create();
-        
-        // Create spans with different access levels, reusing the existing users
+        $suffix = uniqid('mgmt_', true);
+
+        // Early start years keep these on the first index page when other spans exist.
         $publicSpan = Span::factory()->create([
             'owner_id' => $owner->id,
             'updater_id' => $owner->id,
             'access_level' => 'public',
-            'name' => 'Public Test Span',
+            'name' => "Public Test Span {$suffix}",
             'type_id' => 'event',
+            'start_year' => 100,
+            'start_month' => 1,
+            'start_day' => 1,
         ]);
-        
+
         $privateSpan = Span::factory()->create([
             'owner_id' => $owner->id,
             'updater_id' => $owner->id,
             'access_level' => 'private',
-            'name' => 'Private Test Span',
+            'name' => "Private Test Span {$suffix}",
             'type_id' => 'event',
+            'start_year' => 101,
+            'start_month' => 1,
+            'start_day' => 1,
         ]);
-        
+
         $sharedSpan = Span::factory()->create([
             'owner_id' => $owner->id,
             'updater_id' => $owner->id,
             'access_level' => 'shared',
-            'name' => 'Shared Test Span',
+            'name' => "Shared Test Span {$suffix}",
             'type_id' => 'event',
+            'start_year' => 102,
+            'start_month' => 1,
+            'start_day' => 1,
         ]);
-        
-        // Grant view permission to other user for shared span
+
         $sharedSpan->grantPermission($otherUser, 'view');
-        
-        // Test unauthenticated user can only see public spans
+
         $response = $this->get('/spans');
         $response->assertStatus(200);
         $response->assertSee($publicSpan->name);
         $response->assertDontSee($privateSpan->name);
         $response->assertDontSee($sharedSpan->name);
-        
-        // Test authenticated non-owner can see public and shared spans they have permission for
+
         $response = $this->actingAs($otherUser)->get('/spans');
         $response->assertStatus(200);
         $response->assertSee($publicSpan->name);
         $response->assertDontSee($privateSpan->name);
         $response->assertSee($sharedSpan->name);
-        
-        // Test owner can see all their spans
+
         $response = $this->actingAs($owner)->get('/spans');
         $response->assertStatus(200);
         $response->assertSee($publicSpan->name);

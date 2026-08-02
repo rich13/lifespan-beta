@@ -16,17 +16,13 @@ class YamlMergeTest extends TestCase
 
     public function test_yaml_editor_detects_existing_span_for_merge()
     {
-        $this->markTestSkipped('Direct query finds different John Doe (test isolation / multiple persons with same name in suite)');
-
-        // Create a user
         $user = User::factory()->create();
-        
-        // Act as the user first
         $this->actingAs($user);
-        
-        // Create an existing span using factory with explicit owner
+
+        $personName = 'Merge Subject '.uniqid('yaml_', true);
+
         $existingSpan = Span::factory()->create([
-            'name' => 'John Doe',
+            'name' => $personName,
             'type_id' => 'person',
             'state' => 'placeholder',
             'description' => 'Existing description',
@@ -42,15 +38,11 @@ class YamlMergeTest extends TestCase
             'metadata' => ['subtype' => 'private_individual'],
         ]);
 
-        // Ensure the span is actually owned by the current user
         $existingSpan->refresh();
         $this->assertEquals($user->id, $existingSpan->owner_id);
-        
-        // Debug: Check if the user has permission to update the span
-        $this->assertTrue($user->can('update', $existingSpan), 'User should have update permission for the span. Span owner: ' . $existingSpan->owner_id . ', Current user: ' . $user->id);
+        $this->assertTrue($user->can('update', $existingSpan));
 
-        // Create YAML content
-        $yamlContent = "name: 'John Doe'
+        $yamlContent = "name: '{$personName}'
 type: person
 state: complete
 description: 'New description from AI'
@@ -62,55 +54,26 @@ metadata:
 sources:
   - 'AI Generated'";
 
-        // Store YAML content in session
         session(['yaml_content' => $yamlContent]);
+        $this->assertEquals($yamlContent, session('yaml_content'));
 
-        // Debug: Verify session data is set
-        $this->assertEquals($yamlContent, session('yaml_content'), 'Session data should be set');
-
-        // Debug: Check if the span exists in the database
-        $span = Span::find($existingSpan->id);
-        if (!$span) {
-            $this->fail('John Doe span not found in database');
-        }
-        
-        // Debug: Check if the user has permission to update the span
-        $this->assertTrue($user->can('update', $span), 'User should have update permission for the span. Span owner: ' . $span->owner_id . ', Current user: ' . $user->id);
-        
-        // Ensure we're still authenticated as the user
-        $this->assertTrue(auth()->check(), 'User should be authenticated');
-        $this->assertEquals($user->id, auth()->id(), 'Authenticated user should match test user');
-        
-        // Debug: Test findExistingSpan directly
-        // First, verify the span can be found by direct query
-        $directQuerySpan = Span::where('name', 'John Doe')
+        $directQuerySpan = Span::where('name', $personName)
             ->where('type_id', 'person')
             ->first();
-        $this->assertNotNull($directQuerySpan, 'Direct query should find the span');
-        $this->assertEquals($existingSpan->id, $directQuerySpan->id, 'Direct query should find the same span');
-        
-        // Check permissions on the directly queried span
-        $this->assertTrue(auth()->check(), 'User should be authenticated');
-        $this->assertTrue(auth()->user()->can('update', $directQuerySpan), 'User should be able to update the span found by direct query');
-        
+        $this->assertNotNull($directQuerySpan);
+        $this->assertEquals($existingSpan->id, $directQuerySpan->id);
+        $this->assertTrue(auth()->user()->can('update', $directQuerySpan));
+
         $yamlService = app(\App\Services\YamlSpanService::class);
-        $foundSpan = $yamlService->findExistingSpan('John Doe', 'person');
-        $this->assertNotNull($foundSpan, 'findExistingSpan should find the span');
-        $this->assertEquals($existingSpan->id, $foundSpan->id, 'Found span should match the created span');
-        
-        // Access the YAML editor
+        $foundSpan = $yamlService->findExistingSpan($personName, 'person');
+        $this->assertNotNull($foundSpan);
+        $this->assertEquals($existingSpan->id, $foundSpan->id);
+
         $response = $this->get('/spans/editor/new');
-
-        // Assert the response is successful
         $response->assertStatus(200);
-
-        // Debug: Let's see what's actually in the response
         $response->assertSee('YAML Editor');
-        
-        // The response should contain the merge section if the span was found
-        // The controller will call findExistingSpan and check permissions
         $response->assertSee('Existing Span Detected');
-        $response->assertSee('John Doe');
+        $response->assertSee($personName);
         $response->assertSee('Merge AI Data with Existing Span');
     }
 

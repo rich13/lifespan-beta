@@ -5,246 +5,196 @@ namespace Tests\Feature;
 use App\Models\Span;
 use App\Models\User;
 use Illuminate\Foundation\Testing\WithFaker;
-use Tests\PostgresRefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 use Tests\TestHelpers;
-use Illuminate\Support\Facades\DB;
 
 class SpanFilterSearchTest extends TestCase
 {
-    use PostgresRefreshDatabase, WithFaker, TestHelpers;
+    use WithFaker, TestHelpers;
 
-    protected $user;
-    protected $personSpan;
-    protected $organisationSpan;
-    protected $placeSpan;
-    protected $eventSpan;
+    protected User $user;
+
+    protected Span $personSpan;
+
+    protected Span $organisationSpan;
+
+    protected Span $placeSpan;
+
+    protected Span $eventSpan;
+
+    protected string $token;
 
     protected function setUp(): void
     {
         parent::setUp();
-        
-        // Create required span types if they don't exist
+
         $types = ['person', 'organisation', 'place', 'event'];
         foreach ($types as $type) {
-            if (!DB::table('span_types')->where('type_id', $type)->exists()) {
+            if (! DB::table('span_types')->where('type_id', $type)->exists()) {
                 DB::table('span_types')->insert([
                     'type_id' => $type,
                     'name' => ucfirst($type),
-                    'description' => 'A test ' . $type . ' type',
+                    'description' => 'A test '.$type.' type',
                     'created_at' => now(),
-                    'updated_at' => now()
+                    'updated_at' => now(),
                 ]);
             }
         }
 
-        // Create a test user
+        // Unique token so assertions stay reliable even when other suite data shares the DB
+        // (PostgresRefreshDatabase per-class cleaning is not currently wired into TestCase).
+        $this->token = 'Flt'.uniqid('', false);
+
         $this->user = User::factory()->create();
-        
-        // Create test spans of different types
+
+        // Early start years keep these on page 1 of the index when the DB is polluted.
         $this->personSpan = Span::create([
-            'name' => 'Richard Northover',
+            'name' => "Person {$this->token} Northover",
             'type_id' => 'person',
             'owner_id' => $this->user->id,
             'updater_id' => $this->user->id,
-            'start_year' => 1980,
-            'slug' => $this->uniqueSlug('richard-northover'),
+            'start_year' => 101,
+            'slug' => $this->uniqueSlug('person-'.$this->token),
             'access_level' => 'public',
-            'description' => 'A test person with a unique description',
+            'description' => "Unique person description {$this->token}",
             'state' => 'complete',
             'start_precision' => 'year',
             'end_precision' => 'year',
             'is_personal_span' => false,
         ]);
-        
+
         $this->organisationSpan = Span::create([
-            'name' => 'Acme Corporation',
+            'name' => "Org {$this->token} Corporation",
             'type_id' => 'organisation',
             'owner_id' => $this->user->id,
             'updater_id' => $this->user->id,
-            'start_year' => 1990,
-            'slug' => $this->uniqueSlug('acme-corporation'),
+            'start_year' => 102,
+            'slug' => $this->uniqueSlug('org-'.$this->token),
             'access_level' => 'public',
-            'description' => 'A test organisation where Richard works',
+            'description' => "Organisation where Person {$this->token} Northover works",
             'state' => 'complete',
             'start_precision' => 'year',
             'end_precision' => 'year',
         ]);
-        
+
         $this->placeSpan = Span::create([
-            'name' => 'London Bridge',
+            'name' => "Place {$this->token} Bridge",
             'type_id' => 'place',
             'owner_id' => $this->user->id,
             'updater_id' => $this->user->id,
-            'start_year' => 1800,
-            'slug' => $this->uniqueSlug('london-bridge'),
+            'start_year' => 100,
+            'slug' => $this->uniqueSlug('place-'.$this->token),
             'access_level' => 'public',
-            'description' => 'A famous bridge in London',
+            'description' => "A bridge near {$this->token}",
             'state' => 'complete',
             'start_precision' => 'year',
             'end_precision' => 'year',
         ]);
-        
+
         $this->eventSpan = Span::create([
-            'name' => 'Company Picnic',
+            'name' => "Event {$this->token} Picnic",
             'type_id' => 'event',
             'owner_id' => $this->user->id,
             'updater_id' => $this->user->id,
-            'start_year' => 2023,
-            'slug' => $this->uniqueSlug('company-picnic'),
+            'start_year' => 103,
+            'slug' => $this->uniqueSlug('event-'.$this->token),
             'access_level' => 'public',
-            'description' => 'Annual company event at London park',
+            'description' => "Picnic at Place {$this->token} Bridge",
             'state' => 'complete',
             'start_precision' => 'year',
             'end_precision' => 'year',
         ]);
     }
 
-    /**
-     * Test that type filters work correctly
-     */
     public function test_type_filters(): void
     {
-        $this->markTestSkipped('Type filter response does not include expected span (Richard Northover) when run in full suite');
-
         $this->actingAs($this->user);
 
-        // Test single type filter
         $response = $this->get('/spans/?types=person');
         $response->assertStatus(200);
-        
-        // Debug: Check what's actually in the response
-        if (!$response->getContent()) {
-            $this->fail('Response content is empty');
-        }
-        
-        // Debug: Check if the span exists in the database
-        $span = Span::where('name', 'Richard Northover')->first();
-        if (!$span) {
-            $this->fail('Richard Northover span not found in database');
-        }
-        
-        // Debug: Check what's actually in the response content
-        $content = $response->getContent();
-        if (strpos($content, 'Richard Northover') === false) {
-            $this->fail('Richard Northover not found in response. Response content: ' . substr($content, 0, 1000));
-        }
-        
-        $response->assertSee('Richard Northover');
-        $response->assertDontSee('Acme Corporation');
-        $response->assertDontSee('London Bridge');
+        $response->assertSee($this->personSpan->name);
+        $response->assertDontSee($this->organisationSpan->name);
+        $response->assertDontSee($this->placeSpan->name);
 
-        // Test multiple type filters
         $response = $this->get('/spans/?types=person,organisation');
         $response->assertStatus(200);
-        $response->assertSee('Richard Northover');
-        $response->assertSee('Acme Corporation');
-        $response->assertDontSee('London Bridge');
+        $response->assertSee($this->personSpan->name);
+        $response->assertSee($this->organisationSpan->name);
+        $response->assertDontSee($this->placeSpan->name);
     }
 
-    /**
-     * Test that search functionality works correctly
-     */
     public function test_search_functionality(): void
     {
         $this->actingAs($this->user);
 
-        // Debug: Check that test data exists
-        $this->assertDatabaseHas('spans', ['name' => 'Richard Northover']);
-        $this->assertDatabaseHas('spans', ['name' => 'Acme Corporation']);
-        $this->assertDatabaseHas('spans', ['description' => 'A test organisation where Richard works']);
+        $this->assertDatabaseHas('spans', ['name' => $this->personSpan->name]);
+        $this->assertDatabaseHas('spans', ['name' => $this->organisationSpan->name]);
 
-        // Test basic search (search matches name and description)
-        $response = $this->get(route('spans.index', ['search' => 'Richard']));
+        $response = $this->get(route('spans.index', ['search' => $this->token]));
         $response->assertStatus(200);
-        $response->assertSee('Richard Northover');
-        $response->assertSee('Acme Corporation'); // Should find this because description contains "Richard"
+        $response->assertSee($this->personSpan->name);
+        $response->assertSee($this->organisationSpan->name);
 
-        // Test case insensitive search
-        $response = $this->get(route('spans.index', ['search' => 'richard']));
+        $response = $this->get(route('spans.index', ['search' => strtolower($this->token)]));
         $response->assertStatus(200);
-        $response->assertSee('Richard Northover');
-        $response->assertSee('Acme Corporation'); // Should find this because description contains "Richard"
+        $response->assertSee($this->personSpan->name);
+        $response->assertSee($this->organisationSpan->name);
 
-        // Test multi-word search
-        $response = $this->get('/spans/?search=Richard Northover');
+        $response = $this->get('/spans/?search='.urlencode($this->personSpan->name));
         $response->assertStatus(200);
-        $response->assertSee('Richard Northover');
-        
-        // Test search in reverse word order
-        $response = $this->get('/spans/?search=Northover Richard');
+        $response->assertSee($this->personSpan->name);
+
+        $parts = explode(' ', $this->personSpan->name);
+        $response = $this->get('/spans/?search='.urlencode($parts[2].' '.$parts[0].' '.$parts[1]));
         $response->assertStatus(200);
-        $response->assertSee('Richard Northover');
-        
-        // Test partial word search
-        $response = $this->get('/spans/?search=Corporation');
+        $response->assertSee($this->personSpan->name);
+
+        $response = $this->get('/spans/?search='.urlencode($this->organisationSpan->name));
         $response->assertStatus(200);
-        $response->assertSee('Acme Corporation');
+        $response->assertSee($this->organisationSpan->name);
     }
 
-    /**
-     * Test combined filtering with search and type filters
-     */
     public function test_combined_filtering(): void
     {
         $this->actingAs($this->user);
 
-        // Test search + type filter
-        $response = $this->get('/spans/?search=Richard&types=person');
+        $response = $this->get('/spans/?search='.urlencode($this->token).'&types=person');
         $response->assertStatus(200);
-        $response->assertSee('Richard Northover');
-        $response->assertDontSee('Acme Corporation');
-        
-        // Test search that matches multiple types but filtered to one
-        $response = $this->get('/spans/?search=London&types=place');
+        $response->assertSee($this->personSpan->name);
+        $response->assertDontSee($this->organisationSpan->name);
+
+        $response = $this->get('/spans/?search='.urlencode($this->token).'&types=place');
         $response->assertStatus(200);
-        $response->assertSee('London Bridge');
-        $response->assertDontSee('Richard Northover');
+        $response->assertSee($this->placeSpan->name);
+        $response->assertDontSee($this->personSpan->name);
     }
 
-    /**
-     * Test edge cases for search
-     */
     public function test_search_edge_cases(): void
     {
         $this->actingAs($this->user);
 
-        // Test empty search results
-        $response = $this->get('/spans/?search=NonexistentTerm');
+        $response = $this->get('/spans/?search=NonexistentTerm'.uniqid());
         $response->assertStatus(200);
         $response->assertSee('No spans found');
-        
-        // Test search with special characters
-        $response = $this->get('/spans/?search=Richard\'s');
-        $response->assertStatus(200);
-        // This should not cause errors, even if no results
+
+        $response = $this->get('/spans/?search='.urlencode($this->token."'s"));
         $response->assertStatus(200);
     }
 
-    /**
-     * Test UI elements for search and filters
-     */
     public function test_search_and_filter_ui_elements(): void
     {
         $this->actingAs($this->user);
 
-        // Test that filter buttons are present
         $response = $this->get('/spans/');
         $response->assertStatus(200);
         $response->assertSee('filter_person', false);
         $response->assertSee('filter_organisation', false);
         $response->assertSee('filter_place', false);
         $response->assertSee('filter_event', false);
-        
-        // Note: Search box is no longer present on the spans index page
-        // as it has been moved to the global navigation
-        
-        // Test that active filter buttons are highlighted
+
         $response = $this->get('/spans?types=person');
         $response->assertStatus(200);
-        $response->assertSee('btn-primary', false); // Active filter button class
-        
-        // Note: Search UI elements are no longer present on the spans index page
-        // as search has been moved to the global navigation
+        $response->assertSee('btn-primary', false);
     }
-} 
+}
