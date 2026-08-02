@@ -95,6 +95,46 @@ class SpanRoutesTest extends TestCase
         $response->assertRedirect(route('login'));
     }
 
+    public function test_edit_page_type_preview_selects_requested_type_in_form(): void
+    {
+        $this->span->update(['type_id' => 'person', 'state' => 'complete', 'start_year' => 1888]);
+
+        $response = $this->actingAs($this->user)
+            ->get(route('spans.edit', $this->span) . '?type_id=event');
+
+        $response->assertOk();
+        $response->assertViewHas('selectedTypeId', 'event');
+        $response->assertSee('apply the type change', false);
+        $this->assertMatchesRegularExpression(
+            '/<option[^>]*value="event"[^>]*\sselected/i',
+            $response->getContent()
+        );
+    }
+
+    public function test_update_span_can_change_type_from_person_to_event(): void
+    {
+        $this->span->update([
+            'type_id' => 'person',
+            'state' => 'complete',
+            'start_year' => 1888,
+            'metadata' => ['subtype' => 'public_figure'],
+        ]);
+
+        $response = $this->actingAs($this->user)
+            ->put("/spans/{$this->span->id}", [
+                'name' => $this->span->name,
+                'type_id' => 'event',
+                'state' => 'complete',
+                'start_year' => 1888,
+                'metadata' => ['subtype' => 'historical'],
+            ]);
+
+        $this->span->refresh();
+        $response->assertRedirect(route('spans.edit', $this->span));
+        $this->assertSame('event', $this->span->type_id);
+        $this->assertSame('historical', $this->span->metadata['subtype'] ?? null);
+    }
+
     public function test_update_span_works_when_authenticated(): void
     {
         $response = $this->actingAs($this->user)
@@ -106,7 +146,9 @@ class SpanRoutesTest extends TestCase
                 'state' => 'draft'
             ]);
 
-        $response->assertStatus(302);
+        $this->span->refresh();
+        $response->assertRedirect(route('spans.edit', $this->span));
+        $response->assertSessionHas('status', 'Span updated successfully');
         $this->assertDatabaseHas('spans', [
             'id' => $this->span->id,
             'name' => 'Updated Span',

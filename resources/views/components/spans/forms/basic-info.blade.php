@@ -1,4 +1,4 @@
-@props(['span', 'spanTypes'])
+@props(['span', 'spanTypes', 'selectedTypeId' => null])
 
 <div class="card mb-4">
     <div class="card-body">
@@ -31,11 +31,15 @@
         <!-- Type -->
         <div class="mb-3">
             <label for="type_id" class="form-label">Type</label>
+            @php
+                $typeIdForSelect = $selectedTypeId ?? $span->type_id;
+            @endphp
             <select class="form-select @error('type_id') is-invalid @enderror" 
-                    id="type_id" name="type_id" required>
+                    id="type_id" name="type_id" required
+                    data-saved-type="{{ $span->type_id }}">
                 @foreach($spanTypes as $type)
                     <option value="{{ $type->type_id }}" 
-                            {{ old('type_id', $span->type_id) == $type->type_id ? 'selected' : '' }}>
+                            {{ old('type_id', $typeIdForSelect) == $type->type_id ? 'selected' : '' }}>
                         {{ $type->name }}
                     </option>
                 @endforeach

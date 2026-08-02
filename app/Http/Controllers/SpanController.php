@@ -2581,7 +2581,16 @@ class SpanController extends Controller
             ]);
         }
 
-        return view('spans.edit', compact('span', 'spanTypes', 'connectionTypes', 'availableSpans', 'spanType'));
+        $selectedTypeId = old('type_id', $requestedTypeId ?? $span->type_id);
+
+        return view('spans.edit', compact(
+            'span',
+            'spanTypes',
+            'connectionTypes',
+            'availableSpans',
+            'spanType',
+            'selectedTypeId'
+        ));
     }
 
     /**
@@ -2905,7 +2914,7 @@ class SpanController extends Controller
                 return response()->json($span);
             }
 
-            return redirect()->route('spans.show', $span)
+            return redirect()->route('spans.edit', $span)
                 ->with('status', 'Span updated successfully');
 
         } catch (\Illuminate\Validation\ValidationException $e) {

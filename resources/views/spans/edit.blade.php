@@ -1,7 +1,7 @@
 @extends('layouts.app')
 
 @section('page_title')
-    Edit {{ $span->name }}
+    Edit <a href="{{ route('spans.show', $span) }}" class="link-primary">{{ $span->name }}</a>
 @endsection
 
 @section('page_tools')
@@ -26,7 +26,14 @@
     
     <div class="row">
         <div class="col-md-4">
-            <x-spans.forms.basic-info :span="$span" :span-types="$spanTypes" />
+            <x-spans.forms.basic-info :span="$span" :span-types="$spanTypes" :selected-type-id="$selectedTypeId" />
+
+            @if(isset($selectedTypeId) && $selectedTypeId !== $span->type_id)
+                <div class="alert alert-info mb-4" id="type-change-preview-notice" role="status">
+                    You are previewing the <strong>{{ $spanType->name }}</strong> fields.
+                    Click <strong>Save Changes</strong> to apply the type change.
+                </div>
+            @endif
             <x-spans.forms.metadata 
                 :span="$span" 
                 :span-type="$spanType" 
