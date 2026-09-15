@@ -237,14 +237,14 @@
                     <x-spans.cards.places-lived-card :span="$span" :precomputedConnections="$precomputedConnections ?? null" />
                 @endif
                 
-                <!-- Film Card (for people) - slices from precomputedConnections when present -->
+                <!-- Film Card (for people) - films that feature them -->
                 @if($span->type_id === 'person')
                     <x-spans.cards.film-card :span="$span" :precomputedConnections="$precomputedConnections ?? null" :directorConnectionsByFilmId="$directorConnectionsByFilmId ?? null" />
                 @endif
                 
-                <!-- Book Card (for people) - slices from precomputedConnections when present -->
+                <!-- Works Card (for people) - books, films, albums and other things they created -->
                 @if($span->type_id === 'person')
-                    <x-spans.cards.book-card :span="$span" :precomputedConnections="$precomputedConnections ?? null" />
+                    <x-spans.cards.works-card :span="$span" :precomputedConnections="$precomputedConnections ?? null" />
                 @endif
                 
                 <!-- Employee Card (for organisations) - placed under employment card -->
