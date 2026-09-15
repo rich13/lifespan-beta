@@ -25,18 +25,21 @@ class MicroStoryService
     }
 
     /**
-     * Generate a micro story for a span with HTML links
+     * Generate a micro story for a span with HTML links.
+     *
+     * @param bool $asSelf When true, phrase the sentence in second person ("You...") for the span's own biography.
      */
-    public function generateSpanStory(Span $span): string
+    public function generateSpanStory(Span $span, bool $asSelf = false): string
     {
         $spanType = $span->type_id;
-        
-        if (!isset($this->templates['spans'][$spanType])) {
-            return $this->generateFallbackSpanStory($span);
+        $templateSet = $this->templates['spans'][$spanType] ?? null;
+
+        $templates = ($asSelf ? ($templateSet['self_templates'] ?? null) : null) ?? $templateSet['templates'] ?? null;
+
+        if ($templates === null) {
+            return $this->generateFallbackSpanStory($span, $asSelf);
         }
 
-        $templates = $this->templates['spans'][$spanType]['templates'];
-        
         // Try each template in order until one works
         foreach ($templates as $templateKey => $templateConfig) {
             if ($this->evaluateCondition($templateConfig['condition'], $span)) {
@@ -44,18 +47,22 @@ class MicroStoryService
             }
         }
         
-        return $this->generateFallbackSpanStory($span);
+        return $this->generateFallbackSpanStory($span, $asSelf);
     }
     
     /**
-     * Generate a micro story for a connection with HTML links
+     * Generate a micro story for a connection with HTML links.
+     *
+     * @param string|null $selfId When provided and this connection involves the span with this id,
+     *   the sentence is phrased in second person ("You...") from that span's perspective, reversing
+     *   subject/object and predicate direction as needed.
      */
-    public function generateConnectionStory(Connection $connection): string
+    public function generateConnectionStory(Connection $connection, ?string $selfId = null): string
     {
         $connectionType = $connection->type_id;
         
         if (!isset($this->templates['connections'][$connectionType])) {
-            return $this->generateFallbackConnectionStory($connection);
+            return $this->generateFallbackConnectionStory($connection, $selfId);
         }
 
         $templates = $this->templates['connections'][$connectionType]['templates'];
@@ -63,11 +70,11 @@ class MicroStoryService
         // Try each template in order until one works
         foreach ($templates as $templateKey => $templateConfig) {
             if ($this->evaluateCondition($templateConfig['condition'], $connection)) {
-                return $this->processConnectionTemplate($templateConfig, $connection);
+                return $this->processConnectionTemplate($templateConfig, $connection, $selfId);
             }
         }
         
-        return $this->generateFallbackConnectionStory($connection);
+        return $this->generateFallbackConnectionStory($connection, $selfId);
     }
 
     /**
@@ -83,14 +90,14 @@ class MicroStoryService
         $sentences = [];
 
         if ($span->type_id === 'person' && $span->start_year) {
-            $intro = $this->generateSpanStory($span);
+            $intro = $this->generateSpanStory($span, true);
             if ($intro) {
                 $sentences[] = $intro;
             }
         }
 
         foreach ($sorted as $connection) {
-            $sentences[] = $this->generateConnectionStory($connection);
+            $sentences[] = $this->generateConnectionStory($connection, $span->id);
         }
 
         return [
@@ -196,11 +203,11 @@ class MicroStoryService
     /**
      * Process a template for a connection
      */
-    private function processConnectionTemplate(array $templateConfig, Connection $connection): string
+    private function processConnectionTemplate(array $templateConfig, Connection $connection, ?string $selfId = null): string
     {
         $template = $templateConfig['template'];
         
-        return $this->replaceConnectionTemplateVariables($template, $templateConfig['data_methods'], $connection);
+        return $this->replaceConnectionTemplateVariables($template, $templateConfig['data_methods'], $connection, $selfId);
     }
     
     /**
@@ -221,12 +228,12 @@ class MicroStoryService
     /**
      * Replace template variables for connections
      */
-    private function replaceConnectionTemplateVariables(string $template, array $dataMethods, Connection $connection): string
+    private function replaceConnectionTemplateVariables(string $template, array $dataMethods, Connection $connection, ?string $selfId = null): string
     {
         $result = $template;
         
         foreach ($dataMethods as $variable => $method) {
-            $value = $this->callConnectionDataMethod($method, $connection);
+            $value = $this->callConnectionDataMethod($method, $connection, $selfId);
             $result = str_replace("{{$variable}}", $value, $result);
         }
         
@@ -290,12 +297,12 @@ class MicroStoryService
     /**
      * Call a data method for connections
      */
-    private function callConnectionDataMethod(string $method, Connection $connection): string
+    private function callConnectionDataMethod(string $method, Connection $connection, ?string $selfId = null): string
     {
         return match($method) {
-            'createSubjectLink' => $this->createSpanLink($connection->parent),
-            'createSpanLink' => $this->createSpanLink($connection->parent),
-            'createObjectLink' => $this->createSpanLink($connection->child),
+            'createSubjectLink' => $this->createConnectionSubjectLink($connection, $selfId),
+            'createSpanLink' => $this->createConnectionSubjectLink($connection, $selfId),
+            'createObjectLink' => $this->createConnectionObjectLink($connection, $selfId),
             'createDateLink' => $this->createDateLink(
                 $connection->connectionSpan?->start_year,
                 $connection->connectionSpan?->start_month,
@@ -306,10 +313,87 @@ class MicroStoryService
                 $connection->connectionSpan?->end_month,
                 $connection->connectionSpan?->end_day
             ),
-            'createPredicateLink' => $this->createPredicateLink($connection),
+            'createPredicateLink' => $this->createPredicateLink($connection, $selfId),
             'getPredicate' => $connection->type->forward_predicate,
+            'createBeVerb' => $this->createBeVerb($connection, $selfId),
+            'createHaveBeenVerb' => $this->createHaveBeenVerb($connection, $selfId),
             default => $this->callConnectionMethod($method, $connection),
         };
+    }
+
+    /**
+     * Determine whether this connection is being told from the perspective of the given self span,
+     * and if so, whether that span is the object (child) rather than the subject (parent) — i.e.
+     * whether the sentence needs to be reversed to read naturally as "You...".
+     */
+    private function connectionSelfDirection(Connection $connection, ?string $selfId): ?bool
+    {
+        if (!$selfId) {
+            return null;
+        }
+        if ($connection->parent_id === $selfId) {
+            return false; // self is the subject; no reversal needed
+        }
+        if ($connection->child_id === $selfId) {
+            return true; // self is the object; reverse subject/object and use the inverse predicate
+        }
+        return null;
+    }
+
+    /**
+     * Naively conjugate a lowercase predicate phrase for second person ("You ...").
+     * Only the leading auxiliary verb needs changing (is→are, was→were, has→have);
+     * everything else in English past/plain tense predicates is unchanged for "you".
+     */
+    private function conjugatePredicateForYou(string $predicate): string
+    {
+        $map = ['is ' => 'are ', 'was ' => 'were ', 'has ' => 'have '];
+        foreach ($map as $from => $to) {
+            if (str_starts_with($predicate, $from)) {
+                return $to . substr($predicate, strlen($from));
+            }
+        }
+        return $predicate;
+    }
+
+    /**
+     * Subject-slot text for a connection sentence: "You" when told from that span's perspective
+     * (whether it is the underlying subject or object), otherwise a link to the actual subject span.
+     */
+    private function createConnectionSubjectLink(Connection $connection, ?string $selfId): string
+    {
+        if ($this->connectionSelfDirection($connection, $selfId) !== null) {
+            return 'You';
+        }
+        return $this->createSpanLink($connection->parent);
+    }
+
+    /**
+     * Object-slot text for a connection sentence: the "other" span when told from self's perspective
+     * (which may be the underlying subject if self is the object), otherwise a link to the actual object span.
+     */
+    private function createConnectionObjectLink(Connection $connection, ?string $selfId): string
+    {
+        if ($this->connectionSelfDirection($connection, $selfId) === true) {
+            return $this->createSpanLink($connection->parent);
+        }
+        return $this->createSpanLink($connection->child);
+    }
+
+    /**
+     * "was"/"were" depending on whether this sentence is told in second person.
+     */
+    private function createBeVerb(Connection $connection, ?string $selfId): string
+    {
+        return $this->connectionSelfDirection($connection, $selfId) !== null ? 'were' : 'was';
+    }
+
+    /**
+     * "has been"/"have been" depending on whether this sentence is told in second person.
+     */
+    private function createHaveBeenVerb(Connection $connection, ?string $selfId): string
+    {
+        return $this->connectionSelfDirection($connection, $selfId) !== null ? 'have been' : 'has been';
     }
     
     /**
@@ -428,10 +512,18 @@ class MicroStoryService
     }
     
     /**
-     * Create a clickable link for a connection predicate
+     * Create a clickable link for a connection predicate, or plain conjugated text
+     * ("was" → "were", etc.) when the sentence is told in second person ("You...").
      */
-    private function createPredicateLink(Connection $connection): string
+    private function createPredicateLink(Connection $connection, ?string $selfId = null): string
     {
+        $reversed = $this->connectionSelfDirection($connection, $selfId);
+
+        if ($reversed !== null) {
+            $predicate = $reversed ? $connection->type->inverse_predicate : $connection->type->forward_predicate;
+            return e($this->conjugatePredicateForYou($predicate));
+        }
+
         return sprintf(
             '<a href="%s">%s</a>',
             route('spans.connections', [
@@ -481,10 +573,10 @@ class MicroStoryService
     /**
      * Generate a fallback story for spans
      */
-    private function generateFallbackSpanStory(Span $span): string
+    private function generateFallbackSpanStory(Span $span, bool $asSelf = false): string
     {
         $parts = [];
-        $parts[] = $this->createSpanLink($span);
+        $parts[] = $asSelf ? 'You' : $this->createSpanLink($span);
         
         if ($span->start_year || $span->end_year) {
             if ($span->end_year) {
@@ -504,12 +596,12 @@ class MicroStoryService
     /**
      * Generate a fallback story for connections
      */
-    private function generateFallbackConnectionStory(Connection $connection): string
+    private function generateFallbackConnectionStory(Connection $connection, ?string $selfId = null): string
     {
         $parts = [];
-        $parts[] = $this->createSpanLink($connection->parent);
-        $parts[] = $this->createPredicateLink($connection);
-        $parts[] = $this->createSpanLink($connection->child);
+        $parts[] = $this->createConnectionSubjectLink($connection, $selfId);
+        $parts[] = $this->createPredicateLink($connection, $selfId);
+        $parts[] = $this->createConnectionObjectLink($connection, $selfId);
         
         if ($connection->connectionSpan && $connection->connectionSpan->start_year) {
             if ($connection->connectionSpan->end_year && $connection->connectionSpan->end_year !== $connection->connectionSpan->start_year) {

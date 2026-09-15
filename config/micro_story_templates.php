@@ -58,6 +58,32 @@ return [
                     'condition' => 'hasCreator',
                 ],
             ],
+            // Used for the intro sentence of a person's own biography ("Life in sentences" on /me), phrased in second person.
+            'self_templates' => [
+                'with_dates' => [
+                    'template' => 'You lived between {start_date} and {end_date}.',
+                    'ongoing_template' => 'You were born {start_date}.',
+                    'data_methods' => [
+                        'start_date' => 'createDateLink',
+                        'end_date' => 'createDateLink',
+                    ],
+                    'condition' => 'hasStartYear',
+                ],
+                'with_occupation' => [
+                    'template' => 'You worked as {occupation}.',
+                    'data_methods' => [
+                        'occupation' => 'getOccupation',
+                    ],
+                    'condition' => 'hasOccupation',
+                ],
+                'with_creator' => [
+                    'template' => 'You were created by {creator}.',
+                    'data_methods' => [
+                        'creator' => 'createSpanLink',
+                    ],
+                    'condition' => 'hasCreator',
+                ],
+            ],
         ],
         'thing' => [
             'templates' => [
@@ -128,9 +154,10 @@ return [
         'during' => [
             'templates' => [
                 'with_start_and_end' => [
-                    'template' => '{subject} was in {phase} at {organisation} between {start_date} and {end_date}.',
+                    'template' => '{subject} {was} in {phase} at {organisation} between {start_date} and {end_date}.',
                     'data_methods' => [
                         'subject' => 'createSubjectLink',
+                        'was' => 'createBeVerb',
                         'phase' => 'createPhaseName',
                         'organisation' => 'createOrganisationFromDuring',
                         'start_date' => 'createDateLink',
@@ -149,9 +176,10 @@ return [
                     'condition' => 'hasStartYearOnly',
                 ],
                 'with_no_dates' => [
-                    'template' => '{subject} was in {phase} at {organisation}.',
+                    'template' => '{subject} {was} in {phase} at {organisation}.',
                     'data_methods' => [
                         'subject' => 'createSubjectLink',
+                        'was' => 'createBeVerb',
                         'phase' => 'createPhaseName',
                         'organisation' => 'createOrganisationFromDuring',
                     ],
@@ -264,9 +292,10 @@ return [
         'family' => [
             'templates' => [
                 'with_start_and_end' => [
-                    'template' => '{subject} {predicate} {object} between {start_date} and {end_date}.',
+                    'template' => '{subject} {was} {predicate} {object} between {start_date} and {end_date}.',
                     'data_methods' => [
                         'subject' => 'createSubjectLink',
+                        'was' => 'createBeVerb',
                         'predicate' => 'createPredicateLink',
                         'object' => 'createObjectLink',
                         'start_date' => 'createDateLink',
@@ -275,9 +304,10 @@ return [
                     'condition' => 'hasStartAndEndYear',
                 ],
                 'with_start_only' => [
-                    'template' => '{subject} {predicate} {object} since {start_date}.',
+                    'template' => '{subject} {have_been} {predicate} {object} since {start_date}.',
                     'data_methods' => [
                         'subject' => 'createSubjectLink',
+                        'have_been' => 'createHaveBeenVerb',
                         'predicate' => 'createPredicateLink',
                         'object' => 'createObjectLink',
                         'start_date' => 'createDateLink',
@@ -298,9 +328,10 @@ return [
         'membership' => [
             'templates' => [
                 'with_start_and_end' => [
-                    'template' => '{subject} was {predicate} {object} between {start_date} and {end_date}.',
+                    'template' => '{subject} {was} {predicate} {object} between {start_date} and {end_date}.',
                     'data_methods' => [
                         'subject' => 'createSubjectLink',
+                        'was' => 'createBeVerb',
                         'predicate' => 'createPredicateLink',
                         'object' => 'createObjectLink',
                         'start_date' => 'createDateLink',
@@ -309,9 +340,10 @@ return [
                     'condition' => 'hasStartAndEndYear',
                 ],
                 'with_start_only' => [
-                    'template' => '{subject} has been {predicate} {object} since {start_date}.',
+                    'template' => '{subject} {have_been} {predicate} {object} since {start_date}.',
                     'data_methods' => [
                         'subject' => 'createSubjectLink',
+                        'have_been' => 'createHaveBeenVerb',
                         'predicate' => 'createPredicateLink',
                         'object' => 'createObjectLink',
                         'start_date' => 'createDateLink',
@@ -360,6 +392,56 @@ return [
                         'object' => 'createObjectLink',
                     ],
                     'condition' => 'hasNoDates',
+                ],
+            ],
+        ],
+        // Only the completed (start-and-end) case is templated; ongoing/undated has_role
+        // connections fall back to the default "{subject} have role {object} ..." wording,
+        // since "has role" reads fine in the present tense but needs "had the role" once finished.
+        'has_role' => [
+            'templates' => [
+                'with_start_and_end' => [
+                    'template' => '{subject} had the role {object} between {start_date} and {end_date}.',
+                    'data_methods' => [
+                        'subject' => 'createSubjectLink',
+                        'object' => 'createObjectLink',
+                        'start_date' => 'createDateLink',
+                        'end_date' => 'createEndDateLink',
+                    ],
+                    'condition' => 'hasStartAndEndYear',
+                ],
+            ],
+        ],
+        // Only the completed (start-and-end) case is templated; ongoing relationships fall back
+        // to the default "{subject} have relationship with {object} ..." wording, which is correct
+        // in the present tense but needs "had relationship with" once the relationship has ended.
+        'relationship' => [
+            'templates' => [
+                'with_start_and_end' => [
+                    'template' => '{subject} had relationship with {object} between {start_date} and {end_date}.',
+                    'data_methods' => [
+                        'subject' => 'createSubjectLink',
+                        'object' => 'createObjectLink',
+                        'start_date' => 'createDateLink',
+                        'end_date' => 'createEndDateLink',
+                    ],
+                    'condition' => 'hasStartAndEndYear',
+                ],
+            ],
+        ],
+        // Only the ongoing (start-only, "since") case is templated; bounded/undated friendships
+        // fall back to the default "{subject} is/are friend of {object} ..." wording.
+        'friend' => [
+            'templates' => [
+                'with_start_only' => [
+                    'template' => '{subject} {have_been} friends with {object} since {start_date}.',
+                    'data_methods' => [
+                        'subject' => 'createSubjectLink',
+                        'have_been' => 'createHaveBeenVerb',
+                        'object' => 'createObjectLink',
+                        'start_date' => 'createDateLink',
+                    ],
+                    'condition' => 'hasStartYearOnly',
                 ],
             ],
         ],
