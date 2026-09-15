@@ -660,7 +660,7 @@ Route::middleware(['auth', 'admin'])->group(function () {
 });
 
 // Span search API
-Route::get('/spans/search', [SpanSearchController::class, 'search']);
+Route::get('/spans/search', [SpanSearchController::class, 'search'])->middleware('throttle:expensive-guest');
 Route::get('/lifespan/{path?}', [LifespanUrlController::class, 'resolve'])
     ->where('path', '.*');
 
@@ -678,13 +678,13 @@ Route::get('/spans/{span}/subject-connections', [SpanSearchController::class, 't
 Route::get('/spans/{span}/leadership-overlay', [SpanSearchController::class, 'timelineLeadershipOverlay'])->middleware(['web', 'timeout.prevention']);
 Route::get('/spans/{span}/context-overlay-events', [SpanSearchController::class, 'timelineContextOverlayEvents'])->middleware(['web', 'timeout.prevention']);
 Route::get('/spans/{span}/during-connections', [SpanSearchController::class, 'timelineDuringConnections'])->middleware(['web', 'timeout.prevention']);
-Route::post('/spans/batch-timeline', [SpanSearchController::class, 'batchTimeline'])->middleware(['web', 'timeout.prevention']);
+Route::post('/spans/batch-timeline', [SpanSearchController::class, 'batchTimeline'])->middleware(['web', 'timeout.prevention', 'throttle:expensive-guest']);
 
 // Temporal relationship API
 Route::get('/spans/{span}/temporal', [SpanSearchController::class, 'temporal']);
 
-// Family graph API - higher rate limit for authenticated users
-Route::get('/spans/{span}/family-graph', [SpanSearchController::class, 'familyGraph'])->middleware('throttle:120,1');
+// Family graph API - guests 20/min; authenticated users keep the 60/min api limiter
+Route::get('/spans/{span}/family-graph', [SpanSearchController::class, 'familyGraph'])->middleware('throttle:family-graph');
 
 // Residence timeline API
 

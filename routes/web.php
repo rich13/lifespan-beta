@@ -72,6 +72,12 @@ Route::get('/health', function () {
     }
 });
 
+Route::get('/robots.txt', function () {
+    return response(file_get_contents(public_path('robots.txt')), 200, [
+        'Content-Type' => 'text/plain; charset=UTF-8',
+    ]);
+});
+
 // Debug route for troubleshooting - disabled in production for security
 Route::get('/debug', function() {
     if (app()->environment('production')) {
@@ -261,7 +267,7 @@ Route::middleware('web')->group(function () {
     // Span routes
     Route::prefix('spans')->group(function () {
             // Search route (works with session auth)
-            Route::get('/search', [SpanController::class, 'search'])->name('spans.search');
+            Route::get('/search', [SpanController::class, 'search'])->middleware('throttle:expensive-guest')->name('spans.search');
             
             // JSON endpoint - MUST come before auth group's /{subject} catch-all so /spans/x.json returns 401 for private spans (not 302 redirect)
             Route::middleware('span.access')->group(function () {

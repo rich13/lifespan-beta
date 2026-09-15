@@ -120,6 +120,24 @@ class RouteServiceProvider extends ServiceProvider
             return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
         });
 
+        // Stricter guest limit for expensive public search/timeline endpoints.
+        // Authenticated humans keep the 60/min api limiter only.
+        RateLimiter::for('expensive-guest', function (Request $request) {
+            if ($request->user()) {
+                return Limit::none();
+            }
+
+            return Limit::perMinute(20)->by($request->ip());
+        });
+
+        RateLimiter::for('family-graph', function (Request $request) {
+            if ($request->user()) {
+                return Limit::perMinute(60)->by($request->user()->id);
+            }
+
+            return Limit::perMinute(20)->by($request->ip());
+        });
+
         // Registration rate limiting - prevent abuse
         // Allow 3 registrations per hour per IP address
         RateLimiter::for('registration', function (Request $request) {
