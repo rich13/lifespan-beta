@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\DB;
 use App\Models\SpanType;
 use App\Models\ConnectionType;
 use App\Services\YamlSpanService;
+use App\Services\AiYamlCreatorService;
 use App\Services\ConfigurableStoryGeneratorService;
 use App\Services\RouteReservationService;
 use App\Services\YamlValidationService;
@@ -6082,6 +6083,33 @@ class SpanController extends Controller
     }
 
     /**
+     * Show the AI improve page for a span
+     */
+    public function improve(Span $span)
+    {
+        $this->authorize('update', $span);
+
+        if (!AiYamlCreatorService::supportsAiImprovement($span->type_id)) {
+            abort(404);
+        }
+
+        $yamlContent = null;
+        try {
+            $yamlContent = $this->yamlService->spanToYamlSafe($span);
+        } catch (\Exception $e) {
+            Log::warning('Failed to generate YAML for improve page', [
+                'span_id' => $span->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return view('spans.improve', [
+            'span' => $span,
+            'yamlContent' => $yamlContent,
+        ]);
+    }
+
+    /**
      * Improve an existing span with AI-generated YAML data
      */
     public function improveWithAi(Request $request, Span $span)
@@ -6307,11 +6335,22 @@ class SpanController extends Controller
                     'connections' => []
                 ];
             }
+
+            try {
+                $spanEffects = $yamlService->summariseSpanEffects($span, $validationResult['data'], $diff);
+            } catch (\Exception $e) {
+                Log::warning('Error summarising span effects', ['span_id' => $span->id, 'error' => $e->getMessage()]);
+                $spanEffects = [
+                    'updated' => [],
+                    'created' => [],
+                ];
+            }
             
             return response()->json([
                 'success' => true,
                 'impacts' => $impacts,
                 'diff' => $diff,
+                'span_effects' => $spanEffects,
                 'current_data' => $currentData,
                 'merged_data' => $mergedData,
                 'message' => 'Preview generated successfully'
@@ -6417,11 +6456,14 @@ class SpanController extends Controller
             ];
         }
 
-        // Compare date fields
+        // Compare date fields (normalise int/string so unchanged dates are not reported)
         $dateFields = ['start_year', 'start_month', 'start_day', 'end_year', 'end_month', 'end_day'];
         foreach ($dateFields as $field) {
             $current = $currentData[$field] ?? null;
             $merged = $mergedData[$field] ?? null;
+
+            $current = $current !== null && $current !== '' ? (int) $current : null;
+            $merged = $merged !== null && $merged !== '' ? (int) $merged : null;
             
             if ($current !== $merged) {
                 $diff['basic_fields'][] = [
@@ -6456,6 +6498,34 @@ class SpanController extends Controller
                     'action' => $current === null ? 'add' : ($merged === null ? 'remove' : 'update')
                 ];
             }
+        }
+
+        // Compare sources
+        $currentSources = $currentData['sources'] ?? [];
+        $mergedSources = $mergedData['sources'] ?? [];
+        if (!is_array($currentSources)) {
+            $currentSources = $currentSources ? [$currentSources] : [];
+        }
+        if (!is_array($mergedSources)) {
+            $mergedSources = $mergedSources ? [$mergedSources] : [];
+        }
+        $currentSources = array_values(array_filter($currentSources, fn ($s) => $s !== null && $s !== ''));
+        $mergedSources = array_values(array_filter($mergedSources, fn ($s) => $s !== null && $s !== ''));
+
+        $addedSources = array_values(array_diff($mergedSources, $currentSources));
+        $removedSources = array_values(array_diff($currentSources, $mergedSources));
+
+        if (!empty($addedSources)) {
+            $diff['sources'][] = [
+                'action' => 'add',
+                'sources' => $addedSources,
+            ];
+        }
+        if (!empty($removedSources)) {
+            $diff['sources'][] = [
+                'action' => 'remove',
+                'sources' => $removedSources,
+            ];
         }
 
         // Compare connections (database format - array of connection objects)

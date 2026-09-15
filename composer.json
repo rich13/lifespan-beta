@@ -6,6 +6,7 @@
     "license": "MIT",
     "require": {
         "php": "^8.2",
+        "anthropic-ai/sdk": "^0.40.0",
         "aws/aws-sdk-php": "^3.356",
         "doctrine/dbal": "^3.9",
         "guzzlehttp/guzzle": "^7.2",
@@ -19,8 +20,8 @@
         "laravel/telescope": "^5.4",
         "laravel/tinker": "^2.8",
         "league/flysystem-aws-s3-v3": "^3.29",
-        "mailersend/laravel-driver": "^2.0",
         "league/oauth1-client": "^1.11",
+        "mailersend/laravel-driver": "^2.0",
         "nonsoniyi/the-guardian-api-client": "^1.0",
         "openai-php/client": "^0.14.0",
         "predis/predis": "^2.2",

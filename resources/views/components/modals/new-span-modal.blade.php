@@ -211,83 +211,32 @@ $(document).ready(function() {
     let aiData = null;
     let selectedCreationMethod = null;
     let formData = {};
-    let isImproveMode = false;
     
     // Get timeless span types from the server
     const timelessSpanTypes = @json(\App\Models\SpanType::getTimelessTypes());
     
-    // Handle Improve button click
-    $('#improve-span-btn, #mobile-improve-span-btn').on('click', function() {
-        isImproveMode = true;
-        const spanName = $(this).data('span-name');
-        const spanType = $(this).data('span-type');
-        const spanId = $(this).data('span-id');
-        
-        // Store the span ID for improve operations
-        window.currentSpanId = spanId;
-        
-        // Prefill the form data
-        formData.name = spanName;
-        formData.type_id = spanType;
-        
-        // Update modal title
-        $('#newSpanModalLabel').html('<i class="bi bi-magic me-2 text-success"></i>Improve Span');
-        
-        // Fetch existing YAML for the span
-        if (spanId) {
-            $.ajax({
-                url: '{{ route("spans.yaml", ":spanId") }}'.replace(':spanId', spanId),
-                method: 'GET',
-                success: function(response) {
-                    if (response.success) {
-                        window.existingYaml = response.yaml_content;
-                    }
-                },
-                error: function() {
-                    console.warn('Failed to fetch existing YAML for span', spanId);
-                }
-            });
-        }
-        
-        // For all span types, skip directly to the creation method selection
-        // Show step 1 first to set up the form, then immediately go to step 2
-        showStep(1);
-        setTimeout(() => {
-            showStep(2);
-        }, 100);
-    });
-    
-    // Handle New button click (reset improve mode)
+    // Handle New button click
     $('#new-span-btn').on('click', function() {
-        isImproveMode = false;
         formData = {};
-        window.currentSpanId = null;
-        window.existingYaml = null;
         $('#newSpanModalLabel').html('<i class="bi bi-plus-circle me-2 text-primary"></i>Create New Span');
     });
     
     // Reset modal state when closed
     $('#newSpanModal').on('hidden.bs.modal', function() {
-        isImproveMode = false;
         currentStep = 1;
         aiData = null;
         selectedCreationMethod = null;
         formData = {};
-        window.currentSpanId = null;
-        window.existingYaml = null;
         $('#newSpanModalLabel').html('<i class="bi bi-plus-circle me-2 text-primary"></i>Create New Span');
     });
     
     // Global function to open modal with prefilled name
     window.openNewSpanModalWithName = function(name) {
         // Reset modal state
-        isImproveMode = false;
         currentStep = 1;
         aiData = null;
         selectedCreationMethod = null;
         formData = { name: name };
-        window.currentSpanId = null;
-        window.existingYaml = null;
         $('#newSpanModalLabel').html('<i class="bi bi-plus-circle me-2 text-primary"></i>Create New Span');
         
         // Show the modal and go to step 1
@@ -366,29 +315,29 @@ $(document).ready(function() {
         2: `
             <div class="text-center mb-3">
                 <div class="badge bg-primary mb-2">Step 2 of 3</div>
-                <h6 class="text-muted">${isImproveMode ? 'Improve Span' : 'Create Span'}</h6>
-                <p class="text-muted small">How would you like to ${isImproveMode ? 'improve' : 'create'} this ${formData.type_id || 'span'}?</p>
+                <h6 class="text-muted">Create Span</h6>
+                <p class="text-muted small">How would you like to create this ${formData.type_id || 'span'}?</p>
             </div>
             
             <div class="row g-3">
                 <div class="col-6">
                     <div class="card h-100 border-2" id="create-manual-card" 
-                         tabindex="2" role="button" aria-label="${isImproveMode ? 'Improve manually' : 'Create manually'} - fill in all details yourself"
+                         tabindex="2" role="button" aria-label="Create manually - fill in all details yourself"
                          onkeydown="if(event.key === 'Enter' || event.key === ' ') { event.preventDefault(); $(this).click(); }">
                         <div class="card-body text-center p-3">
                             <i class="bi bi-pencil-square text-primary mb-2" style="font-size: 1.5rem;"></i>
-                            <h6 class="card-title mb-1">${isImproveMode ? 'Improve Manually' : 'Create Manually'}</h6>
+                            <h6 class="card-title mb-1">Create Manually</h6>
                             <p class="card-text text-muted small mb-0">Fill in all the details yourself</p>
                         </div>
                     </div>
                 </div>
                 <div class="col-6">
                     <div class="card h-100 border-2" id="create-ai-card" 
-                         tabindex="1" role="button" aria-label="${isImproveMode ? 'Use AI to improve' : 'Use AI to create'} - AI will research and fill in details" autofocus
+                         tabindex="1" role="button" aria-label="Use AI to create - AI will research and fill in details" autofocus
                          onkeydown="if(event.key === 'Enter' || event.key === ' ') { event.preventDefault(); $(this).click(); }">
                         <div class="card-body text-center p-3">
                             <i class="bi bi-robot text-success mb-2" style="font-size: 1.5rem;"></i>
-                            <h6 class="card-title mb-1">${isImproveMode ? 'Use AI to Improve' : 'Use AI to Create'}</h6>
+                            <h6 class="card-title mb-1">Use AI to Create</h6>
                             <p class="card-text text-muted small mb-0">AI will research and fill in details</p>
                         </div>
                     </div>
@@ -560,23 +509,6 @@ $(document).ready(function() {
                 <i class="bi bi-check-circle me-2"></i>
                 <strong>Span created successfully!</strong>
             </div>
-        `,
-        
-        8: `
-            <div class="text-center mb-3">
-                <div class="badge bg-info mb-2">Preview Changes</div>
-                <h6 class="text-muted">Review AI Improvements</h6>
-                <p class="text-muted small">Review the changes that will be made to your span before applying them.</p>
-            </div>
-            
-            <div id="preview-content">
-                <div class="text-center">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Loading preview...</span>
-                    </div>
-                    <p class="mt-2 text-muted">Generating preview...</p>
-                </div>
-            </div>
         `
     };
     
@@ -636,15 +568,6 @@ $(document).ready(function() {
             <button type="button" class="btn btn-primary px-4" id="view-span-btn" 
                     aria-label="View the newly created span" tabindex="1" autofocus>
                 <i class="bi bi-eye me-1"></i>View Span
-            </button>
-        `,
-        
-        8: `
-            <button type="button" class="btn btn-outline-secondary me-2" id="cancel-improve-btn">
-                <i class="bi bi-x-circle me-1"></i>Cancel
-            </button>
-            <button type="button" class="btn btn-primary px-4" id="apply-improve-btn" tabindex="1" autofocus>
-                <i class="bi bi-check-circle me-1"></i>Apply Improvements
             </button>
         `
     };
@@ -1054,95 +977,52 @@ $(document).ready(function() {
                 const btn = $(this);
                 const originalText = btn.html();
                 btn.prop('disabled', true);
+                btn.html('<span class="spinner-border spinner-border-sm me-1"></span>Creating...');
                 
-                // Determine if we're in improve mode
-                if (isImproveMode && window.currentSpanId) {
-                    btn.html('<span class="spinner-border spinner-border-sm me-1"></span>Generating Preview...');
-                    
-                    // Generate preview of changes
-                    console.log('Preview - sending ai_yaml:', aiData.yaml);
-                    console.log('Preview - span ID:', window.currentSpanId);
-                    
-                    $.ajax({
-                        url: '{{ route("spans.improve.preview", ":spanId") }}'.replace(':spanId', window.currentSpanId),
-                        method: 'POST',
-                        data: {
-                            ai_yaml: aiData.yaml,
-                            _token: $('meta[name="csrf-token"]').attr('content')
-                        },
-                        success: function(response) {
-                            console.log('Preview - success response:', response);
-                            if (response.success) {
-                                window.previewData = response;
-                                showStep(8); // Show preview step
-                            } else {
-                                // Reset button state
-                                btn.prop('disabled', false);
-                                btn.html(originalText);
-                                alert('Failed to generate preview: ' + (response.error || 'Unknown error'));
-                            }
-                        },
-                        error: function(xhr) {
-                            // Reset button state
-                            btn.prop('disabled', false);
-                            btn.html(originalText);
-                            console.error('Preview - error response:', xhr.responseJSON);
-                            console.error('Preview - status:', xhr.status);
-                            let errorMessage = 'Failed to generate preview';
-                            if (xhr.responseJSON && xhr.responseJSON.error) {
-                                errorMessage += ': ' + xhr.responseJSON.error;
-                            }
-                            alert(errorMessage);
-                        }
-                    });
-                } else {
-                    btn.html('<span class="spinner-border spinner-border-sm me-1"></span>Creating...');
-                    
-                    // Create new span with AI data
-                    const aiCreateData = {
-                        name: formData.name,
-                        type_id: formData.type_id,
-                        state: 'placeholder',
-                        ai_yaml: aiData.yaml,
-                        _token: $('meta[name="csrf-token"]').attr('content')
-                    };
-                    
-                    if (formData.subtype) {
-                        aiCreateData['metadata[subtype]'] = formData.subtype;
-                    }
-                    
-                    $.ajax({
-                        url: '{{ route("spans.store") }}',
-                        method: 'POST',
-                        data: aiCreateData,
-                        headers: {
-                            'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content'),
-                            'Accept': 'application/json'
-                        },
-                        success: function(response) {
-                            if (response.merge_available) {
-                                window.mergeData = response;
-                                showStep(6);
-                                return;
-                            }
-                            showCreationSuccess(response);
-                        },
-                        error: function(xhr) {
-                            // Reset button state
-                            btn.prop('disabled', false);
-                            btn.html(originalText);
-                            
-                            if (xhr.status === 419) {
-                                console.warn('419 CSRF token mismatch - refreshing token');
-                                alert('Session expired. Please try again.');
-                                showStep(5);
-                            } else {
-                                showStep(5);
-                                alert('Failed to create span with AI data. Please try again.');
-                            }
-                        }
-                    });
+                // Create new span with AI data
+                const aiCreateData = {
+                    name: formData.name,
+                    type_id: formData.type_id,
+                    state: 'placeholder',
+                    ai_yaml: aiData.yaml,
+                    _token: $('meta[name="csrf-token"]').attr('content')
+                };
+                
+                if (formData.subtype) {
+                    aiCreateData['metadata[subtype]'] = formData.subtype;
                 }
+                
+                $.ajax({
+                    url: '{{ route("spans.store") }}',
+                    method: 'POST',
+                    data: aiCreateData,
+                    headers: {
+                        'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content'),
+                        'Accept': 'application/json'
+                    },
+                    success: function(response) {
+                        if (response.merge_available) {
+                            window.mergeData = response;
+                            showStep(6);
+                            return;
+                        }
+                        showCreationSuccess(response);
+                    },
+                    error: function(xhr) {
+                        // Reset button state
+                        btn.prop('disabled', false);
+                        btn.html(originalText);
+                        
+                        if (xhr.status === 419) {
+                            console.warn('419 CSRF token mismatch - refreshing token');
+                            alert('Session expired. Please try again.');
+                            showStep(5);
+                        } else {
+                            showStep(5);
+                            alert('Failed to create span with AI data. Please try again.');
+                        }
+                    }
+                });
             });
         }
         if (step === 6) {
@@ -1212,57 +1092,6 @@ $(document).ready(function() {
                 }
             });
         }
-        
-        if (step === 8) {
-            // Step 8: Preview improvements
-            if (window.previewData) {
-                displayPreviewContent(window.previewData);
-            }
-            
-            $('#cancel-improve-btn').on('click', function() {
-                showStep(5);
-            });
-            
-            $('#apply-improve-btn').on('click', function() {
-                if (!aiData || !window.currentSpanId) return;
-                
-                // Show loading state
-                const btn = $(this);
-                const originalText = btn.html();
-                btn.prop('disabled', true);
-                btn.html('<span class="spinner-border spinner-border-sm me-1"></span>Applying...');
-                
-                // Apply the improvements
-                $.ajax({
-                    url: '{{ route("spans.improve", ":spanId") }}'.replace(':spanId', window.currentSpanId),
-                    method: 'POST',
-                    data: {
-                        ai_yaml: aiData.yaml,
-                        _token: $('meta[name="csrf-token"]').attr('content')
-                    },
-                    success: function(response) {
-                        if (response.success) {
-                            showCreationSuccess(response);
-                        } else {
-                            // Reset button state
-                            btn.prop('disabled', false);
-                            btn.html(originalText);
-                            alert('Failed to apply improvements: ' + (response.error || 'Unknown error'));
-                        }
-                    },
-                    error: function(xhr) {
-                        // Reset button state
-                        btn.prop('disabled', false);
-                        btn.html(originalText);
-                        let errorMessage = 'Failed to apply improvements';
-                        if (xhr.responseJSON && xhr.responseJSON.error) {
-                            errorMessage += ': ' + xhr.responseJSON.error;
-                        }
-                        alert(errorMessage);
-                    }
-                });
-            });
-        }
     }
     
     function updateStartYearRequirement() {
@@ -1291,19 +1120,12 @@ $(document).ready(function() {
         const spanType = formData.type_id;
         $('#ai-span-name').text(name);
         
-        // Determine if we're in improve mode and have existing YAML
-        const isImprove = isImproveMode && window.existingYaml;
-        const url = isImprove ? '{{ route("ai-yaml-generator.improve") }}' : '{{ route("ai-yaml-generator.generate") }}';
+        const url = '{{ route("ai-yaml-generator.generate") }}';
         const data = {
             name: name,
             span_type: spanType,
             _token: $('meta[name="csrf-token"]').attr('content')
         };
-        
-        if (isImprove) {
-            data.yaml = window.existingYaml;
-            console.log('Improve mode - sending existing YAML:', window.existingYaml);
-        }
         
         console.log('AI Process - sending data:', data);
         console.log('AI Process - URL:', url);
@@ -1451,138 +1273,6 @@ $(document).ready(function() {
         }
         
         return '<p class="text-muted">Span created successfully</p>';
-    }
-    
-    function displayPreviewContent(previewData) {
-        const { impacts, diff } = previewData;
-        let content = '';
-        
-        // Display impacts summary
-        if (impacts && impacts.length > 0) {
-            content += '<div class="card mb-3">';
-            content += '<div class="card-header"><h6 class="mb-0"><i class="bi bi-info-circle me-2"></i>Summary of Changes</h6></div>';
-            content += '<div class="card-body p-3">';
-            
-            impacts.forEach(impact => {
-                const iconClass = impact.type === 'warning' ? 'bi-exclamation-triangle text-warning' : 'bi-info-circle text-info';
-                const indent = impact.indent ? 'ms-3' : '';
-                content += `<div class="d-flex align-items-start ${indent} mb-1">`;
-                content += `<i class="bi ${iconClass} me-2 mt-1"></i>`;
-                content += `<small>${impact.message}</small>`;
-                content += '</div>';
-            });
-            
-            content += '</div></div>';
-        }
-        
-        // Display detailed diff
-        if (diff) {
-            content += '<div class="card">';
-            content += '<div class="card-header"><h6 class="mb-0"><i class="bi bi-list-ul me-2"></i>Detailed Changes</h6></div>';
-            content += '<div class="card-body p-3">';
-            
-            // Basic fields
-            if (diff.basic_fields && diff.basic_fields.length > 0) {
-                content += '<h6 class="text-muted mb-2">Basic Information</h6>';
-                diff.basic_fields.forEach(field => {
-                    const actionIcon = field.action === 'add' ? 'bi-plus-circle text-success' : 
-                                     field.action === 'remove' ? 'bi-dash-circle text-danger' : 
-                                     'bi-arrow-right text-primary';
-                    content += `<div class="d-flex align-items-start mb-2">`;
-                    content += `<i class="bi ${actionIcon} me-2 mt-1"></i>`;
-                    content += `<div class="flex-grow-1">`;
-                    content += `<strong>${field.field}:</strong> `;
-                    if (field.action === 'add') {
-                        content += `<span class="text-success">${field.new || 'null'}</span>`;
-                    } else if (field.action === 'remove') {
-                        content += `<span class="text-danger">${field.current || 'null'}</span> <i class="bi bi-arrow-right"></i> <span class="text-muted">removed</span>`;
-                    } else {
-                        content += `<span class="text-danger">${field.current || 'null'}</span> <i class="bi bi-arrow-right"></i> <span class="text-success">${field.new || 'null'}</span>`;
-                    }
-                    content += '</div></div>';
-                });
-            }
-            
-            // Metadata
-            if (diff.metadata && diff.metadata.length > 0) {
-                content += '<h6 class="text-muted mb-2 mt-3">Metadata</h6>';
-                diff.metadata.forEach(item => {
-                    const actionIcon = item.action === 'add' ? 'bi-plus-circle text-success' : 
-                                     item.action === 'remove' ? 'bi-dash-circle text-danger' : 
-                                     'bi-arrow-right text-primary';
-                    content += `<div class="d-flex align-items-start mb-2">`;
-                    content += `<i class="bi ${actionIcon} me-2 mt-1"></i>`;
-                    content += `<div class="flex-grow-1">`;
-                    content += `<strong>${item.key}:</strong> `;
-                    if (item.action === 'add') {
-                        content += `<span class="text-success">${item.new || 'null'}</span>`;
-                    } else if (item.action === 'remove') {
-                        content += `<span class="text-danger">${item.current || 'null'}</span> <i class="bi bi-arrow-right"></i> <span class="text-muted">removed</span>`;
-                    } else {
-                        content += `<span class="text-danger">${item.current || 'null'}</span> <i class="bi bi-arrow-right"></i> <span class="text-success">${item.new || 'null'}</span>`;
-                    }
-                    content += '</div></div>';
-                });
-            }
-            
-            // Sources
-            if (diff.sources && diff.sources.length > 0) {
-                content += '<h6 class="text-muted mb-2 mt-3">Sources</h6>';
-                diff.sources.forEach(sourceGroup => {
-                    if (sourceGroup.action === 'add') {
-                        content += `<div class="d-flex align-items-start mb-2">`;
-                        content += `<i class="bi bi-plus-circle text-success me-2 mt-1"></i>`;
-                        content += `<div class="flex-grow-1">`;
-                        content += `<strong>Adding sources:</strong><br>`;
-                        sourceGroup.sources.forEach(source => {
-                            content += `<small class="text-success">${source}</small><br>`;
-                        });
-                        content += '</div></div>';
-                    } else if (sourceGroup.action === 'remove') {
-                        content += `<div class="d-flex align-items-start mb-2">`;
-                        content += `<i class="bi bi-dash-circle text-danger me-2 mt-1"></i>`;
-                        content += `<div class="flex-grow-1">`;
-                        content += `<strong>Removing sources:</strong><br>`;
-                        sourceGroup.sources.forEach(source => {
-                            content += `<small class="text-danger">${source}</small><br>`;
-                        });
-                        content += '</div></div>';
-                    }
-                });
-            }
-            
-            // Connections
-            if (diff.connections && diff.connections.length > 0) {
-                content += '<h6 class="text-muted mb-2 mt-3">Connections</h6>';
-                diff.connections.forEach(connectionGroup => {
-                    if (connectionGroup.added && connectionGroup.added.length > 0) {
-                        content += `<div class="d-flex align-items-start mb-2">`;
-                        content += `<i class="bi bi-plus-circle text-success me-2 mt-1"></i>`;
-                        content += `<div class="flex-grow-1">`;
-                        content += `<strong>Adding ${connectionGroup.type} connections:</strong><br>`;
-                        connectionGroup.added.forEach(name => {
-                            content += `<small class="text-success">${name}</small><br>`;
-                        });
-                        content += '</div></div>';
-                    }
-                    
-                    if (connectionGroup.removed && connectionGroup.removed.length > 0) {
-                        content += `<div class="d-flex align-items-start mb-2">`;
-                        content += `<i class="bi bi-dash-circle text-danger me-2 mt-1"></i>`;
-                        content += `<div class="flex-grow-1">`;
-                        content += `<strong>Removing ${connectionGroup.type} connections:</strong><br>`;
-                        connectionGroup.removed.forEach(name => {
-                            content += `<small class="text-danger">${name}</small><br>`;
-                        });
-                        content += '</div></div>';
-                    }
-                });
-            }
-            
-            content += '</div></div>';
-        }
-        
-        $('#preview-content').html(content);
     }
     
     // Initialize modal

@@ -35,6 +35,11 @@ return [
         'api_key' => env('OPENAI_API_KEY'),
     ],
 
+    'anthropic' => [
+        'api_key' => env('ANTHROPIC_API_KEY'),
+        'model' => env('ANTHROPIC_MODEL', 'claude-sonnet-5'),
+    ],
+
     'slack' => [
         // Incoming Webhook (current setup)
         'webhook_url' => env('SLACK_WEBHOOK_URL'),

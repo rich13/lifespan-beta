@@ -308,8 +308,9 @@ Route::post('/{span}/spanner/validate-connection', [SpanController::class, 'vali
 Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadsheetChanges'])->name('spans.spanner-preview')->middleware('timeout.prevention');
             Route::post('/{span}/editor/validate', [SpanController::class, 'validateYaml'])->name('spans.yaml-validate')->middleware('timeout.prevention');
             Route::post('/{span}/editor/apply', [SpanController::class, 'applyYaml'])->name('spans.yaml-apply')->middleware('timeout.prevention');
+            Route::get('/{span}/improve', [SpanController::class, 'improve'])->name('spans.improve')->middleware('timeout.prevention');
             Route::post('/{span}/improve/preview', [SpanController::class, 'previewImprovement'])->name('spans.improve.preview')->middleware('timeout.prevention');
-            Route::post('/{span}/improve', [SpanController::class, 'improveWithAi'])->name('spans.improve')->middleware('timeout.prevention');
+            Route::post('/{span}/improve', [SpanController::class, 'improveWithAi'])->name('spans.improve.apply')->middleware('timeout.prevention');
             Route::put('/{span}', [SpanController::class, 'update'])->name('spans.update');
             Route::put('/{span}/notes', function (Request $request, \App\Models\Span $span) {
                 $user = auth()->user();

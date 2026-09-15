@@ -32,10 +32,10 @@ $(document).ready(function() {
         if ((e.metaKey || e.ctrlKey) && e.key === 'i') {
             e.preventDefault(); // Prevent any potential conflicts
             
-            // Check if user is authenticated and improve button exists
+            // Check if user is authenticated and improve link exists
             const improveSpanBtn = document.getElementById('improve-span-btn');
-            if (improveSpanBtn) {
-                improveSpanBtn.click();
+            if (improveSpanBtn && improveSpanBtn.href) {
+                window.location.href = improveSpanBtn.href;
             }
         }
     });

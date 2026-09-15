@@ -25,15 +25,12 @@ use App\Services\AiYamlCreatorService;
             @endif
             
             @if(request()->routeIs('spans.show') && $span && AiYamlCreatorService::supportsAiImprovement($span->type_id))
-                <button type="button" class="btn btn-success" 
-                        data-bs-toggle="modal" data-bs-target="#newSpanModal" 
-                        data-bs-dismiss="offcanvas"
-                        id="mobile-improve-span-btn"
-                        data-span-name="{{ $span->name }}"
-                        data-span-type="{{ $span->type_id }}"
-                        data-span-id="{{ $span->id }}">
+                <a href="{{ route('spans.improve', $span) }}"
+                   class="btn btn-success"
+                   data-bs-dismiss="offcanvas"
+                   id="mobile-improve-span-btn">
                     <i class="bi bi-magic me-2"></i>Improve This Span
-                </button>
+                </a>
             @endif
         </div>
     @else
@@ -55,17 +52,14 @@ use App\Services\AiYamlCreatorService;
                 @endif
                 
                 @if(request()->routeIs('spans.show') && $span && AiYamlCreatorService::supportsAiImprovement($span->type_id))
-                    <button type="button" class="btn btn-sm btn-success" 
-                        data-bs-toggle="modal" data-bs-target="#newSpanModal" 
-                        id="improve-span-btn"
-                        data-span-name="{{ $span->name }}"
-                        data-span-type="{{ $span->type_id }}"
-                        data-span-id="{{ $span->id }}"
-                        title="Improve this span with AI data (⌘I)">
+                    <a href="{{ route('spans.improve', $span) }}"
+                       class="btn btn-sm btn-success"
+                       id="improve-span-btn"
+                       title="Improve this span with AI data (⌘I)">
                         <i class="bi bi-magic me-1"></i>Improve
-                    </button>
+                    </a>
                 @endif
             </div>
         </div>
     @endif
-@endauth 
+@endauth

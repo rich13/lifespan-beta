@@ -7,6 +7,7 @@ use App\Models\Connection;
 use App\Models\ConnectionType;
 use App\Models\SpanType;
 use App\Services\Import\Connections\ConnectionImporter;
+use App\Support\BootstrapIconMap;
 use Symfony\Component\Yaml\Yaml;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
@@ -1276,6 +1277,9 @@ class YamlSpanService
         if (isset($data['sources']) && is_array($data['sources']) && empty($data['sources'])) {
             $data['sources'] = null;
         }
+
+        // Convert discrete date parts to YAML start/end before schema validation
+        $this->normalizeDiscreteDateFieldsToYaml($data);
         
         // Normalize connections - AI sometimes forgets the dash syntax for YAML lists
         if (isset($data['connections']) && is_array($data['connections'])) {
@@ -1293,10 +1297,71 @@ class YamlSpanService
                             'original_keys' => $keys
                         ]);
                         $data['connections'][$connectionType] = [$connectionList];
+                        $connectionList = $data['connections'][$connectionType];
                     }
+
+                    foreach ($connectionList as &$connection) {
+                        if (is_array($connection)) {
+                            $this->normalizeDiscreteDateFieldsToYaml($connection);
+                        }
+                    }
+                    unset($connection);
                 }
             }
+            unset($connectionList);
         }
+    }
+
+    /**
+     * Convert start_year/month/day (and end_*) into YAML start/end strings, then remove the discrete fields.
+     * AI (and some internal serialisations) may emit database-style date parts instead of YAML dates.
+     */
+    private function normalizeDiscreteDateFieldsToYaml(array &$data): void
+    {
+        $hasDiscreteStart = array_key_exists('start_year', $data)
+            || array_key_exists('start_month', $data)
+            || array_key_exists('start_day', $data);
+
+        if ($hasDiscreteStart) {
+            if (!isset($data['start']) || $data['start'] === null || $data['start'] === '') {
+                $year = $this->nullableInt($data['start_year'] ?? null);
+                $month = $this->nullableInt($data['start_month'] ?? null);
+                $day = $this->nullableInt($data['start_day'] ?? null);
+                if ($year !== null) {
+                    $data['start'] = $this->formatDate($year, $month, $day);
+                }
+            }
+            unset($data['start_year'], $data['start_month'], $data['start_day']);
+        }
+
+        $hasDiscreteEnd = array_key_exists('end_year', $data)
+            || array_key_exists('end_month', $data)
+            || array_key_exists('end_day', $data);
+
+        if ($hasDiscreteEnd) {
+            if (!isset($data['end']) || $data['end'] === null || $data['end'] === '') {
+                $year = $this->nullableInt($data['end_year'] ?? null);
+                $month = $this->nullableInt($data['end_month'] ?? null);
+                $day = $this->nullableInt($data['end_day'] ?? null);
+                if ($year !== null) {
+                    $data['end'] = $this->formatDate($year, $month, $day);
+                }
+            }
+            unset($data['end_year'], $data['end_month'], $data['end_day']);
+        }
+    }
+
+    private function nullableInt(mixed $value): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if (is_numeric($value)) {
+            return (int) $value;
+        }
+
+        return null;
     }
     
     private function filterUnsupportedConnections(array &$data): void
@@ -1914,6 +1979,605 @@ class YamlSpanService
         }
         
         return $impacts;
+    }
+
+    /**
+     * Summarise which existing spans will be updated/linked and which new spans will be created.
+     *
+     * @return array{updated: array<int, array>, created: array<int, array>}
+     */
+    public function summariseSpanEffects(Span $subject, array $data, array $diff = []): array
+    {
+        $updated = [];
+        $created = [];
+        $seenKeys = [];
+
+        $subjectChanges = $this->summariseSubjectDiffChanges($diff);
+        $updated[] = [
+            'id' => $subject->id,
+            'name' => $subject->name,
+            'type' => $subject->type_id,
+            'url' => route('spans.show', $subject),
+            'action' => 'update',
+            'role' => 'subject',
+            'connection_type' => null,
+            'changes' => $subjectChanges,
+            'card' => $this->buildSubjectEffectCard($subject),
+        ];
+        $seenKeys[$subject->name . '|' . $subject->type_id] = true;
+
+        $currentConnections = $this->spanToArraySafe($subject)['connections'] ?? [];
+        if (!is_array($currentConnections)) {
+            $currentConnections = [];
+        }
+
+        $connections = $data['connections'] ?? [];
+        if (is_array($connections)) {
+            foreach ($connections as $connectionType => $connectionList) {
+                if (!is_array($connectionList)) {
+                    continue;
+                }
+
+                foreach ($connectionList as $connection) {
+                    if (!is_array($connection)) {
+                        continue;
+                    }
+
+                    $matchingCurrent = $this->findMatchingCurrentConnection(
+                        $connection,
+                        $currentConnections
+                    );
+
+                    $this->collectSpanEffectFromConnection(
+                        $connection,
+                        (string) $connectionType,
+                        $updated,
+                        $created,
+                        $seenKeys,
+                        $matchingCurrent,
+                        $subject
+                    );
+
+                    $nestedConnections = $connection['nested_connections'] ?? [];
+                    if (!is_array($nestedConnections)) {
+                        continue;
+                    }
+
+                    foreach ($nestedConnections as $nested) {
+                        if (!is_array($nested)) {
+                            continue;
+                        }
+
+                        $nestedAsConnection = [
+                            'name' => $nested['target_name'] ?? null,
+                            'type' => $nested['target_type'] ?? null,
+                            'id' => $nested['target_id'] ?? null,
+                            'start' => $nested['start'] ?? null,
+                            'end' => $nested['end'] ?? null,
+                            'metadata' => $nested['metadata'] ?? null,
+                        ];
+
+                        $this->collectSpanEffectFromConnection(
+                            $nestedAsConnection,
+                            (string) ($nested['type'] ?? $connectionType),
+                            $updated,
+                            $created,
+                            $seenKeys,
+                            null,
+                            $subject
+                        );
+                    }
+                }
+            }
+        }
+
+        return [
+            'updated' => array_values($updated),
+            'created' => array_values($created),
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $connection
+     * @param array<int, array> $updated
+     * @param array<int, array> $created
+     * @param array<string, bool> $seenKeys
+     * @param array<string, mixed>|null $matchingCurrentConnection
+     */
+    private function collectSpanEffectFromConnection(
+        array $connection,
+        string $connectionType,
+        array &$updated,
+        array &$created,
+        array &$seenKeys,
+        ?array $matchingCurrentConnection = null,
+        ?Span $subject = null
+    ): void {
+        $name = isset($connection['name']) ? trim((string) $connection['name']) : '';
+        $type = isset($connection['type']) ? trim((string) $connection['type']) : '';
+
+        if ($name === '' || $type === '' || !$subject) {
+            return;
+        }
+
+        $key = $name . '|' . $type . '|' . $connectionType;
+        if (isset($seenKeys[$key])) {
+            return;
+        }
+        $seenKeys[$key] = true;
+
+        $existing = null;
+        if (!empty($connection['id'])) {
+            $existing = Span::find($connection['id']);
+        }
+        if (!$existing) {
+            $existing = Span::where('name', $name)->where('type_id', $type)->first();
+        }
+
+        $action = $existing
+            ? ($matchingCurrentConnection ? 'update' : 'link')
+            : 'create';
+        $changes = $this->summariseConnectionTargetChanges(
+            $connection,
+            $connectionType,
+            !$existing,
+            $matchingCurrentConnection
+        );
+        $card = $this->buildConnectionEffectCard(
+            $subject,
+            $connection,
+            $connectionType,
+            $action,
+            $existing,
+            $name,
+            $type,
+            $matchingCurrentConnection
+        );
+
+        if ($existing) {
+            $updated[] = [
+                'id' => $existing->id,
+                'name' => $existing->name,
+                'type' => $existing->type_id,
+                'url' => route('spans.show', $existing),
+                'action' => $action,
+                'role' => 'connection_target',
+                'connection_type' => $connectionType,
+                'changes' => $changes,
+                'card' => $card,
+            ];
+            return;
+        }
+
+        $created[] = [
+            'id' => null,
+            'name' => $name,
+            'type' => $type,
+            'url' => null,
+            'action' => 'create',
+            'role' => 'connection_target',
+            'connection_type' => $connectionType,
+            'changes' => $changes,
+            'card' => $card,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildSubjectEffectCard(Span $subject): array
+    {
+        return [
+            'kind' => 'span',
+            'action' => 'update',
+            'span' => [
+                'id' => $subject->id,
+                'name' => $subject->name,
+                'type' => $subject->type_id,
+                'state' => $subject->state,
+                'url' => route('spans.show', $subject),
+                'icon' => BootstrapIconMap::suffix('span', $subject->type_id),
+            ],
+            'start' => $this->buildDateCardPartsFromComponents(
+                $subject->start_year,
+                $subject->start_month,
+                $subject->start_day
+            ),
+            'end' => $this->buildDateCardPartsFromComponents(
+                $subject->end_year,
+                $subject->end_month,
+                $subject->end_day
+            ),
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $connection
+     * @param array<string, mixed>|null $matchingCurrentConnection
+     * @return array<string, mixed>
+     */
+    private function buildConnectionEffectCard(
+        Span $subject,
+        array $connection,
+        string $connectionType,
+        string $action,
+        ?Span $objectSpan,
+        string $objectName,
+        string $objectType,
+        ?array $matchingCurrentConnection
+    ): array {
+        $connectionTypeModel = ConnectionType::find($connectionType);
+        $predicateLabel = $connectionTypeModel?->forward_predicate
+            ?? str_replace('_', ' ', $connectionType);
+        $predicateSlug = str_replace(' ', '-', $predicateLabel);
+
+        $start = $this->buildDateCardParts($this->extractConnectionDateString($connection, 'start'));
+        $end = $this->buildDateCardParts($this->extractConnectionDateString($connection, 'end'));
+
+        $notes = [];
+        if ($start === null) {
+            $notes[] = 'No dates found for this connection';
+        }
+
+        if ($matchingCurrentConnection) {
+            $currentStart = $this->extractConnectionDateString($matchingCurrentConnection, 'start');
+            $currentEnd = $this->extractConnectionDateString($matchingCurrentConnection, 'end');
+            $newStart = $this->extractConnectionDateString($connection, 'start');
+            $newEnd = $this->extractConnectionDateString($connection, 'end');
+
+            if ($this->normalizeDateForComparison($newStart) !== $this->normalizeDateForComparison($currentStart)
+                && ($newStart !== null || $currentStart !== null)
+            ) {
+                $notes[] = 'Start: '
+                    . $this->formatConnectionDateLabel($currentStart)
+                    . ' → '
+                    . $this->formatConnectionDateLabel($newStart);
+            }
+            if ($this->normalizeDateForComparison($newEnd) !== $this->normalizeDateForComparison($currentEnd)
+                && ($newEnd !== null || $currentEnd !== null)
+            ) {
+                $notes[] = 'End: '
+                    . $this->formatConnectionDateLabel($currentEnd)
+                    . ' → '
+                    . $this->formatConnectionDateLabel($newEnd);
+            }
+        }
+
+        $metadata = $connection['metadata'] ?? null;
+        if (is_array($metadata) && !empty($metadata)) {
+            foreach ($metadata as $key => $value) {
+                $notes[] = 'Metadata ' . $key . ': ' . $this->formatDiffValueForSummary($value);
+            }
+        }
+
+        return [
+            'kind' => 'connection',
+            'action' => $action,
+            'subject' => [
+                'id' => $subject->id,
+                'name' => $subject->name,
+                'type' => $subject->type_id,
+                'state' => $subject->state,
+                'url' => route('spans.show', $subject),
+            ],
+            'predicate' => [
+                'type_id' => $connectionType,
+                'label' => $predicateLabel,
+                'icon' => BootstrapIconMap::suffix('connection', $connectionType),
+                'url' => route('spans.connections', [
+                    'subject' => $subject,
+                    'predicate' => $predicateSlug,
+                ]),
+            ],
+            'object' => [
+                'id' => $objectSpan?->id,
+                'name' => $objectSpan?->name ?? $objectName,
+                'type' => $objectSpan?->type_id ?? $objectType,
+                'state' => $objectSpan?->state ?? 'placeholder',
+                'url' => $objectSpan ? route('spans.show', $objectSpan) : null,
+            ],
+            'start' => $start,
+            'end' => $end,
+            'has_dates' => $start !== null,
+            'date_preposition' => in_array($connectionType, [
+                'created', 'died', 'born', 'started', 'ended', 'released', 'published',
+            ], true) ? 'on' : 'from',
+            'notes' => $notes,
+        ];
+    }
+
+    /**
+     * @return array{label: string, link: string}|null
+     */
+    private function buildDateCardParts(?string $date): ?array
+    {
+        if ($date === null || $date === '') {
+            return null;
+        }
+
+        try {
+            $parsed = $this->parseDate($date);
+        } catch (\InvalidArgumentException) {
+            return [
+                'label' => (string) $date,
+                'link' => (string) $date,
+            ];
+        }
+
+        return $this->buildDateCardPartsFromComponents(
+            $parsed['year'] ?? null,
+            $parsed['month'] ?? null,
+            $parsed['day'] ?? null
+        );
+    }
+
+    /**
+     * @return array{label: string, link: string}|null
+     */
+    private function buildDateCardPartsFromComponents(
+        $year,
+        $month = null,
+        $day = null
+    ): ?array {
+        if ($year === null || $year === '' || (int) $year <= 0) {
+            return null;
+        }
+
+        $year = (int) $year;
+        $month = $month !== null && $month !== '' ? (int) $month : null;
+        $day = $day !== null && $day !== '' ? (int) $day : null;
+
+        $span = new Span();
+        $label = $span->formatDateForDisplay($year, $month, $day);
+        if ($label === '') {
+            return null;
+        }
+
+        if ($month && $day) {
+            $link = sprintf('%04d-%02d-%02d', $year, $month, $day);
+        } elseif ($month) {
+            $link = sprintf('%04d-%02d', $year, $month);
+        } else {
+            $link = (string) $year;
+        }
+
+        return [
+            'label' => $label,
+            'link' => $link,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $connection
+     * @param array<string, mixed>|null $existingConnection
+     * @return array<int, string>
+     */
+    private function summariseConnectionTargetChanges(
+        array $connection,
+        string $connectionType,
+        bool $isNewSpan,
+        ?array $existingConnection = null
+    ): array {
+        $changes = [];
+
+        if ($isNewSpan) {
+            $changes[] = "Will be created and linked via {$connectionType}";
+        } elseif ($existingConnection) {
+            $changes[] = "Existing {$connectionType} connection will be updated";
+        } else {
+            $changes[] = "Will be linked via {$connectionType}";
+        }
+
+        $newStart = $this->extractConnectionDateString($connection, 'start');
+        $newEnd = $this->extractConnectionDateString($connection, 'end');
+        $currentStart = $existingConnection
+            ? $this->extractConnectionDateString($existingConnection, 'start')
+            : null;
+        $currentEnd = $existingConnection
+            ? $this->extractConnectionDateString($existingConnection, 'end')
+            : null;
+
+        $hasExplicitEndKey = array_key_exists('end', $connection)
+            || ($existingConnection !== null && array_key_exists('end', $existingConnection));
+
+        $dateLines = [];
+
+        if ($existingConnection) {
+            if ($this->normalizeDateForComparison($newStart) !== $this->normalizeDateForComparison($currentStart)) {
+                $dateLines[] = 'Start: '
+                    . $this->formatConnectionDateLabel($currentStart)
+                    . ' → '
+                    . $this->formatConnectionDateLabel($newStart);
+            } elseif ($newStart !== null) {
+                $dateLines[] = 'Start: ' . $this->formatConnectionDateLabel($newStart);
+            }
+
+            if ($this->normalizeDateForComparison($newEnd) !== $this->normalizeDateForComparison($currentEnd)) {
+                $dateLines[] = 'End: '
+                    . $this->formatConnectionDateLabel($currentEnd)
+                    . ' → '
+                    . $this->formatConnectionDateLabel($newEnd);
+            } elseif ($newEnd !== null || ($hasExplicitEndKey && $newStart !== null)) {
+                $dateLines[] = 'End: ' . $this->formatConnectionDateLabel($newEnd);
+            }
+        } else {
+            if ($newStart !== null) {
+                $dateLines[] = 'Start: ' . $this->formatConnectionDateLabel($newStart);
+            }
+            if ($newEnd !== null || ($hasExplicitEndKey && $newStart !== null)) {
+                $dateLines[] = 'End: ' . $this->formatConnectionDateLabel($newEnd);
+            }
+        }
+
+        if (empty($dateLines)) {
+            $changes[] = 'No dates found for this connection';
+        } else {
+            array_push($changes, ...$dateLines);
+        }
+
+        $metadata = $connection['metadata'] ?? null;
+        if (is_array($metadata) && !empty($metadata)) {
+            foreach ($metadata as $key => $value) {
+                $changes[] = 'Metadata ' . $key . ': ' . $this->formatDiffValueForSummary($value);
+            }
+        }
+
+        return $changes;
+    }
+
+    /**
+     * @param array<string, mixed> $connection
+     */
+    private function extractConnectionDateString(array $connection, string $which): ?string
+    {
+        if ($which === 'start') {
+            if (isset($connection['start']) && $connection['start'] !== null && $connection['start'] !== '') {
+                return is_scalar($connection['start']) ? (string) $connection['start'] : null;
+            }
+
+            $year = $connection['start_year'] ?? null;
+            if ($year === null || $year === '') {
+                return null;
+            }
+
+            return $this->formatDate(
+                (int) $year,
+                isset($connection['start_month']) ? (int) $connection['start_month'] : null,
+                isset($connection['start_day']) ? (int) $connection['start_day'] : null
+            ) ?: null;
+        }
+
+        if (array_key_exists('end', $connection)) {
+            if ($connection['end'] === null || $connection['end'] === '') {
+                return null;
+            }
+
+            return is_scalar($connection['end']) ? (string) $connection['end'] : null;
+        }
+
+        $year = $connection['end_year'] ?? null;
+        if ($year === null || $year === '') {
+            return null;
+        }
+
+        return $this->formatDate(
+            (int) $year,
+            isset($connection['end_month']) ? (int) $connection['end_month'] : null,
+            isset($connection['end_day']) ? (int) $connection['end_day'] : null
+        ) ?: null;
+    }
+
+    private function formatConnectionDateLabel(?string $date): string
+    {
+        return $this->formatDiffValueForSummary($date);
+    }
+
+    /**
+     * @param array<string, mixed> $diff
+     * @return array<int, string>
+     */
+    private function summariseSubjectDiffChanges(array $diff): array
+    {
+        $changes = [];
+
+        foreach ($diff['basic_fields'] ?? [] as $field) {
+            $label = ucfirst(str_replace('_', ' ', (string) ($field['field'] ?? 'field')));
+            $action = $field['action'] ?? 'update';
+            $current = $this->formatDiffValueForSummary($field['current'] ?? null);
+            $new = $this->formatDiffValueForSummary($field['new'] ?? null);
+
+            if ($action === 'add') {
+                $changes[] = "{$label}: set to {$new}";
+            } elseif ($action === 'remove') {
+                $changes[] = "{$label}: {$current} → cleared";
+            } else {
+                $changes[] = "{$label}: {$current} → {$new}";
+            }
+        }
+
+        foreach ($diff['metadata'] ?? [] as $item) {
+            $key = (string) ($item['key'] ?? 'field');
+            $action = $item['action'] ?? 'update';
+            $current = $this->formatDiffValueForSummary($item['current'] ?? null);
+            $new = $this->formatDiffValueForSummary($item['new'] ?? null);
+
+            if ($action === 'add') {
+                $changes[] = "Metadata {$key}: set to {$new}";
+            } elseif ($action === 'remove') {
+                $changes[] = "Metadata {$key}: {$current} → cleared";
+            } else {
+                $changes[] = "Metadata {$key}: {$current} → {$new}";
+            }
+        }
+
+        foreach ($diff['sources'] ?? [] as $sourceGroup) {
+            $action = $sourceGroup['action'] ?? 'add';
+            foreach ($sourceGroup['sources'] ?? [] as $source) {
+                $sourceLabel = $this->formatDiffValueForSummary($source);
+                if ($action === 'remove') {
+                    $changes[] = "Source removed: {$sourceLabel}";
+                } else {
+                    $changes[] = "Source added: {$sourceLabel}";
+                }
+            }
+        }
+
+        // Connection adds/links are listed in the Existing / New spans sections.
+        // Still list removals and modifications here so they are not hidden.
+        foreach ($diff['connections'] ?? [] as $group) {
+            $type = (string) ($group['type'] ?? 'connection');
+            foreach ($group['removed'] ?? [] as $name) {
+                $changes[] = "Connection removed ({$type}): " . $this->formatDiffValueForSummary($name);
+            }
+            foreach ($group['modified'] ?? [] as $modified) {
+                $object = $this->formatDiffValueForSummary($modified['object'] ?? 'connection');
+                $detailParts = [];
+                foreach ($modified['changes'] ?? [] as $changeField => $changeValues) {
+                    if (!is_array($changeValues)) {
+                        continue;
+                    }
+                    $from = $this->formatDiffValueForSummary($changeValues['current'] ?? null);
+                    $to = $this->formatDiffValueForSummary($changeValues['new'] ?? null);
+                    $detailParts[] = str_replace('_', ' ', (string) $changeField) . ": {$from} → {$to}";
+                }
+                if (!empty($detailParts)) {
+                    $changes[] = "Connection updated ({$type}) {$object}: " . implode('; ', $detailParts);
+                } else {
+                    $changes[] = "Connection updated ({$type}): {$object}";
+                }
+            }
+        }
+
+        return $changes;
+    }
+
+    private function formatDiffValueForSummary(mixed $value): string
+    {
+        if ($value === null || $value === '') {
+            return '(none)';
+        }
+
+        if (is_bool($value)) {
+            return $value ? 'true' : 'false';
+        }
+
+        if (is_array($value) || is_object($value)) {
+            $encoded = json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            if ($encoded === false) {
+                return '(complex value)';
+            }
+            if (strlen($encoded) > 120) {
+                return substr($encoded, 0, 117) . '...';
+            }
+            return $encoded;
+        }
+
+        $string = trim((string) $value);
+        if (strlen($string) > 120) {
+            return substr($string, 0, 117) . '...';
+        }
+
+        return $string;
     }
 
     /**
@@ -3915,6 +4579,7 @@ class YamlSpanService
         $data = [
             'id' => $span->id,
             'name' => $span->name,
+            'slug' => $span->slug,
             'type' => $span->type_id,
             'state' => $span->state,
             'description' => $span->description,
@@ -3922,6 +4587,12 @@ class YamlSpanService
             'metadata' => $span->metadata ?? [],
             'sources' => $span->sources ?? [],
             'access_level' => $span->access_level,
+            'start_year' => $span->start_year,
+            'start_month' => $span->start_month,
+            'start_day' => $span->start_day,
+            'end_year' => $span->end_year,
+            'end_month' => $span->end_month,
+            'end_day' => $span->end_day,
         ];
         
         // Ensure required metadata fields are present for place spans
@@ -4045,6 +4716,16 @@ class YamlSpanService
     public function spanToYamlSafe(Span $span): string
     {
         $data = $this->spanToArraySafe($span);
+
+        // YAML schema uses start/end strings, not discrete database date parts
+        unset(
+            $data['start_year'],
+            $data['start_month'],
+            $data['start_day'],
+            $data['end_year'],
+            $data['end_month'],
+            $data['end_day']
+        );
         
         // Use a custom YAML dump that ensures dates are quoted
         return $this->dumpYamlWithQuotedDates($data, 4, 2);

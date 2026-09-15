@@ -2,24 +2,26 @@
 
 namespace App\Services;
 
-use OpenAI\Client;
+use Anthropic\Client;
+use Anthropic\Messages\TextBlock;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
 use Symfony\Component\Yaml\Yaml;
 
 class AiYamlCreatorService
 {
-    private Client $openai;
-    private string $model = 'gpt-4';
+    private Client $anthropic;
+    private string $model;
 
     public function __construct()
     {
-        $apiKey = config('services.openai.api_key');
+        $apiKey = config('services.anthropic.api_key');
         if (!$apiKey) {
-            throw new \Exception('OpenAI API key not configured');
+            throw new \Exception('Anthropic API key not configured');
         }
 
-        $this->openai = \OpenAI::client($apiKey);
+        $this->anthropic = new Client(apiKey: $apiKey);
+        $this->model = config('services.anthropic.model', 'claude-sonnet-5');
     }
 
     /**
@@ -37,23 +39,19 @@ class AiYamlCreatorService
         $prompt = $this->buildPrompt($name, $spanType, $disambiguation);
         
         try {
-            $response = $this->openai->chat()->create([
-                'model' => $this->model,
-                'messages' => [
-                    [
-                        'role' => 'system',
-                        'content' => $this->getSystemPrompt($spanType)
-                    ],
+            $response = $this->anthropic->messages->create(
+                model: $this->model,
+                system: $this->getSystemPrompt($spanType),
+                messages: [
                     [
                         'role' => 'user',
                         'content' => $prompt
                     ]
                 ],
-                'temperature' => 0.3, // Lower temperature for more consistent output
-                'max_tokens' => 2000
-            ]);
+                maxTokens: 4096
+            );
 
-            $yamlContent = $response->choices[0]->message->content;
+            $yamlContent = $this->extractTextFromResponse($response);
             
             // Clean up the response - remove any markdown formatting
             $yamlContent = $this->cleanYamlResponse($yamlContent);
@@ -62,9 +60,9 @@ class AiYamlCreatorService
                 'success' => true,
                 'yaml' => $yamlContent,
                 'usage' => [
-                    'prompt_tokens' => $response->usage->promptTokens,
-                    'completion_tokens' => $response->usage->completionTokens,
-                    'total_tokens' => $response->usage->totalTokens
+                    'prompt_tokens' => $response->usage->inputTokens,
+                    'completion_tokens' => $response->usage->outputTokens,
+                    'total_tokens' => $response->usage->inputTokens + $response->usage->outputTokens
                 ]
             ];
 
@@ -74,7 +72,7 @@ class AiYamlCreatorService
             return $result;
 
         } catch (\Exception $e) {
-            Log::error('OpenAI API error for ' . $spanType, [
+            Log::error('Anthropic API error for ' . $spanType, [
                 'error' => $e->getMessage(),
                 'name' => $name,
                 'span_type' => $spanType,
@@ -103,23 +101,19 @@ class AiYamlCreatorService
         $prompt = $this->buildImprovePrompt($name, $existingYaml, $spanType, $disambiguation);
         
         try {
-            $response = $this->openai->chat()->create([
-                'model' => $this->model,
-                'messages' => [
-                    [
-                        'role' => 'system',
-                        'content' => $this->getImproveSystemPrompt($spanType)
-                    ],
+            $response = $this->anthropic->messages->create(
+                model: $this->model,
+                system: $this->getImproveSystemPrompt($spanType),
+                messages: [
                     [
                         'role' => 'user',
                         'content' => $prompt
                     ]
                 ],
-                'temperature' => 0.3, // Lower temperature for more consistent output
-                'max_tokens' => 2000
-            ]);
+                maxTokens: 4096
+            );
 
-            $yamlContent = $response->choices[0]->message->content;
+            $yamlContent = $this->extractTextFromResponse($response);
             
             Log::info('AI raw response for ' . $spanType . ' improvement', [
                 'name' => $name,
@@ -141,9 +135,9 @@ class AiYamlCreatorService
                 'success' => true,
                 'yaml' => $yamlContent,
                 'usage' => [
-                    'prompt_tokens' => $response->usage->promptTokens,
-                    'completion_tokens' => $response->usage->completionTokens,
-                    'total_tokens' => $response->usage->totalTokens
+                    'prompt_tokens' => $response->usage->inputTokens,
+                    'completion_tokens' => $response->usage->outputTokens,
+                    'total_tokens' => $response->usage->inputTokens + $response->usage->outputTokens
                 ]
             ];
 
@@ -160,7 +154,7 @@ class AiYamlCreatorService
             return $result;
 
         } catch (\Exception $e) {
-            Log::error('OpenAI API error during ' . $spanType . ' improvement', [
+            Log::error('Anthropic API error during ' . $spanType . ' improvement', [
                 'error' => $e->getMessage(),
                 'name' => $name,
                 'span_type' => $spanType,
@@ -244,9 +238,12 @@ class AiYamlCreatorService
         $prompt .= "2. If you cannot find specific information (like an architect's name, a precise date, or other details), DO NOT include that field\n";
         $prompt .= "3. ACCURACY OVER COMPLETENESS: Better to have less information that's correct than more information that might be wrong\n";
         $prompt .= "4. When adding new connections, you MUST use a dash (-) before each connection item to create a YAML list\n";
-        $prompt .= "5. Look at the existing YAML above - see how connections use dashes? Copy that exact format for any new connections you add\n\n";
+        $prompt .= "5. Look at the existing YAML above - see how connections use dashes? Copy that exact format for any new connections you add\n";
+        $prompt .= "6. TEMPORAL DATES ARE ESSENTIAL: Lifespan is about time. For every residence, employment, education, membership, relationship, role, and similar connection, research and include start/end for the CONNECTION PERIOD at the best granularity the evidence supports ('YYYY-MM-DD', else 'YYYY-MM', else 'YYYY'). Use end: null only when ongoing and evidenced.\n";
+        $prompt .= "7. FILL MISSING CONNECTION DATES: If existing connections lack start/end but sources provide the association period, add those dates while preserving existing IDs\n";
+        $prompt .= "8. DO NOT CONFUSE CONNECTION DATES WITH TARGET DATES: Connection start/end = when the subject was associated with the connected span (lived there, attended, worked, created, etc.). Never use the connected span's own founding/birth/release/publication dates as connection dates unless sources also show that as the association period.\n\n";
         
-        $prompt .= "Please enhance this YAML by adding missing information, correcting any errors, and expanding with additional biographical details while preserving all existing UUIDs and IDs. Only add information that you can verify from reliable sources.";
+        $prompt .= "Please enhance this YAML by adding missing information, correcting any errors, and expanding with additional biographical details while preserving all existing UUIDs and IDs. Prioritise dated connections. Only add information that you can verify from reliable sources.";
         
         return $prompt;
     }
@@ -324,6 +321,32 @@ class AiYamlCreatorService
 - Put any additional commentary or context in the "description" or "notes" fields
 - Follow the exact field names and structure provided in the schema
 
+### CRITICAL: TEMPORAL DATES (LIFESPAN IS ABOUT TIME)
+
+Lifespan is a temporal system. Dates on the main span AND on connections are essential — but they mean different things.
+
+**Connection dates vs target-span dates (do not confuse these):**
+- On a connection, `start` / `end` mean when the RELATIONSHIP or PERIOD OF ASSOCIATION existed between the subject and the connected span
+  - residence: when they lived there (NOT when the place was founded)
+  - education: when they attended (NOT when the school opened)
+  - employment / has_role: when they held the job/role (NOT when the organisation was founded)
+  - relationship / membership: when that relationship/membership existed (NOT the other person's birth date)
+  - created: when they created/produced/directed/wrote it (NOT automatically the work's publication/release date unless sources say that is when they created it)
+  - participation: when they took part (NOT when the event first existed, unless those are the same)
+- If you learn founding, birth, death, release, or publication dates for the CONNECTED span (B), those belong to B's own lifespan — do NOT put them on the connection unless they are also evidenced as the connection period
+- Example: Marilyn Monroe lived in West Hollywood 1949–1955 → connection start/end are 1949/1955. West Hollywood's founding year must NOT become the residence connection start
+- Example: a person directed a film released in 1960 → film release may be the film span's start; the connection start should be the evidenced creation/direction period (which may or may not equal 1960)
+
+**Researching and writing connection dates:**
+- For every connection you add or improve (residence, employment, education, membership, relationship, has_role, participation, created, etc.), actively research and include `start` and `end` whenever evidence exists for the connection period
+- Use the best granularity the evidence supports: prefer 'YYYY-MM-DD', then 'YYYY-MM', then 'YYYY'
+- Always quote dates in YAML (e.g., start: '1962-10', end: '1965')
+- Use `end: null` when the connection is ongoing / still current and that is supported by sources
+- If sources only support a year (or year-month), use that — do not invent day/month precision
+- If no reliable evidence exists for the connection period, omit start/end rather than substituting the target span's dates
+- When improving existing YAML, fill in missing `start`/`end` on existing connections if you can verify the connection period from sources
+- Do not leave dated life events undated if Wikipedia or other authoritative sources give a clear period for that connection
+
 **YAML FORMATTING EXAMPLES**:
 ```yaml
 # Correct - quoted values with special characters
@@ -341,6 +364,21 @@ end: null
 # Correct - names with punctuation quoted
 name: "D'arcy Wretzky"
 birth_name: "Mary-Ann Phelan"
+
+# Correct - connection dates are the period of association, not the target's own lifespan
+connections:
+  residence:
+    - name: 'Oxford'
+      type: place
+      start: '1971'   # when they lived there
+      end: '1991'     # NOT Oxford's founding date
+  employment:
+    - name: 'BBC'
+      type: organisation
+      start: '1952'   # when they worked there
+      end: '1955'     # NOT when the BBC was founded
+      metadata:
+        role: 'Actor'
 ```
 
 **ACCURACY REQUIREMENTS**:
@@ -357,12 +395,11 @@ COMMON_RULES;
      */
     private function getPersonSystemPrompt(): string
     {
-        return <<<'PROMPT'
+        return $this->getCommonRules() . <<<'PROMPT'
 You are a comprehensive biographical research assistant tasked with creating detailed YAML records for public figures, using ONLY publicly verifiable information from authoritative sources (e.g. from Wikipedia, BBC, official websites, or similar reliable sources). 
 
 CRITICAL: You must NEVER hallucinate or invent information. If you cannot find verifiable information from reliable sources, you must omit that field rather than guess or make up data. Accuracy is paramount - it is better to have incomplete but accurate information than complete but incorrect information.
 
-{$this->getCommonRules()}
 
 You must strictly follow the YAML structure defined below. The schema reflects a data model used to represent lifespans and biographical timelines. Your goal is to capture as much accurate, verifiable information as possible about the person's life, career, and relationships.
 
@@ -415,7 +452,7 @@ You may include the following groups:
 - education: each entry includes:
   - name of school/university
   - type: organisation
-  - start and end (if available)
+  - start and end: research these actively; use best supported granularity ('YYYY-MM-DD', 'YYYY-MM', or 'YYYY')
 
 - employment: comprehensive career history including all significant employers and positions (excluding band memberships):
   - name of organisation
@@ -439,7 +476,7 @@ You may include the following groups:
 - relationship: list of confirmed romantic relationships/marriages:
   - name
   - type: person
-  - start / end (if available)
+  - start / end: research these actively; use best supported granularity ('YYYY-MM-DD', 'YYYY-MM', or 'YYYY')
   - metadata.relationship: spouse (if married)
 
 - parents: only include if both parent's full names are publicly known
@@ -508,12 +545,11 @@ PROMPT;
      */
     private function getPersonImproveSystemPrompt(): string
     {
-        return <<<'PROMPT'
+        return $this->getCommonRules() . <<<'PROMPT'
 You are a comprehensive biographical research assistant tasked with improving and expanding existing YAML records for public figures, using ONLY publicly verifiable information from authoritative sources (e.g. from Wikipedia, BBC, official websites, or similar reliable sources). 
 
 CRITICAL: You must NEVER hallucinate or invent information. If you cannot find verifiable information from reliable sources, you must omit that field rather than guess or make up data. Accuracy is paramount - it is better to have incomplete but accurate information than complete but incorrect information.
 
-{$this->getCommonRules()}
 
 You must strictly follow the YAML structure defined below while preserving all existing data and UUIDs. The schema reflects a data model used to represent lifespans and biographical timelines. Your goal is to enhance the existing record with additional accurate, verifiable information.
 
@@ -573,7 +609,7 @@ You may include the following groups:
 - education: each entry includes:
   - name of school/university
   - type: organisation
-  - start and end (if available)
+  - start and end: research these actively; use best supported granularity ('YYYY-MM-DD', 'YYYY-MM', or 'YYYY')
 
 - employment: comprehensive career history including all significant employers and positions (excluding band memberships):
   - name of organisation
@@ -597,7 +633,7 @@ You may include the following groups:
 - relationship: list of confirmed romantic relationships/marriages:
   - name
   - type: person
-  - start / end (if available)
+  - start / end: research these actively; use best supported granularity ('YYYY-MM-DD', 'YYYY-MM', or 'YYYY')
   - metadata.relationship: spouse (if married)
 
 - parents: only include if both parent's full names are publicly known
@@ -629,6 +665,7 @@ You may include the following groups:
 6. **CRITICAL**: In nested_connections, all field values must be strings, not arrays (e.g., type: "at_organisation", not type: ["at_organisation"])
 7. Only include information that is publicly verifiable from authoritative sources
 8. Use exact dates when available, approximate dates (YYYY-MM or YYYY) when necessary
+8a. **TEMPORAL PRIORITY**: For residence, employment, education, membership, relationship, and has_role connections, always try to supply start/end for the association period from evidence; fill missing dates on existing connections when sources support them. Never substitute the connected span's founding/birth/release dates for the connection period.
 
 ### CRITICAL: BIRTH DATES AND PERSONAL INFORMATION
 
@@ -683,14 +720,13 @@ PROMPT;
      */
     private function getOrganisationSystemPrompt(): string
     {
-        return <<<'PROMPT'
+        return $this->getCommonRules() . <<<'PROMPT'
 You are a comprehensive organisational research assistant tasked with creating detailed YAML records for organisations, using publicly verifiable information from authoritative sources (e.g. from Wikipedia, BBC, official websites, or similar reliable sources). 
 
 You must strictly follow the YAML structure defined below. The schema reflects a data model used to represent organisations and their lifespans. Your goal is to capture as much accurate, verifiable information as possible about the organisation's history, purpose, and relationships.
 
 IMPORTANT: Be thorough and comprehensive in your research. Read the full source material, not just summaries. Include all significant organisational details, milestones, locations, and notable relationships that are publicly documented.
 
-{$this->getCommonRules()}
 
 ### Your task:
 
@@ -762,14 +798,13 @@ PROMPT;
      */
     private function getOrganisationImproveSystemPrompt(): string
     {
-        return <<<'PROMPT'
+        return $this->getCommonRules() . <<<'PROMPT'
 You are a comprehensive organisational research assistant tasked with improving and expanding existing YAML records for organisations, using publicly verifiable information from authoritative sources (e.g. from Wikipedia, BBC, official websites, or similar reliable sources). 
 
 You must strictly follow the YAML structure defined below while preserving all existing data and UUIDs. The schema reflects a data model used to represent organisations and their lifespans. Your goal is to enhance the existing record with additional accurate, verifiable information.
 
 IMPORTANT: Be thorough and comprehensive in your research. Read the full source material, not just summaries. Add missing organisational details, milestones, locations, and notable relationships that are publicly documented but not yet included.
 
-{$this->getCommonRules()}
 
 ### Your task:
 
@@ -849,14 +884,13 @@ PROMPT;
      */
     private function getPlaceSystemPrompt(): string
     {
-        return <<<'PROMPT'
+        return $this->getCommonRules() . <<<'PROMPT'
 You are a comprehensive geographical research assistant tasked with creating detailed YAML records for places, using publicly verifiable information from authoritative sources (e.g. from Wikipedia, BBC, official websites, or similar reliable sources). 
 
 You must strictly follow the YAML structure defined below. The schema reflects a data model used to represent places and their lifespans. Your goal is to capture as much accurate, verifiable information as possible about the place's history, significance, and relationships.
 
 IMPORTANT: Be thorough and comprehensive in your research. Read the full source material, not just summaries. Include all significant geographical details, historical milestones, and notable relationships that are publicly documented.
 
-{$this->getCommonRules()}
 
 ### Your task:
 
@@ -989,14 +1023,13 @@ PROMPT;
      */
     private function getPlaceImproveSystemPrompt(): string
     {
-        return <<<'PROMPT'
+        return $this->getCommonRules() . <<<'PROMPT'
 You are a comprehensive geographical research assistant tasked with improving and expanding existing YAML records for places, using publicly verifiable information from authoritative sources (e.g. from Wikipedia, BBC, official websites, or similar reliable sources). 
 
 You must strictly follow the YAML structure defined below while preserving all existing data and UUIDs. The schema reflects a data model used to represent places and their lifespans. Your goal is to enhance the existing record with additional accurate, verifiable information.
 
 IMPORTANT: Be thorough and comprehensive in your research. Read the full source material, not just summaries. Add missing geographical details, historical milestones, and notable relationships that are publicly documented but not yet included.
 
-{$this->getCommonRules()}
 
 ### Your task:
 
@@ -1095,14 +1128,13 @@ PROMPT;
      */
     private function getEventSystemPrompt(): string
     {
-        return <<<'PROMPT'
+        return $this->getCommonRules() . <<<'PROMPT'
 You are a comprehensive historical research assistant tasked with creating detailed YAML records for events, using publicly verifiable information from authoritative sources (e.g. from Wikipedia, BBC, official websites, or similar reliable sources). 
 
 You must strictly follow the YAML structure defined below. The schema reflects a data model used to represent events and their lifespans. Your goal is to capture as much accurate, verifiable information as possible about the event's history, significance, and relationships.
 
 IMPORTANT: Be thorough and comprehensive in your research. Read the full source material, not just summaries. Include all significant event details, participants, locations, and notable relationships that are publicly documented.
 
-{$this->getCommonRules()}
 
 ### Your task:
 
@@ -1163,6 +1195,7 @@ You may include the following groups:
 2. Be comprehensive - include all significant event details, participants, and locations that are publicly documented
 3. Use exact dates when available, approximate dates (YYYY-MM or YYYY) when necessary
 4. Include connections whenever you have reliable information - be thorough rather than selective
+4a. Prefer dated connections: research start/end for the association period on residence, employment, education, membership, and similar before omitting dates. Do not use the connected span's own founding/birth/release dates as connection dates.
 5. Always quote dates in YAML format
 6. Use proper YAML indentation
 7. Include sources as a top-level field, not in metadata
@@ -1180,14 +1213,13 @@ PROMPT;
      */
     private function getEventImproveSystemPrompt(): string
     {
-        return <<<'PROMPT'
+        return $this->getCommonRules() . <<<'PROMPT'
 You are a comprehensive historical research assistant tasked with improving and expanding existing YAML records for events, using publicly verifiable information from authoritative sources (e.g. from Wikipedia, BBC, official websites, or similar reliable sources). 
 
 You must strictly follow the YAML structure defined below while preserving all existing data and UUIDs. The schema reflects a data model used to represent events and their lifespans. Your goal is to enhance the existing record with additional accurate, verifiable information.
 
 IMPORTANT: Be thorough and comprehensive in your research. Read the full source material, not just summaries. Add missing event details, participants, locations, and notable relationships that are publicly documented but not yet included.
 
-{$this->getCommonRules()}
 
 ### Your task:
 
@@ -1273,14 +1305,13 @@ PROMPT;
      */
     private function getThingSystemPrompt(): string
     {
-        return <<<'PROMPT'
+        return $this->getCommonRules() . <<<'PROMPT'
 You are a comprehensive research assistant tasked with creating detailed YAML records for things (human-made items), using publicly verifiable information from authoritative sources (e.g. from Wikipedia, BBC, official websites, or similar reliable sources). 
 
 You must strictly follow the YAML structure defined below. The schema reflects a data model used to represent things and their lifespans. Your goal is to capture as much accurate, verifiable information as possible about the thing's creation, significance, and relationships.
 
 IMPORTANT: Be thorough and comprehensive in your research. Read the full source material, not just summaries. Include all significant details about the thing's creation, creators, and notable relationships that are publicly documented.
 
-{$this->getCommonRules()}
 
 ### Your task:
 
@@ -1340,6 +1371,7 @@ You may include the following groups:
 2. Be comprehensive - include all significant details about the thing's creation and creators that are publicly documented
 3. Use exact dates when available, approximate dates (YYYY-MM or YYYY) when necessary
 4. Include connections whenever you have reliable information - be thorough rather than selective
+4a. Prefer dated connections: research start/end for the association period on residence, employment, education, membership, and similar before omitting dates. Do not use the connected span's own founding/birth/release dates as connection dates.
 5. Always quote dates in YAML format
 6. Use proper YAML indentation
 7. Include sources as a top-level field, not in metadata
@@ -1357,14 +1389,13 @@ PROMPT;
      */
     private function getThingImproveSystemPrompt(): string
     {
-        return <<<'PROMPT'
+        return $this->getCommonRules() . <<<'PROMPT'
 You are a comprehensive research assistant tasked with improving and expanding existing YAML records for things (human-made items), using publicly verifiable information from authoritative sources (e.g. from Wikipedia, BBC, official websites, or similar reliable sources). 
 
 You must strictly follow the YAML structure defined below while preserving all existing data and UUIDs. The schema reflects a data model used to represent things and their lifespans. Your goal is to enhance the existing record with additional accurate, verifiable information.
 
 IMPORTANT: Be thorough and comprehensive in your research. Read the full source material, not just summaries. Add missing details about the thing's creation, creators, and notable relationships that are publicly documented but not yet included.
 
-{$this->getCommonRules()}
 
 ### Your task:
 
@@ -1449,14 +1480,13 @@ PROMPT;
      */
     private function getBandSystemPrompt(): string
     {
-        return <<<'PROMPT'
+        return $this->getCommonRules() . <<<'PROMPT'
 You are a comprehensive musical research assistant tasked with creating detailed YAML records for bands, using publicly verifiable information from authoritative sources (e.g. from Wikipedia, BBC, official websites, or similar reliable sources). 
 
 You must strictly follow the YAML structure defined below. The schema reflects a data model used to represent bands and their lifespans. Your goal is to capture as much accurate, verifiable information as possible about the band's history, members, and relationships.
 
 IMPORTANT: Be thorough and comprehensive in your research. Read the full source material, not just summaries. Include all significant band details, member changes, and notable relationships that are publicly documented.
 
-{$this->getCommonRules()}
 
 ### Your task:
 
@@ -1562,14 +1592,13 @@ PROMPT;
      */
     private function getBandImproveSystemPrompt(): string
     {
-        return <<<'PROMPT'
+        return $this->getCommonRules() . <<<'PROMPT'
 You are a comprehensive musical research assistant tasked with improving and expanding existing YAML records for bands, using publicly verifiable information from authoritative sources (e.g. from Wikipedia, BBC, official websites, or similar reliable sources). 
 
 You must strictly follow the YAML structure defined below while preserving all existing data and UUIDs. The schema reflects a data model used to represent bands and their lifespans. Your goal is to enhance the existing record with additional accurate, verifiable information.
 
 IMPORTANT: Be thorough and comprehensive in your research. Read the full source material, not just summaries. Add missing band details, member changes, and notable relationships that are publicly documented but not yet included.
 
-{$this->getCommonRules()}
 
 ### Your task:
 
@@ -1676,6 +1705,21 @@ sources:
 
 Return only the enhanced YAML content, no additional text or formatting.
 PROMPT;
+    }
+
+    /**
+     * Extract the text content from a Claude response, skipping any thinking blocks
+     */
+    private function extractTextFromResponse(\Anthropic\Messages\Message $response): string
+    {
+        $textParts = [];
+        foreach ($response->content as $block) {
+            if ($block instanceof TextBlock) {
+                $textParts[] = $block->text;
+            }
+        }
+
+        return implode("\n", $textParts);
     }
 
     /**

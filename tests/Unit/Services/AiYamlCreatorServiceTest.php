@@ -9,20 +9,20 @@ use Illuminate\Support\Facades\Config;
 
 class AiYamlCreatorServiceTest extends TestCase
 {
-    public function test_service_requires_openai_api_key()
+    public function test_service_requires_anthropic_api_key()
     {
-        // Clear the OpenAI API key
-        Config::set('services.openai.api_key', null);
+        // Clear the Anthropic API key
+        Config::set('services.anthropic.api_key', null);
         
         $this->expectException(\Exception::class);
-        $this->expectExceptionMessage('OpenAI API key not configured');
+        $this->expectExceptionMessage('Anthropic API key not configured');
         
         new AiYamlCreatorService();
     }
 
     public function test_validate_yaml_with_valid_yaml()
     {
-        Config::set('services.openai.api_key', 'test-key');
+        Config::set('services.anthropic.api_key', 'test-key');
         
         $service = new AiYamlCreatorService();
         
@@ -35,7 +35,7 @@ class AiYamlCreatorServiceTest extends TestCase
 
     public function test_validate_yaml_with_invalid_yaml()
     {
-        Config::set('services.openai.api_key', 'test-key');
+        Config::set('services.anthropic.api_key', 'test-key');
         
         $service = new AiYamlCreatorService();
         
@@ -48,7 +48,7 @@ class AiYamlCreatorServiceTest extends TestCase
 
     public function test_cache_key_generation()
     {
-        Config::set('services.openai.api_key', 'test-key');
+        Config::set('services.anthropic.api_key', 'test-key');
         
         $service = new AiYamlCreatorService();
         
@@ -70,7 +70,7 @@ class AiYamlCreatorServiceTest extends TestCase
 
     public function test_clean_yaml_response()
     {
-        Config::set('services.openai.api_key', 'test-key');
+        Config::set('services.anthropic.api_key', 'test-key');
         
         $service = new AiYamlCreatorService();
         
@@ -92,7 +92,7 @@ class AiYamlCreatorServiceTest extends TestCase
 
     public function test_fix_yaml_quoting()
     {
-        Config::set('services.openai.api_key', 'test-key');
+        Config::set('services.anthropic.api_key', 'test-key');
         
         $service = new AiYamlCreatorService();
         
