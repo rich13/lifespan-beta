@@ -32,6 +32,9 @@ class ErrorPagesTest extends TestCase
         $response->assertSee('bi-hourglass-split');
         $response->assertSee('bi-trash');
         $response->assertSee('bi-info-circle');
+
+        $response->assertSee('js/game-of-life.js', false);
+        $response->assertSee('css/game-of-life.css', false);
     }
 
     public function test_other_error_pages_still_work(): void
