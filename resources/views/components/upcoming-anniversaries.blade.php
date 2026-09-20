@@ -96,7 +96,7 @@
         $type = $event['type'];
         $days = (int) $event['days_until'];
         $date = $event['date'];
-        $photoUrl = $resolvePhotoUrl($span);
+        $photoUrl = ($span->subtype ?? null) === 'album' ? null : $resolvePhotoUrl($span);
         $milestone = ($event['significance'] ?? 0) >= 50;
         $isToday = $days === 0;
 
@@ -214,20 +214,7 @@
                     @forelse($startsEntries as $row)
                         <div class="card mb-2{{ !empty($row['is_today']) ? ' border-primary bg-primary-subtle shadow-sm' : '' }}">
                             <div class="card-body py-2">
-                                @if($row['photoUrl'])
-                                    <a href="{{ route('spans.show', $row['span']) }}" class="text-decoration-none float-start me-3 mb-2">
-                                        <img src="{{ $row['photoUrl'] }}"
-                                             alt="{{ $row['span']->name }}"
-                                             class="rounded upcoming-anniversary-thumb"
-                                             loading="lazy">
-                                    </a>
-                                @else
-                                    <a href="{{ route('spans.show', $row['span']) }}" class="text-decoration-none float-start me-3 mb-2">
-                                        <div class="rounded bg-light d-flex align-items-center justify-content-center upcoming-anniversary-thumb-placeholder">
-                                            <x-icon :span="$row['span']" />
-                                        </div>
-                                    </a>
-                                @endif
+                                @include('components.upcoming-anniversaries-thumb', ['row' => $row])
                                 <p class="mb-0 small">{!! $row['whenBadgeHtml'] !!}{!! $row['sentenceHtml'] !!}</p>
                                 <div class="clearfix"></div>
                             </div>
@@ -240,20 +227,7 @@
                     @forelse($endsEntries as $row)
                         <div class="card mb-2{{ !empty($row['is_today']) ? ' border-primary bg-primary-subtle shadow-sm' : '' }}">
                             <div class="card-body py-2">
-                                @if($row['photoUrl'])
-                                    <a href="{{ route('spans.show', $row['span']) }}" class="text-decoration-none float-start me-3 mb-2">
-                                        <img src="{{ $row['photoUrl'] }}"
-                                             alt="{{ $row['span']->name }}"
-                                             class="rounded upcoming-anniversary-thumb"
-                                             loading="lazy">
-                                    </a>
-                                @else
-                                    <a href="{{ route('spans.show', $row['span']) }}" class="text-decoration-none float-start me-3 mb-2">
-                                        <div class="rounded bg-light d-flex align-items-center justify-content-center upcoming-anniversary-thumb-placeholder">
-                                            <x-icon :span="$row['span']" />
-                                        </div>
-                                    </a>
-                                @endif
+                                @include('components.upcoming-anniversaries-thumb', ['row' => $row])
                                 <p class="mb-0 small">{!! $row['whenBadgeHtml'] !!}{!! $row['sentenceHtml'] !!}</p>
                                 <div class="clearfix"></div>
                             </div>

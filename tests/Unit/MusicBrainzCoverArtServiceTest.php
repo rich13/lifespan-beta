@@ -121,4 +121,25 @@ class MusicBrainzCoverArtServiceTest extends TestCase
         $cacheKey = "coverart_{$releaseGroupId}";
         $this->assertFalse(Cache::has($cacheKey));
     }
+
+    public function test_front_cover_urls_are_derived_from_archive_payload(): void
+    {
+        $service = MusicBrainzCoverArtService::getInstance();
+        $urls = $service->frontCoverUrlsFromData([
+            'images' => [[
+                'front' => true,
+                'id' => 14451051246,
+                'image' => 'https://coverartarchive.org/release/15ef2b50-902d-416f-9e1f-5ad9f602dbad/14451051246.jpg',
+            ]],
+        ]);
+
+        $this->assertSame(
+            'https://coverartarchive.org/release/15ef2b50-902d-416f-9e1f-5ad9f602dbad/14451051246-250.jpg',
+            $urls['small']
+        );
+        $this->assertSame(
+            'https://coverartarchive.org/release/15ef2b50-902d-416f-9e1f-5ad9f602dbad/14451051246-500.jpg',
+            $urls['medium']
+        );
+    }
 } 

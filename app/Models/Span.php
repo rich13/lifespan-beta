@@ -135,6 +135,25 @@ class Span extends Model
     ];
 
     /**
+     * Collapse line breaks and other whitespace in a single-line field to spaces.
+     */
+    public static function sanitiseSingleLineText(?string $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $sanitised = preg_replace('/\s+/u', ' ', $value) ?? $value;
+
+        return trim($sanitised);
+    }
+
+    public function setNameAttribute(?string $value): void
+    {
+        $this->attributes['name'] = static::sanitiseSingleLineText($value);
+    }
+
+    /**
      * Boot the model.
      */
     protected static function boot()
@@ -1177,16 +1196,46 @@ class Span extends Model
     }
 
     /**
+     * Stored front-cover URL for this album (no HTTP).
+     */
+    public function storedCoverArtUrl(string $size = 'small'): ?string
+    {
+        if ($this->subtype !== 'album') {
+            return null;
+        }
+
+        $key = match ($size) {
+            'large', '1200' => 'cover_art.large',
+            'medium', '500' => 'cover_art.medium',
+            default => 'cover_art.small',
+        };
+
+        $url = $this->getMeta($key);
+        return is_string($url) && $url !== '' ? $url : null;
+    }
+
+    /**
+     * True when this album has a MusicBrainz ID but no stored cover yet.
+     */
+    public function needsCoverArtFetch(): bool
+    {
+        if ($this->subtype !== 'album' || !$this->music_brainz_id) {
+            return false;
+        }
+
+        if ($this->getMeta('cover_art.missing') === true) {
+            return false;
+        }
+
+        return $this->storedCoverArtUrl('small') === null;
+    }
+
+    /**
      * Get the front cover art URL for this album
      */
     public function getCoverArtUrlAttribute(): ?string
     {
-        if ($this->subtype !== 'album' || !$this->music_brainz_id) {
-            return null;
-        }
-
-        $coverArtService = \App\Services\MusicBrainzCoverArtService::getInstance();
-        return $coverArtService->getFrontCoverUrl($this->music_brainz_id, '500');
+        return $this->storedCoverArtUrl('medium');
     }
 
     /**
@@ -1194,12 +1243,7 @@ class Span extends Model
      */
     public function getCoverArtLargeUrlAttribute(): ?string
     {
-        if ($this->subtype !== 'album' || !$this->music_brainz_id) {
-            return null;
-        }
-
-        $coverArtService = \App\Services\MusicBrainzCoverArtService::getInstance();
-        return $coverArtService->getFrontCoverUrl($this->music_brainz_id, '1200');
+        return $this->storedCoverArtUrl('large');
     }
 
     /**
@@ -1207,25 +1251,15 @@ class Span extends Model
      */
     public function getCoverArtSmallUrlAttribute(): ?string
     {
-        if ($this->subtype !== 'album' || !$this->music_brainz_id) {
-            return null;
-        }
-
-        $coverArtService = \App\Services\MusicBrainzCoverArtService::getInstance();
-        return $coverArtService->getFrontCoverUrl($this->music_brainz_id, '250');
+        return $this->storedCoverArtUrl('small');
     }
 
     /**
-     * Check if this album has cover art available
+     * Check if this album has stored cover art
      */
     public function getHasCoverArtAttribute(): bool
     {
-        if ($this->subtype !== 'album' || !$this->music_brainz_id) {
-            return false;
-        }
-
-        $coverArtService = \App\Services\MusicBrainzCoverArtService::getInstance();
-        return $coverArtService->hasCoverArt($this->music_brainz_id);
+        return $this->storedCoverArtUrl('small') !== null;
     }
 
     /**

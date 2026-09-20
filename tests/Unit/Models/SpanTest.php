@@ -244,4 +244,28 @@ class SpanTest extends TestCase
         $this->assertContains((string) $object->id, $ids);
         $this->assertContains((string) $connectionSpan->id, $ids);
     }
+
+    public function test_name_mutator_replaces_line_breaks_with_spaces(): void
+    {
+        $span = Span::factory()->create([
+            'name' => "Middleton Hall Lane\nBrentwood, Essex, CM15 8EE\nEngland",
+        ]);
+
+        $this->assertSame(
+            'Middleton Hall Lane Brentwood, Essex, CM15 8EE England',
+            $span->name
+        );
+        $this->assertSame(
+            'Middleton Hall Lane Brentwood, Essex, CM15 8EE England',
+            $span->fresh()->name
+        );
+    }
+
+    public function test_name_mutator_collapses_windows_line_breaks_and_tabs(): void
+    {
+        $span = new Span();
+        $span->name = "Foo\r\nBar\tBaz";
+
+        $this->assertSame('Foo Bar Baz', $span->name);
+    }
 } 

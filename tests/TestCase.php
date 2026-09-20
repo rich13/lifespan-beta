@@ -320,6 +320,11 @@ abstract class TestCase extends BaseTestCase
             $mock->shouldReceive('getCoverArtSummary')->andReturn(null);
             $mock->shouldReceive('clearCache')->andReturn(null);
             $mock->shouldReceive('clearAllCaches')->andReturn(null);
+            $mock->shouldReceive('getCachedCoverArtResult')->andReturn(['hit' => false, 'data' => null]);
+            $mock->shouldReceive('frontCoverUrlsFromData')->andReturn(null);
+            $mock->shouldReceive('persistCoverArtOnSpan')->andReturn(null);
+            $mock->shouldReceive('fetchAndStoreForSpan')->andReturn(null);
+            $mock->shouldReceive('isConfirmedMissing')->andReturn(false);
         });
         
         // Mock SlackNotificationService to prevent real Slack API calls during tests

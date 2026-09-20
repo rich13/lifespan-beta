@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Span;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
@@ -94,23 +95,37 @@ class MusicBrainzCoverArtService
     private const CACHE_RESULT_KEY = '_result';
 
     /**
+     * Read cover art from cache only (no HTTP).
+     *
+     * @return array{hit: bool, data: ?array}
+     */
+    public function getCachedCoverArtResult(string $releaseGroupId): array
+    {
+        $cacheKey = "coverart_{$releaseGroupId}";
+        $wrapper = Cache::get($cacheKey);
+        if ($wrapper !== null && is_array($wrapper) && array_key_exists(self::CACHE_RESULT_KEY, $wrapper)) {
+            return ['hit' => true, 'data' => $wrapper[self::CACHE_RESULT_KEY]];
+        }
+
+        return ['hit' => false, 'data' => null];
+    }
+
+    /**
      * Get cover art information for a release group
-     * 
+     *
      * @param string $releaseGroupId MusicBrainz Release Group ID
      * @return array|null Cover art information or null if not found
      */
     public function getCoverArt(string $releaseGroupId): ?array
     {
-        // Cache key for this release group. We store a wrapper array so that
-        // "no cover art" (null) is cached and not treated as a cache miss.
         $cacheKey = "coverart_{$releaseGroupId}";
-        $wrapper = Cache::get($cacheKey);
-        if ($wrapper !== null && is_array($wrapper) && array_key_exists(self::CACHE_RESULT_KEY, $wrapper)) {
+        $cached = $this->getCachedCoverArtResult($releaseGroupId);
+        if ($cached['hit']) {
             Log::info('Cover art retrieved from cache', [
                 'release_group_id' => $releaseGroupId,
                 'cached' => true
             ]);
-            return $wrapper[self::CACHE_RESULT_KEY];
+            return $cached['data'];
         }
 
         Log::info('Fetching cover art from Cover Art Archive', [
@@ -141,6 +156,7 @@ class MusicBrainzCoverArtService
                 Log::info('No cover art found for release group', [
                     'release_group_id' => $releaseGroupId
                 ]);
+                Cache::put($this->missingCacheKey($releaseGroupId), true, 86400 * 30);
                 $this->putCoverArtCache($cacheKey, null, 3600); // 1 hour for 404s
                 return null;
             }
@@ -176,6 +192,101 @@ class MusicBrainzCoverArtService
     }
 
     /**
+     * Build small/medium/large front-cover URLs from a Cover Art Archive payload.
+     *
+     * @param  array<string, mixed>|null  $coverArt
+     * @return array{small: string, medium: string, large: string}|null
+     */
+    public function frontCoverUrlsFromData(?array $coverArt): ?array
+    {
+        if (!$coverArt || empty($coverArt['images'])) {
+            return null;
+        }
+
+        $frontCover = collect($coverArt['images'])
+            ->first(function ($image) {
+                return ($image['front'] ?? false) === true;
+            });
+
+        if (!$frontCover) {
+            $frontCover = $coverArt['images'][0];
+        }
+
+        $imageUrl = $frontCover['image'] ?? '';
+        if (preg_match('/\/release\/([a-f0-9-]+)\//', $imageUrl, $matches)) {
+            $releaseId = $matches[1];
+        } else {
+            return null;
+        }
+
+        $imageId = $frontCover['id'] ?? null;
+        if (!$imageId) {
+            return null;
+        }
+
+        return [
+            'small' => $this->buildCoverUrl($releaseId, $imageId, '250'),
+            'medium' => $this->buildCoverUrl($releaseId, $imageId, '500'),
+            'large' => $this->buildCoverUrl($releaseId, $imageId, '1200'),
+        ];
+    }
+
+    /**
+     * Persist cover URLs (or a confirmed-missing flag) on the album span.
+     * Uses saveQuietly so we do not invalidate public span HTML caches.
+     *
+     * @param  array{small?: string, medium?: string, large?: string}|null  $urls
+     */
+    public function persistCoverArtOnSpan(Span $span, ?array $urls): void
+    {
+        $metadata = $span->metadata ?? [];
+        if ($urls && !empty($urls['small'])) {
+            $metadata['cover_art'] = [
+                'small' => $urls['small'],
+                'medium' => $urls['medium'] ?? $urls['small'],
+                'large' => $urls['large'] ?? $urls['medium'] ?? $urls['small'],
+                'missing' => false,
+                'fetched_at' => now()->toIso8601String(),
+            ];
+        } else {
+            $metadata['cover_art'] = [
+                'missing' => true,
+                'fetched_at' => now()->toIso8601String(),
+            ];
+        }
+
+        $span->metadata = $metadata;
+        $span->saveQuietly();
+    }
+
+    /**
+     * Fetch cover art (using cache when present) and store URLs on the span.
+     */
+    public function fetchAndStoreForSpan(Span $span): void
+    {
+        $releaseGroupId = $span->music_brainz_id;
+        if ($span->subtype !== 'album' || !$releaseGroupId) {
+            return;
+        }
+
+        if (Cache::get($this->missingCacheKey($releaseGroupId))) {
+            $this->persistCoverArtOnSpan($span, null);
+            return;
+        }
+
+        $data = $this->getCoverArt($releaseGroupId);
+        $urls = $this->frontCoverUrlsFromData($data);
+        if ($urls) {
+            $this->persistCoverArtOnSpan($span, $urls);
+            return;
+        }
+
+        if (Cache::get($this->missingCacheKey($releaseGroupId))) {
+            $this->persistCoverArtOnSpan($span, null);
+        }
+    }
+
+    /**
      * Get the front cover image URL for a release group
      * 
      * @param string $releaseGroupId MusicBrainz Release Group ID
@@ -184,42 +295,21 @@ class MusicBrainzCoverArtService
      */
     public function getFrontCoverUrl(string $releaseGroupId, string $size = '500'): ?string
     {
-        $coverArt = $this->getCoverArt($releaseGroupId);
-        
-        if (!$coverArt || empty($coverArt['images'])) {
+        $urls = $this->frontCoverUrlsFromData($this->getCoverArt($releaseGroupId));
+        if (!$urls) {
             return null;
         }
 
-        // Find the front cover image
-        $frontCover = collect($coverArt['images'])
-            ->first(function ($image) {
-                return $image['front'] === true;
-            });
-
-        if (!$frontCover) {
-            // If no front cover, use the first image
-            $frontCover = $coverArt['images'][0];
-        }
-
-        // Extract the release ID from the image URL
-        $imageUrl = $frontCover['image'];
-        if (preg_match('/\/release\/([a-f0-9-]+)\//', $imageUrl, $matches)) {
-            $releaseId = $matches[1];
-        } else {
-            // Fallback to using release group ID if we can't extract release ID
-            $releaseId = $releaseGroupId;
-        }
-
-        // Construct the URL for the requested size
-        $imageId = $frontCover['id'];
-        $url = "{$this->coverArtApiUrl}/release/{$releaseId}/{$imageId}-{$size}.jpg";
+        $url = match ($size) {
+            '250', 'small' => $urls['small'],
+            '1200', 'large' => $urls['large'],
+            default => $urls['medium'],
+        };
 
         Log::info('Generated front cover URL', [
             'release_group_id' => $releaseGroupId,
-            'release_id' => $releaseId,
-            'image_id' => $imageId,
             'size' => $size,
-            'url' => $url
+            'url' => $url,
         ]);
 
         return $url;
@@ -341,12 +431,27 @@ class MusicBrainzCoverArtService
      */
     public function clearCache(string $releaseGroupId): void
     {
-        $cacheKey = "coverart_{$releaseGroupId}";
-        Cache::forget($cacheKey);
+        Cache::forget("coverart_{$releaseGroupId}");
+        Cache::forget($this->missingCacheKey($releaseGroupId));
         
         Log::info('Cleared cover art cache', [
             'release_group_id' => $releaseGroupId
         ]);
+    }
+
+    protected function missingCacheKey(string $releaseGroupId): string
+    {
+        return "coverart_missing_{$releaseGroupId}";
+    }
+
+    public function isConfirmedMissing(string $releaseGroupId): bool
+    {
+        return (bool) Cache::get($this->missingCacheKey($releaseGroupId));
+    }
+
+    protected function buildCoverUrl(string $releaseId, string|int $imageId, string $size): string
+    {
+        return "{$this->coverArtApiUrl}/release/{$releaseId}/{$imageId}-{$size}.jpg";
     }
 
     /**
