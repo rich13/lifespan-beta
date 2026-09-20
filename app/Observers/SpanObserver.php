@@ -85,6 +85,7 @@ class SpanObserver
             DB::table('users')
                 ->where('id', $span->owner_id)
                 ->update(['personal_span_id' => $span->id]);
+            app(\App\Services\PersonalSpanCache::class)->forgetForSpan($span);
         }
         
         // Handle public figure connection access

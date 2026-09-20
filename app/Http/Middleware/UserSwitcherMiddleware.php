@@ -15,6 +15,10 @@ class UserSwitcherMiddleware
      */
     public function handle(Request $request, Closure $next): Response
     {
+        if (! config('features.user_switcher_enabled')) {
+            abort(404);
+        }
+
         // Allow access if the user is an admin OR if there's an admin_user_id in the session
         if ($request->user() && ($request->user()->is_admin || session()->has('admin_user_id'))) {
             return $next($request);

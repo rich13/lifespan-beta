@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use Illuminate\Support\Facades\Config;
 use Tests\PostgresRefreshDatabase;
 use Illuminate\Foundation\Testing\WithFaker;
 use Tests\TestCase;
@@ -11,11 +12,28 @@ class UserSwitcherTest extends TestCase
 {
     use PostgresRefreshDatabase;
 
+    private function enableUserSwitcher(): void
+    {
+        Config::set('features.user_switcher_enabled', true);
+    }
+
+    public function test_user_switcher_is_disabled_by_default(): void
+    {
+        $admin = User::factory()->create([
+            'is_admin' => true,
+        ]);
+
+        $this->actingAs($admin)->get('/admin/user-switcher/users')->assertNotFound();
+        $this->actingAs($admin)->get('/')->assertDontSee('Switch User');
+    }
+
     /**
      * Test that admin users can access the user switcher API.
      */
     public function test_admin_users_can_access_user_switcher_api(): void
     {
+        $this->enableUserSwitcher();
+
         // Create an admin user
         $admin = User::factory()->create([
             'is_admin' => true,
@@ -52,6 +70,8 @@ class UserSwitcherTest extends TestCase
      */
     public function test_non_admin_users_cannot_access_user_switcher_api(): void
     {
+        $this->enableUserSwitcher();
+
         // Create a regular user
         $user = User::factory()->create([
             'is_admin' => false,
@@ -69,6 +89,8 @@ class UserSwitcherTest extends TestCase
      */
     public function test_admin_users_can_switch_to_another_user(): void
     {
+        $this->enableUserSwitcher();
+
         // Create an admin user and a regular user
         $admin = User::factory()->create([
             'is_admin' => true,
@@ -95,6 +117,8 @@ class UserSwitcherTest extends TestCase
      */
     public function test_non_admin_users_cannot_switch_to_another_user(): void
     {
+        $this->enableUserSwitcher();
+
         // Create two regular users
         $user1 = User::factory()->create([
             'is_admin' => false,
@@ -121,6 +145,8 @@ class UserSwitcherTest extends TestCase
      */
     public function test_switched_user_can_switch_back_to_admin(): void
     {
+        $this->enableUserSwitcher();
+
         // Create an admin user and a regular user
         $admin = User::factory()->create([
             'is_admin' => true,
@@ -150,6 +176,8 @@ class UserSwitcherTest extends TestCase
      */
     public function test_user_switcher_ui_is_present_for_admin_users(): void
     {
+        $this->enableUserSwitcher();
+
         // Create an admin user
         $admin = User::factory()->create([
             'is_admin' => true,

@@ -89,6 +89,15 @@ class User extends Authenticatable implements MustVerifyEmail
         'metadata' => 'array',
     ];
 
+    protected static function booted(): void
+    {
+        static::saved(function (User $user) {
+            if ($user->wasChanged('personal_span_id')) {
+                app(\App\Services\PersonalSpanCache::class)->forgetForUser($user->id);
+            }
+        });
+    }
+
     /**
      * Get the user's personal span that contains their name and other personal information.
      * This is the primary way to access the user's name through $user->personalSpan->name
@@ -175,7 +184,7 @@ class User extends Authenticatable implements MustVerifyEmail
      */
     public function getNameAttribute(): string
     {
-        return $this->personalSpan?->name ?? 'Unknown User';
+        return app(\App\Services\PersonalSpanCache::class)->rememberFor($this)?->name ?? 'Unknown User';
     }
 
     /**
