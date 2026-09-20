@@ -314,4 +314,22 @@ class FamilyTreeServiceTest extends TestCase
             return $descendant['span']->id === $this->sibling->id;
         }));
     }
+
+    public function test_get_parents_and_children_are_memoised_on_the_service_instance(): void
+    {
+        $familyJoins = 0;
+        DB::listen(function ($query) use (&$familyJoins) {
+            $sql = strtolower($query->sql);
+            if (str_contains($sql, 'inner join') && str_contains($sql, 'connections')) {
+                $familyJoins++;
+            }
+        });
+
+        $this->service->getParents($this->child);
+        $this->service->getParents($this->child);
+        $this->service->getChildren($this->parent1);
+        $this->service->getChildren($this->parent1);
+
+        $this->assertSame(2, $familyJoins);
+    }
 } 

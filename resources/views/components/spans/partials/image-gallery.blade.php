@@ -126,12 +126,7 @@
     } else {
         // Get images connected to this span via features connections (span is object/child)
         if ($precomputedConnections instanceof \App\Support\PrecomputedSpanConnections) {
-            $directConnections = $precomputedConnections->getChildByType('features')
-                ->filter(function ($c) {
-                    $parent = $c->parent;
-                    return $parent && $parent->type_id === 'thing' && isset($parent->metadata['subtype']) && $parent->metadata['subtype'] === 'photo';
-                })
-                ->values();
+            $directConnections = $precomputedConnections->featuredPhotoConnections();
         } else {
             $directConnections = $span->connectionsAsObjectWithAccess()
                 ->where('type_id', 'features')
@@ -185,7 +180,7 @@
     });
 @endphp
 
-    <div class="card mb-4">
+    <div class="card mb-4" data-image-gallery>
         <div class="card-header d-flex justify-content-between align-items-center">
             @php
                 $photosLink = $imageConnections->isNotEmpty() && $imageConnections->count() > 3 

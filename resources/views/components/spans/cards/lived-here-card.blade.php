@@ -1,127 +1,69 @@
-@props(['span'])
+@props(['span', 'precomputedConnections' => null])
 
 @php
-    // Only show for place spans
     if ($span->type_id !== 'place') {
         return;
     }
 
-    // Get all people who have residence connections to this place
-    $residenceConnections = \App\Models\Connection::where('type_id', 'residence')
-        ->where('child_id', $span->id) // Place is the child in residence connections
-        ->whereHas('parent', function($q) { $q->where('type_id', 'person'); })
-        ->with(['parent', 'connectionSpan'])
-        ->get();
+    if ($precomputedConnections instanceof \App\Support\PrecomputedSpanConnections) {
+        $residenceConnections = $precomputedConnections->getChildByType('residence')
+            ->filter(fn ($connection) => $connection->parent && $connection->parent->type_id === 'person');
+        $locatedConnections = $precomputedConnections->getChildByType('located')
+            ->filter(fn ($connection) => $connection->parent
+                && in_array($connection->parent->type_id, ['thing', 'organisation', 'event', 'place'], true));
+    } else {
+        $residenceConnections = \App\Models\Connection::where('type_id', 'residence')
+            ->where('child_id', $span->id)
+            ->whereHas('parent', function($q) { $q->where('type_id', 'person'); })
+            ->with(['parent', 'connectionSpan'])
+            ->get();
+        $locatedConnections = \App\Models\Connection::where('type_id', 'located')
+            ->where('child_id', $span->id)
+            ->whereHas('parent', function($q) {
+                $q->whereIn('type_id', ['thing', 'organisation', 'event', 'place']);
+            })
+            ->with(['parent', 'connectionSpan'])
+            ->get();
+    }
 
-    // Collect all unique people first
-    $personIds = $residenceConnections->pluck('parent_id')->filter()->unique()->toArray();
-    
-    // Get first photo for each person in one query (optimize to avoid N+1)
-    $photoConnections = \App\Models\Connection::where('type_id', 'features')
-        ->whereIn('child_id', $personIds)
-        ->whereHas('parent', function($q) {
-            $q->where('type_id', 'thing')
-              ->whereJsonContains('metadata->subtype', 'photo');
-        })
-        ->with(['parent'])
-        ->get()
-        ->groupBy('child_id')
-        ->map(function($connections) {
-            // Get first photo for each person
-            return $connections->first();
-        });
-    
-    // Collect all unique people with their photos and dates
+    $personIds = $residenceConnections->pluck('parent_id')->filter()->unique()->all();
+    $photoUrls = \App\Support\SpanShowLookups::firstFeaturedPhotoUrlBySpanId($personIds);
+
     $allResidents = collect();
-    
-    // Add people from residence connections
+
     foreach ($residenceConnections as $connection) {
         if ($connection->parent && $connection->parent->type_id === 'person') {
             $person = $connection->parent;
-            
-            // Get photo from pre-loaded collection
-            $photoConnection = $photoConnections->get($person->id);
-            $photoUrl = null;
-            if ($photoConnection && $photoConnection->parent) {
-                $metadata = $photoConnection->parent->metadata ?? [];
-                $photoUrl = $metadata['thumbnail_url'] 
-                    ?? $metadata['medium_url'] 
-                    ?? $metadata['large_url'] 
-                    ?? null;
-                
-                // If we have a filename but no URL, use proxy route
-                if (!$photoUrl && isset($metadata['filename']) && $metadata['filename']) {
-                    $photoUrl = route('images.proxy', ['spanId' => $photoConnection->parent->id, 'size' => 'thumbnail']);
-                }
-            }
-            
-            // Get dates from connection span
             $dates = $connection->connectionSpan;
-            $dateText = $dates ? $dates->formatted_date_range : null;
-            
             $allResidents->put($person->id, [
                 'person' => $person,
                 'connection_type' => 'residence',
                 'connection' => $connection,
-                'photo_url' => $photoUrl,
-                'date_text' => $dateText
+                'photo_url' => $photoUrls->get($person->id),
+                'date_text' => $dates ? $dates->formatted_date_range : null
             ]);
         }
     }
 
-    // Sort residents by name
     $allResidents = $allResidents->sortBy(function($item) {
         return $item['person']->name;
     })->values();
 
-    // Get all things/organisations/events that are located at this place
-    $locatedConnections = \App\Models\Connection::where('type_id', 'located')
-        ->where('child_id', $span->id) // Place is the child in located connections
-        ->whereHas('parent', function($q) {
-            $q->whereIn('type_id', ['thing', 'organisation', 'event', 'place']);
-        })
-        ->with(['parent', 'connectionSpan'])
-        ->get();
-
-    // Collect all located items with their photos and dates
     $allLocated = collect();
-    
+
     foreach ($locatedConnections as $connection) {
         if ($connection->parent) {
             $item = $connection->parent;
-            $itemType = $item->type_id;
-            
-            // Get photo for things (photos, etc.)
-            $photoUrl = null;
-            if ($itemType === 'thing') {
-                $metadata = $item->metadata ?? [];
-                $subtype = $metadata['subtype'] ?? null;
-                
-                // Check if it's a photo
-                if ($subtype === 'photo') {
-                    $photoUrl = $metadata['thumbnail_url'] 
-                        ?? $metadata['medium_url'] 
-                        ?? $metadata['large_url'] 
-                        ?? null;
-                    
-                    // If we have a filename but no URL, use proxy route
-                    if (!$photoUrl && isset($metadata['filename']) && $metadata['filename']) {
-                        $photoUrl = route('images.proxy', ['spanId' => $item->id, 'size' => 'thumbnail']);
-                    }
-                }
-            }
-            
-            // Get dates from connection span
             $dates = $connection->connectionSpan;
-            $dateText = $dates ? $dates->formatted_date_range : null;
-            
             $allLocated->put($item->id, [
                 'item' => $item,
-                'item_type' => $itemType,
+                'item_type' => $item->type_id,
                 'connection_type' => 'located',
                 'connection' => $connection,
-                'photo_url' => $photoUrl,
-                'date_text' => $dateText
+                'photo_url' => \App\Support\SpanShowLookups::photoUrlFromSpan(
+                    ($item->type_id === 'thing' && ($item->metadata['subtype'] ?? null) === 'photo') ? $item : null
+                ),
+                'date_text' => $dates ? $dates->formatted_date_range : null
             ]);
         }
     }
@@ -140,7 +82,7 @@
     $defaultTab = $allResidents->isNotEmpty() ? 'lived' : 'located';
 @endphp
 
-<div class="card mb-4 place-residence-card" data-place-id="{{ $span->id }}">
+<div class="card mb-4 place-residence-card" data-place-id="{{ $span->id }}" data-lived-here-card>
     <div class="card-header d-flex justify-content-between align-items-center">
         <h6 class="card-title mb-0">
             <i class="bi bi-geo-alt me-2"></i>

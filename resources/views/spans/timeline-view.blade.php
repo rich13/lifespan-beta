@@ -209,7 +209,7 @@
 @section('content')
 <div class="timeline-view-page" data-span-id="{{ $span->id }}" data-span-slug="{{ $span->slug }}">
     <div class="timeline-container-wrapper">
-        <x-spans.timeline-scroll-controlled :span="$span" />
+        <x-spans.timeline-scroll-controlled :span="$span" :timelineSeed="$timelineSeed ?? null" :personalTimelineSeed="$personalTimelineSeed ?? null" />
     </div>
     
     <div class="timeline-content-area">

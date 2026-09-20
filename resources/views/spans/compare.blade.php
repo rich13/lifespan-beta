@@ -531,7 +531,7 @@ $(document).ready(function() {
     <!-- Comparison Timeline -->
     <div class="row mb-4">
         <div class="col-12">
-            <x-spans.comparison-timeline :span1="$span" :span2="$personalSpan" />
+            <x-spans.comparison-timeline :span1="$span" :span2="$personalSpan" :span1Seed="$timelineSeed ?? null" :span2Seed="$personalTimelineSeed ?? null" />
         </div>
     </div>
 

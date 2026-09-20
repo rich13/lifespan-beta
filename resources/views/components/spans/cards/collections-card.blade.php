@@ -1,13 +1,22 @@
-@props(['span'])
+@props(['span', 'precomputedConnections' => null])
 
 @php
-    // Get all collections that contain this span
-    $collections = $span->getContainingCollections();
+    if ($precomputedConnections instanceof \App\Support\PrecomputedSpanConnections) {
+        $collections = $precomputedConnections->getChildByType('contains')
+            ->map(fn ($connection) => $connection->parent)
+            ->filter(fn ($parent) => $parent
+                && $parent->type_id === 'collection'
+                && $parent->access_level === 'public')
+            ->unique('id')
+            ->values();
+    } else {
+        $collections = $span->getContainingCollections();
+    }
 @endphp
 
 <!-- Show collections if they exist -->
 @if($collections->isNotEmpty())
-    <div class="card mb-4">
+    <div class="card mb-4" data-collections-card>
         <div class="card-header d-flex justify-content-between align-items-center">
             <h6 class="card-title mb-0">
                 <i class="bi bi-grid-3x3-gap me-2"></i>

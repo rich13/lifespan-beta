@@ -1,10 +1,16 @@
-@props(['span', 'timeTravelDate' => null])
+@props(['span', 'timeTravelDate' => null, 'timelineSeed' => null, 'personalTimelineSeed' => null])
 
 @php
     $currentUserSpanId = optional(auth()->user())->personal_span_id;
 @endphp
 
 <div class="timeline-scroll-controlled-wrapper" data-span-id="{{ $span->id }}">
+    @if($timelineSeed)
+        <script type="application/json" id="timeline-seed-{{ $span->id }}">@json($timelineSeed)</script>
+    @endif
+    @if($personalTimelineSeed && isset($personalTimelineSeed['span']['span']['id']) && $personalTimelineSeed['span']['span']['id'] !== $span->id)
+        <script type="application/json" id="timeline-seed-{{ $personalTimelineSeed['span']['span']['id'] }}">@json($personalTimelineSeed)</script>
+    @endif
     <div class="d-flex justify-content-end align-items-center mb-1 px-2">
         <div class="btn-group btn-group-sm" role="group">
             <input type="radio" class="btn-check" name="timeline-mode-{{ $span->id }}" id="absolute-mode-{{ $span->id }}" value="absolute" checked>
@@ -66,12 +72,76 @@
         var margin = { top: 24, right: 20, bottom: 30, left: 20 };
 
         function fetchJsonOrFallback(url, fallback) {
-            return fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
-                .then(function(response) {
-                    if (!response.ok) return fallback;
-                    return response.json();
-                })
-                .catch(function() { return fallback; });
+            return $.ajax({
+                url: url,
+                dataType: 'json'
+            }).then(function(data) {
+                return data;
+            }, function() {
+                return fallback;
+            });
+        }
+
+        function loadTimelineSeedFor(id) {
+            var raw = $('#timeline-seed-' + id).text();
+            if (!raw) {
+                return null;
+            }
+            try {
+                return JSON.parse(raw);
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function loadTimelineSeed() {
+            return loadTimelineSeedFor(spanId);
+        }
+
+        function swimlaneFromSeed(seed, id, name, isCurrentUser) {
+            if (!seed || !seed.span || !seed.span.span) {
+                return null;
+            }
+
+            var duringConnections = (seed.during_connections && seed.during_connections.connections) || [];
+            (seed.span.connections || []).forEach(function(connection) {
+                if (connection.nested_connections) {
+                    duringConnections = duringConnections.concat(connection.nested_connections);
+                }
+            });
+
+            return {
+                id: id,
+                name: name,
+                timeline: { span: seed.span.span, connections: seed.span.connections || [] },
+                duringConnections: duringConnections,
+                isCurrentSpan: false,
+                isCurrentUser: !!isCurrentUser
+            };
+        }
+
+        function loadCurrentSpanTimelinePayloads() {
+            var seed = loadTimelineSeed();
+            var spanFallback = { span: { id: spanId, name: spanName, start_year: null, end_year: null }, connections: [] };
+            var connectionsFallback = { span: { id: spanId, name: spanName, start_year: null, end_year: null }, connections: [] };
+
+            if (seed && seed.span && seed.object_connections && seed.subject_connections && seed.during_connections) {
+                return $.Deferred().resolve([
+                    seed.span,
+                    seed.object_connections,
+                    seed.subject_connections,
+                    seed.during_connections
+                ]).promise();
+            }
+
+            return $.when(
+                fetchJsonOrFallback('/api/spans/' + spanId, spanFallback),
+                fetchJsonOrFallback('/api/spans/' + spanId + '/object-connections', connectionsFallback),
+                fetchJsonOrFallback('/api/spans/' + spanId + '/subject-connections', connectionsFallback),
+                fetchJsonOrFallback('/api/spans/' + spanId + '/during-connections', connectionsFallback)
+            ).then(function(spanResult, objectResult, subjectResult, duringResult) {
+                return [spanResult, objectResult, subjectResult, duringResult];
+            });
         }
 
         function filterConnectionsDeep(connections) {
@@ -953,12 +1023,7 @@
             var spanFallback = { span: { id: spanId, name: spanName, start_year: null, end_year: null }, connections: [] };
             var connectionsFallback = { span: { id: spanId, name: spanName, start_year: null, end_year: null }, connections: [] };
 
-            Promise.all([
-                fetchJsonOrFallback('/api/spans/' + spanId, spanFallback),
-                fetchJsonOrFallback('/api/spans/' + spanId + '/object-connections', connectionsFallback),
-                fetchJsonOrFallback('/api/spans/' + spanId + '/subject-connections', connectionsFallback),
-                fetchJsonOrFallback('/api/spans/' + spanId + '/during-connections', connectionsFallback)
-            ]).then(function(results) {
+            loadCurrentSpanTimelinePayloads().then(function(results) {
                 var currentSpanData = results[0];
                 var objectConnectionsData = results[1];
                 var subjectConnectionsData = results[2];
@@ -990,8 +1055,10 @@
                 if (shouldIncludeUserSpan) allSubjectIds.push(currentUserSpanId);
 
                 var timelineData = [];
+                var personalSeed = shouldIncludeUserSpan ? loadTimelineSeedFor(currentUserSpanId) : null;
+                var personalSwimlane = swimlaneFromSeed(personalSeed, currentUserSpanId, 'You', true);
                 if (shouldIncludeUserSpan) {
-                    timelineData.push({ id: currentUserSpanId, name: 'You', timeline: null, isCurrentSpan: false, isCurrentUser: true });
+                    timelineData.push(personalSwimlane || { id: currentUserSpanId, name: 'You', timeline: null, isCurrentSpan: false, isCurrentUser: true });
                 }
 
                 var roleOccupancies = (objectConnectionsData.connections || []).filter(function(c) { return c.type_id === 'has_role'; });
@@ -1006,7 +1073,7 @@
                 });
 
                 var subjectIdsToFetch = allSubjectIds.filter(function(id) { return id !== currentUserSpanId && id !== spanId; });
-                var allIdsToFetch = shouldIncludeUserSpan ? [currentUserSpanId].concat(subjectIdsToFetch) : subjectIdsToFetch;
+                var allIdsToFetch = shouldIncludeUserSpan && !personalSwimlane ? [currentUserSpanId].concat(subjectIdsToFetch) : subjectIdsToFetch;
 
                 function finishRender(td) {
                     allTimelineData = td;
@@ -1038,21 +1105,20 @@
                     var csrfToken = document.querySelector('meta[name="csrf-token"]') ? document.querySelector('meta[name="csrf-token"]').getAttribute('content') : '';
 
                     Promise.all(batches.map(function(batch) {
-                        return fetch('/api/spans/batch-timeline', {
+                        return $.ajax({
+                            url: '/api/spans/batch-timeline',
                             method: 'POST',
-                            credentials: 'same-origin',
+                            contentType: 'application/json',
+                            dataType: 'json',
                             headers: {
-                                'Content-Type': 'application/json',
-                                'Accept': 'application/json',
                                 'X-CSRF-TOKEN': csrfToken
                             },
-                            body: JSON.stringify({ span_ids: batch })
-                        }).then(function(r) {
-                            if (!r.ok) throw new Error('Batch request failed');
-                            return r.json();
+                            data: JSON.stringify({ span_ids: batch })
                         }).then(function(data) {
                             return data.results || {};
-                        }).catch(function() { return {}; });
+                        }, function() {
+                            return {};
+                        });
                     })).then(function(batchResults) {
                         var allResults = {};
                         batchResults.forEach(function(br) { Object.assign(allResults, br); });
@@ -1108,7 +1174,7 @@
             });
         }
 
-        document.addEventListener('DOMContentLoaded', function() {
+        $(function() {
             setTimeout(initializeScrollTimeline, 100);
         });
     })();

@@ -74,10 +74,9 @@
                         ?? $metadata['medium_url']
                         ?? $metadata['large_url']
                         ?? null;
-
-                    if (!$coverUrl && !empty($work->cover_art_small_url)) {
-                        $coverUrl = $work->cover_art_small_url;
-                    }
+                    $isAlbum = $work->type_id === 'thing' && $subtype === 'album';
+                    $albumCoverUrl = $isAlbum ? $work->storedCoverArtUrl('small') : null;
+                    $lazyLoadAlbumCover = $isAlbum && !$coverUrl && !$albumCoverUrl && $work->needsCoverArtFetch();
                 @endphp
                 <div class="list-group-item px-0 py-2 border-0 border-bottom">
                     <div class="d-flex align-items-center">
@@ -86,14 +85,16 @@
                                 <a href="{{ route('spans.show', $work) }}">
                                     <img src="{{ $coverUrl }}"
                                          alt="{{ $work->name }}"
-                                         class="rounded"
-                                         style="width: 50px; height: 75px; object-fit: cover;"
+                                         class="cover-art-image cover-art--work rounded"
                                          loading="lazy">
+                                </a>
+                            @elseif($albumCoverUrl || $lazyLoadAlbumCover)
+                                <a href="{{ route('spans.show', $work) }}" class="text-decoration-none">
+                                    <x-spans.cover-art :album="$work" size="small" variant="work" :alt="$work->name" />
                                 </a>
                             @else
                                 <a href="{{ route('spans.show', $work) }}"
-                                   class="d-flex align-items-center justify-content-center bg-light rounded text-muted text-decoration-none"
-                                   style="width: 50px; height: 75px;">
+                                   class="cover-art-placeholder cover-art--work text-decoration-none">
                                     <i class="bi bi-{{ $subtypeIcon }}"></i>
                                 </a>
                             @endif

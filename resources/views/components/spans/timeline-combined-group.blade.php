@@ -74,9 +74,8 @@ let currentSpan_{{ str_replace('-', '_', $span->id) }} = null;
 let currentUserSpanId_{{ str_replace('-', '_', $span->id) }} = null;
 let currentMode_{{ str_replace('-', '_', $span->id) }} = 'absolute';
 
-document.addEventListener('DOMContentLoaded', function() {
-    // Add a small delay to ensure DOM is fully ready
-    setTimeout(() => {
+$(function() {
+    setTimeout(function() {
         initializeCombinedTimeline_{{ str_replace('-', '_', $span->id) }}();
     }, 100);
 });

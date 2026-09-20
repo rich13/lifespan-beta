@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\SpanTypeCatalogue;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Validation\Rule;
@@ -70,6 +71,16 @@ class SpanType extends Model
     protected $casts = [
         'metadata' => 'array'
     ];
+
+    protected static function booted(): void
+    {
+        $forgetCatalogue = function () {
+            app(SpanTypeCatalogue::class)->forget();
+        };
+
+        static::saved($forgetCatalogue);
+        static::deleted($forgetCatalogue);
+    }
 
     /**
      * Get the base validation rules that apply to all spans
@@ -381,9 +392,7 @@ class SpanType extends Model
      */
     public static function getTimelessTypes(): array
     {
-        return static::where('metadata->timeless', true)
-            ->pluck('type_id')
-            ->toArray();
+        return app(SpanTypeCatalogue::class)->timelessTypeIds();
     }
 
     /**

@@ -16,6 +16,12 @@ use Illuminate\Support\Facades\Cache;
 class PublicSpanCache
 {
     /**
+     * Bump when layout/chrome HTML changes independently of span data,
+     * so guest pages do not keep a year of stale chrome.
+     */
+    private const CHROME_VERSION = 2;
+
+    /**
      * Time-to-live for cached HTML responses (seconds). From config.
      */
     protected function ttlSeconds(): int
@@ -33,7 +39,7 @@ class PublicSpanCache
         $queryString = $request->getQueryString() ?? '';
         $queryHash = $queryString === '' ? 'noquery' : sha1($queryString);
 
-        return "public_span_page:{$spanId}:v{$version}:{$locale}:{$queryHash}";
+        return "public_span_page:{$spanId}:v{$version}:c".self::CHROME_VERSION.":{$locale}:{$queryHash}";
     }
 
     /**

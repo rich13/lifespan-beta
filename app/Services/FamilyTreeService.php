@@ -13,6 +13,11 @@ class FamilyTreeService
     /** Request-level cache for getCousins so cousins/extraNephewsAndNieces/extraInLawsAndOutLaws don't recompute (e.g. on homepage). */
     private static array $cousinsBySpanId = [];
 
+    /** Parents/children already loaded on this service instance, reused across ancestors/siblings/aunts/etc. */
+    private array $parentsBySpanId = [];
+
+    private array $childrenBySpanId = [];
+
     /**
      * Get all ancestors of a person span up to a certain number of generations.
      * Cached (like getDescendants) to avoid repeated traversal on span show / story generation.
@@ -83,7 +88,12 @@ class FamilyTreeService
      */
     public function getParents(Span $span): Collection
     {
-        return $span->parents()->get();
+        $id = $span->id;
+        if (! array_key_exists($id, $this->parentsBySpanId)) {
+            $this->parentsBySpanId[$id] = $span->parents()->get();
+        }
+
+        return $this->parentsBySpanId[$id];
     }
 
     /**
@@ -113,7 +123,12 @@ class FamilyTreeService
      */
     public function getChildren(Span $span): Collection
     {
-        return $span->children()->get();
+        $id = $span->id;
+        if (! array_key_exists($id, $this->childrenBySpanId)) {
+            $this->childrenBySpanId[$id] = $span->children()->get();
+        }
+
+        return $this->childrenBySpanId[$id];
     }
 
     /**

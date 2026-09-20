@@ -72,22 +72,12 @@ class AppServiceProvider extends ServiceProvider
             $this->configureRailwaySession();
         }
         
-        // Make span types available globally for the new span modal.
-        // Only select type_id and name to avoid loading/decoding metadata on every request
-        // (metadata can be large and was causing 60s timeouts when decoding all types).
-        // Subtype options are loaded via AJAX when the user selects a type (spans.types.subtype-options).
-        // Run the query once per request and share; composer runs for every view ('*') so without this we'd run it 600+ times.
-        View::composer('*', function ($view) {
+        // Span types for the New span modal only — not every page. The modal is
+        // lazy-loaded, so this composer runs when that fragment (or /new/span) renders.
+        // Subtype options are still loaded via AJAX (spans.types.subtype-options).
+        View::composer('components.modals.new-span-modal', function ($view) {
             if (!$view->offsetExists('spanTypes')) {
-                $spanTypes = View::shared('spanTypes');
-                if ($spanTypes === null) {
-                    $spanTypes = \App\Models\SpanType::whereNotIn('type_id', ['connection', 'note', 'set'])
-                        ->orderBy('name')
-                        ->select('type_id', 'name')
-                        ->get();
-                    View::share('spanTypes', $spanTypes);
-                }
-                $view->with('spanTypes', $spanTypes);
+                $view->with('spanTypes', app(\App\Services\SpanTypeCatalogue::class)->forNewSpanModal());
             }
         });
     }

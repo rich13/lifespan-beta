@@ -10,7 +10,6 @@ use App\Services\AiYamlCreatorService;
     @if($variant === 'mobile')
         <div class="d-grid gap-2">
             <button type="button" class="btn btn-primary" 
-                    data-bs-toggle="modal" data-bs-target="#newSpanModal" 
                     data-bs-dismiss="offcanvas"
                     id="mobile-new-span-btn">
                 <i class="bi bi-plus-circle me-2"></i>Create New Span
@@ -37,7 +36,6 @@ use App\Services\AiYamlCreatorService;
         <div class="d-flex align-items-center">
             <div class="btn-group" role="group">
                 <button type="button" class="btn btn-sm btn-primary" 
-                        data-bs-toggle="modal" data-bs-target="#newSpanModal" 
                         id="new-span-btn"
                         title="Create a new span (⌘K)">
                     <i class="bi bi-plus-circle me-1"></i>New

@@ -12,6 +12,7 @@ class EncryptCookies extends Middleware
      * @var array<int, string>
      */
     protected $except = [
-        //
+        // Set by JavaScript; must stay readable so the first HTML paint can use it.
+        'sidebarCollapsed',
     ];
 }

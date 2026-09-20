@@ -1,6 +1,12 @@
-@props(['span1', 'span2'])
+@props(['span1', 'span2', 'span1Seed' => null, 'span2Seed' => null])
 
 <div class="card">
+    @if($span1Seed)
+        <script type="application/json" id="timeline-seed-{{ $span1->id }}">@json($span1Seed)</script>
+    @endif
+    @if($span2Seed && $span2->id !== $span1->id)
+        <script type="application/json" id="timeline-seed-{{ $span2->id }}">@json($span2Seed)</script>
+    @endif
     <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="card-title mb-0">
             <i class="bi bi-clock-history me-2"></i>
@@ -28,7 +34,7 @@
 @push('scripts')
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+$(function() {
     try {
         initializeComparisonTimeline_{{ str_replace('-', '_', $span1->id) }}_{{ str_replace('-', '_', $span2->id) }}();
     } catch (error) {
@@ -43,14 +49,31 @@ document.addEventListener('DOMContentLoaded', function() {
 function initializeComparisonTimeline_{{ str_replace('-', '_', $span1->id) }}_{{ str_replace('-', '_', $span2->id) }}() {
     const span1Id = '{{ $span1->id }}';
     const span2Id = '{{ $span2->id }}';
-    
-    // Fetch timeline data for both spans
-    Promise.all([
-        fetch(`/api/spans/${span1Id}`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }),
-        fetch(`/api/spans/${span2Id}`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
-    ])
-    .then(responses => Promise.all(responses.map(r => r.json())))
-    .then(([data1, data2]) => {
+
+    function spanPayload(id) {
+        var raw = $('#timeline-seed-' + id).text();
+        if (raw) {
+            try {
+                var seed = JSON.parse(raw);
+                if (seed && seed.span) {
+                    return $.Deferred().resolve(seed.span).promise();
+                }
+            } catch (e) {}
+        }
+
+        return $.ajax({
+            url: '/api/spans/' + id,
+            dataType: 'json'
+        });
+    }
+
+    $.when(spanPayload(span1Id), spanPayload(span2Id)).done(function(data1, data2) {
+        if ($.isArray(data1) && data1.length >= 1 && data1[0] && data1[0].span) {
+            data1 = data1[0];
+        }
+        if ($.isArray(data2) && data2.length >= 1 && data2[0] && data2[0].span) {
+            data2 = data2[0];
+        }
         if ((data1.connections && data1.connections.length > 0) || (data2.connections && data2.connections.length > 0)) {
             renderComparisonTimeline_{{ str_replace('-', '_', $span1->id) }}_{{ str_replace('-', '_', $span2->id) }}(data1, data2, 'absolute');
             
@@ -78,9 +101,8 @@ function initializeComparisonTimeline_{{ str_replace('-', '_', $span1->id) }}_{{
             document.getElementById(`comparison-timeline-container-${span1Id}-${span2Id}`).innerHTML = 
                 '<div class="text-muted text-center py-4">No timeline data available</div>';
         }
-    })
-    .catch(error => {
-        document.getElementById(`comparison-timeline-container-${span1Id}-${span2Id}`).innerHTML = 
+    }).fail(function() {
+        document.getElementById(`comparison-timeline-container-${span1Id}-${span2Id}`).innerHTML =
             '<div class="text-danger text-center py-4">Error loading timeline data</div>';
     });
 }

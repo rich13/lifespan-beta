@@ -9,7 +9,7 @@
     // Use precomputed photo/parent data when passed from family-relationships; otherwise run queries (e.g. family/index)
     $photoConnectionsResolved = $photoConnections ?? collect();
     $parentsMapResolved = $parentsMap ?? collect();
-    if (!$isLegacy && !$interactive && $photoConnectionsResolved->isEmpty() && $parentsMapResolved->isEmpty()) {
+    if (!$isLegacy && !$interactive && $photoConnections === null && $parentsMap === null) {
         $personIds = $sortedMembers->filter(fn ($member) => $member->type_id === 'person')->pluck('id')->filter()->unique()->toArray();
         if (!empty($personIds)) {
             $photoConnectionsResolved = \App\Models\Connection::where('type_id', 'features')

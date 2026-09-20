@@ -1,24 +1,35 @@
-@props(['span'])
+@props(['span', 'precomputedConnections' => null])
 
 @php
     if ($span->type_id !== 'thing') {
         return;
     }
 
-    // Prefer the computed subtype property, fall back to raw metadata
     $subtype = $span->subtype ?? ($span->metadata['subtype'] ?? null);
     if ($subtype !== 'programme') {
         return;
     }
 
-    $episodeConnections = $span->connectionsAsSubject()
-        ->where('type_id', 'contains')
-        ->whereHas('child', function ($q) {
-            $q->where('type_id', 'thing')
-              ->whereRaw("metadata->>'subtype' = ?", ['episode']);
-        })
-        ->with(['child'])
-        ->get();
+    if ($precomputedConnections instanceof \App\Support\PrecomputedSpanConnections) {
+        $episodeConnections = $precomputedConnections->getParentByType('contains')
+            ->filter(function ($connection) {
+                $child = $connection->child;
+
+                return $child
+                    && $child->type_id === 'thing'
+                    && ($child->metadata['subtype'] ?? $child->subtype) === 'episode';
+            })
+            ->values();
+    } else {
+        $episodeConnections = $span->connectionsAsSubject()
+            ->where('type_id', 'contains')
+            ->whereHas('child', function ($query) {
+                $query->where('type_id', 'thing')
+                    ->whereRaw("metadata->>'subtype' = ?", ['episode']);
+            })
+            ->with(['child'])
+            ->get();
+    }
 
     $episodes = $episodeConnections->map(function ($connection) {
         $episode = $connection->child;
@@ -43,7 +54,7 @@
         ->values();
 @endphp
 
-<div class="card mb-4">
+<div class="card mb-4" data-programme-episodes-card>
     <div class="card-header">
         <h6 class="card-title mb-0">
             <i class="bi bi-broadcast me-2"></i>Episodes

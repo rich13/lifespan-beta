@@ -1,17 +1,9 @@
 @props(['span'])
 
 @php
-    // Use the WikipediaSpanMatcherService to add links to the description
-    $matcherService = new \App\Services\WikipediaSpanMatcherService();
-    
-    // Render markdown if present
-    $renderedDescription = null;
-    if ($span->description) {
-        // First render markdown
-        $markdownRendered = \Illuminate\Support\Str::markdown($span->description);
-        // Then add automatic span links
-        $renderedDescription = $matcherService->highlightMatches($markdownRendered);
-    }
+    $renderedDescription = $span->description
+        ? \Illuminate\Support\Str::markdown($span->description)
+        : null;
 @endphp
 
 <div class="card mb-4" id="description-card">
@@ -48,7 +40,9 @@
         @if($span->description)
             <!-- View mode -->
             <div id="description-view-mode" class="description-content">               
-                <div class="description-text">
+                <div class="description-text js-description-links"
+                     data-description-span="{{ $span->id }}"
+                     aria-busy="true">
                     {!! $renderedDescription !!}
                 </div>
             </div>

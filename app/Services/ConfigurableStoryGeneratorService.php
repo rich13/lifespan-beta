@@ -18,8 +18,32 @@ class ConfigurableStoryGeneratorService
     /** Request-level cache for getResidences so we don't run the same query 3+ times per span. */
     private array $residencesCache = [];
 
+    /** Request-level cache for getTracks so hasTracks and getTrackCount share one load. */
+    private array $tracksCache = [];
+
     /** When set, story uses this instead of querying; avoids duplicate connection loads when controller already has them. */
     private ?PrecomputedSpanConnections $precomputedForStory = null;
+
+    /** Family tree for the story subject, reused when the family card already walked it. */
+    private ?array $familyDataForStory = null;
+
+    /** Span id the current generateStory() call is about; familyData only applies to this person. */
+    private ?string $storySubjectId = null;
+
+    /** During (education phase) connections grouped by education connection-span id, for this story run. */
+    private ?Collection $educationDuringByConnSpan = null;
+
+    /** Nearest-city lookups for this story run, keyed by place span id. */
+    private array $nearestCityNameCache = [];
+
+    /** @var array<string, Span|null> */
+    private array $nearestCitySpanCache = [];
+
+    /** Siblings for this story run, keyed by person span id. */
+    private array $siblingsCache = [];
+
+    /** Place spans keyed by normalised city name, loaded once for this story. */
+    private array $storyCitySpansByNormalisedName = [];
 
     public function __construct()
     {
@@ -142,15 +166,7 @@ class ConfigurableStoryGeneratorService
                 ->where('type_id', 'education')
                 ->with('connectionSpan')
                 ->get();
-        $connectionSpanIds = $educationConnections->map(fn ($c) => $c->connectionSpan?->id)->filter()->unique()->values()->all();
-        if (empty($connectionSpanIds)) {
-            return false;
-        }
-        return Connection::where('type_id', 'during')
-            ->where(function ($q) use ($connectionSpanIds) {
-                $q->whereIn('child_id', $connectionSpanIds)->orWhereIn('parent_id', $connectionSpanIds);
-            })
-            ->exists();
+        return $this->getEducationDuringByConnectionSpan($educationConnections)->isNotEmpty();
     }
 
     // person_at_date support: hasEducationPhaseAtDate
@@ -272,17 +288,7 @@ class ConfigurableStoryGeneratorService
                 ->with(['connectionSpan', 'child'])
                 ->get();
 
-        $connectionSpanIds = $educationConnections->map(fn ($c) => $c->connectionSpan?->id)->filter()->unique()->values()->all();
-        $allDuring = empty($connectionSpanIds) ? collect() : Connection::where('type_id', 'during')
-            ->where(function ($q) use ($connectionSpanIds) {
-                $q->whereIn('child_id', $connectionSpanIds)->orWhereIn('parent_id', $connectionSpanIds);
-            })
-            ->with(['parent', 'child'])
-            ->get();
-
-        $duringByConnSpan = $allDuring->groupBy(function ($c) use ($connectionSpanIds) {
-            return in_array($c->parent_id, $connectionSpanIds) ? $c->parent_id : $c->child_id;
-        });
+        $duringByConnSpan = $this->getEducationDuringByConnectionSpan($educationConnections);
 
         $sentences = [];
         foreach ($educationConnections as $edu) {
@@ -354,11 +360,22 @@ class ConfigurableStoryGeneratorService
     /**
      * Generate a story for a span using configuration templates.
      *
-     * @param  PrecomputedSpanConnections|null  $precomputed  When provided (e.g. from span show controller), story uses this instead of querying connections again — same sentence output, fewer queries.
+     * @param  PrecomputedSpanConnections|null  $precomputed  When provided (e.g. from span show controller), story uses this instead of querying connections again — same sentence output, fewer queries. When omitted, connections are loaded once here so every sentence shares them.
+     * @param  array<string, mixed>|null  $familyData  When provided (e.g. from the family card), parents/children/siblings are taken from this instead of walking the family tree again.
      */
-    public function generateStory(Span $span, ?PrecomputedSpanConnections $precomputed = null): array
+    public function generateStory(Span $span, ?PrecomputedSpanConnections $precomputed = null, ?array $familyData = null): array
     {
-        $this->precomputedForStory = $precomputed;
+        $this->residencesCache = [];
+        $this->tracksCache = [];
+        $this->educationDuringByConnSpan = null;
+        $this->nearestCityNameCache = [];
+        $this->nearestCitySpanCache = [];
+        $this->siblingsCache = [];
+        $this->storyCitySpansByNormalisedName = [];
+        $this->familyDataForStory = $familyData;
+        $this->storySubjectId = $span->id;
+        $this->precomputedForStory = $precomputed ?? $this->loadPrecomputedConnectionsForStory($span);
+        $this->preloadStoryCitySpans();
 
         try {
             // Handle connection spans explicitly (e.g., during phase connections)
@@ -517,7 +534,113 @@ class ConfigurableStoryGeneratorService
         ];
         } finally {
             $this->precomputedForStory = null;
+            $this->educationDuringByConnSpan = null;
+            $this->familyDataForStory = null;
+            $this->storySubjectId = null;
         }
+    }
+
+    /**
+     * Load subject and object connections once for this story, with the same access
+     * rules as the per-sentence queries this replaces.
+     */
+    private function loadPrecomputedConnectionsForStory(Span $span): PrecomputedSpanConnections
+    {
+        $with = [
+            'child.type',
+            'parent.type',
+            'connectionSpan.type',
+            'type',
+        ];
+
+        return new PrecomputedSpanConnections(
+            $span->connectionsAsSubjectWithAccess($this->currentUser)->with($with)->get(),
+            $span->connectionsAsObjectWithAccess($this->currentUser)->with($with)->get(),
+        );
+    }
+
+    /**
+     * Resolve city names from OSM hierarchy on residence places, then load matching
+     * place spans in one query. Avoids PlaceLocationService spatial scans per address.
+     */
+    private function preloadStoryCitySpans(): void
+    {
+        if (! $this->precomputedForStory) {
+            return;
+        }
+
+        $candidateNames = [];
+        foreach ($this->precomputedForStory->getParentByType('residence') as $connection) {
+            $place = $connection->child;
+            if (! $place || $place->type_id !== 'place') {
+                continue;
+            }
+
+            $cityName = $place->getNearestCityNameFromHierarchy() ?? $place->name;
+            $this->nearestCityNameCache[$place->id] = $cityName;
+
+            $fromHierarchy = $place->getNearestCitySpanFromHierarchy();
+            if ($fromHierarchy) {
+                $this->nearestCitySpanCache[$place->id] = $fromHierarchy;
+                continue;
+            }
+
+            $candidateNames[] = $cityName;
+            $candidateNames[] = $place->name;
+            $normalised = $this->normalizeCityName($cityName);
+            if ($normalised !== '' && $normalised !== $cityName) {
+                $candidateNames[] = $normalised;
+                $candidateNames[] = 'Greater '.$normalised;
+                $candidateNames[] = 'City of '.$normalised;
+            }
+        }
+
+        $candidateNames = array_values(array_unique(array_filter($candidateNames)));
+        if ($candidateNames === []) {
+            return;
+        }
+
+        $matches = Span::query()
+            ->where('type_id', 'place')
+            ->whereIn('name', $candidateNames)
+            ->get();
+
+        foreach ($matches as $match) {
+            $this->storyCitySpansByNormalisedName[strtolower($this->normalizeCityName($match->name))] = $match;
+            $this->storyCitySpansByNormalisedName[strtolower(trim($match->name))] = $match;
+        }
+    }
+
+    /**
+     * Education "during" (phase) connections, grouped by education connection-span id.
+     */
+    private function getEducationDuringByConnectionSpan(Collection $educationConnections): Collection
+    {
+        if ($this->educationDuringByConnSpan !== null) {
+            return $this->educationDuringByConnSpan;
+        }
+
+        $connectionSpanIds = $educationConnections
+            ->map(fn ($c) => $c->connectionSpan?->id)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $allDuring = $connectionSpanIds === []
+            ? collect()
+            : Connection::where('type_id', 'during')
+                ->where(function ($q) use ($connectionSpanIds) {
+                    $q->whereIn('child_id', $connectionSpanIds)->orWhereIn('parent_id', $connectionSpanIds);
+                })
+                ->with(['parent', 'child'])
+                ->get();
+
+        $this->educationDuringByConnSpan = $allDuring->groupBy(function ($c) use ($connectionSpanIds) {
+            return in_array($c->parent_id, $connectionSpanIds, true) ? $c->parent_id : $c->child_id;
+        });
+
+        return $this->educationDuringByConnSpan;
     }
 
     /**
@@ -942,9 +1065,9 @@ class ConfigurableStoryGeneratorService
             'hasWork' => $this->getWork($span)->isNotEmpty(),
             'hasRelationships' => $this->getRelationships($span)->isNotEmpty(),
             'hasCurrentRelationship' => $this->getCurrentRelationshipData($span, 'person') !== null,
-            'hasParents' => $span->parents->isNotEmpty(),
-            'hasChildren' => $span->children->isNotEmpty(),
-            'hasSiblings' => $span->siblings()->count() > 0,
+            'hasParents' => $this->getParentSpans($span)->isNotEmpty(),
+            'hasChildren' => $this->getChildSpans($span)->isNotEmpty(),
+            'hasSiblings' => $this->getSiblingSpans($span)->isNotEmpty(),
             'hasBandMemberships' => $this->getBandMemberships($span)->isNotEmpty(),
             'hasMembers' => $this->getBandMembers($span)->isNotEmpty(),
             'hasDiscography' => $this->getDiscography($span)->isNotEmpty(),
@@ -1028,11 +1151,11 @@ class ConfigurableStoryGeneratorService
             'getLongestRelationshipPartner' => ($longestRel = $this->getLongestRelationshipData($span, 'person')) ? $this->makeSpanLink($longestRel['name'] ?? $longestRel, $longestRel['span'] ?? null) : null,
             'getLongestRelationshipDuration' => ($longestRel = $this->getLongestRelationshipData($span, 'person')) ? ($longestRel['duration'] ?? null) : null,
             'getParentNames' => $this->getParentNames($span),
-            'getChildCount' => $span->children->count(),
-            'getFirstChildName' => ($child = $span->children->first()) ? $this->makeSpanLink($child->name, $child) : null,
+            'getChildCount' => $this->getChildSpans($span)->count(),
+            'getFirstChildName' => ($child = $this->getChildSpans($span)->first()) ? $this->makeSpanLink($child->name, $child) : null,
             'getChildNames' => $this->getChildNames($span),
-            'getSiblingCount' => $span->siblings()->count(),
-            'getFirstSiblingName' => ($sibling = $span->siblings()->first()) ? $this->makeSpanLink($sibling->name, $sibling) : null,
+            'getSiblingCount' => $this->getSiblingSpans($span)->count(),
+            'getFirstSiblingName' => ($sibling = $this->getSiblingSpans($span)->first()) ? $this->makeSpanLink($sibling->name, $sibling) : null,
             'getSiblingNames' => $this->getSiblingNames($span),
             'getBandMembershipNames' => $this->getBandMembershipNames($span),
             'getFirstBandMembershipName' => ($firstBand = $this->getBandMemberships($span)->first()) ? $this->makeSpanLink($firstBand['band'], $firstBand['band_span']) : null,
@@ -1273,26 +1396,13 @@ class ConfigurableStoryGeneratorService
             return null;
         }
 
-        $residenceConnections = $person->connectionsAsSubjectWithAccess($this->currentUser)
-            ->where('type_id', 'residence')
-            ->whereHas('child', function ($query) {
-                $query->where('type_id', 'place');
-            })
-            ->with(['child', 'connectionSpan'])
-            ->limit(50)
-            ->get();
-
-        // Find the best matching residence for birth location
         $bestMatch = null;
         $bestScore = 0;
 
-        foreach ($residenceConnections as $connection) {
-            // Only consider connections where the child is a place
-            if ($connection->child->type_id !== 'place') {
-                continue;
-            }
-            $connectionSpan = $connection->connectionSpan;
-            if (!$connectionSpan) {
+        foreach ($this->getResidences($person) as $residence) {
+            $placeSpan = $residence['place_span'] ?? null;
+            $connectionSpan = $residence['connection_span'] ?? null;
+            if (!$placeSpan || $placeSpan->type_id !== 'place' || !$connectionSpan) {
                 continue;
             }
 
@@ -1304,21 +1414,20 @@ class ConfigurableStoryGeneratorService
 
             if ($score > $bestScore) {
                 $bestScore = $score;
-                $bestMatch = $connection;
+                $bestMatch = $residence;
             }
         }
 
-        // Only return a match if we have a reasonable score (at least year match)
-        if ($bestScore >= 1 && $bestMatch && $bestMatch->child->type_id === 'place') {
-            $placeSpan = $bestMatch->child;
+        if ($bestScore >= 1 && $bestMatch && ($bestMatch['place_span']->type_id ?? null) === 'place') {
+            $placeSpan = $bestMatch['place_span'];
             $displayName = $this->getDisplayPlaceName($placeSpan);
-            $linkSpan = $placeSpan->getNearestCitySpan() ?? $placeSpan;
+            $linkSpan = $this->nearestCitySpanForStory($placeSpan) ?? $placeSpan;
             return $this->makeSpanLink($displayName, $linkSpan);
         }
-        
+
         return null;
     }
-    
+
     /**
      * Normalise city names for comparison/deduplication (strip "City of", "Greater " prefixes).
      */
@@ -1335,15 +1444,39 @@ class ConfigurableStoryGeneratorService
     }
 
     /**
-     * Get a display name for a place span, using the nearest city (same approach as place relations card).
-     * Delegates to getNearestCityName() so a road in Lambeth resolves to "London".
-     *
-     * @param Span $placeSpan The place span to get display name for
-     * @return string The display name to use in stories
+     * City-level display name from OSM hierarchy already on the place (no spatial scan).
      */
     protected function getDisplayPlaceName(Span $placeSpan): string
     {
-        return $placeSpan->getNearestCityName();
+        $id = $placeSpan->id;
+        if (! array_key_exists($id, $this->nearestCityNameCache)) {
+            $this->nearestCityNameCache[$id] = $placeSpan->getNearestCityNameFromHierarchy() ?? $placeSpan->name;
+        }
+
+        return $this->nearestCityNameCache[$id];
+    }
+
+    /**
+     * Place to link for a city name: hierarchy (if this place is a city), else a
+     * preloaded span with that name, else the original place.
+     */
+    private function nearestCitySpanForStory(Span $placeSpan): ?Span
+    {
+        $id = $placeSpan->id;
+        if (! array_key_exists($id, $this->nearestCitySpanCache)) {
+            $fromHierarchy = $placeSpan->getNearestCitySpanFromHierarchy();
+            if ($fromHierarchy) {
+                $this->nearestCitySpanCache[$id] = $fromHierarchy;
+            } else {
+                $name = $this->getDisplayPlaceName($placeSpan);
+                $normalised = strtolower($this->normalizeCityName($name));
+                $this->nearestCitySpanCache[$id] = $this->storyCitySpansByNormalisedName[$normalised]
+                    ?? $this->storyCitySpansByNormalisedName[strtolower($name)]
+                    ?? $placeSpan;
+            }
+        }
+
+        return $this->nearestCitySpanCache[$id];
     }
 
     /**
@@ -1355,14 +1488,7 @@ class ConfigurableStoryGeneratorService
             return ['error' => 'No birth year'];
         }
 
-        $residenceConnections = $person->connectionsAsSubjectWithAccess($this->currentUser)
-            ->where('type_id', 'residence')
-            ->whereHas('child', function ($query) {
-                $query->where('type_id', 'place');
-            })
-            ->with(['child', 'connectionSpan'])
-            ->limit(20) // Limit to prevent memory issues with people who have many residences
-            ->get();
+        $residenceConnections = $this->getResidences($person)->take(20);
 
         $debug = [
             'birth_year' => $person->start_year,
@@ -1376,15 +1502,15 @@ class ConfigurableStoryGeneratorService
         $bestMatch = null;
         $bestScore = 0;
 
-        foreach ($residenceConnections as $connection) {
-            // Only consider connections where the child is a place
-            if ($connection->child->type_id !== 'place') {
+        foreach ($residenceConnections as $residence) {
+            $placeSpan = $residence['place_span'] ?? null;
+            $connectionSpan = $residence['connection_span'] ?? null;
+            if (!$placeSpan || $placeSpan->type_id !== 'place') {
                 continue;
             }
-            $connectionSpan = $connection->connectionSpan;
             if (!$connectionSpan) {
                 $debug['residence_details'][] = [
-                    'place' => $connection->child->name,
+                    'place' => $placeSpan->name,
                     'no_connection_span' => true
                 ];
                 continue;
@@ -1397,7 +1523,7 @@ class ConfigurableStoryGeneratorService
             );
 
             $debug['residence_details'][] = [
-                'place' => $connection->child->name,
+                'place' => $placeSpan->name,
                 'start_year' => $connectionSpan->start_year,
                 'start_month' => $connectionSpan->start_month,
                 'start_day' => $connectionSpan->start_day,
@@ -1409,12 +1535,15 @@ class ConfigurableStoryGeneratorService
 
             if ($score > $bestScore) {
                 $bestScore = $score;
-                $bestMatch = $connection;
+                $bestMatch = $residence;
             }
         }
 
         $debug['best_score'] = $bestScore;
-        $debug['best_match_place'] = $bestMatch?->child?->type_id === 'place' ? $bestMatch?->child?->name : null;
+        $bestPlace = $bestMatch['place_span'] ?? null;
+        $debug['best_match_place'] = ($bestPlace && $bestPlace->type_id === 'place')
+            ? $bestPlace->name
+            : null;
 
         // Store debug info in a way we can access it
         if (app()->environment('local', 'development')) {
@@ -1538,7 +1667,7 @@ class ConfigurableStoryGeneratorService
 
             if ($placeSpan) {
                 $displayName = $this->getDisplayPlaceName($placeSpan);
-                $linkSpan = $placeSpan->getNearestCitySpan() ?? $placeSpan;
+                $linkSpan = $this->nearestCitySpanForStory($placeSpan) ?? $placeSpan;
                 $linkOrText = $this->makeSpanLink($displayName, $linkSpan);
             } else {
                 $displayName = $residence['place'];
@@ -1644,7 +1773,7 @@ class ConfigurableStoryGeneratorService
         return match ($field) {
             'place' => $this->makeSpanLink(
                 $this->getDisplayPlaceName($longest['place_span']),
-                $longest['place_span']->getNearestCitySpan() ?? $longest['place_span']
+                $this->nearestCitySpanForStory($longest['place_span']) ?? $longest['place_span']
             ),
             'duration' => $this->formatDuration($maxYears),
             default => null,
@@ -1677,15 +1806,8 @@ class ConfigurableStoryGeneratorService
     protected function getEducationInstitutions(Span $person): string
     {
         $institutions = $this->getEducation($person);
-        $links = $institutions->map(function ($edu) use ($person) {
-            $org = $edu['organisation_span'] ?? $person->connectionsAsSubjectWithAccess($this->currentUser)
-                ->where('type_id', 'education')
-                ->whereHas('child', function ($query) {
-                    $query->where('type_id', 'organisation');
-                })
-                ->with('child')
-                ->get()
-                ->firstWhere('child.name', $edu['organisation'])?->child;
+        $links = $institutions->map(function ($edu) {
+            $org = $edu['organisation_span'] ?? null;
             if ($org) {
                 return $this->makeSpanLink($edu['organisation'], $org);
             }
@@ -1720,15 +1842,8 @@ class ConfigurableStoryGeneratorService
     protected function getWorkOrganisations(Span $person): string
     {
         $organisations = $this->getWork($person);
-        $links = $organisations->map(function ($work) use ($person) {
-            $org = $work['organisation_span'] ?? $person->connectionsAsSubjectWithAccess($this->currentUser)
-                ->where('type_id', 'employment')
-                ->whereHas('child', function ($query) {
-                    $query->where('type_id', 'organisation');
-                })
-                ->with('child')
-                ->get()
-                ->firstWhere('child.name', $work['organisation'])?->child;
+        $links = $organisations->map(function ($work) {
+            $org = $work['organisation_span'] ?? null;
             if ($org) {
                 return $this->makeSpanLink($work['organisation'], $org);
             }
@@ -1788,14 +1903,7 @@ class ConfigurableStoryGeneratorService
             return null;
         }
 
-        $org = $mostRecent['organisation_span'] ?? $person->connectionsAsSubjectWithAccess($this->currentUser)
-            ->where('type_id', 'employment')
-            ->whereHas('child', function ($query) {
-                $query->where('type_id', 'organisation');
-            })
-            ->with('child')
-            ->get()
-            ->firstWhere('child.name', $mostRecent['organisation'])?->child;
+        $org = $mostRecent['organisation_span'] ?? null;
 
         if ($org) {
             return $this->makeSpanLink($mostRecent['organisation'], $org);
@@ -1941,10 +2049,69 @@ class ConfigurableStoryGeneratorService
         }
     }
 
+    /**
+     * Immediate family already walked for the family card, when this person is the story subject.
+     *
+     * @return Collection<int, Span>|null
+     */
+    protected function familyDataSpansForSubject(Span $person, string $key, ?int $generation = null): ?Collection
+    {
+        if ($this->familyDataForStory === null || $this->storySubjectId === null || $person->id !== $this->storySubjectId) {
+            return null;
+        }
+
+        $items = collect($this->familyDataForStory[$key] ?? []);
+
+        if ($generation !== null) {
+            return $items
+                ->filter(fn ($item) => ($item['generation'] ?? null) === $generation)
+                ->pluck('span')
+                ->filter()
+                ->values();
+        }
+
+        return $items->filter()->values();
+    }
+
+    protected function getParentSpans(Span $person): Collection
+    {
+        $fromFamily = $this->familyDataSpansForSubject($person, 'ancestors', 1);
+        if ($fromFamily !== null) {
+            return $fromFamily;
+        }
+
+        if ($this->precomputedForStory) {
+            return $this->precomputedForStory->getChildByType('family')
+                ->map(fn ($connection) => $connection->parent)
+                ->filter(fn ($parent) => $parent && $parent->type_id === 'person')
+                ->unique('id')
+                ->values();
+        }
+
+        return $person->parents;
+    }
+
+    protected function getChildSpans(Span $person): Collection
+    {
+        $fromFamily = $this->familyDataSpansForSubject($person, 'descendants', 1);
+        if ($fromFamily !== null) {
+            return $fromFamily;
+        }
+
+        if ($this->precomputedForStory) {
+            return $this->precomputedForStory->getParentByType('family')
+                ->map(fn ($connection) => $connection->child)
+                ->filter(fn ($child) => $child && $child->type_id === 'person')
+                ->unique('id')
+                ->values();
+        }
+
+        return $person->children;
+    }
+
     protected function getParentNames(Span $person): string
     {
-        $parentSpans = $person->parents;
-        $parentLinks = $parentSpans->map(function ($parent) {
+        $parentLinks = $this->getParentSpans($person)->map(function ($parent) {
             return $this->makeSpanLink($parent->name, $parent);
         })->toArray();
         return $this->formatList($parentLinks);
@@ -1952,17 +2119,26 @@ class ConfigurableStoryGeneratorService
 
     protected function getChildNames(Span $person): string
     {
-        $childSpans = $person->children;
-        $childLinks = $childSpans->map(function ($child) {
+        $childLinks = $this->getChildSpans($person)->map(function ($child) {
             return $this->makeSpanLink($child->name, $child);
         })->toArray();
         return $this->formatList($childLinks);
     }
 
+    protected function getSiblingSpans(Span $person): Collection
+    {
+        $id = $person->id;
+        if (! array_key_exists($id, $this->siblingsCache)) {
+            $fromFamily = $this->familyDataSpansForSubject($person, 'siblings');
+            $this->siblingsCache[$id] = $fromFamily ?? $person->siblings();
+        }
+
+        return $this->siblingsCache[$id];
+    }
+
     protected function getSiblingNames(Span $person): string
     {
-        $siblingSpans = $person->siblings();
-        $siblingLinks = $siblingSpans->map(function ($sibling) {
+        $siblingLinks = $this->getSiblingSpans($person)->map(function ($sibling) {
             return $this->makeSpanLink($sibling->name, $sibling);
         })->toArray();
         return $this->formatList($siblingLinks);
@@ -1970,21 +2146,25 @@ class ConfigurableStoryGeneratorService
 
     protected function getBandMembers(Span $band): Collection
     {
-        return $band->connectionsAsObjectWithAccess($this->currentUser)
-            ->where('type_id', 'membership')
-            ->whereHas('parent', function ($query) {
-                $query->where('type_id', 'person');
-            })
-            ->with(['parent', 'connectionSpan'])
-            ->get()
-            ->map(function ($connection) {
-                return [
-                    'person' => $connection->parent->name,
-                    'person_span' => $connection->parent,
-                    'start_date' => $connection->connectionSpan?->formatted_start_date,
-                    'end_date' => $connection->connectionSpan?->formatted_end_date,
-                ];
-            });
+        $connections = $this->precomputedForStory
+            ? $this->precomputedForStory->getChildByType('membership')
+                ->filter(fn ($c) => $c->parent && $c->parent->type_id === 'person')
+            : $band->connectionsAsObjectWithAccess($this->currentUser)
+                ->where('type_id', 'membership')
+                ->whereHas('parent', function ($query) {
+                    $query->where('type_id', 'person');
+                })
+                ->with(['parent', 'connectionSpan'])
+                ->get();
+
+        return $connections->map(function ($connection) {
+            return [
+                'person' => $connection->parent->name,
+                'person_span' => $connection->parent,
+                'start_date' => $connection->connectionSpan?->formatted_start_date,
+                'end_date' => $connection->connectionSpan?->formatted_end_date,
+            ];
+        });
     }
 
     protected function getBandMemberNames(Span $band): string
@@ -2316,11 +2496,11 @@ class ConfigurableStoryGeneratorService
         
         $closing = "That's all for now.";
         if ($span->type_id === 'place') {
-            $nearestCity = $span->getNearestCityName();
+            $nearestCity = $this->getDisplayPlaceName($span);
             $normalizedCity = strtolower($this->normalizeCityName($nearestCity));
             $normalizedPlaceName = strtolower($this->normalizeCityName($span->name));
             if ($normalizedCity !== '' && $normalizedCity !== $normalizedPlaceName) {
-                $citySpan = $span->getNearestCitySpan();
+                $citySpan = $this->nearestCitySpanForStory($span);
                 $closing = "It's in " . ($citySpan
                     ? $this->makeSpanLink($nearestCity, $citySpan)
                     : e($nearestCity)) . ".";
@@ -2414,6 +2594,18 @@ class ConfigurableStoryGeneratorService
     {
         if (!$this->isProgramme($span)) {
             return 0;
+        }
+
+        if ($this->precomputedForStory) {
+            return $this->precomputedForStory->getParentByType('contains')
+                ->filter(function ($connection) {
+                    $child = $connection->child;
+
+                    return $child
+                        && $child->type_id === 'thing'
+                        && ($child->metadata['subtype'] ?? $child->subtype) === 'episode';
+                })
+                ->count();
         }
 
         return $span->connectionsAsSubject()
@@ -2531,34 +2723,43 @@ class ConfigurableStoryGeneratorService
 
     protected function getRoles(Span $person): Collection
     {
-        return $person->connectionsAsSubjectWithAccess($this->currentUser)
-            ->where('type_id', 'has_role')
-            ->whereHas('child', function ($query) {
-                $query->where('type_id', 'role');
-            })
-            ->with(['child', 'connectionSpan'])
-            ->get()
-            ->map(function ($connection) {
-                $roleSpan = $connection->child;
-                $connectionSpan = $connection->connectionSpan;
-                
-                // Get organisation info if available
-                $organisation = null;
-                if ($roleSpan && $roleSpan->getMeta('organisation')) {
-                    $organisationId = $roleSpan->getMeta('organisation');
-                    $organisation = \App\Models\Span::find($organisationId);
-                }
-                
-                return [
-                    'role' => $roleSpan->name,
-                    'role_span' => $roleSpan,
-                    'organisation' => $organisation ? $organisation->name : null,
-                    'organisation_span' => $organisation,
-                    'start_date' => $connectionSpan?->formatted_start_date,
-                    'end_date' => $connectionSpan?->formatted_end_date,
-                    'is_ongoing' => $connectionSpan?->is_ongoing ?? false,
-                ];
-            });
+        $connections = $this->precomputedForStory
+            ? $this->precomputedForStory->getParentByType('has_role')
+                ->filter(fn ($c) => $c->child && $c->child->type_id === 'role')
+            : $person->connectionsAsSubjectWithAccess($this->currentUser)
+                ->where('type_id', 'has_role')
+                ->whereHas('child', function ($query) {
+                    $query->where('type_id', 'role');
+                })
+                ->with(['child', 'connectionSpan'])
+                ->get();
+
+        $organisationIds = $connections
+            ->map(fn ($connection) => $connection->child?->getMeta('organisation'))
+            ->filter()
+            ->unique()
+            ->values();
+
+        $organisations = $organisationIds->isEmpty()
+            ? collect()
+            : Span::query()->whereIn('id', $organisationIds)->get()->keyBy('id');
+
+        return $connections->map(function ($connection) use ($organisations) {
+            $roleSpan = $connection->child;
+            $connectionSpan = $connection->connectionSpan;
+            $organisationId = $roleSpan?->getMeta('organisation');
+            $organisation = $organisationId ? $organisations->get($organisationId) : null;
+
+            return [
+                'role' => $roleSpan->name,
+                'role_span' => $roleSpan,
+                'organisation' => $organisation?->name,
+                'organisation_span' => $organisation,
+                'start_date' => $connectionSpan?->formatted_start_date,
+                'end_date' => $connectionSpan?->formatted_end_date,
+                'is_ongoing' => $connectionSpan?->is_ongoing ?? false,
+            ];
+        });
     }
 
     protected function getPastRoles(Span $person): Collection
@@ -2899,13 +3100,17 @@ class ConfigurableStoryGeneratorService
      */
     protected function getCreator(Span $span): ?string
     {
-        $creatorConnection = $span->connectionsAsObjectWithAccess($this->currentUser)
-            ->where('type_id', 'created')
-            ->whereHas('parent', function ($query) {
-                $query->whereIn('type_id', ['person', 'band']);
-            })
-            ->with(['parent'])
-            ->first();
+        $creatorConnection = $this->precomputedForStory
+            ? $this->precomputedForStory->getChildByType('created')
+                ->first(fn ($connection) => $connection->parent
+                    && in_array($connection->parent->type_id, ['person', 'band'], true))
+            : $span->connectionsAsObjectWithAccess($this->currentUser)
+                ->where('type_id', 'created')
+                ->whereHas('parent', function ($query) {
+                    $query->whereIn('type_id', ['person', 'band']);
+                })
+                ->with(['parent'])
+                ->first();
 
         if ($creatorConnection && $creatorConnection->parent) {
             return $this->makeSpanLink($creatorConnection->parent->name, $creatorConnection->parent);
@@ -2919,19 +3124,32 @@ class ConfigurableStoryGeneratorService
      */
     protected function getTracks(Span $span): Collection
     {
-        return $span->connectionsAsSubjectWithAccess($this->currentUser)
-            ->where('type_id', 'contains')
-            ->whereHas('child', function ($query) {
-                $query->where('type_id', 'thing');
-            })
-            ->with(['child'])
-            ->get()
-            ->map(function ($connection) {
-                return [
-                    'track' => $connection->child->name,
-                    'track_span' => $connection->child,
-                ];
-            });
+        $cacheKey = $span->id;
+        if (isset($this->tracksCache[$cacheKey])) {
+            return $this->tracksCache[$cacheKey];
+        }
+
+        $connections = $this->precomputedForStory
+            ? $this->precomputedForStory->getParentByType('contains')
+                ->filter(fn ($connection) => $connection->child && $connection->child->type_id === 'thing')
+            : $span->connectionsAsSubjectWithAccess($this->currentUser)
+                ->where('type_id', 'contains')
+                ->whereHas('child', function ($query) {
+                    $query->where('type_id', 'thing');
+                })
+                ->with(['child'])
+                ->get();
+
+        $tracks = $connections->map(function ($connection) {
+            return [
+                'track' => $connection->child->name,
+                'track_span' => $connection->child,
+            ];
+        });
+
+        $this->tracksCache[$cacheKey] = $tracks;
+
+        return $tracks;
     }
 
     /**
@@ -3695,46 +3913,49 @@ class ConfigurableStoryGeneratorService
     // Plaque-specific methods
     protected function getPlaqueFeatures(Span $plaque): ?string
     {
-        // Look for "features" connections to find what/who this plaque features
-        // Like photos: Plaque (parent/subject) features Person (child/object)
-        $featuresConnections = $plaque->connectionsAsSubject()
-            ->where('type_id', 'features')
-            ->whereHas('child')
-            ->with(['child'])
-            ->get();
-        
+        $featuresConnections = $this->precomputedForStory
+            ? $this->precomputedForStory->getParentByType('features')
+                ->filter(fn ($connection) => $connection->child)
+            : $plaque->connectionsAsSubject()
+                ->where('type_id', 'features')
+                ->whereHas('child')
+                ->with(['child'])
+                ->get();
+
         if ($featuresConnections->isEmpty()) {
             return null;
         }
-        
+
         $featuredSpans = $featuresConnections->map(function ($connection) {
             return $this->makeSpanLink($connection->child->name, $connection->child);
         });
-        
-        // Join multiple spans with commas and "and" for the last one
+
         if ($featuredSpans->count() === 1) {
             return $featuredSpans->first();
-        } elseif ($featuredSpans->count() === 2) {
-            return $featuredSpans->join(' and ');
-        } else {
-            $lastSpan = $featuredSpans->pop();
-            return $featuredSpans->join(', ') . ' and ' . $lastSpan;
         }
+        if ($featuredSpans->count() === 2) {
+            return $featuredSpans->join(' and ');
+        }
+
+        $lastSpan = $featuredSpans->pop();
+
+        return $featuredSpans->join(', ').' and '.$lastSpan;
     }
 
     protected function getPlaqueLocation(Span $plaque): ?string
     {
-        // Look for "located" connections to find where this plaque is
-        $locationConnection = \App\Models\Connection::where('type_id', 'located')
-            ->where('parent_id', $plaque->id)
-            ->whereHas('child')
-            ->with(['child'])
-            ->first();
-        
-        if (!$locationConnection) {
+        $locationConnection = $this->precomputedForStory
+            ? $this->precomputedForStory->getParentByType('located')->first(fn ($connection) => $connection->child)
+            : \App\Models\Connection::where('type_id', 'located')
+                ->where('parent_id', $plaque->id)
+                ->whereHas('child')
+                ->with(['child'])
+                ->first();
+
+        if (! $locationConnection || ! $locationConnection->child) {
             return null;
         }
-        
+
         return $this->makeSpanLink($locationConnection->child->name, $locationConnection->child);
     }
 

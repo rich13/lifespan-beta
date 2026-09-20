@@ -4,5 +4,6 @@ window.routes = {
         users: '/admin/user-switcher/users',
         switch: '/admin/user-switcher/switch/:userId',
         switchBack: '/admin/user-switcher/switch-back'
-    }
+    },
+    newSpanModal: '/modals/new-span'
 };

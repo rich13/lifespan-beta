@@ -94,7 +94,28 @@ class SpanFactory extends Factory
         return $attributes;
     }
 
+    /**
+     * Keep merged overrides valid for check_span_temporal_constraint.
+     * definition() cannot see create([...]) overrides, so a later start_year
+     * can otherwise be saved with an earlier generated end_year.
+     */
+    public function configure(): static
+    {
+        return $this->afterMaking(function (Span $span) {
+            if ($span->end_year === null || $span->start_year === null) {
+                return;
+            }
 
+            if ((int) $span->end_year >= (int) $span->start_year) {
+                return;
+            }
+
+            $span->end_year = null;
+            $span->end_month = null;
+            $span->end_day = null;
+            $span->end_precision = null;
+        });
+    }
 
     /**
      * Configure the span as a personal span.

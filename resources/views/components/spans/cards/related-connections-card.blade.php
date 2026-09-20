@@ -16,37 +16,7 @@
         return;
     }
 
-    // Get the subject and object (parent/child are same as subject/object on Connection)
-    $subject = $currentConnection->parent;
-    $object = $currentConnection->child;
-    $connectionType = $currentConnection->type_id;
-
-    // Find all connections between the same subject and object with the same type
-    // Exclude the current connection and filter to only those with connection spans
-    $relatedConnections = \App\Models\Connection::where('type_id', $connectionType)
-        ->where(function($query) use ($subject, $object) {
-            $query->where(function($q) use ($subject, $object) {
-                $q->where('parent_id', $subject->id)
-                  ->where('child_id', $object->id);
-            });
-        })
-        ->where('id', '!=', $currentConnection->id)
-        ->whereNotNull('connection_span_id')
-        ->with(['connectionSpan'])
-        ->get()
-        ->filter(function($conn) {
-            // Filter out connections without connection spans
-            return $conn->connectionSpan !== null;
-        })
-        ->sortBy(function($conn) {
-            // Sort by start year, then start month, then start day
-            $span = $conn->connectionSpan;
-            $year = $span->start_year ?? PHP_INT_MAX;
-            $month = $span->start_month ?? PHP_INT_MAX;
-            $day = $span->start_day ?? PHP_INT_MAX;
-            return sprintf('%08d-%02d-%02d', $year, $month, $day);
-        })
-        ->values();
+    $relatedConnections = \App\Support\SpanShowLookups::siblingConnections($currentConnection);
 
     // Don't show the card if there are no related connections
     if ($relatedConnections->isEmpty()) {
@@ -54,7 +24,7 @@
     }
 @endphp
 
-<div class="card mb-4">
+<div class="card mb-4" data-related-connections-card>
     <div class="card-header">
         <h6 class="card-title mb-0">
             <i class="bi bi-link-45deg me-2"></i>

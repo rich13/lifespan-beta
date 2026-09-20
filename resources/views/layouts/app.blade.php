@@ -1,14 +1,28 @@
 @php
 use Illuminate\Support\Facades\Route;
 
-// Get sidebar state from cookie or default to expanded
-$sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
+// Get sidebar state from cookie or default to expanded.
+// The cookie is set by JavaScript and excluded from encryption.
+$sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true'
+    || (($_COOKIE['sidebarCollapsed'] ?? null) === 'true');
+$isPlaquesInterface = request()->routeIs('plaques.index', 'plaques.show', 'plaques.connection', 'plaques.connections');
 @endphp
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" @class(['sidebar-collapsed' => $sidebarCollapsed])>
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
+        {{-- Apply collapsed state before first paint so a refresh does not flash the open sidebar. --}}
+        <script>
+            (function () {
+                try {
+                    var match = document.cookie.match(/(?:^|; )sidebarCollapsed=([^;]*)/);
+                    if (match && match[1] === 'true') {
+                        document.documentElement.classList.add('sidebar-collapsed');
+                    }
+                } catch (e) {}
+            })();
+        </script>
         <meta name="csrf-token" content="{{ csrf_token() }}">
         <meta name="robots" content="noindex, nofollow, noarchive">
 
@@ -88,6 +102,31 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
                 --sidebar-width-md: 240px;
                 --sidebar-width-collapsed: 60px;
                 --sidebar-transition: 0.3s ease-in-out;
+            }
+
+            /* First-paint collapsed state from the html class (set in head before the body parses) */
+            html.sidebar-collapsed .sidebar {
+                width: var(--sidebar-width-collapsed) !important;
+            }
+            html.sidebar-collapsed .sidebar .nav-link {
+                text-align: center;
+                padding: 0.75rem 0.5rem;
+            }
+            html.sidebar-collapsed .sidebar .nav-link span,
+            html.sidebar-collapsed .sidebar .sidebar-heading,
+            html.sidebar-collapsed .sidebar .sidebar-brand span {
+                display: none;
+            }
+            html.sidebar-collapsed .sidebar .nav-link i {
+                margin-right: 0 !important;
+                font-size: 1.1em;
+            }
+            html.sidebar-collapsed .main-content {
+                margin-left: var(--sidebar-width-collapsed);
+            }
+            html.sidebar-collapsed .sidebar-toggle-btn {
+                left: var(--sidebar-width-collapsed);
+                transform: rotate(180deg);
             }
             
             /* Prevent animations on initial load */
@@ -169,7 +208,8 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
             /* Mobile: sidebar is hidden (offcanvas), so no left margin */
             @media (max-width: 767.98px) {
                 .main-content,
-                .main-content.collapsed {
+                .main-content.collapsed,
+                html.sidebar-collapsed .main-content {
                     margin-left: 0 !important;
                 }
                 .sidebar-toggle-btn {
@@ -480,7 +520,7 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
                     </div>
 
                     <!-- Main Content Area with Top Navigation -->
-                    <div id="main-content" class="bg-light main-content">
+                    <div id="main-content" class="bg-light main-content{{ $sidebarCollapsed ? ' collapsed' : '' }}">
                         <!-- Top Navigation Bar -->
                         <x-topnav-container>
                             <!-- Mobile Menu Button -->
@@ -510,8 +550,8 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
                         </x-topnav-container>
                         
                         <!-- Page Content -->
-                        <div class="py-3 px-3">
-                        <div class="header-section mb-4">
+                        <div class="{{ $isPlaquesInterface ? 'plaque-app-content' : 'py-3 px-3' }}">
+                        <div class="header-section {{ $isPlaquesInterface ? 'plaque-flash-overlay' : 'mb-4' }}">
                             @yield('header')
                             @unless(request()->routeIs('password.request') || request()->routeIs('password.reset') || request()->routeIs('password.store') || request()->routeIs('auth.password') || request()->routeIs('auth.password.submit') || request()->routeIs('login') || request()->routeIs('register') || request()->routeIs('register.pending') || request()->routeIs('verification.notice') || request()->routeIs('verification.send'))
                                 <x-flash-messages />
@@ -533,16 +573,20 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
                 
                 <!-- Guest Content Area -->
                 <div class="row">
-                    <div class="col-12 bg-light py-3 px-3">
-                        <div class="header-section mb-4">
+                    <div class="col-12 bg-light {{ $isPlaquesInterface ? 'plaque-app-content plaque-app-content--guest' : 'py-3 px-3' }}">
+                        <div class="header-section {{ $isPlaquesInterface ? 'plaque-flash-overlay' : 'mb-4' }}">
                             @yield('header')
                             @unless(request()->routeIs('password.request') || request()->routeIs('password.reset') || request()->routeIs('password.store') || request()->routeIs('auth.password') || request()->routeIs('auth.password.submit') || request()->routeIs('login') || request()->routeIs('register') || request()->routeIs('register.pending') || request()->routeIs('verification.notice') || request()->routeIs('verification.send'))
                                 <x-flash-messages />
                             @endunless
                         </div>
+                        @if($isPlaquesInterface)
+                            @yield('content')
+                        @else
                         <div class="guest-content-wrapper">
                             @yield('content')
                         </div>
+                        @endif
                     </div>
                 </div>
             @endauth
@@ -573,12 +617,10 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
         <!-- Modals -->
         @stack('modals')
         
-        <!-- About Lifespan Modal -->
-        <x-modals.about-lifespan-modal />
-        
         <!-- Footer Modal (generic for About, Privacy, Terms, Contact) -->
         <x-footer.footer-modal />
         
+        @auth
         <!-- Global Access Level Modal -->
         <x-modals.access-level-modal />
         
@@ -594,14 +636,14 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
         <!-- Global Sets Modal -->
         <x-modals.sets-modal />
         
-        <!-- New Span Modal -->
-        <x-modals.new-span-modal />
+        <!-- New Span Modal is lazy-loaded on first open (modals.new-span) -->
         
         <!-- Add Connection Modal -->
         <x-modals.add-connection-modal />
         
         <!-- Time Travel Modal -->
         <x-modals.time-travel-modal />
+        @endauth
         
         <!-- Sidebar Toggle Script -->
         @auth
@@ -616,8 +658,9 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
                 // Get stored sidebar state from cookie
                 const sidebarCollapsed = document.cookie.split('; ').find(row => row.startsWith('sidebarCollapsed='))?.split('=')[1] === 'true';
                 
-                // Set initial state based on cookie (no animation)
+                // Keep element classes in sync (html class is already set before first paint)
                 if (sidebarCollapsed) {
+                    document.documentElement.classList.add('sidebar-collapsed');
                     $('#sidebar').addClass('collapsed');
                     $('#sidebar-toggle').addClass('collapsed');
                     $('#main-content').addClass('collapsed');
@@ -641,6 +684,9 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
                     sidebar.toggleClass('collapsed');
                     toggle.toggleClass('collapsed');
                     $('#main-content').toggleClass('collapsed');
+
+                    const isCollapsed = sidebar.hasClass('collapsed');
+                    document.documentElement.classList.toggle('sidebar-collapsed', isCollapsed);
                     
                     // Remove animating class after transition completes
                     setTimeout(function() {
@@ -648,7 +694,6 @@ $sidebarCollapsed = request()->cookie('sidebarCollapsed') === 'true';
                     }, 300); // Match the transition duration
                     
                     // Store state in cookie (expires in 1 year)
-                    const isCollapsed = sidebar.hasClass('collapsed');
                     document.cookie = `sidebarCollapsed=${isCollapsed}; path=/; max-age=${365 * 24 * 60 * 60}`;
                     
                     // Update tooltips

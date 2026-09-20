@@ -1,4 +1,4 @@
-@props(['span', 'connectionForSpan' => null])
+@props(['span', 'connectionForSpan' => null, 'precomputedConnections' => null])
 
 @php
     // Only show for connection spans
@@ -24,86 +24,74 @@
 
     // Get the subject (we'll find other connections to the same subject)
     $subject = $currentConnection->parent;
+    if (!$subject) {
+        return;
+    }
     $user = auth()->user();
     
     // Get the current connection span's temporal range
     $temporalService = app(\App\Services\Temporal\TemporalService::class);
     $currentRange = \App\Services\Temporal\TemporalRange::fromSpan($span);
 
-    // Find all connections connected to the same subject (with access control)
-    // Get connections where subject is parent
-    $connectionsAsSubject = $subject->connectionsAsSubjectWithAccess($user)
-        ->where('id', '!=', $currentConnection->id)
-        ->whereNotNull('connection_span_id')
-        ->with(['connectionSpan', 'subject', 'object', 'type'])
-        ->get();
-    
-    // Get connections where subject is child
-    $connectionsAsObject = $subject->connectionsAsObjectWithAccess($user)
-        ->where('id', '!=', $currentConnection->id)
-        ->whereNotNull('connection_span_id')
-        ->with(['connectionSpan', 'subject', 'object', 'type'])
-        ->get();
-    
-    // Also get phase spans connected to the current connection span via "during" connections
-    $phaseConnectionsQuery = \App\Models\Connection::where('type_id', 'during')
-        ->where('parent_id', $span->id) // Current connection span contains the phase
-        ->whereHas('child', function($q) {
-            $q->where('type_id', 'phase');
-        });
-    
-    // Apply access control to phase spans
-    if (!$user) {
-        // Guest users can only see connections to public phase spans
-        $phaseConnectionsQuery->whereHas('child', function($q) {
-            $q->where('access_level', 'public');
-        });
-    } elseif (!$user->is_admin) {
-        // Regular users can see connections to spans they have permission to view
-        $phaseConnectionsQuery->whereHas('child', function($q) use ($user) {
-            $q->where(function($subQ) use ($user) {
-                // Public spans
-                $subQ->where('access_level', 'public')
-                    // Owner's spans
-                    ->orWhere('owner_id', $user->id)
-                    // Spans with explicit user permissions
-                    ->orWhereHas('spanPermissions', function($permQ) use ($user) {
-                        $permQ->where('user_id', $user->id)
-                              ->whereIn('permission_type', ['view', 'edit']);
-                    })
-                    // Spans with group permissions
-                    ->orWhereHas('spanPermissions', function($permQ) use ($user) {
-                        $permQ->whereNotNull('group_id')
-                              ->whereIn('permission_type', ['view', 'edit'])
-                              ->whereHas('group', function($groupQ) use ($user) {
-                                  $groupQ->whereHas('users', function($userQ) use ($user) {
-                                      $userQ->where('user_id', $user->id);
-                                  });
-                              });
-                    });
+    $subjectConnections = \App\Support\SpanShowLookups::otherConnectionsOf($subject, $currentConnection->id);
+
+    $mapPhaseConnection = function ($conn) {
+        $connectionType = $conn->type ?? (object)['forward_predicate' => 'contains', 'inverse_predicate' => 'during', 'type' => 'during'];
+        $conn->connection_type = $connectionType;
+        $conn->is_subject_parent = true;
+        $conn->other_span = $conn->child;
+        return $conn;
+    };
+
+    if ($precomputedConnections instanceof \App\Support\PrecomputedSpanConnections) {
+        $phaseConnections = $precomputedConnections->getParentByType('during')
+            ->filter(fn ($conn) => $conn->child && $conn->child->type_id === 'phase')
+            ->map($mapPhaseConnection);
+    } else {
+        $phaseConnectionsQuery = \App\Models\Connection::where('type_id', 'during')
+            ->where('parent_id', $span->id)
+            ->whereHas('child', function($q) {
+                $q->where('type_id', 'phase');
             });
-        });
+
+        if (!$user) {
+            $phaseConnectionsQuery->whereHas('child', function($q) {
+                $q->where('access_level', 'public');
+            });
+        } elseif (!$user->is_admin) {
+            $phaseConnectionsQuery->whereHas('child', function($q) use ($user) {
+                $q->where(function($subQ) use ($user) {
+                    $subQ->where('access_level', 'public')
+                        ->orWhere('owner_id', $user->id)
+                        ->orWhereHas('spanPermissions', function($permQ) use ($user) {
+                            $permQ->where('user_id', $user->id)
+                                  ->whereIn('permission_type', ['view', 'edit']);
+                        })
+                        ->orWhereHas('spanPermissions', function($permQ) use ($user) {
+                            $permQ->whereNotNull('group_id')
+                                  ->whereIn('permission_type', ['view', 'edit'])
+                                  ->whereHas('group', function($groupQ) use ($user) {
+                                      $groupQ->whereHas('users', function($userQ) use ($user) {
+                                          $userQ->where('user_id', $user->id);
+                                      });
+                                  });
+                        });
+                });
+            });
+        }
+
+        $phaseConnections = $phaseConnectionsQuery
+            ->with(['child', 'connectionSpan'])
+            ->get()
+            ->map($mapPhaseConnection);
     }
-    
-    $phaseConnections = $phaseConnectionsQuery
-        ->with(['child', 'connectionSpan'])
-        ->get()
-        ->map(function($conn) {
-            // Create a pseudo-connection structure for phase spans
-            // Use the connection type if available, otherwise create a simple object
-            $connectionType = $conn->type ?? (object)['forward_predicate' => 'contains', 'inverse_predicate' => 'during', 'type' => 'during'];
-            $conn->connection_type = $connectionType;
-            $conn->is_subject_parent = true;
-            $conn->other_span = $conn->child;
-            return $conn;
-        });
     
     // Get the current span's start and end years for filtering
     $currentStartYear = $span->start_year;
     $currentEndYear = $span->end_year;
     
     // Merge the three collections
-    $allConnections = $connectionsAsSubject->merge($connectionsAsObject)->merge($phaseConnections)
+    $allConnections = $subjectConnections->merge($phaseConnections)
         ->filter(function($conn) use ($temporalService, $currentRange, $currentStartYear, $currentEndYear) {
             // For phase spans, use the phase span itself (not connectionSpan)
             // Check if this is a phase connection by checking if child is loaded and is a phase
@@ -247,7 +235,7 @@
     }
 @endphp
 
-<div class="card mb-4">
+<div class="card mb-4" data-temporal-relations-card>
     <div class="card-header">
         <h6 class="card-title mb-0">
             <i class="bi bi-border-style me-2"></i>

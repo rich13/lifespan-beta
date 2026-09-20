@@ -39,9 +39,15 @@ $(function () {
         modalInstance.show();
     };
 
-    $(window).on('load', function () {
+    const openWhenReady = function () {
         setTimeout(openModal, 50);
-    });
+    };
+
+    if (document.readyState === 'complete') {
+        openWhenReady();
+    } else {
+        $(window).on('load', openWhenReady);
+    }
 
     $('#openNewSpanModal').on('click', function () {
         openModal();

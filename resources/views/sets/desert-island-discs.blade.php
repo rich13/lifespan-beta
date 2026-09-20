@@ -148,18 +148,13 @@
                                     {{-- Album Artwork + Track/Artist/Album --}}
                                     <div class="d-flex gap-2 align-items-start">
                                         <div class="me-2">
-                                            @if($album && $album->has_cover_art && $album->cover_art_small_url)
+                                            @if($album)
                                                 <a href="{{ route('spans.show', $album) }}" class="text-decoration-none">
-                                                    <img src="{{ $album->cover_art_small_url }}" 
-                                                         alt="{{ $album->name }} cover" 
-                                                         class="img-fluid rounded shadow-sm" 
-                                                         style="width: 96px; height: 96px; object-fit: cover;"
-                                                         loading="lazy">
+                                                    <x-spans.cover-art :album="$album" size="small" variant="did" :alt="$album->name . ' cover'" />
                                                 </a>
                                             @else
-                                                <div class="bg-light rounded d-flex align-items-center justify-content-center" 
-                                                     style="width: 96px; height: 96px;">
-                                                    <i class="bi bi-disc-fill text-muted" style="font-size: 1.75rem;"></i>
+                                                <div class="cover-art-placeholder cover-art--did">
+                                                    <i class="bi bi-disc-fill text-muted"></i>
                                                 </div>
                                             @endif
                                         </div>

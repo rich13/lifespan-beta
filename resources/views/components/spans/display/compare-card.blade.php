@@ -1,8 +1,8 @@
-@props(['span'])
+@props(['span', 'personalTimelineSeed' => null])
 
 @php
     $user = Auth::user();
-    $personalSpan = $user->personalSpan;
+    $personalSpan = $user?->personalSpan;
     
     if ($personalSpan && $span->id !== $personalSpan->id) {
         // Calculate various date comparisons
@@ -152,7 +152,7 @@
 @endphp
 
 @if(isset($comparisons) && count($comparisons) > 0)
-<div class="card mb-4">
+<div class="card mb-4" data-compare-card>
     <div class="card-header d-flex justify-content-between align-items-center">
         <h6 class="card-title mb-0">
             <i class="bi bi-arrow-left-right me-2"></i>
@@ -195,27 +195,43 @@
 @push('scripts')
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+$(function() {
     initializeMiniComparisonTimeline_{{ str_replace('-', '_', $span->id) }}();
 });
 
 function initializeMiniComparisonTimeline_{{ str_replace('-', '_', $span->id) }}() {
-    const spanId = '{{ $span->id }}';
-    const personalSpanId = '{{ $personalSpan->id }}';
-    
-    // Fetch timeline data for both spans
-    Promise.all([
-        fetch(`/api/spans/${spanId}`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }),
-        fetch(`/api/spans/${personalSpanId}`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
-    ])
-    .then(responses => Promise.all(responses.map(r => r.json())))
-    .then(([data1, data2]) => {
+    var spanId = '{{ $span->id }}';
+    var personalSpanId = '{{ $personalSpan->id }}';
+
+    function spanPayload(id) {
+        var raw = $('#timeline-seed-' + id).text();
+        if (raw) {
+            try {
+                var seed = JSON.parse(raw);
+                if (seed && seed.span) {
+                    return $.Deferred().resolve(seed.span).promise();
+                }
+            } catch (e) {}
+        }
+
+        return $.ajax({
+            url: '/api/spans/' + id,
+            dataType: 'json'
+        }).then(function(data) {
+            return data;
+        });
+    }
+
+    $.when(
+        spanPayload(spanId),
+        spanPayload(personalSpanId)
+    ).done(function(data1, data2) {
         renderMiniComparisonTimeline_{{ str_replace('-', '_', $span->id) }}(data1, data2);
-    })
-    .catch(error => {
-        console.error('Error loading mini timeline data:', error);
-        document.getElementById(`mini-comparison-timeline-${spanId}`).innerHTML = 
-            '<div class="text-muted text-center py-4">No timeline data available</div>';
+    }).fail(function() {
+        console.error('Error loading mini timeline data');
+        $('#mini-comparison-timeline-' + spanId).html(
+            '<div class="text-muted text-center py-4">No timeline data available</div>'
+        );
     });
 }
 

@@ -276,28 +276,40 @@ class JourneyService
             return null;
         }
 
+        // If they're the same span, return null
+        if ($sourcePerson->id === $targetSpan->id) {
+            return null;
+        }
+
+        $sourceDegree = $this->incidentConnectionCount($sourcePerson);
+        $targetDegree = $this->incidentConnectionCount($targetSpan);
+
+        if ($sourceDegree === 0 || $targetDegree === 0) {
+            return null;
+        }
+
+        // Search from the smaller neighbourhood so isolated spans fail fast
+        $reversed = $targetDegree < $sourceDegree;
+        $searchFrom = $reversed ? $targetSpan : $sourcePerson;
+        $searchTo = $reversed ? $sourcePerson : $targetSpan;
+
         \Log::info('Finding path to span', [
             'source_person_id' => $sourcePerson->id,
             'source_person_name' => $sourcePerson->name,
             'target_span_id' => $targetSpan->id,
             'target_span_name' => $targetSpan->name,
             'target_span_type' => $targetSpan->type_id,
-            'max_degrees' => $maxDegrees
+            'max_degrees' => $maxDegrees,
+            'search_from_id' => $searchFrom->id,
+            'reversed' => $reversed,
         ]);
-
-        // If they're the same span, return null
-        if ($sourcePerson->id === $targetSpan->id) {
-            return null;
-        }
 
         $visited = new Collection();
         $queue = new Collection();
-        $bestJourney = null;
 
-        // Start with the source person
         $queue->push([
-            'span' => $sourcePerson,
-            'path' => [$sourcePerson],
+            'span' => $searchFrom,
+            'path' => [$searchFrom],
             'connections' => [],
             'degrees' => 0
         ]);
@@ -327,8 +339,13 @@ class JourneyService
 
             $visited->push($span->id);
 
-            // If we found the target span, we have a journey
-            if ($span->id === $targetSpan->id) {
+            // If we found the other end, we have a journey
+            if ($span->id === $searchTo->id) {
+                if ($reversed) {
+                    $path = array_reverse($path);
+                    $connections = array_reverse($connections);
+                }
+
                 $journey = [
                     'source_person' => $sourcePerson,
                     'target_span' => $targetSpan,
@@ -344,7 +361,8 @@ class JourneyService
                     'iterations' => $iterations,
                     'visited_count' => $visited->count(),
                     'path_length' => count($path),
-                    'degrees' => $degrees
+                    'degrees' => $degrees,
+                    'reversed' => $reversed,
                 ]);
                 return $journey;
             }
@@ -356,9 +374,17 @@ class JourneyService
         \Log::info('Path search complete - no path found', [
             'iterations' => $iterations,
             'visited_count' => $visited->count(),
-            'queue_size' => $queue->count()
+            'queue_size' => $queue->count(),
+            'reversed' => $reversed,
         ]);
 
         return null;
+    }
+
+    private function incidentConnectionCount(Span $span): int
+    {
+        return Connection::where('parent_id', $span->id)
+            ->orWhere('child_id', $span->id)
+            ->count();
     }
 }

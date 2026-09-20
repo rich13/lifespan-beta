@@ -97,6 +97,7 @@ import './components/responsive-button-groups';
 
 // Import modal functionality
 import './add-connection-modal';
+import './new-span-modal-loader';
 
 import Alpine from 'alpinejs';
 

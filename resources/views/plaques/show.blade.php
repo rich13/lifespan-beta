@@ -1,6 +1,4 @@
-@extends('layouts.blank')
-
-@section('title', $span->getDisplayTitle() . ' – ' . config('app.name'))
+@extends('layouts.app')
 
 @php
     $buildNameLines = function ($text) {
@@ -27,6 +25,8 @@
     };
 
     $isConnection = isset($subject, $object, $predicate);
+    $isPredicateGroup = isset($predicate) && !isset($object);
+    $breadcrumbPredicate = isset($predicate) ? str_replace('-', ' ', $predicate) : null;
     if ($isConnection) {
         $nameLines = $buildNameLines($subject->getDisplayTitle());
         $subjectDatesText = null;
@@ -49,6 +49,20 @@
                 $connectionDatesText .= ' –';
             }
         }
+    } elseif ($isPredicateGroup) {
+        $nameLines = $buildNameLines($span->getDisplayTitle());
+        $subjectDatesText = null;
+        if ($span->start_year || $span->end_year) {
+            $subjectDatesText = $span->start_year ? (string) $span->start_year : (string) $span->end_year;
+            if ($span->end_year && $span->start_year !== $span->end_year) {
+                $subjectDatesText .= ' – ' . $span->end_year;
+            } elseif ($span->start_year && $span->is_ongoing) {
+                $subjectDatesText .= ' –';
+            }
+        }
+        $predicateText = config('plaques.predicate_mappings.' . $predicate)
+            ?? ucwords(str_replace('-', ' ', $predicate));
+        $connectionDatesText = null;
     } else {
         $nameLines = $buildNameLines($span->getDisplayTitle());
         $subjectDatesText = null;
@@ -64,9 +78,18 @@
         $connectionDatesText = null;
     }
 
-    $placeCoords = null;
+    $detailDescription = $span->description
+        ?: ($isConnection ? $subject->description : null);
+    $featuredTitle = null;
     if ($isConnection) {
-        $placeSpan = null;
+        $featuredTitle = $subject->getDisplayTitle() . ' ' . $predicateText . ' — ' . $object->getDisplayTitle();
+    } elseif ($isPredicateGroup) {
+        $featuredTitle = $span->getDisplayTitle() . ' ' . $predicateText;
+    }
+
+    $placeCoords = null;
+    $placeSpan = null;
+    if ($isConnection) {
         if ($subject->type_id === 'place') {
             $placeSpan = $subject;
         } elseif ($object->type_id === 'place') {
@@ -89,15 +112,75 @@
             }
         }
     }
+
+    $focusMarkers = collect($placeConnections ?? [])
+        ->filter(fn ($placeConnection) => isset($placeConnection['latitude'], $placeConnection['longitude']))
+        ->map(fn ($placeConnection) => [
+            'latitude' => $placeConnection['latitude'],
+            'longitude' => $placeConnection['longitude'],
+            'url' => $placeConnection['url'],
+            'title' => $placeConnection['title'] ?? $placeConnection['place_name'],
+        ])
+        ->values();
+    $showMap = (bool) $placeCoords || (! $isConnection && $focusMarkers->isNotEmpty());
+    $mapCentre = $placeCoords
+        ?? ($focusMarkers->isNotEmpty()
+            ? [$focusMarkers[0]['latitude'], $focusMarkers[0]['longitude']]
+            : config('plaques.map.centre'));
+
+    $breadcrumbItems = [
+        [
+            'text' => 'Plaques',
+            'url' => route('plaques.index'),
+            'icon' => 'geo-alt',
+            'icon_category' => 'bootstrap',
+        ],
+    ];
+    if ($isConnection) {
+        $breadcrumbItems[] = [
+            'text' => $subject->getDisplayTitle(),
+            'url' => route('plaques.show', $subject),
+        ];
+        $breadcrumbItems[] = [
+            'text' => $breadcrumbPredicate,
+            'url' => route('plaques.connections', ['span' => $subject, 'predicate' => $predicate]),
+        ];
+        $breadcrumbItems[] = [
+            'text' => $object->getDisplayTitle(),
+        ];
+    } elseif ($isPredicateGroup) {
+        $breadcrumbItems[] = [
+            'text' => $span->getDisplayTitle(),
+            'url' => route('plaques.show', $span),
+        ];
+        $breadcrumbItems[] = [
+            'text' => $breadcrumbPredicate,
+        ];
+    } else {
+        $breadcrumbItems[] = [
+            'text' => $span->getDisplayTitle(),
+        ];
+    }
 @endphp
 
+@section('page_title')
+    <x-breadcrumb :items="$breadcrumbItems" />
+@endsection
+
+@section('page_tools')
+    <x-spans.span-tools
+        :span="$span"
+        idPrefix="plaque"
+        :label="$span->type_id === 'connection' ? 'connection' : 'span'" />
+@endsection
+
 @section('content')
-@if($placeCoords)
+@if($showMap)
 <div class="plaque-map-container">
     <div id="plaque-map" class="plaque-map"></div>
-    <div id="plaque-positioned" class="plaque-positioned">
+    <aside class="plaque-detail-panel" aria-label="Plaque details">
 @endif
-<div class="plaque-content">
+<div class="plaque-content{{ $showMap ? '' : ' plaque-centred-content' }}">
 <svg class="plaque-svg" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="{{ $span->getDisplayTitle() }}">
     <defs>
         <clipPath id="plaque-clip">
@@ -112,8 +195,8 @@
     <g clip-path="url(#plaque-clip)" fill="#f5f0e6" font-family="Georgia, 'Times New Roman', serif" text-anchor="middle">
         @php $y = 150; @endphp
         {{-- 1. Name (caps) --}}
-        @if($isConnection)
-        <a href="{{ route('plaques.show', $subject) }}" class="plaque-name-link">
+        @if($isConnection || $isPredicateGroup)
+        <a href="{{ route('plaques.show', $isConnection ? $subject : $span) }}" class="plaque-name-link">
         @endif
         @foreach($nameLines as $i => $line)
             @php
@@ -128,7 +211,7 @@
             <text x="200" y="{{ $y }}" font-size="{{ $fontSize }}" font-weight="700">{{ $line }}</text>
             @php $y += (count($nameLines) === 2 && $i === 0) ? 48 : 28; @endphp
         @endforeach
-        @if($isConnection)
+        @if($isConnection || $isPredicateGroup)
         </a>
         @endif
         {{-- 2. Subject dates --}}
@@ -147,7 +230,54 @@
         @endif
     </g>
 </svg>
+@if($showMap && $isConnection)
+    <div class="plaque-detail-info">
+        @if($placeSpan)
+            <h2 class="plaque-detail-place">{{ $placeSpan->getDisplayTitle() }}</h2>
+        @endif
+        @if($predicateText || $connectionDatesText)
+            <p class="plaque-detail-meta">
+                @if($predicateText)
+                    <span>{{ $predicateText }}</span>
+                @endif
+                @if($connectionDatesText)
+                    <span>{{ $connectionDatesText }}</span>
+                @endif
+            </p>
+        @endif
+        @if($detailDescription)
+            <div class="plaque-detail-description">
+                {!! \Illuminate\Support\Str::markdown($detailDescription) !!}
+            </div>
+        @endif
+        @include('plaques.partials.physical-plaque')
+    </div>
+@elseif($showMap && $isPredicateGroup)
+    <div class="plaque-detail-info">
+        @if($predicateText)
+            <p class="plaque-detail-meta">
+                <span>{{ $predicateText }}</span>
+            </p>
+        @endif
+        @if($detailDescription)
+            <div class="plaque-detail-description">
+                {!! \Illuminate\Support\Str::markdown($detailDescription) !!}
+            </div>
+        @endif
+    </div>
+@elseif($showMap && $detailDescription)
+    <div class="plaque-detail-info">
+        <div class="plaque-detail-description">
+            {!! \Illuminate\Support\Str::markdown($detailDescription) !!}
+        </div>
+    </div>
+@endif
 @if(($placeConnections ?? collect())->isNotEmpty())
+    @if($showMap && $isConnection)
+        <h3 class="plaque-detail-related">Other places</h3>
+    @elseif($showMap)
+        <h3 class="plaque-detail-related">Places</h3>
+    @endif
     <div class="place-cards-grid">
         @foreach($placeConnections as $pc)
             <a href="{{ $pc['url'] }}" class="place-card" title="{{ $pc['place_name'] }}">
@@ -160,119 +290,32 @@
     <p class="plaque-geocode-note">This place needs to be geocoded before it can show a map.</p>
 @endif
 </div>
-@if($placeCoords)
-    </div>
+@if($showMap)
+    </aside>
 </div>
 @endif
 @endsection
 
+@if($showMap)
 @push('styles')
-<style>
-.plaque-svg {
-    width: 100%;
-    max-width: 520px;
-    height: auto;
-    filter: drop-shadow(0 4px 12px rgba(0,0,0,0.15));
-}
-.plaque-name-link {
-    fill: inherit;
-    text-decoration: none;
-    cursor: pointer;
-}
-.plaque-name-link:hover {
-    text-decoration: underline;
-}
-.plaque-map-container {
-    position: fixed;
-    inset: 0;
-    z-index: 0;
-}
-.plaque-map {
-    width: 100%;
-    height: 100%;
-}
-.plaque-positioned {
-    position: absolute;
-    top: 0;
-    left: 0;
-    z-index: 1000;
-    pointer-events: none;
-    transform: translate(-50%, -50%);
-}
-.plaque-positioned .plaque-content {
-    pointer-events: auto;
-}
-.plaque-content {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 1.5rem;
-}
-.place-cards-grid {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 1rem;
-    max-width: 90vw;
-}
-.place-card {
-    display: flex;
-    flex-direction: column;
-    padding: 1rem 1.25rem;
-    background: #fff;
-    border: 1px solid #dee2e6;
-    border-radius: 0.375rem;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-    color: #212529;
-    text-decoration: none;
-    font-family: Georgia, 'Times New Roman', serif;
-    text-align: center;
-    transition: box-shadow 0.2s, transform 0.2s;
-}
-.place-card:hover {
-    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
-    transform: translateY(-2px);
-}
-.place-card-name {
-    font-size: 0.95rem;
-    font-weight: 700;
-}
-.plaque-geocode-note {
-    font-size: 0.85rem;
-    color: #6c757d;
-    text-align: center;
-    margin-top: 1rem;
-    margin-bottom: 0;
-}
-</style>
-@endpush
-
-@if($placeCoords)
-@push('styles')
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+@include('plaques.partials.map-styles')
 @endpush
 @push('scripts')
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+@include('plaques.partials.map-script')
 <script>
 $(function() {
-    var coords = @json($placeCoords);
-    var map = L.map('plaque-map').setView(coords, 15);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-    }).addTo(map);
-
-    var plaqueEl = document.getElementById('plaque-positioned');
-    var latLng = L.latLng(coords[0], coords[1]);
-
-    function updatePlaquePosition() {
-        var point = map.latLngToContainerPoint(latLng);
-        plaqueEl.style.left = point.x + 'px';
-        plaqueEl.style.top = point.y + 'px';
-    }
-
-    map.on('move', updatePlaquePosition);
-    map.on('zoom', updatePlaquePosition);
-    updatePlaquePosition();
+    window.initPlaquesMap({
+        elementId: 'plaque-map',
+        centre: @json($mapCentre),
+        zoom: @json(config('plaques.map.plaque_zoom')),
+        markersUrl: '{{ route('plaques.markers') }}',
+        excludeCurrent: @json((bool) $isConnection),
+        featuredCoords: @json($placeCoords),
+        featuredTitle: @json($featuredTitle),
+        focusMarkers: @json($isConnection ? [] : $focusMarkers),
+        detailPanel: true,
+        otherPlaquesToggle: @json(! $isConnection)
+    });
 });
 </script>
 @endpush

@@ -477,6 +477,101 @@ class PlaqueVirtualPlaqueService
         return $nameLines !== [] ? $nameLines : [$nameText];
     }
 
+    /**
+     * Find a real-world plaque span for this person and place.
+     * Prefers a plaque connected to both, then located at the place, then featuring the person.
+     *
+     * @return array{plaque: Span, photoUrl: string|null}|null
+     */
+    public function physicalPlaqueForPersonAndPlace(Span $person, Span $place, ?User $user = null): ?array
+    {
+        $featuringPersonIds = Connection::query()
+            ->where('type_id', 'features')
+            ->where('child_id', $person->id)
+            ->whereHas('parent', fn ($query) => $this->constrainPlaqueSpan($query))
+            ->pluck('parent_id');
+
+        $locatedAtPlaceIds = Connection::query()
+            ->where('type_id', 'located')
+            ->where('child_id', $place->id)
+            ->whereHas('parent', fn ($query) => $this->constrainPlaqueSpan($query))
+            ->pluck('parent_id');
+
+        $candidateIds = $featuringPersonIds->intersect($locatedAtPlaceIds);
+        if ($candidateIds->isEmpty()) {
+            $candidateIds = $locatedAtPlaceIds->isNotEmpty() ? $locatedAtPlaceIds : $featuringPersonIds;
+        }
+
+        if ($candidateIds->isEmpty()) {
+            return null;
+        }
+
+        $plaques = Span::query()
+            ->whereIn('id', $candidateIds->unique()->values())
+            ->orderBy('name')
+            ->get()
+            ->filter(fn (Span $plaque) => $this->isPlaqueViewable($plaque, $user))
+            ->values();
+
+        $plaque = $plaques->first();
+        if (!$plaque) {
+            return null;
+        }
+
+        return [
+            'plaque' => $plaque,
+            'photoUrl' => $this->photoUrlForPlaque($plaque),
+        ];
+    }
+
+    public function photoUrlForPlaque(Span $plaque): ?string
+    {
+        $photoConnection = Connection::query()
+            ->where('type_id', 'features')
+            ->where('child_id', $plaque->id)
+            ->whereHas('parent', function ($query) {
+                $query->where('type_id', 'thing')
+                    ->whereJsonContains('metadata->subtype', 'photo');
+            })
+            ->with('parent')
+            ->first();
+
+        if ($photoConnection?->parent) {
+            $photo = $photoConnection->parent;
+            $metadata = $photo->metadata ?? [];
+            $photoUrl = $metadata['medium_url']
+                ?? $metadata['thumbnail_url']
+                ?? $metadata['large_url']
+                ?? $metadata['original_url']
+                ?? null;
+
+            if (!$photoUrl && !empty($metadata['filename'])) {
+                return route('images.proxy', ['spanId' => $photo->id, 'size' => 'medium']);
+            }
+
+            return $photoUrl;
+        }
+
+        $plaqueMetadata = $plaque->metadata ?? [];
+
+        return $plaqueMetadata['main_photo'] ?? $plaqueMetadata['thumbnail_url'] ?? null;
+    }
+
+    private function constrainPlaqueSpan($query)
+    {
+        return $query->where('type_id', 'thing')
+            ->whereJsonContains('metadata->subtype', 'plaque');
+    }
+
+    private function isPlaqueViewable(Span $plaque, ?User $user): bool
+    {
+        if ($user) {
+            return $plaque->isAccessibleBy($user);
+        }
+
+        return $plaque->access_level === 'public';
+    }
+
     private function formatSpanDateRange(Span $span): ?string
     {
         if (!$span->start_year && !$span->end_year) {

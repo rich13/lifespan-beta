@@ -312,7 +312,7 @@
         <div class="card-carousel-container">
             <div class="card-carousel">
 
-            <div class="carousel-card">
+            <!--<div class="carousel-card">
                     <div class="card h-100 shadow-sm">
                         <div class="card-body">
                             <div class="card-content-top">
@@ -327,12 +327,12 @@
                             </div>
                             <div class="card-content-bottom">
                             <p class="card-text">Roy Batty</p>
-                            <!-- <p class="card-text"><a href="/spans/roy-batty">Roy Batty</a></p> -->
+                            <p class="card-text"><a href="/spans/roy-batty">Roy Batty</a></p>
                                 <p class="card-text mb-0">2016 - 2019</p>
                             </div>
                         </div>
                     </div>
-                </div>
+                </div>-->
 
                 <div class="carousel-card">
                     <div class="card h-100 shadow-sm">

@@ -92,6 +92,81 @@ class MusicianDiscographyViewTest extends TestCase
         $response->assertSee('bi-music-note-beamed');
         $response->assertSee('1989');
         $response->assertSee('2014');
+        $response->assertSee('data-musician-discography', false);
+    }
+
+    public function test_musician_discography_does_not_requery_created_albums_when_dump_is_present(): void
+    {
+        $user = User::factory()->create(['is_admin' => true]);
+        $this->actingAs($user);
+
+        $musicianRole = Span::create([
+            'name' => 'Musician',
+            'type_id' => 'role',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+            'access_level' => 'public',
+        ]);
+        $musician = Span::create([
+            'name' => 'Max Richter',
+            'type_id' => 'person',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+            'access_level' => 'public',
+            'start_year' => 1966,
+        ]);
+        $hasRoleSpan = Span::create([
+            'name' => 'Max Richter has role Musician',
+            'type_id' => 'connection',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+            'access_level' => 'public',
+            'start_year' => 1966,
+        ]);
+        Connection::create([
+            'type_id' => 'has_role',
+            'parent_id' => $musician->id,
+            'child_id' => $musicianRole->id,
+            'connection_span_id' => $hasRoleSpan->id,
+        ]);
+        $album = Span::create([
+            'name' => 'The Blue Notebooks',
+            'type_id' => 'thing',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+            'access_level' => 'public',
+            'metadata' => ['subtype' => 'album'],
+            'start_year' => 2004,
+        ]);
+        $createdSpan = Span::create([
+            'name' => 'Max Richter created The Blue Notebooks',
+            'type_id' => 'connection',
+            'owner_id' => $user->id,
+            'updater_id' => $user->id,
+            'access_level' => 'public',
+            'start_year' => 2004,
+        ]);
+        Connection::create([
+            'type_id' => 'created',
+            'parent_id' => $musician->id,
+            'child_id' => $album->id,
+            'connection_span_id' => $createdSpan->id,
+        ]);
+
+        $createdAlbumFallbackQueries = 0;
+        \Illuminate\Support\Facades\DB::listen(function ($query) use (&$createdAlbumFallbackQueries) {
+            $sql = strtolower($query->sql);
+            if (str_contains($sql, 'created') && str_contains($sql, 'album') && str_contains($sql, 'connections')) {
+                $createdAlbumFallbackQueries++;
+            }
+        });
+
+        $response = $this->get('/spans/'.$musician->slug);
+
+        $response->assertOk();
+        $response->assertSee('data-musician-discography', false);
+        $response->assertSee('The Blue Notebooks');
+        $this->assertSame(0, $createdAlbumFallbackQueries);
     }
 
     public function test_musician_discography_card_does_not_appear_on_person_without_musician_role()

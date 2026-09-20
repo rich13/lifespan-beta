@@ -2,6 +2,10 @@ import UserSwitcher from './shared/user-switcher.js';
 
 // Only run if admin user (server-side blade check will ensure this is only included for admins)
 document.addEventListener('DOMContentLoaded', function() {
+    if (typeof $ === 'undefined' || !$('#mobileUserSwitcherList').length) {
+        return;
+    }
+
     // Initialize shared user switcher for mobile
     const mobileUserSwitcher = new UserSwitcher('mobileUserSwitcherList');
 

@@ -137,7 +137,7 @@
         @if($showCombinedTimeline)
         <div class="row mb-4">
             <div class="col-12">
-                <x-spans.timeline-combined-group-konva :span="$span" />
+                <x-spans.timeline-combined-group-konva :span="$span" :timelineSeed="$timelineSeed ?? null" :personalTimelineSeed="$personalTimelineSeed ?? null" />
             </div>
         </div>
         @endif
@@ -168,21 +168,21 @@
                 @if($span->type_id === 'connection')
                     <x-spans.cards.related-connections-card :span="$span" :connectionForSpan="$connectionForSpan ?? null" />
                     <!-- Temporal Relations Card - Show other connections to same subject that overlap in time -->
-                    <x-spans.temporal-relations :span="$span" :connectionForSpan="$connectionForSpan ?? null" />
+                    <x-spans.temporal-relations :span="$span" :connectionForSpan="$connectionForSpan ?? null" :precomputedConnections="$precomputedConnections ?? null" />
                 @endif
                 
                 <!-- Annotations Card - Show notes that annotate this span -->
                 <x-spans.cards.note-spans-card :span="$span" :annotatingNotes="$annotatingNotes ?? null" />
                 
                 <!-- Collections Card - Show collections that contain this span -->
-                <x-spans.cards.collections-card :span="$span" />
+                <x-spans.cards.collections-card :span="$span" :precomputedConnections="$precomputedConnections ?? null" />
                 
                 <x-spans.partials.connections :span="$span" :parentConnections="$parentConnections ?? null" :childConnections="$childConnections ?? null" :connectionForSpan="$connectionForSpan ?? null" />
             </div>
 
             <div class="col-md-4">
                 <!-- Legacy Album Cover (only for albums) -->
-                @if($span->subtype === 'album' && $span->has_cover_art && $span->cover_art_url)
+                @if($span->subtype === 'album' && ($span->has_cover_art || $span->needsCoverArtFetch()))
                     <div class="card mb-4">
                         <div class="card-header">
                             <h6 class="card-title mb-0">
@@ -191,12 +191,8 @@
                         </div>
                         <div class="card-body">
                             <div class="text-center">
-                                <div class="ratio ratio-1x1">
-                                    <img src="{{ $span->cover_art_url }}" 
-                                         alt="{{ $span->getDisplayTitle() }} album cover" 
-                                         class="img-fluid rounded" 
-                                         style="object-fit: cover;"
-                                         loading="lazy">
+                                <div class="ratio ratio-1x1 cover-art-frame">
+                                    <x-spans.cover-art :album="$span" size="medium" variant="hero" :alt="$span->getDisplayTitle() . ' album cover'" />
                                 </div>
                             </div>
                         </div>
@@ -208,12 +204,12 @@
                 
                 <!-- Episodes list for programme spans -->
                 @if($span->type_id === 'thing' && ($span->metadata['subtype'] ?? null) === 'programme')
-                    <x-spans.cards.programme-episodes-card :span="$span" />
+                    <x-spans.cards.programme-episodes-card :span="$span" :precomputedConnections="$precomputedConnections ?? null" />
                 @endif
                 
                 <!-- Featured person for plaque spans (sits under image gallery) -->
                 @if($span->type_id === 'thing' && isset($span->metadata['subtype']) && $span->metadata['subtype'] === 'plaque')
-                    <x-spans.cards.plaque-featured-subject-card :span="$span" />
+                    <x-spans.cards.plaque-featured-subject-card :span="$span" :precomputedConnections="$precomputedConnections ?? null" />
                 @endif
                 
                 <!-- AKA Card - Show alternative names if they exist -->
@@ -249,17 +245,17 @@
                 
                 <!-- Employee Card (for organisations) - placed under employment card -->
                 @if($span->type_id === 'organisation')
-                    <x-spans.cards.employee-card :span="$span" />
+                    <x-spans.cards.employee-card :span="$span" :precomputedConnections="$precomputedConnections ?? null" />
                 @endif
                 
                 <!-- Student Card (for organisations) - placed under employee card -->
                 @if($span->type_id === 'organisation')
-                    <x-spans.cards.student-card :span="$span" />
+                    <x-spans.cards.student-card :span="$span" :precomputedConnections="$precomputedConnections ?? null" />
                 @endif
                 
                 <!-- Lived Here Card (for places) - placed after student card -->
                 @if($span->type_id === 'place')
-                    <x-spans.cards.lived-here-card :span="$span" />
+                    <x-spans.cards.lived-here-card :span="$span" :precomputedConnections="$precomputedConnections ?? null" />
                 @endif
                 
                 <!-- Film Poster (only for films) -->
@@ -305,7 +301,7 @@
                 
                 <!-- Album Tracks Card (only for albums) -->
                 @if($span->subtype === 'album')
-                    <x-spans.cards.album-tracks-card :span="$span" />
+                    <x-spans.cards.album-tracks-card :span="$span" :precomputedConnections="$precomputedConnections ?? null" />
                 @endif
                 
                 <!-- User Connection Card -->
@@ -317,18 +313,12 @@
                 
                 <!-- Band Discography Card -->
                 @if($span->type_id === 'band')
-                    @includeIf('components.spans.cards.band-discography', ['span' => $span])
+                    <x-spans.cards.band-discography :span="$span" :precomputedConnections="$precomputedConnections ?? null" />
                 @endif
                 
                 <!-- Musician Discography Card -->
                 @if($span->type_id === 'person')
-                    @php
-                        $personRelationshipService = app(\App\Services\PersonRelationshipService::class);
-                        $hasMusicianRole = $personRelationshipService->hasMusicianRole($span);
-                    @endphp
-                    @if($hasMusicianRole)
-                        @includeIf('components.spans.cards.musician-discography', ['span' => $span])
-                    @endif
+                    <x-spans.cards.musician-discography :span="$span" :precomputedConnections="$precomputedConnections ?? null" />
                 @endif
                 
                 <!-- Photo Display Card -->
@@ -341,19 +331,19 @@
 
                 <!-- Related Films Card (only for films) -->
                 @if($span->type_id === 'thing' && isset($span->metadata['subtype']) && $span->metadata['subtype'] === 'film')
-                    <x-spans.cards.related-films-card :span="$span" />
+                    <x-spans.cards.related-films-card :span="$span" :precomputedConnections="$precomputedConnections ?? null" />
                 @endif
 
                 @auth
                     @if($span->type_id === 'person')
-                        <x-spans.display.compare-card :span="$span" />
+                        <x-spans.display.compare-card :span="$span" :personalTimelineSeed="$personalTimelineSeed ?? null" />
                         <x-spans.display.reflect-card :span="$span" />
                     @endif
                     
                 @endauth
                 @if($span->type_id === 'person')
                     <x-spans.partials.family-relationships :span="$span" :familyData="$familyData ?? null" />
-                    <x-spans.partials.desert-island-discs-tracks-card :span="$span" :desertIslandDiscsSet="$desertIslandDiscsSet" />
+                    <x-spans.partials.desert-island-discs-tracks-card :span="$span" :desertIslandDiscsSet="$desertIslandDiscsSet" :desertIslandDiscsTracks="$desertIslandDiscsTracks ?? null" />
                     
                     <!-- Guardian Articles about this person (only for public persons and admin users) -->
                     @if($span->access_level === 'public' && $span->getMeta('subtype') !== 'private_individual' && auth()->check() && auth()->user()->getEffectiveAdminStatus())

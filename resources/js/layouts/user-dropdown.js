@@ -59,6 +59,10 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Load user list for admin user switcher
     function loadUserList() {
+        if (!document.getElementById('userSwitcherList')) {
+            return;
+        }
+
         try {
             // Use imported UserSwitcher class
             const userSwitcher = new UserSwitcher('userSwitcherList');

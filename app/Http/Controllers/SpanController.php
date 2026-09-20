@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Span;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
@@ -25,7 +26,9 @@ use App\Services\ConfigurableStoryGeneratorService;
 use App\Services\RouteReservationService;
 use App\Services\YamlValidationService;
 use App\Services\SpreadsheetValidationService;
+use App\Services\PlaqueVirtualPlaqueService;
 use App\Services\Lifespan\UrlDateParser;
+use App\Services\SpanTimelineSeedService;
 
 use InvalidArgumentException;
 use App\Models\Connection;
@@ -34,11 +37,12 @@ use App\Models\SpanEpistemicRevision;
 use App\Services\WikipediaOnThisDayService;
 use App\Models\ConnectionVersion;
 use App\Support\PrecomputedSpanConnections;
+use App\Support\SpanShowPageLoader;
 use App\Support\ApiEnvelope;
 use App\Support\SpanApiPayload;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Collection;
-use Illuminate\Database\Eloquent\Builder;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
  * Handle span viewing and management
@@ -62,13 +66,31 @@ class SpanController extends Controller
     {
         // Require auth for all routes except public span viewing, connections, explore, and time-travel pages
         $this->middleware('auth')->except([
-            'show', 'showJson', 'connectionsJson', 'plaque', 'plaqueConnection', 'plaquesIndex', 'plaquesSearch',
-            'index', 'search', 'explore', 'desertIslandDiscs', 'explorePlaques', 'connectionTypes', 'connectionsByType',
+            'show', 'showJson', 'connectionsJson', 'plaque', 'plaqueConnection', 'plaqueConnections', 'plaquesIndex', 'plaquesSearch', 'plaquesMarkers',
+            'index', 'search', 'explore', 'exploreDate', 'desertIslandDiscs', 'explorePlaques', 'connectionTypes', 'connectionsByType',
             'showConnection', 'showConnectionJson', 'showConnectionBySpanId', 'showConnectionBySpanIdJson', 'listConnections',
             'showTimeline', 'showAtDate', 'showAtDateCanonical', 'showAtDateWithAsOf', 'showAsOfDate',
         ]);
         $this->yamlService = $yamlService;
         $this->routeReservationService = $routeReservationService;
+    }
+
+    /**
+     * Render an error page with the matching HTTP status (never 200).
+     */
+    private function errorPage(int $status, ?\Throwable $exception = null): Response
+    {
+        $view = $status === 403 ? 'errors.403' : 'errors.500';
+        $data = [];
+
+        if ($exception !== null && $status >= 500 && ! app()->environment('production')) {
+            $data = [
+                'error' => $exception->getMessage(),
+                'trace' => $exception->getTraceAsString(),
+            ];
+        }
+
+        return response()->view($view, $data, $status);
     }
 
     /**
@@ -256,22 +278,15 @@ class SpanController extends Controller
             ]);
 
             return view('spans.index', compact('spans'));
+        } catch (HttpException $e) {
+            throw $e;
         } catch (\Exception $e) {
-            // Log the error
-            \Illuminate\Support\Facades\Log::error('Error in spans index', [
+            Log::error('Error in spans index', [
                 'message' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
-            
-            // Return error page
-            if (app()->environment('production')) {
-                return view('errors.500');
-            } else {
-                return view('errors.500', [
-                    'error' => $e->getMessage(),
-                    'trace' => $e->getTraceAsString()
-                ]);
-            }
+
+            return $this->errorPage(500, $e);
         }
     }
 
@@ -953,8 +968,9 @@ class SpanController extends Controller
 
             $asOfDateIso = $request->attributes->get('as_of_date_iso');
             $isAsOfRender = is_string($asOfDateIso) && $asOfDateIso !== '';
+            $pageLoader = app(SpanShowPageLoader::class);
 
-            // Cache span show data (eager loads + Desert Island Discs + family data); story is generated after connections so it can use precomputed.
+            // Cache the span row and family-tree walk. Connections stay uncached (access-dependent).
             // For as_of renders we bypass cache to prevent mixing snapshots with present-day cache entries.
             if ($isAsOfRender) {
                 $subject->load([
@@ -962,83 +978,25 @@ class SpanController extends Controller
                     'owner',
                     'updater',
                 ]);
-                $desertIslandDiscsSet = null;
-                $familyData = null;
-                if ($subject->type_id === 'person') {
-                    try {
-                        $desertIslandDiscsSet = Span::getDesertIslandDiscsSet($subject);
-                    } catch (\Exception $e) {
-                        Log::warning('Failed to get Desert Island Discs set for person', [
-                            'person_id' => $subject->id,
-                            'error' => $e->getMessage()
-                        ]);
-                    }
-                    $familyData = $this->getFamilyDataForSpan($subject);
-                }
+                $familyData = $pageLoader->familyTree($subject);
             } else {
                 $spanShowCacheKey = 'span_show_data_v4_' . $subject->id;
                 $spanShowCacheTtl = config('app.span_show_cache_ttl', 900);
-                $cached = Cache::remember($spanShowCacheKey, $spanShowCacheTtl, function () use ($subject) {
+                $cached = Cache::remember($spanShowCacheKey, $spanShowCacheTtl, function () use ($subject, $pageLoader) {
                     $subject->load([
                         'type',
                         'owner',
                         'updater',
                     ]);
-                    $desertIslandDiscsSet = null;
-                    $familyData = null;
-                    if ($subject->type_id === 'person') {
-                        try {
-                            $desertIslandDiscsSet = Span::getDesertIslandDiscsSet($subject);
-                        } catch (\Exception $e) {
-                            Log::warning('Failed to get Desert Island Discs set for person', [
-                                'person_id' => $subject->id,
-                                'error' => $e->getMessage()
-                            ]);
-                        }
-                        $familyData = $this->getFamilyDataForSpan($subject);
-                    }
-                    return ['span' => $subject, 'desertIslandDiscsSet' => $desertIslandDiscsSet, 'familyData' => $familyData];
+
+                    return ['span' => $subject, 'familyData' => $pageLoader->familyTree($subject)];
                 });
                 $subject = $cached['span'];
-                $desertIslandDiscsSet = $cached['desertIslandDiscsSet'];
                 $familyData = $cached['familyData'] ?? null;
             }
 
-            // Precompute connections for the connections partial (access-dependent, so not cached)
-            [$parentConnections, $childConnections] = $this->getConnectionsForSpanShow($subject);
-
-            // One source of truth: connections grouped by type so cards can slice instead of re-querying
-            $precomputedConnections = new PrecomputedSpanConnections($parentConnections, $childConnections);
-
-            // Story uses precomputed connections so it doesn't re-query (same sentence output, fewer queries)
-            $story = null;
-            try {
-                $story = app(\App\Services\ConfigurableStoryGeneratorService::class)->generateStory($subject, $precomputedConnections);
-            } catch (\Exception $e) {
-                $story = ['paragraphs' => [], 'metadata' => [], 'error' => $e->getMessage()];
-            }
-
-            // Education card: derive connections from precomputed; only run "during" (phases) batch query
-            $educationCardData = $this->getEducationCardData($subject, $precomputedConnections->getParentByType('education'));
-
-            // When viewing a connection span, load the connection once for all view components (avoids repeated Connection::where('connection_span_id', ...))
-            $connectionForSpan = null;
-            if ($subject->type_id === 'connection') {
-                $connectionForSpan = $this->applyAsOfConnectionFilter(
-                    Connection::where('connection_span_id', $subject->id)
-                    ->with(['parent.type', 'child.type', 'type', 'connectionSpan.type'])
-                )->first();
-            }
-
-            // Precompute data for cards that would otherwise query in the view
-            $annotatingNotes = $this->getAnnotatingNotes($subject);
-            $bluePlaqueCardData = $this->getBluePlaqueCardData($subject);
-            $directorConnectionsByFilmId = ($subject->type_id === 'person')
-                ? $this->getDirectorConnectionsByFilmId($precomputedConnections)
-                : collect();
-            if ($familyData !== null) {
-                $familyData = $this->enrichFamilyDataWithConnectionBatches($subject, $familyData);
-            }
+            $page = $pageLoader->load($subject, $familyData);
+            $viewData = $page->viewData();
 
             // Additional validation: ensure the type relationship is correct
             if ($subject->type && $subject->type->type_id !== $subject->type_id) {
@@ -1049,9 +1007,8 @@ class SpanController extends Controller
                 ]);
                 // Reload the type relationship
                 $subject->load('type');
+                $viewData['span'] = $subject;
             }
-
-            $span = $subject; // For view compatibility
 
             // HTTP conditional requests for guest + public span: return 304 if unchanged
             if (!Auth::check() && $subject->access_level === 'public' && $subject->updated_at) {
@@ -1077,35 +1034,28 @@ class SpanController extends Controller
                     }
                 }
 
-                ViewFacade::share('familyData', $familyData);
-                $response = response()->view('spans.show', compact('span', 'desertIslandDiscsSet', 'familyData', 'parentConnections', 'childConnections', 'story', 'educationCardData', 'connectionForSpan', 'precomputedConnections', 'annotatingNotes', 'bluePlaqueCardData', 'directorConnectionsByFilmId'));
+                ViewFacade::share('familyData', $viewData['familyData']);
+                $response = response()->view('spans.show', $viewData);
                 $response->header('ETag', $etag);
                 $response->header('Last-Modified', $lastModified);
                 $response->header('Cache-Control', 'private, max-age=60');
                 return $response;
             }
 
-            ViewFacade::share('familyData', $familyData);
-            return view('spans.show', compact('span', 'desertIslandDiscsSet', 'familyData', 'parentConnections', 'childConnections', 'story', 'educationCardData', 'connectionForSpan', 'precomputedConnections', 'annotatingNotes', 'bluePlaqueCardData', 'directorConnectionsByFilmId'));
+            ViewFacade::share('familyData', $viewData['familyData']);
+            return view('spans.show', $viewData);
         } catch (AuthorizationException $e) {
-            // Return a 403 forbidden view
-            return view('errors.403');
+            return $this->errorPage(403);
+        } catch (HttpException $e) {
+            throw $e;
         } catch (\Exception $e) {
-            // Log the error
-            \Illuminate\Support\Facades\Log::error('Error in spans show', [
+            Log::error('Error in spans show', [
                 'message' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
                 'route_param' => $request->segment(2)
             ]);
-            // Return error page
-            if (app()->environment('production')) {
-                return view('errors.500');
-            } else {
-                return view('errors.500', [
-                    'error' => $e->getMessage(),
-                    'trace' => $e->getTraceAsString()
-                ]);
-            }
+
+            return $this->errorPage(500, $e);
         }
     }
 
@@ -1113,7 +1063,7 @@ class SpanController extends Controller
      * Display the scroll-controlled timeline view for a span.
      * GET /s/{subject}
      */
-    public function showTimeline(Request $request, Span $subject): View
+    public function showTimeline(Request $request, Span $subject): View|Response|\Illuminate\Http\RedirectResponse
     {
         try {
             // If we're accessing via UUID and a slug exists, redirect to slug URL for consistency
@@ -1128,70 +1078,250 @@ class SpanController extends Controller
             $this->authorize('view', $subject);
 
             $span = $subject;
+            $seeds = app(SpanTimelineSeedService::class)
+                ->seedsForSpanAndViewer($span, Auth::user()?->personalSpan);
 
-            return view('spans.timeline-view', compact('span'));
+            return view('spans.timeline-view', [
+                'span' => $span,
+                'timelineSeed' => $seeds['timelineSeed'],
+                'personalTimelineSeed' => $seeds['personalTimelineSeed'],
+            ]);
         } catch (AuthorizationException $e) {
-            return view('errors.403');
+            return $this->errorPage(403);
+        } catch (HttpException $e) {
+            throw $e;
         } catch (\Exception $e) {
             Log::error('Error in timeline view', [
                 'message' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
                 'route_param' => $request->segment(2)
             ]);
-            if (app()->environment('production')) {
-                return view('errors.500');
-            } else {
-                return view('errors.500', [
-                    'error' => $e->getMessage(),
-                    'trace' => $e->getTraceAsString()
-                ]);
-            }
+
+            return $this->errorPage(500, $e);
         }
     }
 
     /**
-     * Display the plaques index with 5 random people.
+     * Display the plaques index as a full-bleed map.
      * GET /plaques
      */
     public function plaquesIndex(Request $request): View
     {
-        $query = Span::where('type_id', 'person')
-            ->where(function ($q) {
-                $q->whereHas('connectionsAsSubject', function ($sub) {
-                    $sub->whereHas('object', fn ($o) => $o->where('type_id', 'place'))
-                        ->whereNotNull('connection_span_id')
-                        ->whereHas('connectionSpan', fn ($cs) => $cs->whereNotNull('short_id'));
-                })->orWhereHas('connectionsAsObject', function ($sub) {
-                    $sub->whereHas('subject', fn ($s) => $s->where('type_id', 'place'))
-                        ->whereNotNull('connection_span_id')
-                        ->whereHas('connectionSpan', fn ($cs) => $cs->whereNotNull('short_id'));
-                });
-            });
+        return view('plaques.home');
+    }
 
-        if (!Auth::check()) {
-            $query->where('access_level', 'public');
-        } else {
-            $user = Auth::user();
-            if (!$user->getEffectiveAdminStatus()) {
-                $query->where(function ($q) use ($user) {
-                    $q->where('access_level', 'public')
-                        ->orWhere('owner_id', $user->id)
-                        ->orWhere(function ($q) use ($user) {
-                            $q->where('access_level', 'shared')
-                                ->whereExists(function ($subquery) use ($user) {
-                                    $subquery->select('id')
-                                        ->from('span_permissions')
-                                        ->whereColumn('span_permissions.span_id', 'spans.id')
-                                        ->where('span_permissions.user_id', $user->id);
-                                });
-                        });
-                });
-            }
+    /**
+     * Person–place plaque markers within the current map bounds.
+     * Density is reduced at lower zoom so more markers appear as you zoom in.
+     * GET /plaques/markers
+     */
+    public function plaquesMarkers(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'north' => 'required|numeric|between:-90,90',
+            'south' => 'required|numeric|between:-90,90',
+            'east' => 'required|numeric|between:-180,180',
+            'west' => 'required|numeric|between:-180,180',
+            'zoom' => 'nullable|integer|min:0|max:18',
+        ]);
+
+        $north = (float) $validated['north'];
+        $south = (float) $validated['south'];
+        $east = (float) $validated['east'];
+        $west = (float) $validated['west'];
+        $zoom = (int) ($validated['zoom'] ?? config('plaques.map.zoom', 6));
+
+        if ($north <= $south || $east <= $west) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid bounding box coordinates',
+            ], 400);
         }
 
-        $people = $query->inRandomOrder()->limit(5)->get();
+        $limit = (int) config('plaques.map.max_markers', 250);
+        $precision = $this->plaqueMarkerGridPrecision($zoom);
+        $ids = $this->plaqueMarkerIdsInBounds($north, $south, $east, $west, $precision, $limit);
 
-        return view('plaques.home', compact('people'));
+        if ($ids->isEmpty()) {
+            return response()->json([
+                'success' => true,
+                'markers' => [],
+                'count' => 0,
+                'zoom' => $zoom,
+            ]);
+        }
+
+        $connections = Connection::query()
+            ->whereIn('id', $ids)
+            ->with(['subject', 'object', 'type', 'connectionSpan'])
+            ->get()
+            ->sortBy(fn (Connection $connection) => array_search($connection->id, $ids->all(), true))
+            ->values();
+
+        $markers = $connections->map(function (Connection $connection) {
+            $subject = $connection->subject;
+            $object = $connection->object;
+            $connType = $connection->type;
+            $connSpan = $connection->connectionSpan;
+            if (!$subject || !$object || !$connType || !$connSpan || !$connSpan->short_id) {
+                return null;
+            }
+
+            $placeSpan = $subject->type_id === 'place' ? $subject : ($object->type_id === 'place' ? $object : null);
+            $personSpan = $subject->type_id === 'person' ? $subject : ($object->type_id === 'person' ? $object : null);
+            if (!$placeSpan || !$personSpan) {
+                return null;
+            }
+
+            $coords = $placeSpan->getCoordinates();
+            if (!$coords || !isset($coords['latitude'], $coords['longitude'])) {
+                return null;
+            }
+
+            $isForward = $connection->parent_id === $personSpan->id;
+            $predicateKey = str_replace(' ', '-', $isForward ? $connType->forward_predicate : $connType->inverse_predicate);
+            $predicateText = config('plaques.predicate_mappings.' . $predicateKey)
+                ?? ($isForward ? $connType->forward_predicate : $connType->inverse_predicate);
+
+            return [
+                'id' => $connection->id,
+                'latitude' => (float) $coords['latitude'],
+                'longitude' => (float) $coords['longitude'],
+                'url' => route('plaques.connection', [
+                    'subject' => $subject,
+                    'predicate' => $predicateKey,
+                    'object' => $object,
+                    'shortId' => $connSpan->short_id,
+                ]),
+                'person_name' => $personSpan->getDisplayTitle(),
+                'place_name' => $placeSpan->getDisplayTitle(),
+                'predicate' => $predicateText,
+            ];
+        })->filter()->values();
+
+        return response()->json([
+            'success' => true,
+            'markers' => $markers,
+            'count' => $markers->count(),
+            'zoom' => $zoom,
+        ]);
+    }
+
+    /**
+     * Degrees per grid cell for sampling markers at a zoom level.
+     * Zero means return every marker in bounds (up to the max).
+     */
+    private function plaqueMarkerGridPrecision(int $zoom): float
+    {
+        return match (true) {
+            $zoom <= 5 => 1.0,
+            $zoom <= 6 => 0.5,
+            $zoom <= 7 => 0.25,
+            $zoom <= 8 => 0.15,
+            $zoom <= 9 => 0.08,
+            $zoom <= 10 => 0.04,
+            $zoom <= 11 => 0.02,
+            $zoom <= 12 => 0.01,
+            $zoom <= 13 => 0.005,
+            $zoom <= 14 => 0.002,
+            default => 0.0,
+        };
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, string>
+     */
+    private function plaqueMarkerIdsInBounds(
+        float $north,
+        float $south,
+        float $east,
+        float $west,
+        float $precision,
+        int $limit
+    ): \Illuminate\Support\Collection {
+        $latExpr = "CASE WHEN child_spans.type_id = 'place' THEN (child_spans.metadata->'coordinates'->>'latitude')::float ELSE (parent_spans.metadata->'coordinates'->>'latitude')::float END";
+        $lngExpr = "CASE WHEN child_spans.type_id = 'place' THEN (child_spans.metadata->'coordinates'->>'longitude')::float ELSE (parent_spans.metadata->'coordinates'->>'longitude')::float END";
+
+        $query = DB::table('connections')
+            ->join('spans as connection_spans', 'connection_spans.id', '=', 'connections.connection_span_id')
+            ->join('spans as parent_spans', 'parent_spans.id', '=', 'connections.parent_id')
+            ->join('spans as child_spans', 'child_spans.id', '=', 'connections.child_id')
+            ->whereNotNull('connection_spans.short_id')
+            ->where(function ($q) {
+                $q->where(function ($inner) {
+                    $inner->where('parent_spans.type_id', 'person')
+                        ->where('child_spans.type_id', 'place');
+                })->orWhere(function ($inner) {
+                    $inner->where('parent_spans.type_id', 'place')
+                        ->where('child_spans.type_id', 'person');
+                });
+            })
+            ->whereRaw("{$latExpr} IS NOT NULL")
+            ->whereRaw("{$lngExpr} IS NOT NULL")
+            ->whereRaw("{$latExpr} >= ?", [$south])
+            ->whereRaw("{$latExpr} <= ?", [$north])
+            ->whereRaw("{$lngExpr} >= ?", [$west])
+            ->whereRaw("{$lngExpr} <= ?", [$east]);
+
+        $this->constrainPlaqueMapSpanAccess($query, 'parent_spans');
+        $this->constrainPlaqueMapSpanAccess($query, 'child_spans');
+        $this->constrainPlaqueMapSpanAccess($query, 'connection_spans');
+
+        if ($precision > 0) {
+            $base = (clone $query)->selectRaw(
+                "connections.id, round(({$latExpr}) / ?) as grid_lat, round(({$lngExpr}) / ?) as grid_lng",
+                [$precision, $precision]
+            );
+
+            return DB::query()
+                ->fromSub($base, 'plaque_markers')
+                ->selectRaw('DISTINCT ON (grid_lat, grid_lng) id')
+                ->orderBy('grid_lat')
+                ->orderBy('grid_lng')
+                ->orderBy('id')
+                ->limit($limit)
+                ->pluck('id')
+                ->unique()
+                ->values();
+        }
+
+        return $query->select('connections.id')
+            ->orderBy('connections.id')
+            ->limit($limit)
+            ->pluck('id')
+            ->unique()
+            ->values();
+    }
+
+    /**
+     * Restrict a joined spans alias to records the current viewer may see.
+     */
+    private function constrainPlaqueMapSpanAccess($query, string $alias): void
+    {
+        $user = Auth::user();
+        if (!$user) {
+            $query->where("{$alias}.access_level", 'public');
+
+            return;
+        }
+
+        if ($user->getEffectiveAdminStatus()) {
+            return;
+        }
+
+        $query->where(function ($q) use ($alias, $user) {
+            $q->where("{$alias}.access_level", 'public')
+                ->orWhere("{$alias}.owner_id", $user->id)
+                ->orWhere(function ($q) use ($alias, $user) {
+                    $q->where("{$alias}.access_level", 'shared')
+                        ->whereExists(function ($sub) use ($alias, $user) {
+                            $sub->select(DB::raw(1))
+                                ->from('span_permissions')
+                                ->whereColumn('span_permissions.span_id', "{$alias}.id")
+                                ->where('span_permissions.user_id', $user->id);
+                        });
+                });
+        });
     }
 
     /**
@@ -1258,13 +1388,40 @@ class SpanController extends Controller
     public function plaque(Span $span): View
     {
         $placeConnections = $this->getPlaceConnectionsForPlaque($span);
-        return view('plaques.show', compact('span', 'placeConnections'));
+        $physicalPlaque = null;
+
+        return view('plaques.show', compact('span', 'placeConnections', 'physicalPlaque'));
+    }
+
+    /**
+     * Display a plaque map of one connection type for a span.
+     * GET /plaques/{span}/{predicate}
+     */
+    public function plaqueConnections(Span $span, string $predicate): View
+    {
+        $predicateWithSpaces = str_replace('-', ' ', $predicate);
+        $connectionType = ConnectionType::where('forward_predicate', $predicateWithSpaces)
+            ->orWhere('inverse_predicate', $predicateWithSpaces)
+            ->first();
+
+        if (!$connectionType) {
+            abort(404, 'Connection type not found');
+        }
+
+        $placeConnections = $this->getPlaceConnectionsForPlaque($span, $predicate);
+        if ($placeConnections->isEmpty()) {
+            abort(404, 'No plaques found');
+        }
+
+        $physicalPlaque = null;
+
+        return view('plaques.show', compact('span', 'predicate', 'placeConnections', 'physicalPlaque'));
     }
 
     /**
      * Get connections to places for mini-plaques on a span's plaque view.
      */
-    private function getPlaceConnectionsForPlaque(Span $span): \Illuminate\Support\Collection
+    private function getPlaceConnectionsForPlaque(Span $span, ?string $predicate = null): \Illuminate\Support\Collection
     {
         $user = Auth::user();
         $connections = Connection::where(function ($q) use ($span) {
@@ -1273,7 +1430,7 @@ class SpanController extends Controller
             ->with(['subject', 'object', 'type', 'connectionSpan'])
             ->get();
 
-        return $connections->filter(function ($conn) use ($span, $user) {
+        return $connections->filter(function ($conn) use ($span, $user, $predicate) {
             $other = $conn->parent_id === $span->id ? $conn->object : $conn->subject;
             if (!$other || $other->type_id !== 'place') {
                 return false;
@@ -1281,6 +1438,18 @@ class SpanController extends Controller
             $connSpan = $conn->connectionSpan;
             if (!$connSpan || !$connSpan->short_id) {
                 return false;
+            }
+            if ($predicate !== null) {
+                $connType = $conn->type;
+                $isForward = $conn->parent_id === $span->id;
+                $connPredicate = str_replace(
+                    ' ',
+                    '-',
+                    $isForward ? $connType->forward_predicate : $connType->inverse_predicate
+                );
+                if ($connPredicate !== $predicate) {
+                    return false;
+                }
             }
             if ($user) {
                 return $connSpan->isAccessibleBy($user) && $other->isAccessibleBy($user);
@@ -1293,6 +1462,11 @@ class SpanController extends Controller
             $object = $conn->object;
             $placeSpan = $subject->type_id === 'place' ? $subject : $object;
             $predicate = str_replace(' ', '-', $isForward ? $connType->forward_predicate : $connType->inverse_predicate);
+            $coords = $this->plaquePlaceCoordinates($placeSpan);
+            $predicateLabel = $isForward ? $connType->forward_predicate : $connType->inverse_predicate;
+            $displayPredicate = config('plaques.predicate_mappings.' . $predicate)
+                ?? $predicateLabel;
+
             return [
                 'url' => route('plaques.connection', [
                     'subject' => $subject,
@@ -1301,9 +1475,40 @@ class SpanController extends Controller
                     'shortId' => $conn->connectionSpan->short_id,
                 ]),
                 'place_name' => $placeSpan->getDisplayTitle(),
-                'predicate' => $isForward ? $connType->forward_predicate : $connType->inverse_predicate,
+                'predicate' => $predicateLabel,
+                'title' => $span->getDisplayTitle() . ' ' . $displayPredicate . ' — ' . $placeSpan->getDisplayTitle(),
+                'latitude' => $coords[0] ?? null,
+                'longitude' => $coords[1] ?? null,
             ];
         });
+    }
+
+    /**
+     * @return array{0: float, 1: float}|null
+     */
+    private function plaquePlaceCoordinates(?Span $placeSpan): ?array
+    {
+        if (!$placeSpan) {
+            return null;
+        }
+
+        $coords = $placeSpan->getCoordinates() ?? $placeSpan->boundaryCentroid();
+        if (!$coords && !empty($placeSpan->metadata['coordinates'])) {
+            $metadata = $placeSpan->metadata['coordinates'];
+            $coords = [
+                'latitude' => $metadata['latitude'] ?? $metadata['lat'] ?? null,
+                'longitude' => $metadata['longitude'] ?? $metadata['lon'] ?? $metadata['lng'] ?? null,
+            ];
+            if ($coords['latitude'] === null || $coords['longitude'] === null) {
+                $coords = null;
+            }
+        }
+
+        if ($coords && isset($coords['latitude'], $coords['longitude'])) {
+            return [(float) $coords['latitude'], (float) $coords['longitude']];
+        }
+
+        return null;
     }
 
     /**
@@ -1353,8 +1558,35 @@ class SpanController extends Controller
         }
 
         $span = $connectionSpan;
-        $placeConnections = collect();
-        return view('plaques.show', compact('span', 'subject', 'object', 'predicate', 'placeConnections'));
+        $personSpan = $subject->type_id === 'person'
+            ? $subject
+            : ($object->type_id === 'person' ? $object : $subject);
+        $currentUrl = route('plaques.connection', [
+            'subject' => $subject,
+            'predicate' => $predicate,
+            'object' => $object,
+            'shortId' => $shortId,
+        ]);
+        $placeConnections = $this->getPlaceConnectionsForPlaque($personSpan)
+            ->reject(fn ($placeConnection) => $placeConnection['url'] === $currentUrl)
+            ->values();
+
+        $placeSpan = $subject->type_id === 'place'
+            ? $subject
+            : ($object->type_id === 'place' ? $object : null);
+        $physicalPlaque = ($personSpan && $placeSpan)
+            ? app(PlaqueVirtualPlaqueService::class)
+                ->physicalPlaqueForPersonAndPlace($personSpan, $placeSpan, $user)
+            : null;
+
+        return view('plaques.show', compact(
+            'span',
+            'subject',
+            'object',
+            'predicate',
+            'placeConnections',
+            'physicalPlaque'
+        ));
     }
 
     /**
@@ -1554,181 +1786,11 @@ class SpanController extends Controller
     }
 
     /**
-     * Precompute all family relationship collections for a person span.
-     * Used to avoid N+1 and repeated work when rendering family-relationships partial.
-     *
-     * @return array<string, mixed>|null Null for non-person spans
-     */
-    private function getFamilyDataForSpan(Span $span): ?array
-    {
-        if ($span->type_id !== 'person') {
-            return null;
-        }
-        return [
-            'ancestors' => $span->ancestors(3),
-            'descendants' => $span->descendants(3),
-            'siblings' => $span->siblings(),
-            'unclesAndAunts' => $span->unclesAndAunts(),
-            'cousins' => $span->cousins(),
-            'nephewsAndNieces' => $span->nephewsAndNieces(),
-            'extraNephewsAndNieces' => $span->extraNephewsAndNieces(),
-            'stepParents' => $span->stepParents(),
-            'inLawsAndOutLaws' => $span->inLawsAndOutLaws(),
-            'extraInLawsAndOutLaws' => $span->extraInLawsAndOutLaws(),
-            'childrenInLawsAndOutLaws' => $span->childrenInLawsAndOutLaws(),
-            'grandchildrenInLawsAndOutLaws' => $span->grandchildrenInLawsAndOutLaws(),
-        ];
-    }
-
-    /**
-     * Enrich familyData with batched photo and parent connections so family partials don't re-query.
-     *
-     * @param  array<string, mixed>  $familyData
-     * @return array<string, mixed>
-     */
-    private function enrichFamilyDataWithConnectionBatches(Span $span, array $familyData): array
-    {
-        $interactive = false;
-        $descendants = $familyData['descendants'] ?? collect();
-        $childrenForGrouped = $descendants->filter(fn ($item) => $item['generation'] === 1)->pluck('span');
-        $childIdsForGrouped = $childrenForGrouped->pluck('id')->all();
-        $otherParentConnectionsPrecomputed = ! empty($childIdsForGrouped)
-            ? $this->applyAsOfConnectionFilter(
-                Connection::where('type_id', 'family')
-                    ->whereIn('child_id', $childIdsForGrouped)
-                    ->where('parent_id', '!=', $span->id)
-                    ->with('parent')
-            )->get()
-            : collect();
-
-        $otherParentSpans = $otherParentConnectionsPrecomputed->pluck('parent')->unique('id')->filter();
-        $allSpans = ($familyData['ancestors'] ?? collect())->pluck('span')
-            ->merge($descendants->pluck('span'))
-            ->merge($familyData['siblings'] ?? collect())->merge($familyData['unclesAndAunts'] ?? collect())
-            ->merge($familyData['cousins'] ?? collect())->merge($familyData['nephewsAndNieces'] ?? collect())
-            ->merge($familyData['extraNephewsAndNieces'] ?? collect())->merge($familyData['stepParents'] ?? collect())
-            ->merge($familyData['inLawsAndOutLaws'] ?? collect())->merge($familyData['extraInLawsAndOutLaws'] ?? collect())
-            ->merge($familyData['childrenInLawsAndOutLaws'] ?? collect())->merge($familyData['grandchildrenInLawsAndOutLaws'] ?? collect())
-            ->merge($otherParentSpans)
-            ->filter(fn ($s) => $s && $s->type_id === 'person')->unique('id');
-        $personIds = $allSpans->pluck('id')->filter()->unique()->values()->all();
-
-        $photoConnections = collect();
-        $parentConnectionsForMap = collect();
-        if (! empty($personIds)) {
-            $photoConnections = $this->applyAsOfConnectionFilter(
-                Connection::where('type_id', 'features')
-                    ->whereIn('child_id', $personIds)
-                    ->whereHas('parent', function ($q) {
-                        $q->where('type_id', 'thing')->whereJsonContains('metadata->subtype', 'photo');
-                    })
-                    ->with(['parent'])
-            )->get()
-                ->groupBy('child_id')
-                ->map(fn ($conns) => $conns->first());
-            $parentConnectionsForMap = $this->applyAsOfConnectionFilter(
-                Connection::where('type_id', 'family')
-                    ->whereIn('child_id', $personIds)
-                    ->whereHas('parent', function ($q) {
-                        $q->where('type_id', 'person');
-                    })
-                    ->with(['parent'])
-            )->get()
-                ->groupBy('child_id');
-        }
-
-        $familyData['otherParentConnectionsPrecomputed'] = $otherParentConnectionsPrecomputed;
-        $familyData['photoConnections'] = $photoConnections;
-        $familyData['parentConnectionsForMap'] = $parentConnectionsForMap;
-        $familyData['parentsMap'] = collect();
-        foreach ($personIds as $personId) {
-            $connections = $parentConnectionsForMap->get($personId);
-            if ($connections && $connections->isNotEmpty()) {
-                $parentSpans = $connections->map(fn ($c) => $c->parent)->filter()->values();
-                if ($parentSpans->isNotEmpty()) {
-                    $familyData['parentsMap']->put($personId, $parentSpans);
-                }
-            }
-        }
-
-        return $familyData;
-    }
-
-    /**
-     * Notes that annotate this span (one query, passed to note-spans card).
-     *
-     * @return \Illuminate\Support\Collection<int, \App\Models\Span>
-     */
-    private function getAnnotatingNotes(Span $span): Collection
-    {
-        $user = Auth::user();
-        $notesQuery = Connection::where('type_id', 'annotates')
-            ->where('child_id', $span->id)
-            ->with(['parent' => function ($q) {
-                $q->where('type_id', 'note')->with(['owner.personalSpan']);
-            }]);
-
-        $notes = $this->applyAsOfConnectionFilter($notesQuery)
-            ->get()
-            ->pluck('parent')
-            ->filter();
-        return $notes->filter(function ($note) use ($user) {
-            if (! $note) {
-                return false;
-            }
-            if (! $user) {
-                return $note->access_level === 'public';
-            }
-            if ($note->owner_id === $user->id) {
-                return true;
-            }
-            return $note->isAccessibleBy($user);
-        })->unique('id')->values();
-    }
-
-    /**
-     * Blue plaque card data for person spans: plaque, photo URL, location, metadata (one batch in controller).
-     *
-     * @return array{plaque: \App\Models\Span, photoUrl: string|null, locationName: string|null, plaqueMetadata: array, plaqueColour: string, erectedYear: mixed}|null
+     * Blue plaque card data for JSON connection payloads.
      */
     private function getBluePlaqueCardData(Span $span): ?array
     {
-        if ($span->type_id === 'connection') {
-            return null;
-        }
-
-        $plaqueConnections = $this->applyAsOfConnectionFilter(
-            Connection::where('type_id', 'features')
-            ->where('child_id', $span->id)
-            ->whereHas('parent', function ($q) {
-                $q->where('type_id', 'thing')->whereJsonContains('metadata->subtype', 'plaque');
-            })
-            ->with(['parent'])
-        )->get();
-        if ($plaqueConnections->isEmpty()) {
-            return null;
-        }
-        $plaque = $plaqueConnections->first()->parent;
-        $photoUrl = $this->resolvePlaquePhotoUrl($plaque);
-        $locationConnection = $this->applyAsOfConnectionFilter(
-            Connection::where('parent_id', $plaque->id)
-            ->where('type_id', 'located')
-            ->with(['child'])
-        )->first();
-        $location = $locationConnection ? $locationConnection->child : null;
-        $locationName = $location ? $location->name : null;
-        $plaqueMetadata = $plaque->metadata ?? [];
-        $plaqueColour = $plaqueMetadata['colour'] ?? 'blue';
-        $erectedYear = $plaqueMetadata['erected'] ?? $plaque->start_year;
-
-        return [
-            'plaque' => $plaque,
-            'photoUrl' => $photoUrl,
-            'locationName' => $locationName,
-            'plaqueMetadata' => $plaqueMetadata,
-            'plaqueColour' => $plaqueColour,
-            'erectedYear' => $erectedYear,
-        ];
+        return app(SpanShowPageLoader::class)->bluePlaqueCardData($span);
     }
 
     /**
@@ -1736,155 +1798,7 @@ class SpanController extends Controller
      */
     private function resolvePlaquePhotoUrl(Span $plaque): ?string
     {
-        $plaquePhotoConnection = Connection::where('type_id', 'features')
-            ->where('child_id', $plaque->id)
-            ->whereHas('parent', function ($q) {
-                $q->where('type_id', 'thing')->whereJsonContains('metadata->subtype', 'photo');
-            })
-            ->with(['parent'])
-            ->first();
-
-        if ($plaquePhotoConnection?->parent) {
-            $plaquePhoto = $plaquePhotoConnection->parent;
-            $metadata = $plaquePhoto->metadata ?? [];
-            $photoUrl = $metadata['thumbnail_url']
-                ?? $metadata['medium_url']
-                ?? $metadata['large_url']
-                ?? $metadata['original_url']
-                ?? null;
-
-            if (! $photoUrl && ! empty($metadata['filename'])) {
-                return route('images.proxy', ['spanId' => $plaquePhoto->id, 'size' => 'medium']);
-            }
-
-            return $photoUrl;
-        }
-
-        $plaqueMetadata = $plaque->metadata ?? [];
-
-        return $plaqueMetadata['main_photo'] ?? $plaqueMetadata['thumbnail_url'] ?? null;
-    }
-
-    /**
-     * Batch-load director (created) connections for film spans; keyed by film span id for use in film card.
-     *
-     * @return \Illuminate\Support\Collection<int, \App\Models\Connection> keyed by child_id (film id)
-     */
-    private function getDirectorConnectionsByFilmId(PrecomputedSpanConnections $precomputedConnections): Collection
-    {
-        $filmConnections = $precomputedConnections->getChildByType('features')
-            ->filter(function ($conn) {
-                $film = $conn->parent;
-                return $film && $film->type_id === 'thing'
-                    && isset($film->metadata['subtype']) && $film->metadata['subtype'] === 'film';
-            });
-        $filmIds = $filmConnections->pluck('parent_id')->unique()->filter()->values()->all();
-        if (empty($filmIds)) {
-            return collect();
-        }
-        return $this->applyAsOfConnectionFilter(
-            Connection::where('type_id', 'created')
-            ->whereIn('child_id', $filmIds)
-            ->with('parent')
-        )->get()
-            ->groupBy('child_id')
-            ->map(fn ($conns) => $conns->first());
-    }
-
-    /**
-     * Precompute parent and child connection lists for the connections partial.
-     * Uses same logic as the partial; access-dependent so not cached with span.
-     *
-     * @return array{0: \Illuminate\Support\Collection, 1: \Illuminate\Support\Collection}
-     */
-    private function getConnectionsForSpanShow(Span $span): array
-    {
-        // Eager-load nested connectionSpan.connectionsAsSubject so getEffectiveSortDate() does not
-        // trigger N+1 loads for has_role connections (which check at_organisation dates)
-        $parentConnectionsQuery = $span->connectionsAsSubjectWithAccess()
-            ->whereNotNull('connection_span_id')
-            ->whereHas('connectionSpan')
-            ->with([
-                'connectionSpan.type',
-                'connectionSpan.connectionsAsSubject.child.type',
-                'connectionSpan.connectionsAsSubject.type',
-                'connectionSpan.connectionsAsSubject.connectionSpan',
-                'parent.type',
-                'child.type',
-                'type',
-            ]);
-
-        $parentConnections = $parentConnectionsQuery->get()
-            ->sortBy(function ($connection) {
-                return $connection->getEffectiveSortDate();
-            });
-
-        $childConnectionsQuery = $span->connectionsAsObjectWithAccess()
-            ->whereNotNull('connection_span_id')
-            ->whereHas('connectionSpan')
-            ->with([
-                'connectionSpan.type',
-                'connectionSpan.connectionsAsSubject.child.type',
-                'connectionSpan.connectionsAsSubject.type',
-                'connectionSpan.connectionsAsSubject.connectionSpan',
-                'parent.type',
-                'child.type',
-                'type',
-            ]);
-
-        $childConnections = $childConnectionsQuery->get()
-            ->sortBy(function ($connection) {
-                return $connection->getEffectiveSortDate();
-            });
-
-        return [$parentConnections, $childConnections];
-    }
-
-    /**
-     * Precompute education card data for person spans (avoids duplicate queries in view).
-     * When $educationConnections is provided (e.g. from PrecomputedSpanConnections), only
-     * the "during" (phases) batch query is run; otherwise connections are queried (fallback).
-     *
-     * @param  Collection<int, \App\Models\Connection>|null  $educationConnections  Optional slice from precomputed connections
-     * @return array{connections: \Illuminate\Support\Collection, duringBySubject: \Illuminate\Support\Collection, duringByObject: \Illuminate\Support\Collection}|null
-     */
-    private function getEducationCardData(Span $span, ?Collection $educationConnections = null): ?array
-    {
-        if ($span->type_id !== 'person') {
-            return null;
-        }
-        if ($educationConnections === null) {
-            $educationConnections = $span->connectionsAsSubject()
-                ->whereHas('type', fn ($q) => $q->where('type', 'education'))
-                ->with(['child', 'connectionSpan'])
-                ->get();
-        }
-        $educationConnections = $educationConnections
-            ->sortBy(function ($conn) {
-                $parts = $conn->getEffectiveSortDate();
-                $y = $parts[0] ?? PHP_INT_MAX;
-                $m = $parts[1] ?? PHP_INT_MAX;
-                $d = $parts[2] ?? PHP_INT_MAX;
-                return sprintf('%08d-%02d-%02d', $y, $m, $d);
-            })
-            ->values();
-
-        $connectionSpanIds = $educationConnections->map(fn ($c) => $c->connectionSpan?->id)->filter()->unique()->values()->all();
-        $duringBySubject = collect();
-        $duringByObject = collect();
-        if (!empty($connectionSpanIds)) {
-            $allDuringQuery = \App\Models\Connection::where(fn ($q) => $q->whereIn('parent_id', $connectionSpanIds)->orWhereIn('child_id', $connectionSpanIds))
-                ->whereHas('type', fn ($q) => $q->where('type', 'during'))
-                ->with(['child', 'parent']);
-            $allDuring = $this->applyAsOfConnectionFilter($allDuringQuery)->get();
-            $duringBySubject = $allDuring->groupBy('parent_id');
-            $duringByObject = $allDuring->groupBy('child_id');
-        }
-        return [
-            'connections' => $educationConnections,
-            'duringBySubject' => $duringBySubject,
-            'duringByObject' => $duringByObject,
-        ];
+        return app(PlaqueVirtualPlaqueService::class)->photoUrlForPlaque($plaque);
     }
 
     /**
@@ -1975,38 +1889,6 @@ class SpanController extends Controller
         $request->attributes->set('as_of_calendar_parts', $parsedDate);
 
         return $this->show($request, $span);
-    }
-
-    private function applyAsOfConnectionFilter(\Illuminate\Database\Eloquent\Builder $query): \Illuminate\Database\Eloquent\Builder
-    {
-        $asOfParts = request()->attributes->get('as_of_calendar_parts');
-        if (! is_array($asOfParts)) {
-            return $query;
-        }
-
-        $year = (int) ($asOfParts['year'] ?? 0);
-        $month = (int) ($asOfParts['month'] ?? 1);
-        $day = (int) ($asOfParts['day'] ?? 1);
-
-        $query->whereExists(function ($exists) use ($year, $month, $day) {
-            $exists->selectRaw('1')
-                ->from('connection_epistemic_revisions as cer')
-                ->whereColumn('cer.connection_id', 'connections.id')
-                ->where(function ($dateQuery) use ($year, $month, $day) {
-                    $dateQuery->where('cer.effective_year', '<', $year)
-                        ->orWhere(function ($q) use ($year, $month) {
-                            $q->where('cer.effective_year', $year)
-                                ->where('cer.effective_month', '<', $month);
-                        })
-                        ->orWhere(function ($q) use ($year, $month, $day) {
-                            $q->where('cer.effective_year', $year)
-                                ->where('cer.effective_month', $month)
-                                ->where('cer.effective_day', '<=', $day);
-                        });
-                });
-        });
-
-        return $query;
     }
 
     /**
@@ -2104,7 +1986,9 @@ class SpanController extends Controller
 
             return response()->view('spans.at-date', compact('span', 'date', 'displayDate', 'ongoingConnections', 'ageInfo', 'story', 'leadership'));
         } catch (AuthorizationException $e) {
-            return response()->view('errors.403');
+            return $this->errorPage(403);
+        } catch (HttpException $e) {
+            throw $e;
         } catch (\Exception $e) {
             Log::error('Error in spans showAtDate', [
                 'message' => $e->getMessage(),
@@ -2112,15 +1996,8 @@ class SpanController extends Controller
                 'span_id' => $span->id,
                 'date' => $date
             ]);
-            
-            if (app()->environment('production')) {
-                return response()->view('errors.500');
-            } else {
-                return response()->view('errors.500', [
-                    'error' => $e->getMessage(),
-                    'trace' => $e->getTraceAsString()
-                ]);
-            }
+
+            return $this->errorPage(500, $e);
         }
     }
 
@@ -2465,10 +2342,14 @@ class SpanController extends Controller
             return redirect()->back()->with('error', 'Cannot compare a span with itself.');
         }
 
-        // Show the new comparison page directly
+        $seeds = app(SpanTimelineSeedService::class)
+            ->seedsForSpanAndViewer($span, $personalSpan);
+
         return view('spans.compare', [
             'span' => $span,
-            'personalSpan' => $personalSpan
+            'personalSpan' => $personalSpan,
+            'timelineSeed' => $seeds['timelineSeed'],
+            'personalTimelineSeed' => $seeds['personalTimelineSeed'],
         ]);
     }
 
@@ -4065,22 +3946,15 @@ class SpanController extends Controller
                 'selectedExplorerSpan' => null,
                 'typesExplorerSpanJson' => null,
             ]);
+        } catch (HttpException $e) {
+            throw $e;
         } catch (\Exception $e) {
-            // Log the error
-            \Illuminate\Support\Facades\Log::error('Error in spans types', [
+            Log::error('Error in spans types', [
                 'message' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
-            
-            // Return error page
-            if (app()->environment('production')) {
-                return response()->view('errors.500', [], 500);
-            } else {
-                return response()->view('errors.500', [
-                    'error' => $e->getMessage(),
-                    'trace' => $e->getTraceAsString()
-                ], 500);
-            }
+
+            return $this->errorPage(500, $e);
         }
     }
 
@@ -4114,20 +3988,15 @@ class SpanController extends Controller
                 'selectedExplorerSpan' => null,
                 'typesExplorerSpanJson' => null,
             ]);
+        } catch (HttpException $e) {
+            throw $e;
         } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error('Error in span type show', [
+            Log::error('Error in span type show', [
                 'message' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
 
-            if (app()->environment('production')) {
-                return response()->view('errors.500', [], 500);
-            }
-
-            return response()->view('errors.500', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ], 500);
+            return $this->errorPage(500, $e);
         }
     }
 
@@ -4370,20 +4239,15 @@ class SpanController extends Controller
                 'selectedExplorerSpan' => $span,
                 'typesExplorerSpanJson' => $this->spanToTypesExplorerJson($span),
             ]);
+        } catch (HttpException $e) {
+            throw $e;
         } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error('Error in span type subtype explorer span', [
+            Log::error('Error in span type subtype explorer span', [
                 'message' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
 
-            if (app()->environment('production')) {
-                return response()->view('errors.500', [], 500);
-            }
-
-            return response()->view('errors.500', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ], 500);
+            return $this->errorPage(500, $e);
         }
     }
 
@@ -4424,20 +4288,15 @@ class SpanController extends Controller
                 'selectedExplorerSpan' => null,
                 'typesExplorerSpanJson' => null,
             ]);
+        } catch (HttpException $e) {
+            throw $e;
         } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error('Error in span type subtype show', [
+            Log::error('Error in span type subtype show', [
                 'message' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
-            
-            if (app()->environment('production')) {
-                return response()->view('errors.500', [], 500);
-            } else {
-                return response()->view('errors.500', [
-                    'error' => $e->getMessage(),
-                    'trace' => $e->getTraceAsString()
-                ], 500);
-            }
+
+            return $this->errorPage(500, $e);
         }
     }
 
@@ -4590,7 +4449,7 @@ class SpanController extends Controller
                 ->with('status', session('status')); // Preserve flash message
         }
 
-        [$parentConnections, $childConnections] = $this->getConnectionsForSpanShow($span);
+        [$parentConnections, $childConnections] = app(SpanShowPageLoader::class)->connectionLists($span);
         $precomputedConnections = new PrecomputedSpanConnections($parentConnections, $childConnections);
         $storyGenerator = app(ConfigurableStoryGeneratorService::class);
         $story = $storyGenerator->generateStory($span, $precomputedConnections);
@@ -4751,6 +4610,22 @@ class SpanController extends Controller
             // Preload album data for each track to avoid N+1 queries
             $tracks->each(function($track) {
                 $track->cached_album = $track->getContainingAlbum();
+            });
+
+            $albumIds = $tracks->map(fn ($track) => $track->cached_album?->id)->filter()->unique()->values();
+            $creatorsByAlbumId = $albumIds->isEmpty()
+                ? collect()
+                : Connection::where('type_id', 'created')
+                    ->whereIn('child_id', $albumIds)
+                    ->whereHas('parent', function ($query) {
+                        $query->whereIn('type_id', ['person', 'band']);
+                    })
+                    ->with('parent')
+                    ->get()
+                    ->keyBy('child_id');
+
+            $tracks->each(function ($track) use ($creatorsByAlbumId) {
+                $track->cached_album_creator = $creatorsByAlbumId->get($track->cached_album?->id)?->parent;
             });
             
             $set->preloaded_tracks = $tracks;
@@ -5196,31 +5071,10 @@ class SpanController extends Controller
                 ], 302);
             }
             // Fallback: short_id not set (e.g. before migration), show in place
-            $span = $connectionSpan;
-            $familyData = null;
-            [$parentConnections, $childConnections] = $this->getConnectionsForSpanShow($connectionSpan);
-            $precomputedConnections = new PrecomputedSpanConnections($parentConnections, $childConnections);
-            $story = null;
-            try {
-                $story = app(\App\Services\ConfigurableStoryGeneratorService::class)->generateStory($connectionSpan, $precomputedConnections);
-            } catch (\Exception $e) {
-                $story = ['paragraphs' => [], 'metadata' => [], 'error' => $e->getMessage()];
-            }
-            $desertIslandDiscsSet = null;
-            if ($connectionSpan->type_id === 'person') {
-                try {
-                    $desertIslandDiscsSet = Span::getDesertIslandDiscsSet($connectionSpan);
-                } catch (\Exception $e) {
-                    Log::warning('Failed to get Desert Island Discs set for person', ['person_id' => $connectionSpan->id, 'error' => $e->getMessage()]);
-                }
-            }
-            $educationCardData = $connectionSpan->type_id === 'person' ? $this->getEducationCardData($connectionSpan, $precomputedConnections->getParentByType('education')) : null;
             $connection->load(['parent.type', 'child.type', 'type', 'connectionSpan.type']);
-            $connectionForSpan = $connection;
-            $annotatingNotes = $this->getAnnotatingNotes($connectionSpan);
-            $bluePlaqueCardData = $this->getBluePlaqueCardData($connectionSpan);
-            $directorConnectionsByFilmId = ($connectionSpan->type_id === 'person') ? $this->getDirectorConnectionsByFilmId($precomputedConnections) : collect();
-            return view('spans.show', compact('span', 'desertIslandDiscsSet', 'subject', 'object', 'connectionType', 'familyData', 'parentConnections', 'childConnections', 'story', 'predicate', 'educationCardData', 'connectionForSpan', 'precomputedConnections', 'annotatingNotes', 'bluePlaqueCardData', 'directorConnectionsByFilmId'));
+            $page = app(SpanShowPageLoader::class)->load($connectionSpan, null, true, $connection);
+
+            return view('spans.show', array_merge($page->viewData(), compact('subject', 'object', 'connectionType', 'predicate')));
         }
 
         // Multiple connections: show disambiguation view
@@ -5435,35 +5289,10 @@ class SpanController extends Controller
             return redirect()->route('login');
         }
 
-        $desertIslandDiscsSet = null;
-        if ($connectionSpan->type_id === 'person') {
-            try {
-                $desertIslandDiscsSet = Span::getDesertIslandDiscsSet($connectionSpan);
-            } catch (\Exception $e) {
-                Log::warning('Failed to get Desert Island Discs set for person', [
-                    'person_id' => $connectionSpan->id,
-                    'error' => $e->getMessage()
-                ]);
-            }
-        }
-
-        $span = $connectionSpan;
-        $familyData = null;
-        [$parentConnections, $childConnections] = $this->getConnectionsForSpanShow($connectionSpan);
-        $precomputedConnections = new PrecomputedSpanConnections($parentConnections, $childConnections);
-        $story = null;
-        try {
-            $story = app(\App\Services\ConfigurableStoryGeneratorService::class)->generateStory($connectionSpan, $precomputedConnections);
-        } catch (\Exception $e) {
-            $story = ['paragraphs' => [], 'metadata' => [], 'error' => $e->getMessage()];
-        }
-        $educationCardData = $connectionSpan->type_id === 'person' ? $this->getEducationCardData($connectionSpan, $precomputedConnections->getParentByType('education')) : null;
         $connection->load(['parent.type', 'child.type', 'type', 'connectionSpan.type']);
-        $connectionForSpan = $connection;
-        $annotatingNotes = $this->getAnnotatingNotes($connectionSpan);
-        $bluePlaqueCardData = $this->getBluePlaqueCardData($connectionSpan);
-        $directorConnectionsByFilmId = ($connectionSpan->type_id === 'person') ? $this->getDirectorConnectionsByFilmId($precomputedConnections) : collect();
-        return view('spans.show', compact('span', 'desertIslandDiscsSet', 'subject', 'object', 'connectionType', 'familyData', 'parentConnections', 'childConnections', 'story', 'predicate', 'educationCardData', 'connectionForSpan', 'precomputedConnections', 'annotatingNotes', 'bluePlaqueCardData', 'directorConnectionsByFilmId'));
+        $page = app(SpanShowPageLoader::class)->load($connectionSpan, null, true, $connection);
+
+        return view('spans.show', array_merge($page->viewData(), compact('subject', 'object', 'connectionType', 'predicate')));
     }
 
     /**

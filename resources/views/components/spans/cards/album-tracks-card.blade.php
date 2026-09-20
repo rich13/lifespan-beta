@@ -1,40 +1,37 @@
-@props(['span'])
+@props(['span', 'precomputedConnections' => null])
 
 @php
-    // Only show for album spans
     if ($span->subtype !== 'album') {
         return;
     }
 
-    // Get all tracks that are connected to this album via "contains" connection
-    $trackConnections = $span->connectionsAsSubject()
-        ->where('type_id', 'contains')
-        ->whereHas('child', function($q) {
-            $q->where('type_id', 'thing')
-              ->whereJsonContains('metadata->subtype', 'track');
-        })
-        ->with(['child', 'connectionSpan'])
-        ->get();
+    if ($precomputedConnections instanceof \App\Support\PrecomputedSpanConnections) {
+        $trackConnections = $precomputedConnections->getParentByType('contains')
+            ->filter(function ($connection) {
+                $child = $connection->child;
 
-    // Get all track IDs for efficient Desert Island Discs lookup
-    $trackIds = $trackConnections->pluck('child.id')->toArray();
-    
-    // Query all Desert Island Discs sets that contain these tracks (efficient batch query)
-    $didConnections = \App\Models\Connection::where('type_id', 'contains')
-        ->whereIn('child_id', $trackIds)
-        ->whereHas('parent', function($q) {
-            $q->where('type_id', 'set')
-              ->whereJsonContains('metadata->subtype', 'desertislanddiscs');
-        })
-        ->with(['parent:id,name', 'parent.connectionsAsObject' => function($q) {
-            $q->where('type_id', 'created')
-              ->whereHas('parent', function($q2) {
-                  $q2->where('type_id', 'person');
-              })
-              ->with(['parent:id,name']);
-        }, 'parent.connectionsAsObject.parent'])
-        ->get()
-        ->groupBy('child_id'); // Group by track ID
+                return $child
+                    && $child->type_id === 'thing'
+                    && ($child->metadata['subtype'] ?? $child->subtype) === 'track';
+            })
+            ->values();
+    } else {
+        $trackConnections = $span->connectionsAsSubject()
+            ->where('type_id', 'contains')
+            ->whereHas('child', function ($query) {
+                $query->where('type_id', 'thing')
+                    ->whereJsonContains('metadata->subtype', 'track');
+            })
+            ->with(['child', 'connectionSpan'])
+            ->get();
+    }
+
+    if ($trackConnections->isEmpty()) {
+        return;
+    }
+
+    $trackIds = $trackConnections->pluck('child.id')->filter()->values()->all();
+    $didConnections = \App\Support\SpanShowLookups::desertIslandDiscsByTrackId($trackIds);
     
     // Map to track data with ordering and Desert Island Discs info
     $tracks = $trackConnections->map(function($connection) use ($didConnections) {
@@ -95,14 +92,9 @@
 
     // Sort tracks by connection start date (release date), then by name
     $tracks = $tracks->sortBy('sort_key')->values();
-    
-    // Don't show the card if there are no tracks
-    if ($tracks->isEmpty()) {
-        return;
-    }
 @endphp
 
-<div class="card mb-4">
+<div class="card mb-4" data-album-tracks-card>
     <div class="card-header">
         <h6 class="card-title mb-0">
             <i class="bi bi-music-note-list me-2"></i>Tracks

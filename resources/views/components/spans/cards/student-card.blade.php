@@ -1,59 +1,30 @@
-@props(['span'])
+@props(['span', 'precomputedConnections' => null])
 
 @php
-    // Only show for organisation spans
     if ($span->type_id !== 'organisation') {
         return;
     }
 
-    // Get all people who have education connections to this organisation
-    $educationConnections = \App\Models\Connection::where('type_id', 'education')
-        ->where('child_id', $span->id) // Organisation is the child in education connections
-        ->whereHas('parent', function($q) { $q->where('type_id', 'person'); })
-        ->with(['parent', 'connectionSpan'])
-        ->get();
+    if ($precomputedConnections instanceof \App\Support\PrecomputedSpanConnections) {
+        $educationConnections = $precomputedConnections->getChildByType('education')
+            ->filter(fn ($connection) => $connection->parent && $connection->parent->type_id === 'person');
+    } else {
+        $educationConnections = \App\Models\Connection::where('type_id', 'education')
+            ->where('child_id', $span->id)
+            ->whereHas('parent', function($q) { $q->where('type_id', 'person'); })
+            ->with(['parent', 'connectionSpan'])
+            ->get();
+    }
 
-    // Collect all unique people first
-    $personIds = $educationConnections->pluck('parent_id')->filter()->unique()->toArray();
-    
-    // Get first photo for each person in one query (optimize to avoid N+1)
-    $photoConnections = \App\Models\Connection::where('type_id', 'features')
-        ->whereIn('child_id', $personIds)
-        ->whereHas('parent', function($q) {
-            $q->where('type_id', 'thing')
-              ->whereJsonContains('metadata->subtype', 'photo');
-        })
-        ->with(['parent'])
-        ->get()
-        ->groupBy('child_id')
-        ->map(function($connections) {
-            // Get first photo for each person
-            return $connections->first();
-        });
-    
-    // Collect all unique people with their photos and dates
+    $personIds = $educationConnections->pluck('parent_id')->filter()->unique()->all();
+    $photoUrls = \App\Support\SpanShowLookups::firstFeaturedPhotoUrlBySpanId($personIds);
+
     $allStudents = collect();
-    
-    // Add people from education connections
+
     foreach ($educationConnections as $connection) {
         if ($connection->parent && $connection->parent->type_id === 'person') {
             $person = $connection->parent;
-            
-            // Get photo from pre-loaded collection
-            $photoConnection = $photoConnections->get($person->id);
-            $photoUrl = null;
-            if ($photoConnection && $photoConnection->parent) {
-                $metadata = $photoConnection->parent->metadata ?? [];
-                $photoUrl = $metadata['thumbnail_url'] 
-                    ?? $metadata['medium_url'] 
-                    ?? $metadata['large_url'] 
-                    ?? null;
-                
-                // If we have a filename but no URL, use proxy route
-                if (!$photoUrl && isset($metadata['filename']) && $metadata['filename']) {
-                    $photoUrl = route('images.proxy', ['spanId' => $photoConnection->parent->id, 'size' => 'thumbnail']);
-                }
-            }
+            $photoUrl = $photoUrls->get($person->id);
             
             // Get dates from connection span
             $dates = $connection->connectionSpan;
@@ -91,7 +62,7 @@
     }
 @endphp
 
-<div class="card mb-4">
+<div class="card mb-4" data-student-card>
     <div class="card-header d-flex justify-content-between align-items-center">
         <h6 class="card-title mb-0">
             <i class="bi bi-mortarboard me-2"></i>

@@ -93,7 +93,9 @@
                 </h6>
                 <div class="d-grid gap-2">
                     <x-shared.user-profile-info variant="mobile" />
-                    <x-shared.user-switcher variant="mobile" containerId="mobileUserSwitcherList" />
+                    @if(config('features.user_switcher_enabled'))
+                        <x-shared.user-switcher variant="mobile" containerId="mobileUserSwitcherList" />
+                    @endif
                 </div>
             </div>
         @endauth

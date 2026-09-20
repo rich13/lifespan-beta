@@ -44,7 +44,7 @@ $groups = $groups->sortBy(function ($g) {
 // Use precomputed photo/parent when passed from family-relationships; otherwise run queries (e.g. family/index)
 $photoConnectionsResolved = $photoConnections ?? collect();
 $parentsMapResolved = $parentsMap ?? collect();
-if (!$interactive && $photoConnectionsResolved->isEmpty() && $parentsMapResolved->isEmpty()) {
+if (!$interactive && $photoConnections === null && $parentsMap === null) {
     $allMembers = $groups->flatMap(fn ($g) => array_merge($g['other_parent'] ? [$g['other_parent']] : [], $g['children']->all()))->unique('id')->values();
     if ($allMembers->isNotEmpty()) {
         $personIds = $allMembers->filter(fn ($m) => $m->type_id === 'person')->pluck('id')->filter()->unique()->toArray();

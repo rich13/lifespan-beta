@@ -67,7 +67,9 @@ if ($user) {
             <div class="p-2">
                 <!-- Menu Items -->
                 <x-shared.user-profile-info variant="desktop" />
-                <x-shared.user-switcher variant="desktop" />
+                @if(config('features.user_switcher_enabled'))
+                    <x-shared.user-switcher variant="desktop" />
+                @endif
             </div>
         </div>
     </div>

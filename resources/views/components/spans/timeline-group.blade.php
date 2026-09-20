@@ -63,8 +63,8 @@ let currentTimelineData_{{ str_replace('-', '_', $containerId) }} = null;
 let currentUserSpanId_{{ str_replace('-', '_', $containerId) }} = null;
 let currentMode_{{ str_replace('-', '_', $containerId) }} = 'absolute';
 
-document.addEventListener('DOMContentLoaded', function() {
-    setTimeout(() => {
+$(function() {
+    setTimeout(function() {
         initializeGroupTimeline_{{ str_replace('-', '_', $containerId) }}();
     }, 100);
 });
@@ -81,31 +81,77 @@ function initializeGroupTimeline_{{ str_replace('-', '_', $containerId) }}() {
     }
 
     if (groupMode) {
-        // Group mode: fetch timeline data for each provided span
+        // Group mode: one batch dump for every provided span
         const spans = @json(collect($spans)->map(function($s) {
             return [
                 'id' => $s->id,
                 'name' => $s->name,
             ];
         })->values()->toArray());
+        const spanIds = spans.map(function(span) { return span.id; });
+        const csrfToken = $('meta[name="csrf-token"]').attr('content') || '';
+        const BATCH_SIZE = 100;
+        const batches = [];
+        for (let i = 0; i < spanIds.length; i += BATCH_SIZE) {
+            batches.push(spanIds.slice(i, i + BATCH_SIZE));
+        }
 
-        // Fetch all timeline data in parallel
-        Promise.all(spans.map(span =>
-            fetch(`/api/spans/${span.id}`, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
-                .then(response => response.json())
-                .then(data => ({
+        if (batches.length === 0) {
+            return;
+        }
+
+        Promise.all(batches.map(function(batch) {
+            return $.ajax({
+                url: '/api/spans/batch-timeline',
+                method: 'POST',
+                contentType: 'application/json',
+                dataType: 'json',
+                headers: {
+                    'X-CSRF-TOKEN': csrfToken
+                },
+                data: JSON.stringify({ span_ids: batch })
+            }).then(function(data) {
+                return data.results || {};
+            }, function() {
+                return {};
+            });
+        })).then(function(batchResults) {
+            const allResults = {};
+            batchResults.forEach(function(result) { Object.assign(allResults, result); });
+
+            const timelineData = spans.map(function(span) {
+                const result = allResults[span.id];
+                if (!result) {
+                    return {
+                        id: span.id,
+                        name: span.name,
+                        timeline: { span: { id: span.id, name: span.name, start_year: null, end_year: null }, connections: [] },
+                        duringConnections: [],
+                        isCurrentSpan: false,
+                        isCurrentUser: span.id === currentUserSpanId
+                    };
+                }
+
+                let duringConnections = result.during_connections || [];
+                (result.connections || []).forEach(function(connection) {
+                    if (connection.nested_connections) {
+                        duringConnections = duringConnections.concat(connection.nested_connections);
+                    }
+                });
+
+                return {
                     id: span.id,
-                    name: span.name,
-                    timeline: data,
+                    name: (result.span && result.span.name) ? result.span.name : span.name,
+                    timeline: { span: result.span, connections: result.connections || [] },
+                    duringConnections: duringConnections,
                     isCurrentSpan: false,
-                    isCurrentUser: false
-                }))
-        )).then(timelineData => {
-            // Reset filters when new data loads
+                    isCurrentUser: span.id === currentUserSpanId
+                };
+            });
+
             connectionTypeFilters_{{ str_replace('-', '_', $containerId) }} = {};
             renderGroupTimeline_{{ str_replace('-', '_', $containerId) }}(timelineData, 'absolute', currentUserSpanId);
             setupModeToggle_{{ str_replace('-', '_', $containerId) }}(timelineData, currentUserSpanId);
-            // Add reset button handler
             const resetButton = document.getElementById(`timeline-legend-reset-{{ $containerId }}`);
             if (resetButton) {
                 resetButton.onclick = function() {

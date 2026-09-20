@@ -331,6 +331,18 @@ class WikipediaSpanMatcherService
     }
 
     /**
+     * Render markdown, then add span/date links. Safe to call from a deferred request.
+     */
+    public function linkedHtmlFromMarkdown(?string $markdown): ?string
+    {
+        if ($markdown === null || trim($markdown) === '') {
+            return null;
+        }
+
+        return $this->highlightMatches(\Illuminate\Support\Str::markdown($markdown));
+    }
+
+    /**
      * Highlight matching entities and years in text with links
      */
     public function highlightMatches(string $text): string

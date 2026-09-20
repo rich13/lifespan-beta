@@ -1,19 +1,21 @@
-@props(['span'])
+@props(['span', 'precomputedConnections' => null])
 
 @php
-    // Only show for plaque spans (things with subtype=plaque)
     $metadata = $span->metadata ?? [];
     if ($span->type_id !== 'thing' || !isset($metadata['subtype']) || $metadata['subtype'] !== 'plaque') {
         return;
     }
 
-    // Find the subject featured on this plaque (person, event, organisation, etc.)
-    /** @var \App\Models\Connection|null $featuredConnection */
-    $featuredConnection = \App\Models\Connection::where('type_id', 'features')
-        ->where('parent_id', $span->id)
-        ->whereHas('child')
-        ->with(['child.type'])
-        ->first();
+    if ($precomputedConnections instanceof \App\Support\PrecomputedSpanConnections) {
+        $featuredConnection = $precomputedConnections->getParentByType('features')
+            ->first(fn ($connection) => $connection->child);
+    } else {
+        $featuredConnection = \App\Models\Connection::where('type_id', 'features')
+            ->where('parent_id', $span->id)
+            ->whereHas('child')
+            ->with(['child.type'])
+            ->first();
+    }
 
     if (! $featuredConnection || ! $featuredConnection->child) {
         return;
@@ -22,32 +24,9 @@
     /** @var \App\Models\Span $featuredSubject */
     $featuredSubject = $featuredConnection->child;
 
-    // Get a photo for the featured subject (if available)
-    $photoUrl = null;
-    $photoConnection = \App\Models\Connection::where('type_id', 'features')
-        ->where('child_id', $featuredSubject->id)
-        ->whereHas('parent', function ($q) {
-            $q->where('type_id', 'thing')
-              ->whereJsonContains('metadata->subtype', 'photo');
-        })
-        ->with(['parent'])
-        ->first();
+    $photoUrl = \App\Support\SpanShowLookups::firstFeaturedPhotoUrlBySpanId([$featuredSubject->id])
+        ->get($featuredSubject->id);
 
-    if ($photoConnection && $photoConnection->parent) {
-        $photoSpan = $photoConnection->parent;
-        $photoMetadata = $photoSpan->metadata ?? [];
-        $photoUrl = $photoMetadata['thumbnail_url']
-            ?? $photoMetadata['medium_url']
-            ?? $photoMetadata['large_url']
-            ?? null;
-
-        // If we have a filename but no direct URL, use the proxy route
-        if (! $photoUrl && isset($photoMetadata['filename']) && $photoMetadata['filename']) {
-            $photoUrl = route('images.proxy', ['spanId' => $photoSpan->id, 'size' => 'medium']);
-        }
-    }
-
-    // Generate a short story about the featured subject
     $story = null;
     try {
         $storyGenerator = app(\App\Services\ConfigurableStoryGeneratorService::class);
@@ -61,7 +40,7 @@
     }
 @endphp
 
-<div class="card mb-3">
+<div class="card mb-3" data-plaque-featured-card>
     <div class="card-header">
         <h6 class="card-title mb-0 d-flex align-items-center">
             <x-icon type="{{ $featuredSubject->type_id }}" category="span" class="me-2" />

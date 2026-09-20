@@ -3,44 +3,14 @@
 <div class="tracks-grid">
     @foreach($tracks as $track)
         @php
-            // Use pre-loaded artist data if available, otherwise fall back to query
-            $artist = null;
-            if (isset($track->connectionsAsObject) && $track->connectionsAsObject->isNotEmpty()) {
-                $artist = $track->connectionsAsObject->first();
-            } else {
-                // Fallback to query if not pre-loaded
-                $artist = $track->connectionsAsObject()
-                    ->whereHas('type', function($q) {
-                        $q->where('type', 'created');
-                    })
-                    ->whereHas('parent', function($q) {
-                        $q->whereIn('type_id', ['person', 'band']);
-                    })
-                    ->with('parent')
-                    ->first();
-            }
-            
-            // Use pre-loaded album data if available, otherwise fall back to query
-            $album = $track->cached_album ?? $track->getContainingAlbum();
-            
-            // Get album creator (artist/band) from the album's "created" connection
-            $albumCreator = null;
-            if ($album) {
-                $albumCreator = $album->connectionsAsObject()
-                    ->whereHas('type', function($q) {
-                        $q->where('type', 'created');
-                    })
-                    ->whereHas('parent', function($q) {
-                        $q->whereIn('type_id', ['person', 'band']);
-                    })
-                    ->with('parent')
-                    ->first()
-                    ?->parent;
-            }
+            $album = $track->cached_album ?? null;
+            $albumCreator = $track->cached_album_creator ?? null;
         @endphp
-        
-        <a href="{{ route('spans.show', $track) }}" class="track-square text-decoration-none @if($album && $album->has_cover_art) has-cover-art @endif" 
-           @if($album && $album->has_cover_art) style="background-image: url('{{ $album->cover_art_small_url }}')" @endif>
+
+        <a href="{{ route('spans.show', $track) }}" class="track-square text-decoration-none @if($album && $album->has_cover_art) has-cover-art @endif">
+            @if($album)
+                <x-spans.cover-art :album="$album" size="small" variant="track" :alt="$album->name . ' cover'" />
+            @endif
             <div class="track-number">{{ $loop->iteration }}</div>
             
             {{-- Track and artist name badges at bottom (like photo dates) --}}

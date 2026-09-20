@@ -393,4 +393,77 @@ class Connection extends Model
             $span?->start_day ?? PHP_INT_MAX
         ];
     }
+
+    /**
+     * Whether this connection is still active at the given date (time travel aware).
+     * Timeless connections with no dates are treated as active.
+     */
+    public function isActiveAt(?\Carbon\Carbon $date = null): bool
+    {
+        $date = $date ?? \App\Helpers\DateHelper::getCurrentDate();
+        $connectionSpan = $this->connectionSpan;
+
+        if (! $connectionSpan) {
+            return true;
+        }
+
+        $state = $connectionSpan->getTemporalStateAtDateParts(
+            (int) $date->year,
+            (int) $date->month,
+            (int) $date->day
+        );
+
+        return $state['status'] === 'active';
+    }
+
+    /**
+     * Predicate as read from $fromSpan towards the other end, in present or past tense.
+     */
+    public function getDatedPredicateFrom(Span $fromSpan): string
+    {
+        $this->loadMissing('type');
+        $inverse = $this->parent_id !== $fromSpan->id;
+        $predicate = $inverse
+            ? $this->type->inverse_predicate
+            : $this->type->forward_predicate;
+
+        if ($this->isActiveAt()) {
+            return $predicate;
+        }
+
+        return $this->toPastTensePredicate($predicate);
+    }
+
+    /**
+     * Convert a stored present-tense predicate into a simple past form.
+     * Matches micro-story wording such as "had relationship with".
+     */
+    public function toPastTensePredicate(string $predicate): string
+    {
+        $lower = strtolower($predicate);
+        $exact = [
+            'has relationship with' => 'had relationship with',
+            'has role' => 'had the role',
+            'have role' => 'had the role',
+        ];
+
+        if (isset($exact[$lower])) {
+            return $exact[$lower];
+        }
+
+        $leading = [
+            'has ' => 'had ',
+            'have ' => 'had ',
+            'is ' => 'was ',
+            'are ' => 'were ',
+        ];
+
+        foreach ($leading as $from => $to) {
+            if (str_starts_with($lower, $from)) {
+                return $to.substr($predicate, strlen($from));
+            }
+        }
+
+        return $predicate;
+    }
 } 

@@ -20,4 +20,21 @@ return [
         // 'studied-at' => 'studied at',
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Index map
+    |--------------------------------------------------------------------------
+    |
+    | Default view for /plaques. Centre/zoom are starting points and can be
+    | refined later. Marker density is controlled by zoom in the markers API.
+    |
+    */
+
+    'map' => [
+        'centre' => [54.5, -2.8],
+        'zoom' => 6,
+        'plaque_zoom' => 15,
+        'max_markers' => 250,
+    ],
+
 ];

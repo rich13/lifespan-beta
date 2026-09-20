@@ -207,7 +207,14 @@ class SpanSearchApiTest extends TestCase
     {
         $this->actingAs($this->user);
 
-        $response = $this->getJson('/api/spans/search?types=person,organisation&limit=100');
+        // Unique prefix so this assertion does not depend on being in an unordered
+        // global top-N of every person/organisation left in the shared test DB.
+        $needle = 'MultiType ' . $this->faker->unique()->uuid();
+        $this->personSpan->update(['name' => $needle . ' Person']);
+        $this->organisationSpan->update(['name' => $needle . ' Organisation']);
+        $this->placeSpan->update(['name' => $needle . ' Place']);
+
+        $response = $this->getJson('/api/spans/search?types=person,organisation&q=' . urlencode($needle) . '&limit=100');
         $response->assertStatus(200);
         $data = $response->json();
 

@@ -1,4 +1,4 @@
-@props(['span'])
+@props(['span', 'precomputedConnections' => null])
 
 @php
     // Only show for film spans
@@ -8,120 +8,44 @@
 
     $user = auth()->user();
 
-    // Get the director of this film (if any)
-    // Connection: [person][created][film]
-    // So film is the child (object) and director is the parent (subject)
-    $directorConnection = $span->connectionsAsObjectWithAccess($user)
-        ->whereHas('type', function($q) { 
-            $q->where('type_id', 'created'); 
-        })
-        ->whereHas('parent', function($q) { 
-            $q->where('type_id', 'person'); 
-        })
-        ->with(['parent'])
-        ->first();
-    
+    // Director: [person][created][film]. Actors: [film][features][person].
+    if ($precomputedConnections instanceof \App\Support\PrecomputedSpanConnections) {
+        $directorConnection = $precomputedConnections->getChildByType('created')
+            ->first(fn ($connection) => $connection->parent && $connection->parent->type_id === 'person');
+        $actorConnections = $precomputedConnections->getParentByType('features')
+            ->filter(fn ($connection) => $connection->child && $connection->child->type_id === 'person')
+            ->values();
+    } else {
+        $directorConnection = $span->connectionsAsObjectWithAccess($user)
+            ->whereHas('type', function($q) {
+                $q->where('type_id', 'created');
+            })
+            ->whereHas('parent', function($q) {
+                $q->where('type_id', 'person');
+            })
+            ->with(['parent'])
+            ->first();
+
+        $actorConnections = $span->connectionsAsSubjectWithAccess($user)
+            ->whereHas('type', function($q) {
+                $q->where('type_id', 'features');
+            })
+            ->whereHas('child', function($q) {
+                $q->where('type_id', 'person');
+            })
+            ->with(['child'])
+            ->get();
+    }
+
     $currentFilmDirector = $directorConnection ? $directorConnection->parent : null;
     $directorId = $currentFilmDirector ? $currentFilmDirector->id : null;
-
-    // Get all actors connected to this film via "features" connections
-    // Connection: [film][features][person]
-    // So film is the parent (subject) and actor is the child (object)
-    $actorConnections = $span->connectionsAsSubjectWithAccess($user)
-        ->whereHas('type', function($q) { 
-            $q->where('type_id', 'features'); 
-        })
-        ->whereHas('child', function($q) { 
-            $q->where('type_id', 'person'); 
-        })
-        ->with(['child'])
-        ->get();
-
-    // Get all actor IDs
     $actorIds = $actorConnections->pluck('child_id')->unique()->toArray();
 
-    // If we have neither actors nor a director, don't show the component
     if (empty($actorIds) && !$directorId) {
         return;
     }
 
-    // Build query for related films
-    $relatedFilmsQuery = \App\Models\Span::where('type_id', 'thing')
-        ->whereJsonContains('metadata->subtype', 'film')
-        ->where('id', '!=', $span->id)
-        ->where(function($q) use ($actorIds, $directorId) {
-            // Films that share actors
-            if (!empty($actorIds)) {
-                $q->whereHas('connectionsAsSubject', function($subQ) use ($actorIds) {
-                    $subQ->where('type_id', 'features')
-                      ->whereIn('child_id', $actorIds)
-                      ->whereHas('child', function($q2) {
-                          $q2->where('type_id', 'person');
-                      });
-                });
-            }
-            
-            // Films directed by the same director
-            if ($directorId) {
-                if (!empty($actorIds)) {
-                    $q->orWhereHas('connectionsAsObject', function($subQ) use ($directorId) {
-                        $subQ->where('type_id', 'created')
-                          ->where('parent_id', $directorId)
-                          ->whereHas('parent', function($q2) {
-                              $q2->where('type_id', 'person');
-                          });
-                    });
-                } else {
-                    $q->whereHas('connectionsAsObject', function($subQ) use ($directorId) {
-                        $subQ->where('type_id', 'created')
-                          ->where('parent_id', $directorId)
-                          ->whereHas('parent', function($q2) {
-                              $q2->where('type_id', 'person');
-                          });
-                    });
-                }
-            }
-        });
-
-    // Apply access control
-    if (!$user) {
-        $relatedFilmsQuery->where('access_level', 'public');
-    } else {
-        if (!$user->is_admin) {
-            $relatedFilmsQuery->where(function ($query) use ($user) {
-                $query->where('access_level', 'public')
-                    ->orWhere('owner_id', $user->id)
-                    ->orWhere(function ($query) use ($user) {
-                        $query->where('access_level', 'shared')
-                            ->whereExists(function ($subquery) use ($user) {
-                                $subquery->select('id')
-                                    ->from('span_permissions')
-                                    ->whereColumn('span_permissions.span_id', 'spans.id')
-                                    ->where('span_permissions.user_id', $user->id);
-                            });
-                    });
-            });
-        }
-    }
-
-    $relatedFilms = $relatedFilmsQuery
-        ->with([
-            'connectionsAsSubject' => function($q) use ($actorIds) {
-                if (!empty($actorIds)) {
-                    $q->where('type_id', 'features')
-                      ->whereIn('child_id', $actorIds)
-                      ->with(['child:id,name']);
-                }
-            },
-            'connectionsAsObject' => function($q) use ($directorId) {
-                if ($directorId) {
-                    $q->where('type_id', 'created')
-                      ->where('parent_id', $directorId)
-                      ->with(['parent:id,name']);
-                }
-            }
-        ])
-        ->get()
+    $relatedFilms = \App\Support\SpanShowLookups::filmsRelatedByCastOrDirector($span, $actorIds, $directorId)
         ->map(function($film) use ($actorIds, $directorId) {
             // Check if related via actors
             $sharedActors = collect();
@@ -178,7 +102,7 @@
 @endphp
 
 @if($relatedFilms->isNotEmpty())
-<div class="card mb-4">
+<div class="card mb-4" data-related-films-card>
     <div class="card-header d-flex justify-content-between align-items-center">
         <h6 class="card-title mb-0">
             <i class="bi bi-film me-2"></i>
@@ -210,15 +134,15 @@
                         }
                     }
                     
-                    // Get director if available
-                    $director = null;
-                    $directorConnection = $film->connectionsAsObject()
-                        ->whereHas('type', function($q) { $q->where('type_id', 'created'); })
-                        ->with('parent')
-                        ->first();
-                    if ($directorConnection) {
-                        $director = $directorConnection->parent;
-                    }
+                    $director = $film->relationLoaded('connectionsAsObject')
+                        ? $film->connectionsAsObject
+                            ->first(fn ($connection) => $connection->type_id === 'created' && $connection->parent)
+                            ?->parent
+                        : $film->connectionsAsObject()
+                            ->whereHas('type', function($q) { $q->where('type_id', 'created'); })
+                            ->with('parent')
+                            ->first()
+                            ?->parent;
                     
                     // Get film poster/image if available
                     $metadata = $film->metadata ?? [];

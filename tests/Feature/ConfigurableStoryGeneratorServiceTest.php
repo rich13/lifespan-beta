@@ -6,6 +6,7 @@ use Tests\TestCase;
 use App\Models\Span;
 use App\Models\Connection;
 use App\Services\ConfigurableStoryGeneratorService;
+use Illuminate\Support\Facades\DB;
 
 class ConfigurableStoryGeneratorServiceTest extends TestCase
 {
@@ -610,5 +611,202 @@ class ConfigurableStoryGeneratorServiceTest extends TestCase
         $edinburghPos = strpos($storyText, 'Edinburgh');
         $this->assertLessThan($londonPos, $capeTownPos, 'Cape Town should appear before London');
         $this->assertLessThan($edinburghPos, $londonPos, 'London should appear before Edinburgh');
+    }
+
+    public function test_person_story_loads_subject_connections_once_without_precomputed_dump(): void
+    {
+        $person = Span::factory()->create([
+            'name' => 'Query Person',
+            'type_id' => 'person',
+            'start_year' => 1970,
+            'end_year' => 2020,
+            'metadata' => ['gender' => 'male'],
+        ]);
+
+        $place = Span::factory()->create([
+            'name' => 'Test Town',
+            'type_id' => 'place',
+            'access_level' => 'public',
+        ]);
+        $school = Span::factory()->create([
+            'name' => 'Test School',
+            'type_id' => 'organisation',
+            'access_level' => 'public',
+        ]);
+        $employer = Span::factory()->create([
+            'name' => 'Test Employer',
+            'type_id' => 'organisation',
+            'access_level' => 'public',
+        ]);
+        $band = Span::factory()->create([
+            'name' => 'Test Band',
+            'type_id' => 'band',
+            'access_level' => 'public',
+        ]);
+        $partner = Span::factory()->create([
+            'name' => 'Test Partner',
+            'type_id' => 'person',
+            'access_level' => 'public',
+        ]);
+
+        foreach ([
+            ['child' => $place, 'type' => 'residence'],
+            ['child' => $school, 'type' => 'education'],
+            ['child' => $employer, 'type' => 'employment'],
+            ['child' => $band, 'type' => 'membership'],
+            ['child' => $partner, 'type' => 'relationship'],
+        ] as $item) {
+            Connection::factory()->create([
+                'parent_id' => $person->id,
+                'child_id' => $item['child']->id,
+                'type_id' => $item['type'],
+            ]);
+        }
+
+        $subjectConnectionLoads = 0;
+        DB::listen(function ($query) use ($person, &$subjectConnectionLoads) {
+            $sql = strtolower($query->sql);
+            if (! str_contains($sql, 'from "connections"') && ! str_contains($sql, 'from connections')) {
+                return;
+            }
+            if (! str_contains($sql, 'parent_id') || str_contains($sql, ' in (')) {
+                return;
+            }
+            if (in_array($person->id, $query->bindings, true)) {
+                $subjectConnectionLoads++;
+            }
+        });
+
+        $story = (new ConfigurableStoryGeneratorService())->generateStory($person);
+
+        $this->assertNotEmpty($story['paragraphs'] ?? []);
+        $this->assertGreaterThan(0, $subjectConnectionLoads);
+        $this->assertLessThanOrEqual(
+            2,
+            $subjectConnectionLoads,
+            'Story should load subject connections once and reuse them for every sentence.'
+        );
+    }
+
+    public function test_person_story_does_not_run_spatial_place_relation_queries(): void
+    {
+        $person = Span::factory()->create([
+            'name' => 'Geo Person',
+            'type_id' => 'person',
+            'start_year' => 1980,
+            'metadata' => ['gender' => 'male'],
+        ]);
+
+        $place = Span::factory()->create([
+            'name' => 'Brantwood Road, London Borough of Lambeth',
+            'type_id' => 'place',
+            'access_level' => 'public',
+        ]);
+        $place->metadata = array_merge($place->metadata ?? [], [
+            'coordinates' => [
+                'latitude' => 51.45,
+                'longitude' => -0.12,
+            ],
+            'external_refs' => [
+                'osm' => [
+                    'place_id' => 1,
+                    'osm_type' => 'way',
+                    'osm_id' => 1,
+                    'canonical_name' => 'Brantwood Road',
+                    'hierarchy' => [
+                        ['name' => 'London', 'type' => 'administrative', 'admin_level' => 8],
+                    ],
+                ],
+            ],
+        ]);
+        $place->save();
+
+        Connection::factory()->create([
+            'parent_id' => $person->id,
+            'child_id' => $place->id,
+            'type_id' => 'residence',
+        ]);
+
+        $spatialSql = [];
+        DB::listen(function ($query) use (&$spatialSql) {
+            $sql = strtolower($query->sql);
+            if (str_contains($sql, "metadata->'coordinates'") || str_contains($sql, 'boundary_geojson')) {
+                $spatialSql[] = $query->sql;
+            }
+        });
+
+        $story = (new ConfigurableStoryGeneratorService())->generateStory($person);
+        $storyText = implode(' ', $story['paragraphs'] ?? []);
+
+        $this->assertStringContainsString('London', $storyText);
+        $this->assertSame([], $spatialSql, 'Story should not scan place coordinates or boundaries.');
+    }
+
+    public function test_person_story_reuses_passed_family_data_instead_of_walking_the_tree(): void
+    {
+        $person = Span::factory()->create([
+            'name' => 'Query Person',
+            'type_id' => 'person',
+            'start_year' => 1970,
+            'end_year' => 2020,
+            'metadata' => ['gender' => 'male'],
+        ]);
+        $parent = Span::factory()->create([
+            'name' => 'Parent Person',
+            'type_id' => 'person',
+            'access_level' => 'public',
+        ]);
+        $sibling = Span::factory()->create([
+            'name' => 'Sibling Person',
+            'type_id' => 'person',
+            'access_level' => 'public',
+        ]);
+        $child = Span::factory()->create([
+            'name' => 'Child Person',
+            'type_id' => 'person',
+            'access_level' => 'public',
+        ]);
+
+        Connection::factory()->create([
+            'parent_id' => $parent->id,
+            'child_id' => $person->id,
+            'type_id' => 'family',
+        ]);
+        Connection::factory()->create([
+            'parent_id' => $parent->id,
+            'child_id' => $sibling->id,
+            'type_id' => 'family',
+        ]);
+        Connection::factory()->create([
+            'parent_id' => $person->id,
+            'child_id' => $child->id,
+            'type_id' => 'family',
+        ]);
+
+        $familyData = [
+            'ancestors' => collect([['generation' => 1, 'span' => $parent]]),
+            'descendants' => collect([['generation' => 1, 'span' => $child]]),
+            'siblings' => collect([$sibling]),
+        ];
+
+        $familyJoins = [];
+        DB::listen(function ($query) use (&$familyJoins) {
+            $sql = strtolower($query->sql);
+            if (str_contains($sql, 'inner join') && str_contains($sql, 'connections')) {
+                $familyJoins[] = $query->sql;
+            }
+        });
+
+        $story = (new ConfigurableStoryGeneratorService())->generateStory($person, null, $familyData);
+        $storyText = implode(' ', $story['paragraphs'] ?? []);
+
+        $this->assertStringContainsString('Parent Person', $storyText);
+        $this->assertStringContainsString('Child Person', $storyText);
+        $this->assertStringContainsString('Sibling Person', $storyText);
+        $this->assertSame(
+            [],
+            $familyJoins,
+            'Story should not walk parents/children/siblings again when familyData is provided.'
+        );
     }
 } 

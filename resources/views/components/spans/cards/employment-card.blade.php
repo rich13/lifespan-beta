@@ -6,11 +6,14 @@
         return;
     }
 
+    $atOrganisationByConnectionSpanId = null;
+
     // Use precomputed connections when provided (span show); otherwise query (e.g. when rendered elsewhere)
     if ($precomputedConnections instanceof \App\Support\PrecomputedSpanConnections) {
         $allByType = $precomputedConnections->getParentByTypes(['employment', 'has_role']);
         $employmentConnections = $allByType->where('type_id', 'employment');
         $roleConnections = $allByType->where('type_id', 'has_role');
+        $atOrganisationByConnectionSpanId = $precomputedConnections->atOrganisationByHasRoleConnectionSpanId();
     } else {
         $employmentConnections = $span->connectionsAsSubject()
             ->whereHas('type', function($q) { $q->where('type', 'employment'); })
@@ -53,7 +56,7 @@
     })->values();
 @endphp
 
-<div class="card mb-4">
+<div class="card mb-4" data-employment-card>
     <div class="card-header d-flex justify-content-between align-items-center">
         <h6 class="card-title mb-0">
             <i class="bi bi-briefcase me-2"></i>
@@ -88,15 +91,19 @@
                     if ($connectionType === 'role') {
                         // has_role connection: child is the role
                         $role = $connection->child;
-                        // Find the at_organisation connection
-                        if ($dates) {
-                            foreach ($dates->connectionsAsSubject as $nestedConnection) {
-                                if ($nestedConnection->type_id === 'at_organisation' && $nestedConnection->child) {
-                                    $organisation = $nestedConnection->child;
-                                    // Link to the connection span of the at_organisation connection
-                                    // This is the fully combined connection span (e.g., "Person has role Role at Organisation")
-                                    if ($nestedConnection->connectionSpan) {
-                                        $linkSpan = $nestedConnection->connectionSpan;
+                        $nestedConnection = ($dates && $atOrganisationByConnectionSpanId !== null)
+                            ? $atOrganisationByConnectionSpanId->get($dates->id)
+                            : null;
+
+                        if ($nestedConnection && $nestedConnection->child) {
+                            $organisation = $nestedConnection->child;
+                            $linkSpan = $nestedConnection->connectionSpan ?: $dates;
+                        } elseif ($atOrganisationByConnectionSpanId === null && $dates) {
+                            foreach ($dates->connectionsAsSubject as $legacyNestedConnection) {
+                                if ($legacyNestedConnection->type_id === 'at_organisation' && $legacyNestedConnection->child) {
+                                    $organisation = $legacyNestedConnection->child;
+                                    if ($legacyNestedConnection->connectionSpan) {
+                                        $linkSpan = $legacyNestedConnection->connectionSpan;
                                     }
                                     break;
                                 }

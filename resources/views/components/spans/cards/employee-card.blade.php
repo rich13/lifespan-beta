@@ -1,45 +1,63 @@
-@props(['span'])
+@props(['span', 'precomputedConnections' => null])
 
 @php
-    // Only show for organisation spans
     if ($span->type_id !== 'organisation') {
         return;
     }
 
-    // Get all people who have employment connections to this organisation
-    $employmentConnections = \App\Models\Connection::where('type_id', 'employment')
-        ->where('child_id', $span->id) // Organisation is the child in employment connections
-        ->whereHas('parent', function($q) { $q->where('type_id', 'person'); })
-        ->with(['parent', 'connectionSpan'])
-        ->get();
+    $roleConnections = collect();
 
-    // Get all people who have has_role connections with at_organisation connections to this organisation
-    $roleConnections = \App\Models\Connection::where('type_id', 'at_organisation')
-        ->where('child_id', $span->id) // Organisation is the child in at_organisation connections
-        ->whereHas('parent', function($q) {
-            $q->whereHas('connectionsAsSubject', function($q2) {
-                $q2->where('type_id', 'has_role');
-            });
-        })
-        ->whereHas('parent.connectionsAsSubject', function($q) {
-            $q->where('type_id', 'has_role')
-              ->whereHas('parent', function($q2) { $q2->where('type_id', 'person'); });
-        })
-        ->with(['parent.connectionsAsSubject.parent', 'parent.connectionsAsSubject.connectionSpan'])
-        ->get();
+    if ($precomputedConnections instanceof \App\Support\PrecomputedSpanConnections) {
+        $employmentConnections = $precomputedConnections->getChildByType('employment')
+            ->filter(fn ($connection) => $connection->parent && $connection->parent->type_id === 'person');
 
-    // Also get people who have has_role connections where the connection span has at_organisation connections to this organisation
-    // This covers the case: Person -> has_role -> Role (creates connection span) -> at_organisation -> Organisation
-    $roleToOrgConnections = \App\Models\Connection::where('type_id', 'has_role')
-        ->whereHas('connectionSpan', function($q) use ($span) {
-            $q->whereHas('connectionsAsSubject', function($q2) use ($span) {
-                $q2->where('type_id', 'at_organisation')
-                   ->where('child_id', $span->id);
-            });
-        })
-        ->whereHas('parent', function($q) { $q->where('type_id', 'person'); })
-        ->with(['parent', 'connectionSpan', 'connectionSpan.connectionsAsSubject'])
-        ->get();
+        $connectionSpanIds = $precomputedConnections->getChildByType('at_organisation')
+            ->map(fn ($connection) => $connection->parent_id)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $roleToOrgConnections = collect();
+        if ($connectionSpanIds !== []) {
+            $roleToOrgConnections = \App\Models\Connection::where('type_id', 'has_role')
+                ->whereIn('connection_span_id', $connectionSpanIds)
+                ->whereHas('parent', fn ($query) => $query->where('type_id', 'person'))
+                ->with(['parent', 'connectionSpan'])
+                ->get();
+        }
+    } else {
+        $employmentConnections = \App\Models\Connection::where('type_id', 'employment')
+            ->where('child_id', $span->id)
+            ->whereHas('parent', function($q) { $q->where('type_id', 'person'); })
+            ->with(['parent', 'connectionSpan'])
+            ->get();
+
+        $roleConnections = \App\Models\Connection::where('type_id', 'at_organisation')
+            ->where('child_id', $span->id)
+            ->whereHas('parent', function($q) {
+                $q->whereHas('connectionsAsSubject', function($q2) {
+                    $q2->where('type_id', 'has_role');
+                });
+            })
+            ->whereHas('parent.connectionsAsSubject', function($q) {
+                $q->where('type_id', 'has_role')
+                  ->whereHas('parent', function($q2) { $q2->where('type_id', 'person'); });
+            })
+            ->with(['parent.connectionsAsSubject.parent', 'parent.connectionsAsSubject.connectionSpan'])
+            ->get();
+
+        $roleToOrgConnections = \App\Models\Connection::where('type_id', 'has_role')
+            ->whereHas('connectionSpan', function($q) use ($span) {
+                $q->whereHas('connectionsAsSubject', function($q2) use ($span) {
+                    $q2->where('type_id', 'at_organisation')
+                       ->where('child_id', $span->id);
+                });
+            })
+            ->whereHas('parent', function($q) { $q->where('type_id', 'person'); })
+            ->with(['parent', 'connectionSpan', 'connectionSpan.connectionsAsSubject'])
+            ->get();
+    }
 
     // Collect all unique people first
     $allEmployees = collect();
@@ -81,44 +99,13 @@
         }
     }
 
-    // Get all person IDs for photo lookup
-    $personIds = $allEmployees->pluck('person.id')->filter()->unique()->toArray();
-    
-    // Get first photo for each person in one query (optimize to avoid N+1)
-    $photoConnections = \App\Models\Connection::where('type_id', 'features')
-        ->whereIn('child_id', $personIds)
-        ->whereHas('parent', function($q) {
-            $q->where('type_id', 'thing')
-              ->whereJsonContains('metadata->subtype', 'photo');
-        })
-        ->with(['parent'])
-        ->get()
-        ->groupBy('child_id')
-        ->map(function($connections) {
-            // Get first photo for each person
-            return $connections->first();
-        });
-    
-    // Add photos and dates to each employee
-    $allEmployees = $allEmployees->map(function($employee) use ($photoConnections) {
+    $personIds = $allEmployees->pluck('person.id')->filter()->unique()->all();
+    $photoUrls = \App\Support\SpanShowLookups::firstFeaturedPhotoUrlBySpanId($personIds);
+
+    $allEmployees = $allEmployees->map(function($employee) use ($photoUrls) {
         $person = $employee['person'];
         $connection = $employee['connection'];
-        
-        // Get photo from pre-loaded collection
-        $photoConnection = $photoConnections->get($person->id);
-        $photoUrl = null;
-        if ($photoConnection && $photoConnection->parent) {
-            $metadata = $photoConnection->parent->metadata ?? [];
-            $photoUrl = $metadata['thumbnail_url'] 
-                ?? $metadata['medium_url'] 
-                ?? $metadata['large_url'] 
-                ?? null;
-            
-            // If we have a filename but no URL, use proxy route
-            if (!$photoUrl && isset($metadata['filename']) && $metadata['filename']) {
-                $photoUrl = route('images.proxy', ['spanId' => $photoConnection->parent->id, 'size' => 'thumbnail']);
-            }
-        }
+        $photoUrl = $photoUrls->get($person->id);
         
         // Get dates from connection span (varies by connection type)
         $dates = null;
@@ -161,7 +148,7 @@
     }
 @endphp
 
-<div class="card mb-4">
+<div class="card mb-4" data-employee-card>
     <div class="card-header d-flex justify-content-between align-items-center">
         <h6 class="card-title mb-0">
             <i class="bi bi-people me-2"></i>

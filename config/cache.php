@@ -97,6 +97,15 @@ return [
             'driver' => 'octane',
         ],
 
+        /*
+         * Request-local store for the experimental span page. Purged at the start
+         * of each /_/spans request so Redis cannot hide first-hit cost.
+         */
+        'experimental_span' => [
+            'driver' => 'array',
+            'serialize' => false,
+        ],
+
     ],
 
     /*

@@ -331,12 +331,28 @@ trait HasGeospatialCapabilities
     }
 
     /**
+     * Nearest city from stored OSM hierarchy only (no spatial queries).
+     */
+    public function getNearestCityNameFromHierarchy(): ?string
+    {
+        return $this->geospatial()->getNearestCityNameFromHierarchy();
+    }
+
+    /**
      * Get the span to link to when displaying the nearest city.
      * Returns the city span when available (from spatial or when place is city-level); otherwise null.
      */
     public function getNearestCitySpan(): ?Span
     {
         return $this->geospatial()->getNearestCitySpan();
+    }
+
+    /**
+     * Link target from OSM hierarchy only: the place itself when it is city-level or larger.
+     */
+    public function getNearestCitySpanFromHierarchy(): ?Span
+    {
+        return $this->geospatial()->getNearestCitySpanFromHierarchy();
     }
 
     /**

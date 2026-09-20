@@ -6,45 +6,52 @@
         return;
     }
 
+    $residenceRows = collect();
+
     if ($precomputedConnections instanceof \App\Support\PrecomputedSpanConnections) {
-        $residenceConnections = $precomputedConnections->getParentByType('residence');
+        $residenceRows = $precomputedConnections->placesLivedRows();
+        $residenceConnections = $residenceRows->pluck('connection')->values();
+        $placesForMap = $residenceRows->map(fn ($row) => [
+            'id' => $row['place']->id,
+            'name' => $row['place']->name,
+            'coordinates' => $row['coordinates'],
+            'dates' => $row['dates'],
+            'url' => $row['url'],
+        ])->values();
     } else {
         $residenceConnections = $span->connectionsAsSubject()
             ->whereHas('type', function($q) { $q->where('type', 'residence'); })
             ->with(['child', 'connectionSpan'])
             ->get();
-    }
-    $residenceConnections = $residenceConnections
-        ->sortBy(function($conn) {
-            // Use effective sort date helper to build a sortable key
-            $parts = $conn->getEffectiveSortDate();
-            // Normalise very large values to push unknowns to the end
-            $y = $parts[0] ?? PHP_INT_MAX;
-            $m = $parts[1] ?? PHP_INT_MAX;
-            $d = $parts[2] ?? PHP_INT_MAX;
-            return sprintf('%08d-%02d-%02d', $y, $m, $d);
-        })
-        ->values();
+        $residenceConnections = $residenceConnections
+            ->sortBy(function($conn) {
+                $parts = $conn->getEffectiveSortDate();
+                $y = $parts[0] ?? PHP_INT_MAX;
+                $m = $parts[1] ?? PHP_INT_MAX;
+                $d = $parts[2] ?? PHP_INT_MAX;
+                return sprintf('%08d-%02d-%02d', $y, $m, $d);
+            })
+            ->values();
 
-    // Prepare place data for map view (empty array if no connections)
-    $placesForMap = $residenceConnections->isEmpty() 
-        ? collect([]) 
-        : $residenceConnections->map(function($conn) {
-        $place = $conn->child;
-        $coords = $place->getCoordinates();
-        $dates = $conn->connectionSpan;
-        $dateText = $dates ? $dates->formatted_date_range : null;
-        return [
-            'id' => $place->id,
-            'name' => $place->name,
-            'coordinates' => $coords,
-            'dates' => $dateText,
-            'url' => route('spans.show', $dates ?: $place) // Link to connection span (residence) instead of place
-        ];
-    });
+        $placesForMap = $residenceConnections->map(function($conn) {
+            $place = $conn->child;
+            if (! $place) {
+                return null;
+            }
+            $dates = $conn->connectionSpan;
+            $dateText = $dates ? $dates->formatted_date_range : null;
+            return [
+                'id' => $place->id,
+                'name' => $place->name,
+                'coordinates' => $place->getCoordinates(),
+                'dates' => $dateText,
+                'url' => route('spans.show', $dates ?: $place)
+            ];
+        })->filter()->values();
+    }
 @endphp
 
-<div class="card mb-4">
+<div class="card mb-4" data-places-lived-card>
     <div class="card-header d-flex justify-content-between align-items-center">
         <h6 class="card-title mb-0">
             <i class="bi bi-house me-2"></i>

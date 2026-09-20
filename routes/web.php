@@ -25,9 +25,11 @@ use App\Http\Controllers\Admin\BookImportController;
 use App\Http\Controllers\AdminModeController;
 use App\Http\Controllers\FriendsController;
 use App\Http\Controllers\NewSpanController;
+use App\Http\Controllers\NewSpanModalController;
 use App\Http\Controllers\CollectionsController;
 use App\Http\Controllers\FooterController;
 use App\Http\Middleware\SpanShowTimeoutMiddleware;
+use App\Http\Controllers\ExperimentalSpanController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
@@ -168,6 +170,16 @@ Route::post('/sentry-test', function() {
     }
 })->name('sentry.test');
 
+// Experimental stripped span page — registered as early as possible so we can
+// measure a span-row-only render before adding features back one at a time.
+// Parameter is {spanSlug} (not {span}) to skip route-model binding's type lookup.
+Route::get('/_/spans/{spanSlug}', [ExperimentalSpanController::class, 'show'])
+    ->name('spans.experimental.show');
+
+Route::get('/modals/new-span', [NewSpanModalController::class, 'show'])
+    ->middleware('auth')
+    ->name('modals.new-span');
+
 Route::middleware('web')->group(function () {
     // Footer content route (for modal content)
     Route::get('/footer/content/{type}', [FooterController::class, 'content'])
@@ -226,19 +238,33 @@ Route::middleware('web')->group(function () {
         ->where('date', '[0-9]{4}(-[0-9]{2}(-[0-9]{2})?)?')
         ->name('date.explore');
 
-    // Plaque view - minimal layout for viewing any span as a "plaque"
+    // Plaque view - app chrome with full-bleed map for connection pages
     Route::prefix('plaques')->middleware('span.access')->group(function () {
         Route::get('/', [SpanController::class, 'plaquesIndex'])->name('plaques.index');
         Route::get('/search', [SpanController::class, 'plaquesSearch'])->name('plaques.search');
+        Route::get('/markers', [SpanController::class, 'plaquesMarkers'])->name('plaques.markers');
         Route::get('/{subject}/{predicate}/{object}/{shortId}', [SpanController::class, 'plaqueConnection'])
             ->where('shortId', '[0-9A-Za-z]{8}')
             ->name('plaques.connection');
+        Route::get('/{span}/{predicate}', [SpanController::class, 'plaqueConnections'])
+            ->where('predicate', '[A-Za-z0-9\-]+')
+            ->name('plaques.connections');
         Route::get('/{span}', [SpanController::class, 'plaque'])->name('plaques.show');
     });
 
     // Span connection tooltip data (JSON)
     Route::get('/api/spans/{span}/connection-to/{other}', [\App\Http\Controllers\Api\SpanConnectionController::class, 'show'])
         ->name('api.spans.connection');
+
+    Route::get('/api/cover-art', [\App\Http\Controllers\Api\CoverArtController::class, 'index'])
+        ->name('api.cover-art');
+
+    Route::get('/api/spans/{span}/linked-description', [\App\Http\Controllers\Api\LinkedDescriptionController::class, 'show'])
+        ->name('api.spans.linked-description');
+
+    Route::get('/api/spans/{span}/user-connection', [\App\Http\Controllers\Api\UserConnectionController::class, 'show'])
+        ->middleware('auth')
+        ->name('api.spans.user-connection');
 
     Route::middleware(['auth', 'verified', 'profile.complete'])->group(function () {
         // Info page with summary and stats

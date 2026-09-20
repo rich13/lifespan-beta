@@ -1,4 +1,194 @@
 $(document).ready(function() {
+    const loadCoverArt = function() {
+        if (!$('.js-cover-art[data-cover-art-span]').length) {
+            return;
+        }
+
+        let attempts = 0;
+        const maxAttempts = 20;
+
+        const showFallbackIcon = function($el) {
+            $el.removeClass('js-cover-art is-loading')
+                .removeAttr('data-cover-art-span')
+                .attr('aria-busy', 'false');
+            if (!$el.find('.bi-music-note-beamed').length) {
+                $el.empty().append('<i class="bi bi-music-note-beamed text-muted"></i>');
+            }
+        };
+
+        const ensureSpinner = function($el) {
+            if ($el.hasClass('is-loading') && $el.find('.cover-art-spinner').length) {
+                return;
+            }
+            $el.addClass('is-loading').attr('aria-busy', 'true');
+            $el.empty().append(
+                '<div class="spinner-border text-secondary cover-art-spinner" role="status">' +
+                    '<span class="visually-hidden">Loading cover art</span>' +
+                '</div>'
+            );
+        };
+
+        $('.js-cover-art[data-cover-art-span]').each(function() {
+            ensureSpinner($(this));
+        });
+
+        const applyCover = function($el, urls) {
+            if (!urls || !urls.small) {
+                return false;
+            }
+
+            const size = $el.data('cover-art-size') || 'small';
+            const url = urls[size] || urls.small;
+            if (!url) {
+                return false;
+            }
+
+            const $parentSquare = $el.closest('.track-square');
+            const variantClass = ($el.attr('class') || '')
+                .split(/\s+/)
+                .filter(function(cls) {
+                    return cls.indexOf('cover-art--') === 0;
+                })
+                .join(' ');
+
+            const $img = $('<img>', {
+                src: url,
+                alt: $el.data('cover-art-alt') || '',
+                class: $.trim('cover-art-image ' + variantClass),
+                loading: 'lazy'
+            });
+            $el.replaceWith($img);
+            if ($parentSquare.length) {
+                $parentSquare.addClass('has-cover-art');
+            }
+            return true;
+        };
+
+        const requestCovers = function() {
+            const $current = $('.js-cover-art[data-cover-art-span]');
+            const ids = [...new Set($current.map(function() {
+                return $(this).attr('data-cover-art-span');
+            }).get())];
+
+            if (!ids.length) {
+                return;
+            }
+
+            $.getJSON('/api/cover-art', { span_ids: ids })
+                .done(function(data) {
+                    const covers = data.covers || {};
+                    $('.js-cover-art[data-cover-art-span]').each(function() {
+                        const $el = $(this);
+                        const id = $el.attr('data-cover-art-span');
+                        if (!Object.prototype.hasOwnProperty.call(covers, id)) {
+                            return;
+                        }
+                        if (!applyCover($el, covers[id])) {
+                            showFallbackIcon($el);
+                        }
+                    });
+
+                    attempts += 1;
+                    const stillPending = $('.js-cover-art[data-cover-art-span]').length;
+                    if (stillPending && attempts < maxAttempts && (data.pending || []).length) {
+                        setTimeout(requestCovers, 2000);
+                        return;
+                    }
+                    if (stillPending) {
+                        $('.js-cover-art[data-cover-art-span]').each(function() {
+                            showFallbackIcon($(this));
+                        });
+                    }
+                })
+                .fail(function() {
+                    attempts += 1;
+                    if (attempts < maxAttempts && $('.js-cover-art[data-cover-art-span]').length) {
+                        setTimeout(requestCovers, 2000);
+                        return;
+                    }
+                    $('.js-cover-art[data-cover-art-span]').each(function() {
+                        showFallbackIcon($(this));
+                    });
+                });
+        };
+
+        requestCovers();
+    };
+
+    loadCoverArt();
+
+    const loadLinkedDescriptions = function() {
+        $('.js-description-links[data-description-span]').each(function() {
+            const $el = $(this);
+            const spanId = $el.attr('data-description-span');
+            if (!spanId) {
+                return;
+            }
+
+            $el.attr('aria-busy', 'true');
+            $.getJSON('/api/spans/' + spanId + '/linked-description')
+                .done(function(data) {
+                    if (data && data.html) {
+                        $el.html(data.html);
+                    }
+                })
+                .always(function() {
+                    $el.attr('aria-busy', 'false');
+                });
+        });
+    };
+
+    loadLinkedDescriptions();
+
+    const loadUserConnection = function() {
+        const $card = $('.js-user-connection[data-user-connection-span]').first();
+        if (!$card.length) {
+            return;
+        }
+
+        const spanId = $card.attr('data-user-connection-span');
+        $card.attr('aria-busy', 'true');
+
+        $.getJSON('/api/spans/' + spanId + '/user-connection')
+            .done(function(data) {
+                const steps = (data && data.steps) || [];
+                if (!steps.length) {
+                    $card.remove();
+                    return;
+                }
+
+                const $steps = $card.find('.js-user-connection-steps').empty();
+                steps.forEach(function(step, index) {
+                    const $row = $('<div>', { class: 'mb-2' });
+                    $row.append($('<a>', {
+                        href: step.from.url,
+                        class: 'text-decoration-none fw-bold',
+                        text: step.from.name
+                    }));
+                    $row.append(document.createTextNode(' ' + step.predicate + ' '));
+                    $row.append($('<a>', {
+                        href: step.to.url,
+                        class: 'text-decoration-none fw-bold',
+                        text: step.to.name
+                    }));
+                    if (index < steps.length - 1) {
+                        $row.append($('<i>', { class: 'bi bi-arrow-down text-muted ms-2' }));
+                    }
+                    $steps.append($row);
+                });
+
+                $card
+                    .removeClass('d-none')
+                    .attr('aria-hidden', 'false')
+                    .attr('aria-busy', 'false');
+            })
+            .fail(function() {
+                $card.remove();
+            });
+    };
+
+    loadUserConnection();
+
     const $deleteBtn = $('#delete-span-btn');
     if ($deleteBtn.length) {
         $deleteBtn.on('click', function(event) {

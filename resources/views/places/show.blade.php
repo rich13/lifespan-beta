@@ -280,7 +280,8 @@
                                             </span>
                                             @auth
                                                 @if(Auth::user()->getEffectiveAdminStatus())
-                                                    <button type="button" class="btn btn-sm btn-outline-secondary" id="regeocode-btn-no-coords">
+                                                    <button type="button" class="btn btn-sm btn-outline-secondary regeocode-trigger-btn" id="regeocode-btn-no-coords">
+                                                        <span class="spinner-border spinner-border-sm me-1 d-none regeocode-btn-spinner" role="status" aria-hidden="true"></span>
                                                         <i class="bi bi-geo-alt me-1"></i>
                                                         Re-geocode
                                                     </button>
@@ -589,7 +590,8 @@
                         @auth
                             @if(Auth::user()->getEffectiveAdminStatus())
                                 <div class="mb-3">
-                                    <button type="button" class="btn btn-outline-secondary w-100" id="regeocode-btn">
+                                    <button type="button" class="btn btn-outline-secondary w-100 regeocode-trigger-btn" id="regeocode-btn">
+                                        <span class="spinner-border spinner-border-sm me-1 d-none regeocode-btn-spinner" role="status" aria-hidden="true"></span>
                                         <i class="bi bi-geo-alt me-1"></i>
                                         Re-geocode Place
                                     </button>
@@ -628,7 +630,10 @@
                 <div class="input-group mb-2">
                     <span class="input-group-text"><i class="bi bi-search"></i></span>
                     <input type="text" class="form-control" id="regeocode-search-query" placeholder="e.g. Edinburgh, Scotland" value="{{ $span->name ?? '' }}">
-                    <button type="button" class="btn btn-primary" id="regeocode-search-btn">Search</button>
+                    <button type="button" class="btn btn-primary" id="regeocode-search-btn">
+                        <span class="spinner-border spinner-border-sm me-1 d-none" id="regeocode-search-spinner" role="status" aria-hidden="true"></span>
+                        <span id="regeocode-search-label">Search</span>
+                    </button>
                 </div>
                 <div class="mb-3">
                     <label for="regeocode-filter-type" class="form-label small text-muted mb-1">Narrow by type</label>
@@ -640,7 +645,7 @@
                         <option value="historic">Historic (memorial, blue plaque, etc.)</option>
                     </select>
                 </div>
-                <div id="regeocode-results" class="border rounded p-2" style="min-height: 120px;">
+                <div id="regeocode-results" class="border rounded p-2 regeocode-results">
                     <p class="text-muted small mb-0">Enter a query and click Search, or edit the query to disambiguate (e.g. add country or region).</p>
                 </div>
             </div>
@@ -714,7 +719,7 @@ document.addEventListener('DOMContentLoaded', function() {
             shadowSize: [41, 41]
         })
     }).addTo(map);
-    marker.bindPopup('{{ addslashes($span->name) }}');
+    marker.bindPopup(@json($span->name));
     @endif
 
     // Show boundary whenever the place has boundary geometry (no point marker in that case)
@@ -942,145 +947,217 @@ document.addEventListener('DOMContentLoaded', function() {
     window.addEventListener('resize', resizeMap);
     
     // Re-geocode modal: open on button click, search Nominatim, pick result to import
+    var regeocodePlaceName = @json($span->name ?? '');
+    var regeocodeUpdateUrl = '{{ $span ? route("admin.places.update-from-nominatim", $span->id) : "" }}';
+    var regeocodeCsrf = '{{ csrf_token() }}';
+    var regeocodePolygonThreshold = '{{ config("services.nominatim_polygon_threshold", 0.0005) }}';
+    var regeocodeSearchSpinnerHtml = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary" role="status"><span class="visually-hidden">Searching...</span></div><p class="mt-2 text-muted small mb-0">Searching Nominatim...</p></div>';
+    var regeocodeUseThisIdleHtml = 'Use this';
+    var regeocodeUseThisLoadingHtml = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Updating...';
+
+    function setRegeocodeSearchLoading(isLoading) {
+        var $searchBtn = $('#regeocode-search-btn');
+        var $spinner = $('#regeocode-search-spinner');
+        var $label = $('#regeocode-search-label');
+        $searchBtn.prop('disabled', isLoading);
+        if (isLoading) {
+            $spinner.removeClass('d-none');
+            $label.text('Searching...');
+        } else {
+            $spinner.addClass('d-none');
+            $label.text('Search');
+        }
+    }
+
+    function setRegeocodeTriggerLoading($btn, isLoading) {
+        $btn.prop('disabled', isLoading);
+        $btn.find('.regeocode-btn-spinner').toggleClass('d-none', !isLoading);
+    }
+
     function setupRegeocodeButton(buttonId) {
-        const regeocodeBtn = document.getElementById(buttonId);
-        const modalEl = document.getElementById('regeocode-modal');
-        const searchInput = document.getElementById('regeocode-search-query');
-        const searchBtn = document.getElementById('regeocode-search-btn');
-        const resultsEl = document.getElementById('regeocode-results');
-        if (!regeocodeBtn || !modalEl) { return; }
-        regeocodeBtn.addEventListener('click', function() {
-            if (searchInput) { searchInput.value = {!! json_encode($span->name ?? '') !!}; }
-            if (resultsEl) {
-                resultsEl.innerHTML = '<p class="text-muted small mb-0">Enter a query and click Search, or edit the query to disambiguate (e.g. add country or region).</p>';
+        var $regeocodeBtn = $('#' + buttonId);
+        var $modalEl = $('#regeocode-modal');
+        if (!$regeocodeBtn.length || !$modalEl.length) {
+            return;
+        }
+        $regeocodeBtn.on('click', function() {
+            setRegeocodeTriggerLoading($regeocodeBtn, true);
+            $('#regeocode-search-query').val(regeocodePlaceName);
+            $('#regeocode-results').html(regeocodeSearchSpinnerHtml);
+            setRegeocodeSearchLoading(true);
+            var modal = window.bootstrap && window.bootstrap.Modal
+                ? window.bootstrap.Modal.getOrCreateInstance($modalEl[0])
+                : null;
+            if (modal) {
+                modal.show();
             }
-            const modal = window.bootstrap && window.bootstrap.Modal ? new window.bootstrap.Modal(modalEl) : null;
-            if (modal) { modal.show(); }
-            if (searchInput) { searchInput.focus(); }
+        });
+    }
+
+    function applyRegeocodeNominatimResult($btn) {
+        var $allBtns = $('#regeocode-results .use-nominatim-result');
+        $allBtns.prop('disabled', true);
+        $btn.html(regeocodeUseThisLoadingHtml);
+
+        $.ajax({
+            url: regeocodeUpdateUrl,
+            method: 'POST',
+            contentType: 'application/json',
+            dataType: 'json',
+            headers: {
+                'X-CSRF-TOKEN': regeocodeCsrf,
+                'Accept': 'application/json'
+            },
+            data: JSON.stringify({
+                lat: $btn.attr('data-lat'),
+                lng: $btn.attr('data-lng'),
+                osm_type: $btn.attr('data-osm-type'),
+                osm_id: $btn.attr('data-osm-id'),
+                display_name: $btn.attr('data-display-name'),
+                place_type: $btn.attr('data-place-type') || ''
+            })
+        }).done(function(data) {
+            if (data.success && data.redirect_url) {
+                window.location.href = data.redirect_url;
+            } else {
+                window.location.reload();
+            }
+        }).fail(function(xhr) {
+            var message = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Request failed';
+            alert('Update failed: ' + message);
+            $allBtns.prop('disabled', false);
+            $btn.html(regeocodeUseThisIdleHtml);
+        });
+    }
+
+    function renderRegeocodeResults(data) {
+        var $resultsEl = $('#regeocode-results');
+        var html = '<div class="list-group list-group-flush">';
+        $.each(data, function(_, result) {
+            var osmType = result.osm_type || 'node';
+            var placeType = result.type || result.class || 'location';
+            var displayName = result.display_name || result.name || 'Unknown';
+            var hasBoundary = !!result.geojson;
+            html += '<div class="list-group-item d-flex justify-content-between align-items-start">';
+            html += '<div class="flex-grow-1 small">';
+            html += '<div class="fw-semibold">' + escapeHtml(displayName) + '</div>';
+            html += '<span class="badge bg-secondary me-1">' + escapeHtml(placeType) + '</span>';
+            html += '<span class="badge bg-info text-dark me-1">' + escapeHtml(osmType) + ' ' + result.osm_id + '</span>';
+            if (hasBoundary) {
+                html += '<span class="badge bg-success me-1">boundary</span>';
+            }
+            html += '</div>';
+            html += '<button type="button" class="btn btn-sm btn-primary ms-2 use-nominatim-result"';
+            html += ' data-lat="' + result.lat + '" data-lng="' + result.lon + '"';
+            html += ' data-osm-type="' + escapeHtml(osmType) + '" data-osm-id="' + result.osm_id + '"';
+            html += ' data-display-name="' + escapeHtml(displayName) + '" data-place-type="' + escapeHtml(placeType) + '">Use this</button>';
+            html += '</div>';
+        });
+        html += '</div>';
+        $resultsEl.html(html);
+        $resultsEl.find('.use-nominatim-result').on('click', function() {
+            applyRegeocodeNominatimResult($(this));
         });
     }
 
     function runRegeocodeNominatimSearch() {
-        const searchInput = document.getElementById('regeocode-search-query');
-        const searchBtn = document.getElementById('regeocode-search-btn');
-        const resultsEl = document.getElementById('regeocode-results');
-        if (!searchInput || !resultsEl) { return; }
-        const query = searchInput.value.trim();
-        if (!query) {
-            resultsEl.innerHTML = '<p class="text-warning small mb-0">Enter a search query.</p>';
+        var $searchInput = $('#regeocode-search-query');
+        var $resultsEl = $('#regeocode-results');
+        if (!$searchInput.length || !$resultsEl.length) {
             return;
         }
-        if (searchBtn) { searchBtn.disabled = true; }
-        resultsEl.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div><p class="mt-2 text-muted small mb-0">Searching Nominatim...</p></div>';
-        const params = new URLSearchParams({
-            q: query, format: 'json', limit: '15', addressdetails: '1', extratags: '1', namedetails: '1',
-            polygon_geojson: '1', polygon_threshold: '{{ config("services.nominatim_polygon_threshold", 0.0005) }}'
-        });
-        fetch('https://nominatim.openstreetmap.org/search?' + params, {
-            headers: { 'User-Agent': '{{ config("app.user_agent") }}', 'Accept-Language': 'en' }
-        })
-        .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-        .then(function(data) {
-            if (searchBtn) { searchBtn.disabled = false; }
+        var query = $.trim($searchInput.val());
+        if (!query) {
+            setRegeocodeSearchLoading(false);
+            $resultsEl.html('<p class="text-warning small mb-0">Enter a search query.</p>');
+            return;
+        }
+        setRegeocodeSearchLoading(true);
+        $resultsEl.html(regeocodeSearchSpinnerHtml);
+        $.ajax({
+            url: 'https://nominatim.openstreetmap.org/search',
+            method: 'GET',
+            dataType: 'json',
+            headers: { 'Accept-Language': 'en' },
+            data: {
+                q: query,
+                format: 'json',
+                limit: '15',
+                addressdetails: '1',
+                extratags: '1',
+                namedetails: '1',
+                polygon_geojson: '1',
+                polygon_threshold: regeocodePolygonThreshold
+            }
+        }).done(function(data) {
+            setRegeocodeSearchLoading(false);
             if (!data || data.length === 0) {
-                resultsEl.innerHTML = '<p class="text-muted small mb-0">No results. Try a different query (e.g. add country or region).</p>';
+                $resultsEl.html('<p class="text-muted small mb-0">No results. Try a different query (e.g. add country or region).</p>');
                 return;
             }
-            var filterType = (document.getElementById('regeocode-filter-type') || {}).value || 'any';
+            var filterType = $('#regeocode-filter-type').val() || 'any';
             if (filterType !== 'any') {
-                var cls = function(r) { return (r.class || '').toLowerCase(); };
-                var typ = function(r) { return (r.type || '').toLowerCase(); };
-                data = data.filter(function(r) {
+                data = $.grep(data, function(r) {
+                    var cls = (r.class || '').toLowerCase();
+                    var typ = (r.type || '').toLowerCase();
                     if (filterType === 'place') {
-                        return cls(r) === 'place' || ['suburb','neighbourhood','village','hamlet','town','city','locality','district','quarter'].indexOf(typ(r)) !== -1;
+                        return cls === 'place' || ['suburb','neighbourhood','village','hamlet','town','city','locality','district','quarter'].indexOf(typ) !== -1;
                     }
                     if (filterType === 'road') {
-                        return cls(r) === 'highway' || ['road','street','residential','primary','secondary','tertiary','trunk','motorway','path','footway','pedestrian','cycleway','unclassified','living_street'].indexOf(typ(r)) !== -1;
+                        return cls === 'highway' || ['road','street','residential','primary','secondary','tertiary','trunk','motorway','path','footway','pedestrian','cycleway','unclassified','living_street'].indexOf(typ) !== -1;
                     }
                     if (filterType === 'administrative') {
-                        return cls(r) === 'boundary' || typ(r) === 'administrative';
+                        return cls === 'boundary' || typ === 'administrative';
                     }
                     if (filterType === 'historic') {
-                        return cls(r) === 'historic';
+                        return cls === 'historic';
                     }
                     return true;
                 });
             }
             if (data.length === 0) {
-                resultsEl.innerHTML = '<p class="text-muted small mb-0">No results match the selected type. Try "Any" or a different query.</p>';
+                $resultsEl.html('<p class="text-muted small mb-0">No results match the selected type. Try "Any" or a different query.</p>');
                 return;
             }
-            // Prefer boundaries: relation (admin boundary) first, then way, then node
             var order = { relation: 0, way: 1, node: 2 };
             data.sort(function(a, b) {
                 var aOrder = order[a.osm_type] !== undefined ? order[a.osm_type] : 3;
                 var bOrder = order[b.osm_type] !== undefined ? order[b.osm_type] : 3;
-                if (aOrder !== bOrder) return aOrder - bOrder;
+                if (aOrder !== bOrder) {
+                    return aOrder - bOrder;
+                }
                 return (b.importance || 0) - (a.importance || 0);
             });
-            const updateUrl = '{{ $span ? route("admin.places.update-from-nominatim", $span->id) : "" }}';
-            const csrf = '{{ csrf_token() }}';
-            let html = '<div class="list-group list-group-flush">';
-            data.forEach(function(result) {
-                const osmType = result.osm_type || 'node';
-                const placeType = result.type || result.class || 'location';
-                const displayName = result.display_name || result.name || 'Unknown';
-                const lat = result.lat; const lng = result.lon; const osmId = result.osm_id;
-                const hasBoundary = !!(result.geojson);
-                html += '<div class="list-group-item d-flex justify-content-between align-items-start">';
-                html += '<div class="flex-grow-1 small">';
-                html += '<div class="fw-semibold">' + escapeHtml(displayName) + '</div>';
-                html += '<span class="badge bg-secondary me-1">' + escapeHtml(placeType) + '</span>';
-                html += '<span class="badge bg-info text-dark me-1">' + escapeHtml(osmType) + ' ' + osmId + '</span>';
-                if (hasBoundary) { html += '<span class="badge bg-success me-1">boundary</span>'; }
-                html += '</div>';
-                html += '<button type="button" class="btn btn-sm btn-primary ms-2 use-nominatim-result" data-lat="' + lat + '" data-lng="' + lng + '" data-osm-type="' + escapeHtml(osmType) + '" data-osm-id="' + osmId + '" data-display-name="' + escapeHtml(displayName) + '" data-place-type="' + escapeHtml(placeType) + '">Use this</button>';
-                html += '</div>';
-            });
-            html += '</div>';
-            resultsEl.innerHTML = html;
-            resultsEl.querySelectorAll('.use-nominatim-result').forEach(function(btn) {
-                btn.addEventListener('click', function() {
-                    const lat = this.getAttribute('data-lat'); const lng = this.getAttribute('data-lng');
-                    const osmType = this.getAttribute('data-osm-type'); const osmId = this.getAttribute('data-osm-id');
-                    const displayName = this.getAttribute('data-display-name'); const placeType = this.getAttribute('data-place-type') || '';
-                    btn.disabled = true;
-                    btn.textContent = 'Updating...';
-                    fetch(updateUrl, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
-                        body: JSON.stringify({ lat: lat, lng: lng, osm_type: osmType, osm_id: osmId, display_name: displayName, place_type: placeType })
-                    })
-                    .then(function(r) { return r.json().then(function(d) { if (!r.ok) throw new Error(d.message || 'Request failed'); return d; }); })
-                    .then(function(d) {
-                        if (d.success && d.redirect_url) { window.location.href = d.redirect_url; }
-                        else { window.location.reload(); }
-                    })
-                    .catch(function(err) {
-                        alert('Update failed: ' + err.message);
-                        btn.disabled = false;
-                        btn.textContent = 'Use this';
-                    });
-                });
-            });
-        })
-        .catch(function(err) {
-            if (searchBtn) { searchBtn.disabled = false; }
-            resultsEl.innerHTML = '<p class="text-danger small mb-0">Error searching: ' + escapeHtml(err.message) + '</p>';
+            renderRegeocodeResults(data);
+        }).fail(function(xhr, status, error) {
+            setRegeocodeSearchLoading(false);
+            $resultsEl.html('<p class="text-danger small mb-0">Error searching: ' + escapeHtml(error || status) + '</p>');
         });
     }
 
     @if($span)
     setupRegeocodeButton('regeocode-btn');
     setupRegeocodeButton('regeocode-btn-no-coords');
-    var regeocodeSearchBtn = document.getElementById('regeocode-search-btn');
-    if (regeocodeSearchBtn) {
-        regeocodeSearchBtn.addEventListener('click', runRegeocodeNominatimSearch);
-    }
-    var regeocodeSearchInput = document.getElementById('regeocode-search-query');
-    if (regeocodeSearchInput) {
-        regeocodeSearchInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); runRegeocodeNominatimSearch(); } });
-    }
+    $('#regeocode-search-btn').on('click', runRegeocodeNominatimSearch);
+    $('#regeocode-search-query').on('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            runRegeocodeNominatimSearch();
+        }
+    });
+    $('#regeocode-modal').on('shown.bs.modal', function() {
+        $('.regeocode-trigger-btn').each(function() {
+            setRegeocodeTriggerLoading($(this), false);
+        });
+        $('#regeocode-search-query').trigger('focus');
+        runRegeocodeNominatimSearch();
+    });
+    $('#regeocode-modal').on('hidden.bs.modal', function() {
+        $('.regeocode-trigger-btn').each(function() {
+            setRegeocodeTriggerLoading($(this), false);
+        });
+        setRegeocodeSearchLoading(false);
+    });
     @endif
     
     // Inline editing for name and slug (admin only)
@@ -1137,8 +1214,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                     // Save via API - always send both name and slug
                     const updateData = {
-                        name: fieldType === 'name' ? newValue : '{{ $span->name }}',
-                        slug: fieldType === 'slug' ? newValue : '{{ $span->slug ?? "" }}'
+                        name: fieldType === 'name' ? newValue : @json($span->name),
+                        slug: fieldType === 'slug' ? newValue : @json($span->slug ?? '')
                     };
                     
                     fetch(`/api/spans/${spanId}/name-slug`, {
@@ -2070,11 +2147,11 @@ document.addEventListener('DOMContentLoaded', function() {
         // Auto-search for place name if no coordinates exist (only when search card is visible, i.e. !$span)
         @if($span && !$coordinates)
         // Pre-fill search input with place name
-        unifiedSearchInput.value = '{{ addslashes($span->name) }}';
+        unifiedSearchInput.value = @json($span->name);
         
         // Automatically perform search after a short delay
         setTimeout(() => {
-            performUnifiedSearch('{{ addslashes($span->name) }}');
+            performUnifiedSearch(@json($span->name));
         }, 500);
         @endif
         

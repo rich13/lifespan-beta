@@ -1276,8 +1276,6 @@ class GeospatialCapability implements SpanCapability
      */
     public function getNearestCityName(): string
     {
-        $fallback = $this->span->name;
-
         if ($this->span->hasUsableGeodata()) {
             $fromSpatial = $this->getNearestCityFromSpatialContainment();
             if ($fromSpatial !== null) {
@@ -1285,17 +1283,24 @@ class GeospatialCapability implements SpanCapability
             }
         }
 
-        $osmData = $this->getOsmData();
-        if (!$osmData) {
-            return $fallback;
+        return $this->getNearestCityNameFromHierarchy() ?? $this->span->name;
+    }
+
+    /**
+     * Nearest city from OSM hierarchy already stored on the place. No spatial queries.
+     * Stories use this instead of getNearestCityName() so they do not scan every geodata place.
+     */
+    public function getNearestCityNameFromHierarchy(): ?string
+    {
+        if (! $this->getOsmData()) {
+            return null;
         }
 
         $hierarchy = $this->getLocationHierarchy();
-        if (empty($hierarchy)) {
-            return $fallback;
+        if ($hierarchy === []) {
+            return null;
         }
 
-        // If the place itself is city-level or larger, return its span name (not OSM display_name)
         foreach ($hierarchy as $level) {
             if (!($level['is_current'] ?? false)) {
                 continue;
@@ -1305,7 +1310,7 @@ class GeospatialCapability implements SpanCapability
             if ($currentType !== 'road' && $currentAdminLevel !== null && $currentAdminLevel <= 8) {
                 return $this->span->name;
             }
-            break; // only check the current place
+            break;
         }
 
         $priorities = [
@@ -1334,20 +1339,20 @@ class GeospatialCapability implements SpanCapability
                 $adminLevel = $level['admin_level'] ?? null;
                 $name = $level['name'] ?? null;
                 $matchesAdminLevel = $adminLevel === $priority['admin_level'];
-                $matchesType = !isset($priority['type']) || $type === $priority['type'];
+                $matchesType = ! isset($priority['type']) || $type === $priority['type'];
                 if ($matchesAdminLevel && $matchesType && $name) {
                     return $name;
                 }
-                $normalizedName = $this->normalizePlaceNameForComparison($name);
+                $normalisedName = $this->normalizePlaceNameForComparison($name);
                 foreach ($majorCityNames as $majorCity) {
-                    if ($normalizedName && strcasecmp($normalizedName, $this->normalizePlaceNameForComparison($majorCity)) === 0) {
+                    if ($normalisedName && strcasecmp($normalisedName, $this->normalizePlaceNameForComparison($majorCity)) === 0) {
                         return $name;
                     }
                 }
             }
         }
 
-        return $fallback;
+        return null;
     }
 
     private function getNearestCityFromSpatialContainment(): ?string
@@ -1392,12 +1397,19 @@ class GeospatialCapability implements SpanCapability
             }
         }
 
+        return $this->getNearestCitySpanFromHierarchy();
+    }
+
+    /**
+     * Link target from OSM hierarchy only: the place itself when it is city-level or larger.
+     */
+    public function getNearestCitySpanFromHierarchy(): ?\App\Models\Span
+    {
         $hierarchy = $this->getLocationHierarchy();
-        if (empty($hierarchy)) {
+        if ($hierarchy === []) {
             return null;
         }
 
-        // If the place itself is city-level or larger, link to it
         foreach ($hierarchy as $level) {
             if (!($level['is_current'] ?? false)) {
                 continue;
