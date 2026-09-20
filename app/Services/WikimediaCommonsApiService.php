@@ -102,7 +102,7 @@ class WikimediaCommonsApiService
                         'action' => 'query',
                         'pageids' => $imageId,
                         'prop' => 'imageinfo|extracts',
-                        'iiprop' => 'url|size|mime|timestamp|user|comment',
+                        'iiprop' => 'url|size|mime|timestamp|user|comment|extmetadata',
                         'format' => 'json'
                     ]);
 
@@ -158,6 +158,17 @@ class WikimediaCommonsApiService
 
                 // Extract metadata from the content
                 $metadata = $this->extractMetadata($content);
+                $imageInfo = $page['imageinfo'][0] ?? null;
+
+                if (!$imageInfo) {
+                    Log::warning('Wikimedia Commons API: No image info found', ['image_id' => $imageId]);
+                    return null;
+                }
+
+                $extDate = $imageInfo['extmetadata']['DateTimeOriginal']['value'] ?? '';
+                if (($metadata['date'] ?? '') === '' && is_string($extDate) && $extDate !== '') {
+                    $metadata['date'] = trim(strip_tags($extDate));
+                }
                 
                 Log::info('Wikimedia Commons API: Extracted metadata', [
                     'image_id' => $imageId,
@@ -165,14 +176,6 @@ class WikimediaCommonsApiService
                     'content_length' => strlen($content),
                     'content_preview' => substr($content, 0, 500)
                 ]);
-
-                // Get image info
-                $imageInfo = $page['imageinfo'][0] ?? null;
-                
-                if (!$imageInfo) {
-                    Log::warning('Wikimedia Commons API: No image info found', ['image_id' => $imageId]);
-                    return null;
-                }
 
                 $result = [
                     'id' => $imageId,
@@ -217,6 +220,7 @@ class WikimediaCommonsApiService
             'description' => '',
             'source' => '',
             'date' => '',
+            'taken_on' => '',
             'author' => '',
             'permission' => '',
             'license' => '',
@@ -244,6 +248,10 @@ class WikimediaCommonsApiService
             $metadata['date'] = trim($matches[1]);
         } elseif (preg_match('/\|date\s*=\s*(.+?)(?:\n|$)/i', $content, $matches)) {
             $metadata['date'] = trim($matches[1]);
+        }
+
+        if (preg_match('/\{\{\s*(?:Taken[\s_]*on|According[\s_]*to[\s_]*Exif[\s_]*data)\s*\|([^}|]+)/i', $content, $matches)) {
+            $metadata['taken_on'] = trim($matches[1]);
         }
 
         // Extract author - multiple patterns

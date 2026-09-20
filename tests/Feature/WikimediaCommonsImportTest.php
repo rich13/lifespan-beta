@@ -334,7 +334,8 @@ class WikimediaCommonsImportTest extends TestCase
     public function it_cleans_mediawiki_markup_from_descriptions()
     {
         $controller = new \App\Http\Controllers\Admin\WikimediaCommonsImportController(
-            app(\App\Services\WikimediaCommonsApiService::class)
+            app(\App\Services\WikimediaCommonsApiService::class),
+            app(\App\Services\WikimediaPhotoDateParser::class)
         );
         
         // Test various MediaWiki markup patterns

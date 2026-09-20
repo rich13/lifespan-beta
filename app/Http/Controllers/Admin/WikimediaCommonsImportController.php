@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Services\WikimediaCommonsApiService;
+use App\Services\WikimediaPhotoDateParser;
 use App\Models\User;
 use App\Models\Span;
 use App\Models\SpanType;
@@ -18,8 +19,10 @@ class WikimediaCommonsImportController extends Controller
 {
     protected WikimediaCommonsApiService $wikimediaService;
 
-    public function __construct(WikimediaCommonsApiService $wikimediaService)
-    {
+    public function __construct(
+        WikimediaCommonsApiService $wikimediaService,
+        protected WikimediaPhotoDateParser $photoDateParser
+    ) {
         $this->middleware(['auth', 'admin']);
         $this->wikimediaService = $wikimediaService;
     }
@@ -230,7 +233,7 @@ class WikimediaCommonsImportController extends Controller
                     'create_image' => !$existingImage,
                     'image_name' => $this->extractImageName($imageData['title']),
                     'image_description' => $previewDescription,
-                    'image_date' => $this->parseDate($imageData['metadata']['date'] ?? ''),
+                    'image_date' => $this->parsePhotoDate($imageData),
                     'image_author' => $cleanAuthor ?: 'Unknown',
                     'image_license' => $imageData['metadata']['license'] ?? 'Unknown'
                 ]
@@ -386,7 +389,7 @@ class WikimediaCommonsImportController extends Controller
         $imageName = $this->extractImageName($imageData['title']);
         
         // Parse date
-        $dateInfo = $this->parseDate($imageData['metadata']['date'] ?? '');
+        $dateInfo = $this->parsePhotoDate($imageData);
         
         // Determine state based on date availability
         $state = $dateInfo['year'] ? 'complete' : 'placeholder';
@@ -417,6 +420,9 @@ class WikimediaCommonsImportController extends Controller
                 'title' => $imageData['title'],
                 'description' => $cleanDescription,
                 'date' => $imageData['metadata']['date'],
+                'taken_on' => $imageData['metadata']['taken_on'] ?? '',
+                'uploaded_at' => $imageData['timestamp'] ?? '',
+                'categories' => $imageData['metadata']['categories'] ?? [],
                 'author' => $cleanAuthor,
                 'license' => $imageData['metadata']['license'],
                 'license_url' => $imageData['metadata']['license_url'] ?? '',
@@ -546,28 +552,16 @@ class WikimediaCommonsImportController extends Controller
     /**
      * Parse date from Wikimedia Commons format
      */
-    protected function parseDate(string $dateString): array
+    protected function parsePhotoDate(array $imageData): array
     {
-        $date = [
-            'year' => null,
-            'month' => null,
-            'day' => null
-        ];
-
-        if (empty($dateString)) {
-            return $date;
-        }
-
-        // Try to parse various date formats
-        if (preg_match('/(\d{4})-(\d{1,2})-(\d{1,2})/', $dateString, $matches)) {
-            $date['year'] = (int) $matches[1];
-            $date['month'] = (int) $matches[2];
-            $date['day'] = (int) $matches[3];
-        } elseif (preg_match('/(\d{4})/', $dateString, $matches)) {
-            $date['year'] = (int) $matches[1];
-        }
-
-        return $date;
+        return $this->photoDateParser->resolveFromSources([
+            'date' => $imageData['metadata']['date'] ?? '',
+            'title' => $imageData['title'] ?? '',
+            'description' => $imageData['metadata']['description'] ?? '',
+            'uploaded_at' => $imageData['timestamp'] ?? '',
+            'categories' => $imageData['metadata']['categories'] ?? [],
+            'taken_on' => $imageData['metadata']['taken_on'] ?? '',
+        ]);
     }
 
     /**

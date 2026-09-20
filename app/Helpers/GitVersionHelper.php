@@ -5,7 +5,14 @@ namespace App\Helpers;
 class GitVersionHelper
 {
     private const VERSION_PREFIX = 'Lifespan Prototype';
-    private const VERSION_NUMBER = '0.967'; // Update this when deploying
+    private const VERSION_NUMBER = '0.968'; // Update this when deploying
+
+    /**
+     * Git lookups are only needed when About is opened; keep them for the request.
+     *
+     * @var array<string, mixed>|null
+     */
+    private static ?array $detailedVersion = null;
 
     public static function getVersion(): string
     {
@@ -17,6 +24,14 @@ class GitVersionHelper
      */
     public static function getDetailedVersion(): array
     {
+        return self::$detailedVersion ??= self::computeDetailedVersion();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function computeDetailedVersion(): array
+    {
         $info = [
             'version' => self::VERSION_NUMBER,
             'environment' => app()->environment(),
@@ -25,10 +40,10 @@ class GitVersionHelper
         if (app()->environment('local', 'development')) {
             try {
                 $info = array_merge($info, [
-                    'branch' => trim(shell_exec('git rev-parse --abbrev-ref HEAD 2>/dev/null')),
-                    'commit' => trim(shell_exec('git rev-parse --short HEAD 2>/dev/null')),
-                    'commit_count' => trim(shell_exec("git rev-list --count HEAD 2>/dev/null")),
-                    'last_commit_date' => trim(shell_exec("git log -1 --format=%cd 2>/dev/null")),
+                    'branch' => trim(shell_exec('git rev-parse --abbrev-ref HEAD 2>/dev/null') ?? ''),
+                    'commit' => trim(shell_exec('git rev-parse --short HEAD 2>/dev/null') ?? ''),
+                    'commit_count' => trim(shell_exec("git rev-list --count HEAD 2>/dev/null") ?? ''),
+                    'last_commit_date' => trim(shell_exec("git log -1 --format=%cd 2>/dev/null") ?? ''),
                 ]);
             } catch (\Exception $e) {
                 $info['git_error'] = $e->getMessage();
