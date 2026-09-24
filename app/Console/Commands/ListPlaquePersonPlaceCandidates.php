@@ -5,8 +5,8 @@ namespace App\Console\Commands;
 use App\Models\Connection;
 use App\Models\Span;
 use App\Models\User;
+use App\Services\PlaqueResidenceConnectionService;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class ListPlaquePersonPlaceCandidates extends Command
@@ -48,6 +48,7 @@ class ListPlaquePersonPlaceCandidates extends Command
         $createMissingResidences = (bool) $this->option('create-missing-residences');
         $dryRun = (bool) $this->option('dry-run');
         $createLimit = (int) $this->option('create-limit');
+        $service = app(PlaqueResidenceConnectionService::class);
 
         // Coloured symbols for console output
         $tick = '<fg=green>✓</>';
@@ -82,7 +83,7 @@ class ListPlaquePersonPlaceCandidates extends Command
         $totalPlaques = 0;
         $totalCandidatePlaques = 0;
         $totalConnections = 0;
-        /** @var array<int, array{person: Span, place: Span, start_year: int, end_year: int, plaque_name: string}> */
+        /** @var array<int, array{plaque: Span, person: Span, place: Span, start_year: int, end_year: int, plaque_name: string}> */
         $toCreate = [];
         $toCreateKeys = [];
 
@@ -112,14 +113,11 @@ class ListPlaquePersonPlaceCandidates extends Command
 
             // 1) Plaque description contains "lived" (here / in / at etc.)?
             $description = $plaque->description ?? '';
-            $hasLivedPhrase = preg_match('/\blived\s+(?:here|in|at)\b/i', $description);
-            if (!$hasLivedPhrase) {
-                $hasLivedPhrase = stripos($description, 'lived') !== false;
-            }
+            $hasLivedPhrase = $service->hasLivedPhrase($description);
             $symbol = $hasLivedPhrase ? $tick : $cross;
 
-            $livedSnippet = $this->extractLivedSnippet($description);
-            $extractedDates = $this->extractLivedDatesFromDescription($description);
+            $livedSnippet = $service->extractLivedSnippet($description);
+            $extractedDates = $service->extractLivedDatesFromDescription($description);
 
             if ($onlyLivedHere && !$hasLivedPhrase) {
                 // Skip this plaque entirely if we're only interested in "lived" plaques
@@ -243,12 +241,13 @@ class ListPlaquePersonPlaceCandidates extends Command
                         );
                         $totalConnections++;
 
-                        // Collect for --create-missing-residences: missing residence + extracted dates (dedupe by person|place)
-                        if ($createMissingResidences && !$hasResidence && $extractedDates !== null) {
+                        // Collect for --create-missing-residences: missing residence, lived phrase, and extracted dates
+                        if ($createMissingResidences && !$hasResidence && $hasLivedPhrase && $extractedDates !== null) {
                             $createKey = $person->id . '|' . $place->id;
                             if (!isset($toCreateKeys[$createKey])) {
                                 $toCreateKeys[$createKey] = true;
                                 $toCreate[] = [
+                                    'plaque' => $plaque,
                                     'person' => $person,
                                     'place' => $place,
                                     'start_year' => $extractedDates['start_year'],
@@ -387,65 +386,52 @@ class ListPlaquePersonPlaceCandidates extends Command
             $this->newLine();
             $created = 0;
             $skipped = 0;
+            $ineligible = 0;
 
-            Connection::$skipCacheClearingDuringImport = true;
+            $results = $service->createResidences(
+                array_map(function (array $item) {
+                    return [
+                        'plaque_id' => $item['plaque']->id,
+                        'person_id' => $item['person']->id,
+                        'place_id' => $item['place']->id,
+                    ];
+                }, $toCreateCapped),
+                $user
+            );
 
-            try {
-                foreach ($toCreateCapped as $item) {
-                    $person = $item['person'];
-                    $place = $item['place'];
-
-                    $existing = Connection::query()
-                        ->where('type_id', 'residence')
-                        ->where('parent_id', $person->id)
-                        ->where('child_id', $place->id)
-                        ->exists();
-
-                    if ($existing) {
-                        $skipped++;
-                        continue;
-                    }
-
-                    DB::transaction(function () use ($item, $user, &$created) {
-                        $person = $item['person'];
-                        $place = $item['place'];
-
-                        $connectionSpan = Span::create([
-                            'name' => $person->name . ' lived in ' . $place->name,
-                            'type_id' => 'connection',
-                            'owner_id' => $user->id,
-                            'updater_id' => $user->id,
-                            'access_level' => 'public',
-                            'state' => 'complete',
-                            'start_year' => $item['start_year'],
-                            'end_year' => $item['end_year'],
-                            'start_precision' => 'year',
-                            'end_precision' => 'year',
-                        ]);
-
-                        Connection::create([
-                            'type_id' => 'residence',
-                            'parent_id' => $person->id,
-                            'child_id' => $place->id,
-                            'connection_span_id' => $connectionSpan->id,
-                        ]);
-
-                        $created++;
-                        $this->line(sprintf(
-                            '  <fg=green>Created</> %s --residence--> %s [%d - %d]',
-                            $person->name,
-                            $place->name,
-                            $item['start_year'],
-                            $item['end_year']
-                        ));
-                    });
+            foreach ($results as $index => $result) {
+                $item = $toCreateCapped[$index];
+                if ($result['status'] === 'created') {
+                    $created++;
+                    $this->line(sprintf(
+                        '  <fg=green>Created</> %s --residence--> %s [%d - %d]',
+                        $item['person']->name,
+                        $item['place']->name,
+                        $item['start_year'],
+                        $item['end_year']
+                    ));
+                } elseif ($result['status'] === 'skipped') {
+                    $skipped++;
+                } else {
+                    $ineligible++;
+                    $this->line(sprintf(
+                        '  <fg=yellow>Skipped</> %s --residence--> %s (%s)',
+                        $item['person']->name,
+                        $item['place']->name,
+                        $result['message']
+                    ));
                 }
-
-                $this->newLine();
-                $this->info("Created {$created} residence connection(s)." . ($skipped > 0 ? " Skipped {$skipped} (already existed)." : ''));
-            } finally {
-                Connection::$skipCacheClearingDuringImport = false;
             }
+
+            $this->newLine();
+            $summary = "Created {$created} residence connection(s).";
+            if ($skipped > 0) {
+                $summary .= " Skipped {$skipped} (already existed).";
+            }
+            if ($ineligible > 0) {
+                $summary .= " {$ineligible} ineligible.";
+            }
+            $this->info($summary);
         }
 
         return 0;
@@ -471,71 +457,6 @@ class ListPlaquePersonPlaceCandidates extends Command
                 'email_verified_at' => now(),
             ]
         );
-    }
-
-    /**
-     * Extract start and end years from description text after "lived".
-     * Looks for patterns like "lived here 1868-1873" or "lived here 1874 to 1895".
-     * Returns ['start_year' => int, 'end_year' => int] or null if no match.
-     */
-    private function extractLivedDatesFromDescription(string $description): ?array
-    {
-        if ($description === '') {
-            return null;
-        }
-
-        $pos = stripos($description, 'lived');
-        if ($pos === false) {
-            return null;
-        }
-
-        $afterLived = substr($description, $pos);
-
-        // Match YYYY-YYYY or YYYY to YYYY (with optional spaces/dash)
-        if (preg_match('/\b(\d{4})\s*(?:-|to)\s*(\d{4})\b/i', $afterLived, $m)) {
-            $startYear = (int) $m[1];
-            $endYear = (int) $m[2];
-            if ($startYear >= 1 && $startYear <= 9999 && $endYear >= 1 && $endYear <= 9999) {
-                return [
-                    'start_year' => $startYear,
-                    'end_year' => $endYear,
-                ];
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * Extract a short snippet of description text around the first "lived" phrase
-     * (e.g. "lived here", "lived in", "lived at"). Returns empty string if no match.
-     */
-    private function extractLivedSnippet(string $description): string
-    {
-        if ($description === '') {
-            return '';
-        }
-
-        $pos = stripos($description, 'lived');
-        if ($pos === false) {
-            return '';
-        }
-
-        $before = 25;
-        $after = 100;
-        $start = max(0, $pos - $before);
-        $len = min(mb_strlen($description) - $start, $pos - $start + $after);
-        $snippet = mb_substr($description, $start, $len);
-
-        if ($start > 0) {
-            $snippet = '...' . ltrim($snippet, " \t\n\r\0\x0B.,;:!?");
-        }
-        if ($start + $len < mb_strlen($description)) {
-            $snippet = rtrim($snippet, " \t\n\r\0\x0B");
-            $snippet .= '...';
-        }
-
-        return $snippet;
     }
 
     /**
