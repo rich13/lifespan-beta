@@ -120,12 +120,12 @@ class MusicBrainzImportTest extends TestCase
                 'band_id' => $this->band->id,
                 'albums' => [
                     [
-                        'id' => 'test-id-1',
+                        'id' => 'test-album-with-tracks',
                         'title' => 'Test Album 1 2023-01-01',
                         'first_release_date' => '2023-01-01',
                         'tracks' => [
                             [
-                                'id' => 'track-id-1',
+                                'id' => 'track-id-unique-1',
                                 'title' => 'Track 1',
                                 'length' => 180000,
                                 'isrc' => 'USABC1234567',
@@ -133,7 +133,7 @@ class MusicBrainzImportTest extends TestCase
                                 'first_release_date' => '2023-01-01'
                             ],
                             [
-                                'id' => 'track-id-2',
+                                'id' => 'track-id-unique-2',
                                 'title' => 'Track 2',
                                 'length' => 240000,
                                 'isrc' => 'USABC1234568',
@@ -149,7 +149,7 @@ class MusicBrainzImportTest extends TestCase
         $this->assertTrue($response->json('success'));
 
         // Check that album was created
-        $album = Span::where('name', 'Test Album 1')->first();
+        $album = Span::whereJsonContains('metadata->musicbrainz_id', 'test-album-with-tracks')->first();
         $this->assertNotNull($album);
         $this->assertEquals('thing', $album->type_id);
         $this->assertEquals('album', $album->metadata['subtype']);
@@ -158,20 +158,20 @@ class MusicBrainzImportTest extends TestCase
         $this->assertEquals(1, $album->start_day);
 
         // Check that tracks were created
-        $track1 = Span::where('name', 'Track 1')->first();
+        $track1 = Span::whereJsonContains('metadata->musicbrainz_id', 'track-id-unique-1')->first();
         $this->assertNotNull($track1);
         $this->assertEquals('thing', $track1->type_id);
         $this->assertEquals('track', $track1->metadata['subtype']);
-        $this->assertEquals('track-id-1', $track1->metadata['musicbrainz_id']);
+        $this->assertEquals('track-id-unique-1', $track1->metadata['musicbrainz_id']);
         $this->assertEquals('USABC1234567', $track1->metadata['isrc']);
         $this->assertEquals(180000, $track1->metadata['length']);
         $this->assertEquals('Test Band', $track1->metadata['artist_credits']);
 
-        $track2 = Span::where('name', 'Track 2')->first();
+        $track2 = Span::whereJsonContains('metadata->musicbrainz_id', 'track-id-unique-2')->first();
         $this->assertNotNull($track2);
         $this->assertEquals('thing', $track2->type_id);
         $this->assertEquals('track', $track2->metadata['subtype']);
-        $this->assertEquals('track-id-2', $track2->metadata['musicbrainz_id']);
+        $this->assertEquals('track-id-unique-2', $track2->metadata['musicbrainz_id']);
         $this->assertEquals('USABC1234568', $track2->metadata['isrc']);
         $this->assertEquals(240000, $track2->metadata['length']);
         $this->assertEquals('Test Band', $track2->metadata['artist_credits']);
@@ -290,20 +290,17 @@ class MusicBrainzImportTest extends TestCase
         $this->assertEquals('2', $tracks[1]['number']);
     }
 
-    public function test_updates_existing_albums_and_tracks(): void
+    public function test_does_not_rewrite_existing_albums_and_tracks(): void
     {
-        // Create test user with admin privileges
         $user = User::factory()->create(['is_admin' => true]);
         $this->actingAs($user);
 
-        // Create test band
         $band = Span::factory()->create([
             'name' => 'Test Band',
             'type_id' => 'thing',
             'metadata' => ['subtype' => 'band']
         ]);
 
-        // First import
         $response = $this->postJson(route('admin.import.musicbrainz.import'), [
             'band_id' => $band->id,
             'albums' => [
@@ -328,11 +325,9 @@ class MusicBrainzImportTest extends TestCase
         $response->assertStatus(200);
         $response->assertJson(['success' => true]);
 
-        // Get initial counts
         $initialSpanCount = Span::count();
         $initialConnectionCount = Connection::count();
 
-        // Second import with updated data
         $response = $this->postJson(route('admin.import.musicbrainz.import'), [
             'band_id' => $band->id,
             'albums' => [
@@ -357,21 +352,16 @@ class MusicBrainzImportTest extends TestCase
         $response->assertStatus(200);
         $response->assertJson(['success' => true]);
 
-        // Verify no new spans or connections were created
         $this->assertEquals($initialSpanCount, Span::count());
         $this->assertEquals($initialConnectionCount, Connection::count());
 
-        // Verify album was updated
         $album = Span::whereJsonContains('metadata->musicbrainz_id', 'test-album-id')->first();
-        $this->assertEquals('Updated Album Title', $album->name);
+        $this->assertEquals('Test Album', $album->name);
 
-        // Verify track was updated
         $track = Span::whereJsonContains('metadata->musicbrainz_id', 'test-track-id')->first();
-        $this->assertEquals('Updated Track Title', $track->name);
-        $this->assertEquals(190000, $track->metadata['length']);
-        $this->assertEquals('Test Band (Updated)', $track->metadata['artist_credits']);
+        $this->assertEquals('Test Track', $track->name);
+        $this->assertEquals(180000, $track->metadata['length']);
 
-        // Verify connections still exist
         $this->assertTrue(
             Connection::where('parent_id', $band->id)
                 ->where('child_id', $album->id)

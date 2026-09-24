@@ -38,8 +38,7 @@ class MusicBrainzRateLimitTest extends TestCase
         $service->searchArtist('Artist 1');
         $service->searchArtist('Artist 2');
         
-        // Verify that both requests were made (each artist search makes 2 requests: exact + broad)
-        Http::assertSentCount(4);
+        Http::assertSentCount(2);
         
         // Check that rate limiting cache was set after first request
         $this->assertTrue(Cache::has('musicbrainz_rate_limit'));
@@ -81,14 +80,10 @@ class MusicBrainzRateLimitTest extends TestCase
         // This should succeed after retry
         $result = $service->searchArtist('Test Artist');
         
-        // Verify the result
         $this->assertCount(1, $result);
         $this->assertEquals('Test Artist', $result[0]['name']);
         
-        // Verify that multiple requests were made (initial + retry, with each search making 2 requests)
-        // The retry logic may not trigger if the first request succeeds, so we expect 2 requests
-        // But the retry logic might make additional requests, so we expect at least 2
-        Http::assertSentCount(3);
+        Http::assertSentCount(2);
     }
 
     public function test_rate_limit_cache_is_used()

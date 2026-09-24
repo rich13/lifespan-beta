@@ -4,9 +4,12 @@ namespace App\Services;
 
 use App\Models\Span;
 use App\Models\Connection;
+use App\Models\User;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 use Exception;
 
 class InvalidImportDateException extends Exception {}
@@ -17,10 +20,14 @@ class MusicBrainzImportService
     protected $userAgent;
     protected $rateLimitKey = 'musicbrainz_rate_limit';
     protected $minRequestInterval = 1.0; // 1 second minimum between requests
+    protected MusicBrainzArtistMatcher $artistMatcher;
+    protected MusicBrainzStudioAlbumFilter $studioAlbumFilter;
 
     public function __construct()
     {
         $this->userAgent = config('app.user_agent');
+        $this->artistMatcher = new MusicBrainzArtistMatcher();
+        $this->studioAlbumFilter = new MusicBrainzStudioAlbumFilter();
     }
 
     /**
@@ -31,7 +38,7 @@ class MusicBrainzImportService
         $lastRequestTime = Cache::get($this->rateLimitKey);
         $currentTime = microtime(true);
         
-        if ($lastRequestTime) {
+        if ($lastRequestTime && !app()->environment('testing')) {
             $timeSinceLastRequest = $currentTime - $lastRequestTime;
             $requiredDelay = $this->minRequestInterval - $timeSinceLastRequest;
             
@@ -54,61 +61,54 @@ class MusicBrainzImportService
     protected function makeRateLimitedRequest(string $url, array $params = []): \Illuminate\Http\Client\Response
     {
         $this->respectRateLimit();
-        
-        $response = Http::withHeaders([
-            'User-Agent' => $this->userAgent,
-            'Cache-Control' => 'no-cache, no-store, must-revalidate',
-            'Pragma' => 'no-cache',
-            'Expires' => '0',
-        ])->get($url, $params);
-        
-        // If we get a 503 rate limit error, wait and retry once
+
+        $response = $this->musicBrainzHttp()->get($url, $params);
+
         if ($response->status() === 503 && str_contains($response->body(), 'rate limit')) {
             Log::warning('MusicBrainz rate limit hit, waiting 2 seconds before retry', [
                 'url' => $url,
                 'params' => $params
             ]);
-            
-            sleep(2); // Wait 2 seconds
-            $this->respectRateLimit(); // Ensure we still respect our own rate limit
-            
-            $response = Http::withHeaders([
+
+            sleep(2);
+            $this->respectRateLimit();
+
+            $response = $this->musicBrainzHttp()->get($url, $params);
+        }
+
+        return $response;
+    }
+
+    protected function musicBrainzHttp(): \Illuminate\Http\Client\PendingRequest
+    {
+        return Http::timeout(15)
+            ->connectTimeout(5)
+            ->withHeaders([
                 'User-Agent' => $this->userAgent,
                 'Cache-Control' => 'no-cache, no-store, must-revalidate',
                 'Pragma' => 'no-cache',
                 'Expires' => '0',
-            ])->get($url, $params);
-        }
-        
-        return $response;
+            ]);
     }
 
     /**
-     * Search for an artist on MusicBrainz
+     * Search for an artist on MusicBrainz using a typed Lucene query.
      */
-    public function searchArtist(string $artistName): array
+    public function searchArtist(string $artistName, ?string $spanTypeId = null): array
     {
+        $query = $this->artistMatcher->buildSearchQuery($artistName, $spanTypeId);
+
         Log::info('Searching MusicBrainz for artist', [
             'artist_name' => $artistName,
-            'url' => "{$this->musicBrainzApiUrl}/artist",
-            'params' => [
-                'query' => $artistName,
-                'fmt' => 'json',
-                'limit' => 10,
-            ]
+            'span_type_id' => $spanTypeId,
+            'query' => $query,
         ]);
 
-        // Use more specific query parameters for better results
-        $queryParams = [
+        $response = $this->makeRateLimitedRequest("{$this->musicBrainzApiUrl}/artist", [
+            'query' => $query,
             'fmt' => 'json',
-            'limit' => 25, // Get more results to filter from
-            '_' => time(), // Cache-busting parameter
-        ];
-        
-        // Try exact name match first
-        $queryParams['query'] = '"' . $artistName . '"';
-        
-        $response = $this->makeRateLimitedRequest("{$this->musicBrainzApiUrl}/artist", $queryParams);
+            'limit' => 10,
+        ]);
 
         if (!$response->successful()) {
             Log::error('MusicBrainz API error', [
@@ -119,102 +119,28 @@ class MusicBrainzImportService
         }
 
         $data = $response->json();
-        
-        // If we don't get good results with exact match, try a broader search
-        if (empty($data['artists']) || count($data['artists']) < 2) {
-            Log::info('Exact match returned few results, trying broader search', [
-                'artist_name' => $artistName,
-                'exact_results' => count($data['artists'] ?? [])
-            ]);
-            
-            $queryParams['query'] = $artistName;
-            $response = $this->makeRateLimitedRequest("{$this->musicBrainzApiUrl}/artist", $queryParams);
-            
-            if ($response->successful()) {
-                $data = $response->json();
-            }
-        }
-        
-        // More comprehensive exclusion list
-        $excludeNames = [
-            '[unknown]', 'various artists', 'various', 'unknown artist'
-        ];
-        $excludeTypes = ['Other'];
-        $artistNameLower = mb_strtolower($artistName);
-        
-        // Extract search terms for relevance checking
-        $searchTerms = array_filter(explode(' ', $artistNameLower));
-        
-        Log::info('Raw MusicBrainz search results', [
+        $candidates = collect($data['artists'] ?? [])
+            ->map(function ($artist) {
+                return [
+                    'id' => $artist['id'],
+                    'name' => $artist['name'],
+                    'disambiguation' => $artist['disambiguation'] ?? null,
+                    'type' => $artist['type'] ?? null,
+                    'score' => isset($artist['score']) ? (string) $artist['score'] : null,
+                    'country' => $artist['country'] ?? null,
+                ];
+            })
+            ->all();
+
+        $ranked = $this->artistMatcher->rank($candidates, $artistName, $spanTypeId);
+
+        Log::info('Ranked MusicBrainz search results', [
             'artist_name' => $artistName,
-            'raw_results' => collect($data['artists'] ?? [])->pluck('name')->toArray(),
-            'search_terms' => $searchTerms
+            'filtered_results' => collect($ranked)->pluck('name')->toArray(),
+            'filtered_count' => count($ranked),
         ]);
 
-        $artists = collect($data['artists'] ?? [])->map(function ($artist) {
-            return [
-                'id' => $artist['id'],
-                'name' => $artist['name'],
-                'disambiguation' => $artist['disambiguation'] ?? null,
-                'type' => $artist['type'] ?? null,
-                'score' => isset($artist['score']) ? (string)$artist['score'] : null,
-            ];
-        })
-        // Exclude generic/unknown artists and obviously unrelated results
-        ->filter(function ($artist) use ($excludeNames, $excludeTypes, $searchTerms, $artistNameLower) {
-            $name = mb_strtolower($artist['name']);
-            
-            // Exclude by name
-            if (in_array($name, $excludeNames)) {
-                Log::info('Excluding artist by name', ['name' => $artist['name']]);
-                return false;
-            }
-            
-            // Exclude by type
-            if (isset($artist['type']) && in_array($artist['type'], $excludeTypes)) {
-                Log::info('Excluding artist by type', ['name' => $artist['name'], 'type' => $artist['type']]);
-                return false;
-            }
-            
-            // Check relevance - artist name should contain at least one search term
-            $hasRelevance = false;
-            foreach ($searchTerms as $term) {
-                if (strlen($term) > 2 && str_contains($name, $term)) {
-                    $hasRelevance = true;
-                    break;
-                }
-            }
-            
-            // Allow exact matches even if they don't contain search terms
-            if (mb_strtolower($artist['name']) === $artistNameLower) {
-                $hasRelevance = true;
-            }
-            
-            if (!$hasRelevance) {
-                Log::info('Excluding artist for lack of relevance', [
-                    'artist_name' => $artist['name'], 
-                    'search_terms' => $searchTerms
-                ]);
-                return false;
-            }
-            
-            return true;
-        })
-        // Prioritise exact (case-insensitive) name matches
-        ->sortByDesc(function ($artist) use ($artistNameLower) {
-            return mb_strtolower($artist['name']) === $artistNameLower ? 1 : 0;
-        })
-        ->take(10) // Limit to top 10 results
-        ->values()
-        ->toArray();
-
-        Log::info('Filtered MusicBrainz search results', [
-            'artist_name' => $artistName,
-            'filtered_results' => collect($artists)->pluck('name')->toArray(),
-            'filtered_count' => count($artists)
-        ]);
-
-        return $artists;
+        return $ranked;
     }
 
     /**
@@ -318,7 +244,7 @@ class MusicBrainzImportService
     }
 
     /**
-     * Get an artist's discography from MusicBrainz
+     * Get an artist's discography from MusicBrainz (album release groups only).
      */
     public function getDiscography(string $mbid): array
     {
@@ -327,46 +253,34 @@ class MusicBrainzImportService
             'url' => "{$this->musicBrainzApiUrl}/release-group"
         ]);
 
-        $response = $this->makeRateLimitedRequest("{$this->musicBrainzApiUrl}/release-group", [
-            'artist' => $mbid,
-            'fmt' => 'json',
-            'limit' => 100,
-        ]);
+        $albums = [];
+        $offset = 0;
 
-        if (!$response->successful()) {
-            Log::error('MusicBrainz discography API error', [
-                'status' => $response->status(),
-                'body' => $response->body(),
+        do {
+            $response = $this->makeRateLimitedRequest("{$this->musicBrainzApiUrl}/release-group", [
+                'artist' => $mbid,
+                'type' => 'album',
+                'fmt' => 'json',
+                'limit' => 100,
+                'offset' => $offset,
             ]);
-            throw new \Exception('Failed to fetch discography');
-        }
 
-        $data = $response->json();
-        
-        $albums = collect($data['release-groups'] ?? [])->map(function ($releaseGroup) {
-            $album = [
-                'id' => $releaseGroup['id'],
-                'title' => $releaseGroup['title'],
-                'type' => $releaseGroup['primary-type'] ?? null,
-                'primary-type' => $releaseGroup['primary-type'] ?? null,
-                'secondary-types' => $releaseGroup['secondary-types'] ?? [],
-                'disambiguation' => $releaseGroup['disambiguation'] ?? null,
-                'first_release_date' => $releaseGroup['first-release-date'] ?? null,
-            ];
-            
-            // Log suspicious dates
-            if ($album['first_release_date'] && strtotime($album['first_release_date']) === strtotime('today')) {
-                Log::warning('MusicBrainz returned today\'s date for album', [
-                    'album_title' => $album['title'],
-                    'album_id' => $album['id'],
-                    'first_release_date' => $album['first_release_date'],
-                    'raw_release_group' => $releaseGroup
+            if (!$response->successful()) {
+                Log::error('MusicBrainz discography API error', [
+                    'status' => $response->status(),
+                    'body' => $response->body(),
                 ]);
+                throw new \Exception('Failed to fetch discography');
             }
-            
-            return $album;
-        })->toArray();
-        
+
+            $batch = collect($response->json()['release-groups'] ?? [])
+                ->map(fn ($releaseGroup) => $this->mapReleaseGroup($releaseGroup))
+                ->all();
+
+            $albums = array_merge($albums, $batch);
+            $offset += 100;
+        } while (count($batch) === 100 && $offset < 500);
+
         Log::info('MusicBrainz discography response', [
             'total_albums' => count($albums),
             'albums_with_dates' => collect($albums)->filter(fn($a) => !empty($a['first_release_date']))->count(),
@@ -375,8 +289,18 @@ class MusicBrainzImportService
                 'date' => $a['first_release_date']
             ])->toArray()
         ]);
-        
+
         return $albums;
+    }
+
+    /**
+     * Official studio albums only.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function studioAlbums(string $mbid): array
+    {
+        return $this->studioAlbumFilter->filter($this->getDiscography($mbid));
     }
 
     /**
@@ -454,10 +378,17 @@ class MusicBrainzImportService
                     $score += 3;
                 }
             }
+
+            $status = strtolower((string) ($release['status'] ?? ''));
+            if ($status === 'official') {
+                $score += 50;
+            } elseif (in_array($status, ['bootleg', 'pseudo-release'], true)) {
+                $score -= 100;
+            }
             
             // Penalize releases with suspicious titles (compilations, re-releases)
             $title = strtolower($release['title'] ?? '');
-            $suspiciousWords = ['second', 'deluxe', 'remastered', 'expanded', 'bonus', 'b-sides', 'rarities'];
+            $suspiciousWords = ['deluxe', 'remastered', 'expanded', 'bonus', 'b-sides', 'rarities'];
             foreach ($suspiciousWords as $word) {
                 if (str_contains($title, $word)) {
                     $score -= 20;
@@ -470,9 +401,29 @@ class MusicBrainzImportService
             ];
         });
         
-        // Sort by score (highest first) and take the best
-        $bestRelease = $scoredReleases->sortByDesc('score')->first();
+        // Sort by score (highest first) and take the best official release
+        $officialReleases = $scoredReleases
+            ->filter(function ($item) {
+                $status = strtolower((string) ($item['release']['status'] ?? ''));
+
+                return $status === '' || $status === 'official';
+            })
+            ->sortByDesc('score');
+
+        $bestRelease = $officialReleases->first() ?? $scoredReleases->sortByDesc('score')->first();
         $release = $bestRelease ? $bestRelease['release'] : $releases->first();
+        if (!$release) {
+            return [];
+        }
+        $bestStatus = strtolower((string) ($release['status'] ?? ''));
+        if (in_array($bestStatus, ['bootleg', 'pseudo-release'], true)) {
+            Log::info('Skipping bootleg or pseudo-release for tracks', [
+                'release_group_id' => $releaseGroupId,
+                'status' => $bestStatus,
+            ]);
+
+            return [];
+        }
         
         if (!$release) {
             Log::warning('No releases found for release group', [
@@ -589,55 +540,27 @@ class MusicBrainzImportService
             'albums_count' => count($albums)
         ]);
 
+        if (! app(ImprovementCreationPolicy::class)->allowsCreation($artist)) {
+            return [];
+        }
+
         $imported = [];
         foreach ($albums as $album) {
+            if ($this->albumAlreadyImported($album['id'])) {
+                continue;
+            }
+
             $cleanTitle = preg_replace('/\s+\d{4}(-\d{2}(-\d{2})?)?$/', '', $album['title']);
             $cleanTitle = trim($cleanTitle);
 
-                            // Check for today's date on album
-                if (!empty($album['first_release_date'])) {
-                    $releaseDate = $this->parseReleaseDate($album['first_release_date']);
-                    $today = strtotime('today');
-                    if ($failOnTodaysDate && date('Y-m-d', $releaseDate) === date('Y-m-d', $today)) {
-                        throw new InvalidImportDateException("Album '{$cleanTitle}' (MBID: {$album['id']}) has today's date as release date: {$album['first_release_date']}");
-                    }
+            if (!empty($album['first_release_date'])) {
+                $releaseDate = $this->parseReleaseDate($album['first_release_date']);
+                $today = strtotime('today');
+                if ($failOnTodaysDate && date('Y-m-d', $releaseDate) === date('Y-m-d', $today)) {
+                    throw new InvalidImportDateException("Album '{$cleanTitle}' (MBID: {$album['id']}) has today's date as release date: {$album['first_release_date']}");
                 }
+            }
 
-            // Check if album already exists
-            $albumSpan = Span::whereJsonContains('metadata->musicbrainz_id', $album['id'])->first();
-            
-            if ($albumSpan) {
-                // Update existing album
-                $hasReleaseDate = !empty($album['first_release_date']);
-                $albumState = $hasReleaseDate ? 'complete' : 'placeholder';
-                
-                $updateData = [
-                    'name' => $cleanTitle,
-                    'state' => $albumState,
-                    'metadata' => array_merge($albumSpan->metadata ?? [], [
-                        'type' => $album['type'] ?? null,
-                        'disambiguation' => $album['disambiguation'] ?? null,
-                        'subtype' => 'album'
-                    ]),
-                    'updater_id' => $ownerId,
-                ];
-                
-                // Update date fields if we have a release date
-                if (!empty($album['first_release_date'])) {
-                    $releaseDate = $this->parseReleaseDate($album['first_release_date']);
-                    
-                    $updateData['start_year'] = $this->extractYearFromDate($album['first_release_date']);
-                    // Set month/day based on available precision
-                    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $album['first_release_date'])) {
-                        $updateData['start_month'] = date('m', $releaseDate);
-                        $updateData['start_day'] = date('d', $releaseDate);
-                    } elseif (preg_match('/^\d{4}-\d{2}$/', $album['first_release_date'])) {
-                        $updateData['start_month'] = date('m', $releaseDate);
-                    }
-                }
-                
-                $albumSpan->update($updateData);
-            } else {
                 // Determine state based on whether we have release date
                 $hasReleaseDate = !empty($album['first_release_date']);
                 $albumState = $hasReleaseDate ? 'complete' : 'placeholder';
@@ -645,6 +568,8 @@ class MusicBrainzImportService
                 // Prepare album data (albums are public by default)
                 $albumData = [
                     'name' => $cleanTitle,
+                    'slug' => $this->generateUniqueSlug($cleanTitle),
+                    'short_id' => Span::generateUniqueShortId(),
                     'type_id' => 'thing',
                     'state' => $albumState,
                     'access_level' => 'public',
@@ -681,8 +606,10 @@ class MusicBrainzImportService
                     }
                 }
                 
-                // Create new album span
-                $albumSpan = Span::create($albumData);
+                $albumSpan = $this->openChildSpan($artist, $albumData);
+                if (! $albumSpan) {
+                    return $imported;
+                }
 
                 // Create connection span for the created connection
                 $hasConnectionDate = !empty($album['first_release_date']);
@@ -690,6 +617,8 @@ class MusicBrainzImportService
                 
                 $connectionData = [
                     'name' => "{$artist->name} created {$albumSpan->name}",
+                    'slug' => $this->generateUniqueSlug("{$artist->name} created {$albumSpan->name}"),
+                    'short_id' => Span::generateUniqueShortId(),
                     'type_id' => 'connection',
                     'state' => $connectionState,
                     'access_level' => 'private',
@@ -723,7 +652,10 @@ class MusicBrainzImportService
                     }
                 }
                 
-                $connectionSpan1 = Span::create($connectionData);
+                $connectionSpan1 = $this->openChildSpan($artist, $connectionData);
+                if (! $connectionSpan1) {
+                    return $imported;
+                }
 
                 // Create connection between artist and album
                 Connection::create([
@@ -732,11 +664,15 @@ class MusicBrainzImportService
                     'type_id' => 'created',
                     'connection_span_id' => $connectionSpan1->id
                 ]);
-            }
 
             // Import tracks if available
             if (!empty($album['tracks'])) {
                 foreach ($album['tracks'] as $track) {
+                    $existingTrack = Span::whereJsonContains('metadata->musicbrainz_id', $track['id'])->first();
+                    if ($existingTrack) {
+                        continue;
+                    }
+
                     if (!empty($track['first_release_date'])) {
                         $trackReleaseDate = $this->parseReleaseDate($track['first_release_date']);
                         $today = strtotime('today');
@@ -744,49 +680,15 @@ class MusicBrainzImportService
                             throw new InvalidImportDateException("Track '{$track['title']}' (MBID: {$track['id']}) has today's date as release date: {$track['first_release_date']} (album: {$cleanTitle})");
                         }
                     }
-                    // Check if track already exists
-                    $trackSpan = Span::whereJsonContains('metadata->musicbrainz_id', $track['id'])->first();
 
-                    if ($trackSpan) {
-                        // Update existing track
-                        $hasTrackReleaseDate = !empty($track['first_release_date']);
-                        $trackState = $hasTrackReleaseDate ? 'complete' : 'placeholder';
-                        
-                        $updateData = [
-                            'name' => $track['title'],
-                            'state' => $trackState,
-                            'metadata' => array_merge($trackSpan->metadata ?? [], [
-                                'isrc' => $track['isrc'],
-                                'length' => $track['length'],
-                                'artist_credits' => $track['artist_credits'],
-                                'subtype' => 'track'
-                            ]),
-                            'updater_id' => $ownerId,
-                        ];
-                        
-                        // Update date fields if we have a release date
-                        if (!empty($track['first_release_date'])) {
-                            $releaseDate = $this->parseReleaseDate($track['first_release_date']);
-                            
-                            $updateData['start_year'] = $this->extractYearFromDate($track['first_release_date']);
-                            // Set month/day based on available precision
-                            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $track['first_release_date'])) {
-                                $updateData['start_month'] = date('m', $releaseDate);
-                                $updateData['start_day'] = date('d', $releaseDate);
-                            } elseif (preg_match('/^\d{4}-\d{2}$/', $track['first_release_date'])) {
-                                $updateData['start_month'] = date('m', $releaseDate);
-                            }
-                        }
-                        
-                        $trackSpan->update($updateData);
-                    } else {
-                        // Determine state based on whether we have release date
-                        $hasTrackReleaseDate = !empty($track['first_release_date']);
+                    $hasTrackReleaseDate = !empty($track['first_release_date']);
                         $trackState = $hasTrackReleaseDate ? 'complete' : 'placeholder';
                         
                         // Prepare track data (tracks are public by default)
                         $trackData = [
                             'name' => $track['title'],
+                            'slug' => $this->generateUniqueSlug($track['title']),
+                            'short_id' => Span::generateUniqueShortId(),
                             'type_id' => 'thing',
                             'state' => $trackState,
                             'access_level' => 'public',
@@ -815,8 +717,10 @@ class MusicBrainzImportService
                             }
                         }
                         
-                        // Create new track span
-                        $trackSpan = Span::create($trackData);
+                        $trackSpan = $this->openChildSpan($artist, $trackData);
+                        if (! $trackSpan) {
+                            return $imported;
+                        }
 
                         // Create connection span for the contains connection
                         $hasTrackConnectionDate = !empty($track['first_release_date']);
@@ -824,6 +728,8 @@ class MusicBrainzImportService
                         
                         $trackConnectionData = [
                             'name' => "{$albumSpan->name} contains {$trackSpan->name}",
+                            'slug' => $this->generateUniqueSlug("{$albumSpan->name} contains {$trackSpan->name}"),
+                            'short_id' => Span::generateUniqueShortId(),
                             'type_id' => 'connection',
                             'state' => $trackConnectionState,
                             'access_level' => 'private',
@@ -848,7 +754,10 @@ class MusicBrainzImportService
                             }
                         }
                         
-                        $connectionSpan2 = Span::create($trackConnectionData);
+                        $connectionSpan2 = $this->openChildSpan($artist, $trackConnectionData);
+                        if (! $connectionSpan2) {
+                            return $imported;
+                        }
 
                         // Create connection between album and track if it doesn't exist
                         if (!Connection::where('parent_id', $albumSpan->id)
@@ -862,7 +771,6 @@ class MusicBrainzImportService
                                 'connection_span_id' => $connectionSpan2->id
                             ]);
                         }
-                    }
                 }
             }
 
@@ -981,7 +889,10 @@ class MusicBrainzImportService
                     }
                 }
                 
-                $memberSpan = Span::create($memberData);
+                $memberSpan = $this->openChildSpan($band, $memberData);
+                if (! $memberSpan) {
+                    break;
+                }
                 $createdMembers[] = $memberSpan;
                 
                 Log::info('Created new band member', [
@@ -1274,7 +1185,10 @@ class MusicBrainzImportService
             'start_day' => $connectionData['start_day'] ?? null
         ]);
         
-        $connectionSpan = Span::create($connectionData);
+        $connectionSpan = $this->openChildSpan($band, $connectionData);
+        if (! $connectionSpan) {
+            return;
+        }
         
         // Create the connection
         Connection::create([
@@ -1292,6 +1206,14 @@ class MusicBrainzImportService
         ]);
     }
     
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    private function openChildSpan(Span $parent, array $attributes): ?Span
+    {
+        return app(ImprovementCreationPolicy::class)->createChild($parent, $attributes);
+    }
+
     /**
      * Parse a release date from MusicBrainz, handling year-only dates properly
      */
@@ -1417,5 +1339,440 @@ class MusicBrainzImportService
                 'error' => 'Failed to import release: ' . $e->getMessage(),
             ];
         }
+    }
+
+    /**
+     * Search MusicBrainz recordings, optionally constrained to an artist name.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    public function searchRecording(string $trackName, ?string $artistName = null): array
+    {
+        $safeTrack = str_replace('"', '', $trackName);
+        $query = 'recording:"' . $safeTrack . '"';
+        if (is_string($artistName) && $artistName !== '') {
+            $query .= ' AND artist:"' . str_replace('"', '', $artistName) . '"';
+        }
+
+        $response = $this->makeRateLimitedRequest("{$this->musicBrainzApiUrl}/recording", [
+            'query' => $query,
+            'fmt' => 'json',
+            'limit' => 5,
+        ]);
+
+        if (!$response->successful()) {
+            Log::error('MusicBrainz recording search failed', [
+                'status' => $response->status(),
+                'track' => $trackName,
+                'artist' => $artistName,
+            ]);
+
+            return [];
+        }
+
+        $data = $response->json();
+
+        return collect($data['recordings'] ?? [])->map(function ($recording) {
+            return [
+                'id' => $recording['id'] ?? null,
+                'title' => $recording['title'] ?? null,
+                'score' => isset($recording['score']) ? (int) $recording['score'] : 0,
+                'artist' => $recording['artist-credit'][0]['name'] ?? null,
+            ];
+        })->filter(fn ($recording) => !empty($recording['id']))->values()->all();
+    }
+
+    /**
+     * Update an existing artist span in place from MusicBrainz. Does not create a new span.
+     *
+     * @return array{success: bool, skipped?: bool, message?: string}
+     */
+    public function enrichExistingArtist(Span $span, int $minScore = 80): array
+    {
+        if ($this->musicBrainzIdForSpan($span)) {
+            return ['success' => true, 'skipped' => true, 'message' => 'Already has a MusicBrainz id'];
+        }
+
+        $decision = $this->resolveArtistMatch($span);
+        if ($decision['status'] !== 'matched') {
+            return ['success' => false, 'skipped' => true, 'message' => $decision['reason']];
+        }
+
+        $best = $decision['artist'];
+        $score = (int) ($best['score'] ?? $best['rank_score'] ?? 0);
+        if ($score < $minScore && empty($best['exact_name'])) {
+            return ['success' => false, 'message' => 'MusicBrainz artist score too low'];
+        }
+
+        $details = $this->getArtistDetails($best['id']);
+        $spanType = $this->determineSpanTypeFromMusicBrainz($details);
+        $updates = $this->prepareArtistUpdates($details, $spanType);
+        $updates['metadata'] = array_merge($span->metadata ?? [], $updates['metadata'] ?? []);
+        $span->update($updates);
+
+        return ['success' => true, 'skipped' => false];
+    }
+
+    /**
+     * Bands plus people with the Musician role.
+     *
+     * @return Collection<int, Span>
+     */
+    public function catalogueArtists(): Collection
+    {
+        $bands = Span::where('type_id', 'band')->orderBy('name')->get();
+
+        $musicianRole = Span::where('name', 'Musician')
+            ->where('type_id', 'role')
+            ->first()
+            ?? Span::where('name', 'Musician')->first();
+
+        $musicians = collect();
+        if ($musicianRole) {
+            $musicians = Connection::where('child_id', $musicianRole->id)
+                ->where('type_id', 'has_role')
+                ->with('parent')
+                ->get()
+                ->pluck('parent')
+                ->filter();
+        }
+
+        return $bands->concat($musicians)->unique('id')->sortBy('name')->values();
+    }
+
+    /**
+     * Catalogue artists with a MusicBrainz artist id, or with albums already imported from MusicBrainz.
+     *
+     * @param  Collection<int, Span>  $artists
+     * @return Collection<int, string>
+     */
+    public function matchedCatalogueArtistIds(Collection $artists): Collection
+    {
+        if ($artists->isEmpty()) {
+            return collect();
+        }
+
+        $fromMetadata = $artists
+            ->filter(fn (Span $artist) => $this->musicBrainzIdForSpan($artist) !== null)
+            ->pluck('id');
+
+        $fromAlbums = Connection::query()
+            ->whereIn('parent_id', $artists->pluck('id'))
+            ->where('type_id', 'created')
+            ->whereHas('child', function ($query) {
+                $query->where('type_id', 'thing')
+                    ->where('metadata->subtype', 'album')
+                    ->whereNotNull('metadata->musicbrainz_id');
+            })
+            ->pluck('parent_id');
+
+        return $fromMetadata->merge($fromAlbums)->unique()->values();
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function existingMusicBrainzAlbumIdsForArtist(Span $artist): array
+    {
+        return Connection::query()
+            ->where('parent_id', $artist->id)
+            ->where('type_id', 'created')
+            ->with('child')
+            ->get()
+            ->pluck('child')
+            ->filter(function ($child) {
+                if (!$child || ($child->metadata['subtype'] ?? null) !== 'album') {
+                    return false;
+                }
+                $id = $child->metadata['musicbrainz_id'] ?? null;
+
+                return is_string($id) && $id !== '';
+            })
+            ->map(fn ($child) => $child->metadata['musicbrainz_id'])
+            ->values()
+            ->all();
+    }
+
+    public function albumAlreadyImported(string $releaseGroupId): bool
+    {
+        return Span::query()
+            ->where('type_id', 'thing')
+            ->where(function ($query) use ($releaseGroupId) {
+                $query->where('metadata->musicbrainz_id', $releaseGroupId)
+                    ->orWhereJsonContains('metadata->musicbrainz_id', $releaseGroupId);
+            })
+            ->exists();
+    }
+
+    /**
+     * Resolve a MusicBrainz artist and import official studio albums plus tracks.
+     *
+     * @return array{success: bool, skipped: bool, status: string, message: string, artist_name: string, albums_imported?: int}
+     */
+    public function importForSpan(Span $artist, User $user, ?string $forcedMbid = null): array
+    {
+        if (! app(ImprovementCreationPolicy::class)->allowsCreation($artist)) {
+            return [
+                'success' => false,
+                'skipped' => true,
+                'status' => 'generation_limit',
+                'message' => 'This span is already one step from an original, so it cannot add further spans.',
+                'artist_name' => $artist->name,
+            ];
+        }
+
+        $mbid = $forcedMbid ?: $this->musicBrainzIdForSpan($artist);
+
+        if (!$mbid) {
+            $recovered = $this->recoverArtistMatchFromImportedAlbums($artist);
+            if ($recovered) {
+                $mbid = $recovered['id'];
+                $this->stampMusicBrainzMatch($artist, $recovered);
+            } else {
+                $decision = $this->resolveArtistMatch($artist);
+                if ($decision['status'] !== 'matched') {
+                    return [
+                        'success' => false,
+                        'skipped' => true,
+                        'status' => $decision['status'],
+                        'message' => $decision['reason'],
+                        'artist_name' => $artist->name,
+                    ];
+                }
+
+                $mbid = $decision['artist']['id'];
+                $this->stampMusicBrainzMatch($artist, $decision['artist']);
+            }
+        }
+
+        $albums = $this->studioAlbums($mbid);
+        foreach ($albums as $index => $album) {
+            if ($this->albumAlreadyImported($album['id'])) {
+                continue;
+            }
+
+            try {
+                $albums[$index]['tracks'] = $this->getTracks($album['id']);
+            } catch (\Throwable $e) {
+                Log::warning('Failed to fetch tracks for studio album', [
+                    'album_id' => $album['id'] ?? null,
+                    'album_title' => $album['title'] ?? null,
+                    'error' => $e->getMessage(),
+                ]);
+                $albums[$index]['tracks'] = [];
+            }
+        }
+
+        $imported = $this->importDiscography($artist, $albums, $user->id);
+
+        if (count($imported) === 0) {
+            return [
+                'success' => true,
+                'skipped' => true,
+                'status' => 'up_to_date',
+                'message' => 'No new studio albums',
+                'artist_name' => $artist->name,
+                'albums_imported' => 0,
+            ];
+        }
+
+        return [
+            'success' => true,
+            'skipped' => false,
+            'status' => 'imported',
+            'message' => count($imported) . ' studio albums imported',
+            'artist_name' => $artist->name,
+            'albums_imported' => count($imported),
+        ];
+    }
+
+    /**
+     * @return array{status: string, artist?: array<string, mixed>, reason: string}
+     */
+    public function resolveArtistMatch(Span $span): array
+    {
+        $results = $this->searchArtist($span->name, $span->type_id);
+
+        return $this->artistMatcher->pickUnambiguous($results, $span->name, $span->type_id);
+    }
+
+    public function musicBrainzIdForSpan(Span $span): ?string
+    {
+        $id = $span->metadata['musicbrainz']['id']
+            ?? $span->metadata['musicbrainz_id']
+            ?? null;
+
+        return is_string($id) && $id !== '' ? $id : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $match
+     */
+    public function stampMusicBrainzMatch(Span $span, array $match): void
+    {
+        $metadata = $span->metadata ?? [];
+        $metadata['musicbrainz'] = array_merge($metadata['musicbrainz'] ?? [], [
+            'id' => $match['id'],
+            'name' => $match['name'] ?? $span->name,
+            'type' => $match['type'] ?? null,
+            'disambiguation' => $match['disambiguation'] ?? null,
+            'score' => $match['score'] ?? null,
+            'lookup_date' => now()->toIso8601String(),
+        ]);
+        $span->update(['metadata' => $metadata]);
+    }
+
+    /**
+     * Recover an artist MusicBrainz id from albums we already imported, avoiding a name search.
+     *
+     * @return array{id: string, name: string, type: ?string, disambiguation: ?string, score: string}|null
+     */
+    public function recoverArtistMatchFromImportedAlbums(Span $artist): ?array
+    {
+        foreach (array_slice($this->existingMusicBrainzAlbumIdsForArtist($artist), 0, 3) as $releaseGroupId) {
+            $match = $this->artistMatchFromReleaseGroup($releaseGroupId, $artist);
+            if ($match) {
+                return $match;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array{id: string, name: string, type: ?string, disambiguation: ?string, score: string}|null
+     */
+    private function artistMatchFromReleaseGroup(string $releaseGroupId, Span $artist): ?array
+    {
+        $response = $this->makeRateLimitedRequest("{$this->musicBrainzApiUrl}/release-group/{$releaseGroupId}", [
+            'fmt' => 'json',
+            'inc' => 'artist-credits',
+        ]);
+
+        if (!$response->successful()) {
+            Log::warning('Could not recover MusicBrainz artist from existing album', [
+                'artist' => $artist->name,
+                'release_group_id' => $releaseGroupId,
+                'status' => $response->status(),
+            ]);
+
+            return null;
+        }
+
+        $credits = $response->json()['artist-credit'] ?? [];
+        $candidates = [];
+        foreach ($credits as $credit) {
+            $mbArtist = $credit['artist'] ?? null;
+            if (!is_array($mbArtist) || empty($mbArtist['id'])) {
+                continue;
+            }
+            $candidates[] = [
+                'id' => $mbArtist['id'],
+                'name' => $mbArtist['name'] ?? ($credit['name'] ?? $artist->name),
+                'type' => $mbArtist['type'] ?? null,
+                'disambiguation' => $mbArtist['disambiguation'] ?? null,
+                'score' => '100',
+            ];
+        }
+
+        foreach ($candidates as $candidate) {
+            if ($this->artistNamesMatch($artist->name, $candidate['name'])) {
+                return $candidate;
+            }
+        }
+
+        return count($candidates) === 1 ? $candidates[0] : null;
+    }
+
+    private function artistNamesMatch(string $left, string $right): bool
+    {
+        return $this->normaliseArtistName($left) === $this->normaliseArtistName($right);
+    }
+
+    private function normaliseArtistName(string $name): string
+    {
+        $name = mb_strtolower(trim($name));
+        $name = str_replace(['’', '`'], "'", $name);
+
+        return preg_replace("/[^a-z0-9']+/u", '', $name) ?? $name;
+    }
+
+    private function generateUniqueSlug(string $name): string
+    {
+        $baseSlug = Str::slug($name);
+        $reservedNames = app(RouteReservationService::class)->getReservedRouteNames();
+        $slug = $baseSlug !== '' ? $baseSlug : 'span';
+        $counter = 1;
+
+        while (
+            Span::where('slug', $slug)->exists() ||
+            in_array(strtolower($slug), array_map('strtolower', $reservedNames), true)
+        ) {
+            $slug = $baseSlug . '-' . $counter++;
+        }
+
+        return $slug;
+    }
+
+    /**
+     * @param  array<string, mixed>  $releaseGroup
+     * @return array<string, mixed>
+     */
+    private function mapReleaseGroup(array $releaseGroup): array
+    {
+        $album = [
+            'id' => $releaseGroup['id'],
+            'title' => $releaseGroup['title'],
+            'type' => $releaseGroup['primary-type'] ?? null,
+            'primary-type' => $releaseGroup['primary-type'] ?? null,
+            'secondary-types' => $releaseGroup['secondary-types'] ?? [],
+            'disambiguation' => $releaseGroup['disambiguation'] ?? null,
+            'first_release_date' => $releaseGroup['first-release-date'] ?? null,
+        ];
+
+        if ($album['first_release_date'] && strtotime($album['first_release_date']) === strtotime('today')) {
+            Log::warning('MusicBrainz returned today\'s date for album', [
+                'album_title' => $album['title'],
+                'album_id' => $album['id'],
+                'first_release_date' => $album['first_release_date'],
+                'raw_release_group' => $releaseGroup,
+            ]);
+        }
+
+        return $album;
+    }
+
+    /**
+     * Update an existing track span in place from MusicBrainz. Does not create a new span.
+     *
+     * @return array{success: bool, skipped?: bool, message?: string}
+     */
+    public function enrichExistingTrack(Span $span, ?string $artistName = null, int $minScore = 80): array
+    {
+        if (!empty($span->metadata['musicbrainz']['id'])) {
+            return ['success' => true, 'skipped' => true, 'message' => 'Already has a MusicBrainz id'];
+        }
+
+        $results = $this->searchRecording($span->name, $artistName);
+        if ($results === []) {
+            return ['success' => false, 'message' => 'No MusicBrainz recording match'];
+        }
+
+        $best = $results[0];
+        $score = (int) ($best['score'] ?? 0);
+        if ($score < $minScore) {
+            return ['success' => false, 'message' => 'MusicBrainz recording score too low'];
+        }
+
+        $metadata = $span->metadata ?? [];
+        $metadata['musicbrainz'] = [
+            'id' => $best['id'],
+            'title' => $best['title'] ?? $span->name,
+            'score' => $score,
+            'lookup_date' => now()->toIso8601String(),
+        ];
+        $span->update(['metadata' => $metadata]);
+
+        return ['success' => true, 'skipped' => false];
     }
 } 
