@@ -8,12 +8,12 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * Generates storage/app/osm/london-major-locations.json by querying
- * the configured Nominatim instance. Uses the same path as OsmSpanImportService
+ * public Nominatim. Uses the same path as OsmSpanImportService
  * (config services.osm_import_data_path) so the file is ready for /admin/osmdata.
  */
 class OsmLondonJsonGeneratorService
 {
-    private const DELAY_MICROSECONDS = 250000; // 0.25s between requests
+    private const DELAY_MICROSECONDS = 1100000; // public Nominatim: ~1 req/s
 
     /**
      * Run generation and optionally write the file to the configured path.

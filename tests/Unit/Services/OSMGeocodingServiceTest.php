@@ -3,6 +3,8 @@
 namespace Tests\Unit\Services;
 
 use App\Services\OSMGeocodingService;
+use App\Services\PlaceGeocodeQueryBuilder;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class OSMGeocodingServiceTest extends TestCase
@@ -16,9 +18,92 @@ class OSMGeocodingServiceTest extends TestCase
     }
 
     /** @test */
+    public function it_finds_a_london_house_when_the_neighbourhood_only_returns_the_borough(): void
+    {
+        Http::fake(function ($request) {
+            $url = $request->url();
+            $city = (string) ($request['city'] ?? '');
+            $query = (string) ($request['q'] ?? '');
+
+            if (str_contains($url, '/reverse')) {
+                return Http::response([
+                    'lat' => '51.41639',
+                    'lon' => '-0.07889',
+                    'type' => 'administrative',
+                    'class' => 'boundary',
+                    'display_name' => 'London Borough of Bromley, Greater London, England, United Kingdom',
+                    'address' => ['city_district' => 'London Borough of Bromley', 'state' => 'England', 'country' => 'United Kingdom'],
+                ], 200);
+            }
+
+            if ($city === 'London' || str_contains($query, 'Belvedere Road, London')) {
+                return Http::response([[
+                    'place_id' => 99,
+                    'osm_type' => 'way',
+                    'osm_id' => 42,
+                    'lat' => '51.4164',
+                    'lon' => '-0.0789',
+                    'type' => 'house',
+                    'class' => 'building',
+                    'name' => '22',
+                    'display_name' => '22, Belvedere Road, Crystal Palace, London Borough of Bromley, Greater London, England, SE19 2HR, United Kingdom',
+                    'address' => [
+                        'house_number' => '22',
+                        'road' => 'Belvedere Road',
+                        'suburb' => 'Crystal Palace',
+                        'city' => 'London',
+                        'country' => 'United Kingdom',
+                    ],
+                    'importance' => 0.4,
+                ]], 200);
+            }
+
+            return Http::response([[
+                'place_id' => 1,
+                'osm_type' => 'relation',
+                'osm_id' => 51848,
+                'lat' => '51.3676',
+                'lon' => '0.0571',
+                'type' => 'administrative',
+                'class' => 'boundary',
+                'name' => 'London Borough of Bromley',
+                'display_name' => 'London Borough of Bromley, Greater London, England, United Kingdom',
+                'address' => ['city_district' => 'London Borough of Bromley'],
+                'extratags' => ['admin_level' => '8'],
+                'importance' => 0.6,
+            ]], 200);
+        });
+
+        $query = (new PlaceGeocodeQueryBuilder())->fromName(
+            "'Fossil Villa', 22 Belvedere Road, Anerley",
+            latitude: 51.41639,
+            longitude: -0.07889,
+            subtype: 'address',
+        );
+
+        $result = $this->service->evaluateQuery($query, true);
+
+        $this->assertSame('auto_accept', $result['decision']);
+        $this->assertStringContainsString('Belvedere Road', $result['match']['osm_data']['display_name']);
+        $this->assertStringNotContainsString(
+            'London Borough of Bromley, Greater London, England, United Kingdom',
+            $result['match']['osm_data']['display_name']
+        );
+    }
+
+    /** @test */
     public function it_can_be_instantiated()
     {
         $this->assertInstanceOf(OSMGeocodingService::class, $this->service);
+    }
+
+    /** @test */
+    public function it_uses_public_nominatim_by_default(): void
+    {
+        $this->assertSame(
+            'https://nominatim.openstreetmap.org',
+            rtrim((string) config('services.nominatim_base_url'), '/')
+        );
     }
 
     /** @test */

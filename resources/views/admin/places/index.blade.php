@@ -61,29 +61,57 @@
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <h5>Places Needing Attention ({{ $places->total() }})</h5>
                     <div>
-                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="selectAll()">Select All</button>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="deselectAll()">Deselect All</button>
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="select-all-btn">Select All</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="deselect-all-btn">Deselect All</button>
                     </div>
                 </div>
                 <div class="card-body">
+                    <p class="text-muted">
+                        Auto-geocode writes a location only when Nominatim has a high-confidence, unambiguous match
+                        (including nearby OSM road splits of the same street). Tick the option below to pause and choose when a place is ambiguous; otherwise anything that still needs a human stays on this list.
+                    </p>
                     @if($places->count() > 0)
                         <!-- Batch processing form -->
-                        <form action="{{ route('admin.places.batch-geocode') }}" method="POST" id="bulk-form">
+                        <form action="{{ route('admin.places.batch-geocode') }}" method="POST" id="bulk-form"
+                            data-queue-url="{{ route('admin.places.geocode-queue') }}"
+                            data-step-url="{{ route('admin.places.geocode-step', ['span' => '__SPAN__']) }}"
+                            data-choices-url="{{ route('admin.places.geocode-choices', ['span' => '__SPAN__']) }}"
+                            data-resolve-url="{{ route('admin.places.resolve-choice', ['span' => '__SPAN__']) }}">
                             @csrf
-                            <div class="mb-3">
+                            <div class="mb-3 d-flex flex-wrap gap-2 align-items-center">
                                 <button type="submit" class="btn btn-primary" id="bulk-submit" disabled>
-                                    <i class="bi bi-geo-alt"></i> Process Selected Places
+                                    <i class="bi bi-geo-alt"></i> Auto-geocode selected
                                 </button>
-                                <span class="text-muted ms-2" id="selected-count">0 selected</span>
+                                <button type="submit" class="btn btn-outline-primary" id="bulk-all-submit" name="geocode_all" value="1">
+                                    <i class="bi bi-cloud-upload"></i> Auto-geocode all unambiguous
+                                </button>
+                                <button type="button" class="btn btn-outline-danger d-none" id="cancel-geocode-btn">
+                                    <i class="bi bi-x-circle"></i> Cancel
+                                </button>
+                                <span class="text-muted" id="selected-count">0 selected</span>
+                            </div>
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="checkbox" id="pause-for-disambiguation">
+                                <label class="form-check-label" for="pause-for-disambiguation">
+                                    Pause and ask when a human choice is needed
+                                </label>
+                                <div class="form-text">
+                                    This stays in this tab. After you choose a match, geocoding carries on with the next place. Leave it unticked to run in the background and skip anything ambiguous.
+                                </div>
                             </div>
                         </form>
+
+                        <div class="progress mb-3 d-none" id="geocode-progress-wrap">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" id="geocode-progress-bar" role="progressbar" style="width: 0%">0%</div>
+                        </div>
+                        <div class="alert d-none" id="geocode-alert" role="alert"></div>
                         
                         <div class="table-responsive">
                             <table class="table">
                                 <thead>
                                     <tr>
                                         <th width="50">
-                                            <input type="checkbox" id="select-all" onchange="toggleAll(this)">
+                                            <input type="checkbox" id="select-all">
                                         </th>
                                         <th>Name</th>
                                         <th>State</th>
@@ -95,7 +123,7 @@
                                     @foreach($places as $place)
                                         <tr>
                                             <td>
-                                                <input type="checkbox" name="span_ids[]" value="{{ $place->id }}" class="place-checkbox" onchange="updateSelectedCount()" form="bulk-form">
+                                                <input type="checkbox" name="span_ids[]" value="{{ $place->id }}" class="place-checkbox" form="bulk-form">
                                             </td>
                                             <td>
                                                 <a href="{{ route('spans.show', $place) }}" class="text-decoration-none">
@@ -119,6 +147,9 @@
                                                         <i class="bi bi-geo-alt"></i> Import
                                                     </button>
                                                 </form>
+                                                <a href="{{ route('admin.places.disambiguate', $place) }}" class="btn btn-sm btn-outline-secondary">
+                                                    Disambiguate
+                                                </a>
                                             </td>
                                         </tr>
                                     @endforeach
@@ -199,38 +230,145 @@
     </div>
 </div>
 
+<div class="modal fade" id="place-disambiguation-modal" tabindex="-1" aria-labelledby="place-disambiguation-title" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="place-disambiguation-title">Choose a location</h5>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted" id="place-disambiguation-reason"></p>
+                <div class="input-group mb-3">
+                    <input type="text" class="form-control" id="place-disambiguation-query" placeholder="Add a town, region, or country">
+                    <button type="button" class="btn btn-outline-primary" id="place-disambiguation-search">Search again</button>
+                </div>
+                <div id="place-disambiguation-choices" class="list-group"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" id="place-disambiguation-skip">Skip this place</button>
+                <button type="button" class="btn btn-outline-danger" id="place-disambiguation-stop">Stop</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
-function toggleAll(checkbox) {
-    const placeCheckboxes = document.querySelectorAll('.place-checkbox');
-    placeCheckboxes.forEach(cb => {
-        cb.checked = checkbox.checked;
-    });
-    updateSelectedCount();
-}
+$(function () {
+    var statusUrl = @json(route('admin.places.unambiguous-geocode.status'));
+    var cancelUrl = @json(route('admin.places.unambiguous-geocode.cancel'));
+    var pollTimer = null;
 
-function selectAll() {
-    const placeCheckboxes = document.querySelectorAll('.place-checkbox');
-    placeCheckboxes.forEach(cb => {
-        cb.checked = true;
-    });
-    document.getElementById('select-all').checked = true;
-    updateSelectedCount();
-}
+    function selectedCheckboxes() {
+        return $('.place-checkbox:checked');
+    }
 
-function deselectAll() {
-    const placeCheckboxes = document.querySelectorAll('.place-checkbox');
-    placeCheckboxes.forEach(cb => {
-        cb.checked = false;
-    });
-    document.getElementById('select-all').checked = false;
-    updateSelectedCount();
-}
+    function updateSelectedCount() {
+        var count = selectedCheckboxes().length;
+        $('#selected-count').text(count + ' selected');
+        $('#bulk-submit').prop('disabled', count === 0);
+        $('#select-all').prop('checked', count > 0 && count === $('.place-checkbox').length);
+    }
 
-function updateSelectedCount() {
-    const selectedCheckboxes = document.querySelectorAll('.place-checkbox:checked');
-    const count = selectedCheckboxes.length;
-    document.getElementById('selected-count').textContent = count + ' selected';
-    document.getElementById('bulk-submit').disabled = count === 0;
-}
+    function setChecked(value) {
+        $('.place-checkbox').prop('checked', value);
+        updateSelectedCount();
+    }
+
+    function showAlert(message, type) {
+        $('#geocode-alert')
+            .removeClass('d-none alert-success alert-danger alert-info alert-warning')
+            .addClass('alert-' + type)
+            .text(message);
+    }
+
+    function renderProgress(progress) {
+        if (window.placeGeocodeInteractive || !progress) {
+            return;
+        }
+        var percent = progress.progress_percentage || 0;
+        var running = progress.status === 'running';
+        $('#geocode-progress-wrap').removeClass('d-none');
+        $('#geocode-progress-bar')
+            .toggleClass('progress-bar-animated', running)
+            .css('width', percent + '%')
+            .text(percent + '%');
+        var needsHuman = progress.needs_disambiguation || 0;
+        var tally = 'Geocoded ' + (progress.created || 0)
+            + ', ' + needsHuman + ' need a human'
+            + (progress.no_match ? ', ' + progress.no_match + ' unmatched' : '');
+        if (running && progress.current_item) {
+            tally += '. Now: ' + progress.current_item;
+        }
+        if (running) {
+            showAlert(tally, 'info');
+            $('#cancel-geocode-btn').removeClass('d-none');
+        } else if (progress.status === 'completed') {
+            showAlert('Finished. Nothing is running. ' + tally + '.', 'success');
+            $('#cancel-geocode-btn').addClass('d-none');
+        } else if (progress.status === 'cancelled') {
+            showAlert('Stopped. Nothing is running. ' + tally + '.', 'warning');
+            $('#cancel-geocode-btn').addClass('d-none');
+        } else if (progress.status === 'failed') {
+            showAlert(progress.error || 'Geocoding job failed. Nothing is running.', 'danger');
+            $('#cancel-geocode-btn').addClass('d-none');
+        }
+    }
+
+    function stopPolling() {
+        if (pollTimer) {
+            clearInterval(pollTimer);
+            pollTimer = null;
+        }
+    }
+
+    function pollStatus() {
+        $.getJSON(statusUrl).done(function (data) {
+            if (!data.progress) {
+                return;
+            }
+            renderProgress(data.progress);
+            if (!data.running) {
+                stopPolling();
+            }
+        });
+    }
+
+    function startPolling() {
+        stopPolling();
+        pollStatus();
+        pollTimer = setInterval(pollStatus, 2000);
+    }
+
+    $('#select-all').on('change', function () {
+        setChecked($(this).prop('checked'));
+    });
+    $('#select-all-btn').on('click', function () {
+        setChecked(true);
+    });
+    $('#deselect-all-btn').on('click', function () {
+        setChecked(false);
+    });
+    $(document).on('change', '.place-checkbox', updateSelectedCount);
+
+    $('#bulk-all-submit').on('click', function () {
+        $('.place-checkbox').prop('checked', false);
+        updateSelectedCount();
+    });
+
+    $('#cancel-geocode-btn').on('click', function () {
+        if (window.placeGeocodeInteractive) {
+            $(document).trigger('place-geocode-stop');
+            return;
+        }
+        $.post(cancelUrl, {
+            _token: $('meta[name="csrf-token"]').attr('content')
+        }).done(function (data) {
+            showAlert(data.message || 'Cancellation requested.', 'warning');
+        });
+    });
+
+    updateSelectedCount();
+    startPolling();
+});
 </script>
 @endsection

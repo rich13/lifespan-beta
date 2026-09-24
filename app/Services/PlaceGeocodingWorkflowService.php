@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Span;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use App\Services\PlaceLocationService;
 use App\Services\WikidataPlaceHierarchyFetcher;
@@ -46,24 +47,184 @@ class PlaceGeocodingWorkflowService
     }
 
     /**
-     * Resolve a place span by geocoding it
+     * Resolve a place span by geocoding it when the match is unambiguous.
      */
     public function resolvePlace(Span $span): bool
     {
+        return $this->attemptAutoGeocode($span)['decision'] === 'geocoded';
+    }
+
+    /**
+     * Try to geocode a place without human intervention.
+     *
+     * @return array{decision: string, reason: string, span: Span|null, candidate_count: int}
+     */
+    public function attemptAutoGeocode(Span $span): array
+    {
         if ($span->type_id !== 'place') {
-            return false;
+            return [
+                'decision' => 'skipped',
+                'reason' => 'Not a place span',
+                'span' => $span,
+                'candidate_count' => 0,
+            ];
         }
 
         try {
-            // Extract coordinates from span metadata if available
-            $coordinates = $span->getCoordinates();
-            $latitude = $coordinates['latitude'] ?? null;
-            $longitude = $coordinates['longitude'] ?? null;
-            
-            // Try to geocode the place with coordinate context if available
-            $osmData = $this->osmService->geocode($span->name, $latitude, $longitude);
-            
-            if ($osmData) {
+            $evaluation = $this->osmService->evaluateSpan($span);
+            if ($evaluation['decision'] !== 'auto_accept') {
+                $decision = $evaluation['decision'] === 'skip' ? 'skipped' : $evaluation['decision'];
+
+                return [
+                    'decision' => $decision,
+                    'reason' => $evaluation['reason'],
+                    'span' => $span,
+                    'candidate_count' => $evaluation['candidate_count'],
+                ];
+            }
+
+            $applied = $this->applyAcceptedOsmData($span, $evaluation['match']['osm_data']);
+
+            return [
+                'decision' => $applied ? 'geocoded' : 'error',
+                'reason' => $applied ? 'Unambiguous match' : 'Failed to save OSM data',
+                'span' => $span,
+                'candidate_count' => $evaluation['candidate_count'],
+            ];
+        } catch (\Exception $e) {
+            Log::error('Error geocoding place', [
+                'span_id' => $span->id,
+                'name' => $span->name,
+                'error' => $e->getMessage(),
+            ]);
+
+            return [
+                'decision' => 'error',
+                'reason' => $e->getMessage(),
+                'span' => $span,
+                'candidate_count' => 0,
+            ];
+        }
+    }
+
+    /**
+     * Try an unambiguous geocode. When a human is needed, remember the choices for a later selection.
+     *
+     * @return array{decision: string, reason: string, choices: list<array<string, mixed>>}
+     */
+    public function geocodeInteractively(Span $span): array
+    {
+        if ($span->type_id !== 'place') {
+            return [
+                'decision' => 'skipped',
+                'reason' => 'Not a place span',
+                'choices' => [],
+            ];
+        }
+
+        try {
+            $evaluation = $this->osmService->evaluateSpan($span, true);
+            if ($evaluation['decision'] === 'auto_accept') {
+                $applied = $this->applyAcceptedOsmData($span, $evaluation['match']['osm_data']);
+
+                return [
+                    'decision' => $applied ? 'geocoded' : 'error',
+                    'reason' => $applied ? 'Unambiguous match' : 'Failed to save OSM data',
+                    'choices' => [],
+                ];
+            }
+
+            if ($evaluation['decision'] === 'needs_disambiguation') {
+                $this->rememberChoices($span, $evaluation['raw_choices'] ?? []);
+            }
+
+            $decision = $evaluation['decision'] === 'skip' ? 'skipped' : $evaluation['decision'];
+
+            return [
+                'decision' => $decision,
+                'reason' => $evaluation['reason'],
+                'choices' => $evaluation['choices'] ?? [],
+            ];
+        } catch (\Exception $e) {
+            Log::error('Error geocoding place', [
+                'span_id' => $span->id,
+                'name' => $span->name,
+                'error' => $e->getMessage(),
+            ]);
+
+            return [
+                'decision' => 'error',
+                'reason' => $e->getMessage(),
+                'choices' => [],
+            ];
+        }
+    }
+
+    /**
+     * Replace the remembered choices with a fresh search.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function searchChoices(Span $span, string $query): array
+    {
+        $found = $this->osmService->choicesForSpan($span, $query, 8);
+        $this->rememberChoices($span, $found['raw_choices']);
+
+        return $found['choices'];
+    }
+
+    /**
+     * Save a previously offered choice. The index refers to the remembered list.
+     */
+    public function resolveChoice(Span $span, int $index): bool
+    {
+        $rawChoices = Cache::get($this->choiceCacheKey($span->id), []);
+        $item = is_array($rawChoices) ? ($rawChoices[$index] ?? null) : null;
+        if (! is_array($item) || ! isset($item['raw']) || ! is_array($item['raw'])) {
+            return false;
+        }
+
+        $osmData = $this->osmService->osmDataFromScored($item);
+
+        return $this->resolveWithMatch($span, $osmData);
+    }
+
+    /**
+     * @param  list<array{raw: array<string, mixed>, score: float, reasons: list<string>}>  $rawChoices
+     */
+    private function rememberChoices(Span $span, array $rawChoices): void
+    {
+        Cache::put($this->choiceCacheKey($span->id), array_values($rawChoices), now()->addMinutes(20));
+    }
+
+    private function choiceCacheKey(string $spanId): string
+    {
+        return 'place_geocode_choices:'.$spanId;
+    }
+
+    /**
+     * Place IDs that still need coordinates or OSM data.
+     *
+     * @return list<string>
+     */
+    public function idsNeedingGeocoding(): array
+    {
+        return Span::where('type_id', 'place')
+            ->where(function ($query) {
+                $query->whereRaw("metadata->>'coordinates' IS NULL")
+                    ->orWhereRaw("metadata->>'osm_data' IS NULL");
+            })
+            ->orderBy('name')
+            ->pluck('id')
+            ->all();
+    }
+
+    /**
+     * Persist an already auto-accepted Nominatim match.
+     */
+    private function applyAcceptedOsmData(Span $span, array $osmData): bool
+    {
+        try {
                 // If we got a node but this is an administrative area, try to find the relation
                 $osmType = $osmData['osm_type'] ?? null;
                 if ($osmType === 'node') {
@@ -166,24 +327,15 @@ class PlaceGeocodingWorkflowService
                     'new_name' => $span->name,
                     'osm_place_id' => $osmData['place_id']
                 ]);
-                
+
                 return true;
-            } else {
-                Log::warning('Could not geocode place', [
-                    'span_id' => $span->id,
-                    'name' => $span->name
-                ]);
-                
-                return false;
-            }
-            
         } catch (\Exception $e) {
             Log::error('Error geocoding place', [
                 'span_id' => $span->id,
                 'name' => $span->name,
                 'error' => $e->getMessage()
             ]);
-            
+
             return false;
         }
     }
@@ -197,12 +349,17 @@ class PlaceGeocodingWorkflowService
             return [];
         }
 
-        // Extract coordinates from span metadata if available
         $coordinates = $span->getCoordinates();
         $latitude = $coordinates['latitude'] ?? null;
         $longitude = $coordinates['longitude'] ?? null;
 
-        return $this->osmService->search($span->name, $limit, $latitude, $longitude);
+        return $this->osmService->search(
+            $span->name,
+            $limit,
+            $latitude,
+            $longitude,
+            $span->metadata['subtype'] ?? $span->subtype ?? null
+        );
     }
 
     /**
@@ -469,7 +626,7 @@ class PlaceGeocodingWorkflowService
                         'admin_level' => $adminLevel,
                         'triggered_by_place' => $place->name
                     ]);
-                    $this->createAdministrativeSpan($levelName, $adminLevel, $level, $hierarchy, $depth + 1);
+                    $this->createAdministrativeSpan($levelName, $adminLevel, $level, $hierarchy, $place, $depth + 1);
                 }
             }
         }
@@ -536,7 +693,7 @@ class PlaceGeocodingWorkflowService
      * Note: This method is only used when auto-creation of administrative spans is enabled
      * (controlled by $autoCreateAdministrativeSpans configuration)
      */
-    private function createAdministrativeSpan(string $name, int $adminLevel, array $levelData, array $originalHierarchy = [], int $depth = 0): ?Span
+    private function createAdministrativeSpan(string $name, int $adminLevel, array $levelData, array $originalHierarchy, Span $origin, int $depth = 0): ?Span
     {
         try {
             // Use the level data from the original hierarchy to build OSM data
@@ -576,8 +733,7 @@ class PlaceGeocodingWorkflowService
             $subtype = $levelToSubtype[$adminLevel] ?? null;
 
             // Create the span with proper parameters for timeless place spans
-            $span = Span::create([
-                'id' => \Illuminate\Support\Str::uuid(),
+            $span = app(ImprovementCreationPolicy::class)->createChild($origin, [
                 'name' => $name,
                 'type_id' => 'place',
                 'state' => 'complete',
@@ -595,6 +751,10 @@ class PlaceGeocodingWorkflowService
                     'timeless' => true // Explicitly mark as timeless
                 ]
             ]);
+
+            if (! $span) {
+                return null;
+            }
 
             // Generate hierarchical slug using the span's method
             $span->slug = $span->generateHierarchicalSlug();
@@ -620,49 +780,99 @@ class PlaceGeocodingWorkflowService
     }
 
     /**
-     * Batch process multiple places for geocoding
+     * Batch process places, writing OSM data only for unambiguous matches.
+     *
+     * @param  list<string>  $spanIds
+     * @return array{
+     *     geocoded: int,
+     *     needs_disambiguation: int,
+     *     no_match: int,
+     *     skipped: int,
+     *     errors: int,
+     *     successful_spans: list<Span>,
+     *     needs_disambiguation_spans: list<Span>,
+     *     error_details: list<array{span_id: string, error: string}>
+     * }
      */
     public function batchProcess(array $spanIds): array
     {
         $results = [
-            'success' => 0,
-            'failed' => 0,
+            'geocoded' => 0,
+            'needs_disambiguation' => 0,
+            'no_match' => 0,
             'skipped' => 0,
-            'errors' => [],
-            'successful_spans' => [] // Track successful spans for logging
+            'errors' => 0,
+            'successful_spans' => [],
+            'needs_disambiguation_spans' => [],
+            'error_details' => [],
         ];
 
-        foreach ($spanIds as $spanId) {
+        foreach (array_values($spanIds) as $index => $spanId) {
+            if ($index > 0) {
+                $this->pauseForNominatimRateLimit();
+            }
+
             try {
                 $span = Span::find($spanId);
-                
-                if (!$span) {
+
+                if (!$span || $span->type_id !== 'place') {
                     $results['skipped']++;
                     continue;
                 }
 
-                if ($span->type_id !== 'place') {
-                    $results['skipped']++;
-                    continue;
-                }
-
-                if ($this->resolvePlace($span)) {
-                    $results['success']++;
-                    $results['successful_spans'][] = $span; // Track successful spans
-                } else {
-                    $results['failed']++;
-                }
-
+                $outcome = $this->attemptAutoGeocode($span);
+                match ($outcome['decision']) {
+                    'geocoded' => $this->recordGeocoded($results, $span),
+                    'needs_disambiguation' => $this->recordNeedsDisambiguation($results, $span),
+                    'no_match' => $results['no_match']++,
+                    'error' => $this->recordBatchError($results, $spanId, $outcome['reason']),
+                    default => $results['skipped']++,
+                };
             } catch (\Exception $e) {
-                $results['failed']++;
-                $results['errors'][] = [
-                    'span_id' => $spanId,
-                    'error' => $e->getMessage()
-                ];
+                $this->recordBatchError($results, $spanId, $e->getMessage());
             }
         }
 
         return $results;
+    }
+
+    /**
+     * @param array<string, mixed> $results
+     */
+    private function recordGeocoded(array &$results, Span $span): void
+    {
+        $results['geocoded']++;
+        $results['successful_spans'][] = $span;
+    }
+
+    /**
+     * @param array<string, mixed> $results
+     */
+    private function recordNeedsDisambiguation(array &$results, Span $span): void
+    {
+        $results['needs_disambiguation']++;
+        $results['needs_disambiguation_spans'][] = $span;
+    }
+
+    /**
+     * @param array<string, mixed> $results
+     */
+    private function recordBatchError(array &$results, string $spanId, string $error): void
+    {
+        $results['errors']++;
+        $results['error_details'][] = [
+            'span_id' => $spanId,
+            'error' => $error,
+        ];
+    }
+
+    private function pauseForNominatimRateLimit(): void
+    {
+        if (app()->environment('testing')) {
+            return;
+        }
+
+        usleep(1100000);
     }
 
 

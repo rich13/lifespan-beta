@@ -47,6 +47,58 @@ class PlaceRegeocodeTest extends TestCase
         $response->assertSee('Updating...', false);
         $response->assertSee('setRegeocodeSearchLoading', false);
         $response->assertSee('setRegeocodeTriggerLoading', false);
+        $response->assertSee('/admin/places/' . $place->id . '/search-matches', false);
+        $response->assertDontSee("url: 'https://nominatim.openstreetmap.org/search'", false);
+    }
+
+    public function test_admin_search_matches_returns_scored_candidates(): void
+    {
+        $admin = $this->createUserWithoutPersonalSpan(['is_admin' => true]);
+        $place = $this->makePublicPlace([
+            'name' => '1 Avondale Road, N13 Enfield',
+            'metadata' => [
+                'subtype' => 'address',
+                'coordinates' => [
+                    'latitude' => 51.6279,
+                    'longitude' => -0.1155,
+                ],
+            ],
+        ]);
+
+        Http::fake([
+            '*nominatim*/search*' => Http::response([
+                [
+                    'osm_type' => 'node',
+                    'osm_id' => 1,
+                    'lat' => '51.6279',
+                    'lon' => '-0.1155',
+                    'type' => 'post_box',
+                    'class' => 'amenity',
+                    'name' => 'N13 27',
+                    'display_name' => 'N13 27, Bourne Hill, United Kingdom',
+                ],
+                [
+                    'osm_type' => 'way',
+                    'osm_id' => 2,
+                    'lat' => '51.6274',
+                    'lon' => '-0.1090',
+                    'type' => 'house',
+                    'class' => 'building',
+                    'name' => '1',
+                    'display_name' => '1, Avondale Road, Palmers Green, Enfield, United Kingdom',
+                    'address' => ['house_number' => '1', 'road' => 'Avondale Road'],
+                    'geojson' => ['type' => 'Polygon', 'coordinates' => []],
+                ],
+            ], 200),
+        ]);
+
+        $response = $this->actingAs($admin)
+            ->getJson(route('admin.places.search-matches', $place) . '?query=' . urlencode($place->name));
+
+        $response->assertOk();
+        $response->assertJsonPath('hints.street', 'Avondale Road');
+        $response->assertJsonPath('hints.locality', 'Enfield');
+        $response->assertJsonPath('candidates.0.type', 'house');
     }
 
     public function test_non_admin_place_page_hides_regeocode_controls(): void

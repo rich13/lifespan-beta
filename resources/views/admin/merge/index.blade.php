@@ -17,6 +17,120 @@
                 </a>
             </div>
 
+            {{-- Same OSM place: differently named places that share osm_type + osm_id --}}
+            <div class="row">
+                <div class="col-12 mb-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="bi bi-geo-alt"></i>
+                                Same OSM place
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted">Place spans that share the same OpenStreetMap identity (same <code>osm_type</code> and <code>osm_id</code>) even when their names differ, e.g. “Hackney” and “London Borough of Hackney”. Review, keep one, and merge the other. Names are left as they are; the kept span’s name is unchanged.</p>
+
+                            @if(isset($osmDuplicateGroups) && $osmDuplicateGroups->isNotEmpty())
+                                <p class="mb-3"><strong>{{ $osmDuplicateGroups->count() }}</strong> group(s) of places with the same OSM identity.</p>
+
+                                <div class="row">
+                                    @foreach($osmDuplicateGroups as $group)
+                                        <div class="col-lg-6 mb-3">
+                                            <div class="card osm-duplicate-group h-100">
+                                                <div class="card-header py-2">
+                                                    <strong>{{ $group['canonical_name'] ?: ($group['osm_type'] . ' ' . $group['osm_id']) }}</strong>
+                                                    <span class="badge bg-secondary ms-2">{{ $group['osm_type'] }} {{ $group['osm_id'] }}</span>
+                                                    <span class="text-muted ms-2">({{ $group['spans']->count() }} spans)</span>
+                                                    <a href="{{ $group['osm_url'] }}" class="small ms-2" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>
+                                                </div>
+                                                <div class="card-body">
+                                                    @if($group['spans']->count() >= 2)
+                                                        @php
+                                                            $spanIds = $group['spans']->pluck('id')->values()->all();
+                                                            $twoSpansOnly = $group['spans']->count() === 2;
+                                                        @endphp
+                                                        <form class="merge-form" action="{{ route('admin.merge.merge-spans') }}" method="POST" data-two-spans="{{ $twoSpansOnly ? '1' : '0' }}" data-span-ids="{{ json_encode($spanIds) }}">
+                                                            @csrf
+                                                            <p class="small text-muted mb-2">Choose which span to keep; the other will be merged into it. We suggest keeping the one with more connections.</p>
+                                                            <ul class="list-group list-group-flush mb-3">
+                                                                @foreach($group['spans'] as $span)
+                                                                    @php
+                                                                        $connCount = $span->connections_as_subject_count + $span->connections_as_object_count;
+                                                                        $isSuggestedKeep = $span->id === $group['suggested_target_span_id'];
+                                                                        $osmCanonical = $span->getOsmData()['canonical_name'] ?? null;
+                                                                        $subtype = $span->getMeta('subtype') ?? '';
+                                                                    @endphp
+                                                                    <li class="list-group-item py-2">
+                                                                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                                                            <label class="mb-0 d-flex align-items-center gap-2 flex-grow-1">
+                                                                                <input type="radio" name="target_span_id" value="{{ $span->id }}" {{ $isSuggestedKeep ? 'checked' : '' }} required>
+                                                                                <span>
+                                                                                    <strong>{{ $span->name ?: 'Place (unnamed)' }}</strong>
+                                                                                    <span class="text-muted ms-2">{{ $span->slug }}</span>
+                                                                                    <span class="text-muted ms-2">{{ $span->state }}</span>
+                                                                                    @if($subtype !== '')
+                                                                                        <span class="badge bg-light text-dark border ms-1">{{ $subtype }}</span>
+                                                                                    @endif
+                                                                                    <span class="text-muted ms-2">({{ $connCount }} conn.)</span>
+                                                                                    @if($isSuggestedKeep)
+                                                                                        <span class="badge bg-success ms-1">Suggested keep</span>
+                                                                                    @endif
+                                                                                </span>
+                                                                            </label>
+                                                                            <a href="{{ route('spans.show', $span) }}" class="btn btn-sm btn-outline-primary" target="_blank">
+                                                                                <i class="bi bi-eye"></i> View
+                                                                            </a>
+                                                                        </div>
+                                                                        @if($osmCanonical && $osmCanonical !== $span->name)
+                                                                            <div class="small text-muted mt-1 ms-4">OSM name: {{ $osmCanonical }}</div>
+                                                                        @endif
+                                                                        @if($connCount > 0)
+                                                                            <div class="small text-muted mt-1 ms-4">
+                                                                                @foreach($span->connectionsAsSubject as $conn)
+                                                                                    <span class="d-block">{{ $conn->type_id }} → {{ $conn->child->name ?? $conn->child->slug ?? '—' }}</span>
+                                                                                @endforeach
+                                                                                @foreach($span->connectionsAsObject as $conn)
+                                                                                    <span class="d-block">{{ $conn->parent->name ?? $conn->parent->slug ?? '—' }} → {{ $conn->type_id }}</span>
+                                                                                @endforeach
+                                                                            </div>
+                                                                        @endif
+                                                                    </li>
+                                                                @endforeach
+                                                            </ul>
+                                                            @if($twoSpansOnly)
+                                                                <input type="hidden" name="source_span_id" value="{{ $group['suggested_source_span_id'] }}" class="exact-merge-source-hidden">
+                                                            @else
+                                                                <label class="form-label small mb-1"><strong>Which span to merge into the kept one?</strong></label>
+                                                                <select name="source_span_id" class="form-select form-select-sm mb-2 exact-merge-source-select" required>
+                                                                    @foreach($group['spans'] as $span)
+                                                                        <option value="{{ $span->id }}" {{ $span->id === $group['suggested_source_span_id'] ? 'selected' : '' }}>
+                                                                            {{ $span->name }} — {{ $span->slug }} ({{ $span->connections_as_subject_count + $span->connections_as_object_count }} conn.)
+                                                                        </option>
+                                                                    @endforeach
+                                                                </select>
+                                                            @endif
+                                                            <button type="submit" class="btn btn-warning btn-sm merge-button">
+                                                                <i class="bi bi-arrow-merge"></i> Merge
+                                                            </button>
+                                                            <div class="merge-result mt-2" style="display: none;"></div>
+                                                        </form>
+                                                    @endif
+                                                </div>
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            @else
+                                <div class="alert alert-success mb-0">
+                                    <i class="bi bi-check-circle"></i>
+                                    No place spans share the same OSM identity.
+                                </div>
+                            @endif
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="row">
                 {{-- Column 1: Find and Merge Similar Spans (user-driven search) --}}
                 <div class="col-lg-4 mb-4">

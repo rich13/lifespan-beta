@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * Service for geocoding place names using OpenStreetMap's Nominatim API.
- * Set NOMINATIM_BASE_URL in .env (e.g. http://nominatim:8080) to use a local instance.
+ * Uses the public instance so local Docker and production behave the same.
  */
 class OSMGeocodingService
 {
@@ -17,6 +17,14 @@ class OSMGeocodingService
     private const CACHE_TTL = 86400; // 24 hours
     private const MAX_RETRIES = 3;
     private const RETRY_DELAY = 1; // seconds
+
+    public function __construct(
+        private ?PlaceGeocodeQueryBuilder $queryBuilder = null,
+        private ?PlaceGeocodeCandidateScorer $candidateScorer = null,
+    ) {
+        $this->queryBuilder ??= new PlaceGeocodeQueryBuilder();
+        $this->candidateScorer ??= new PlaceGeocodeCandidateScorer();
+    }
 
     /** Max coordinate count for boundary_geojson we store (avoids memory exhaustion for huge polygons e.g. USA) */
     private const MAX_BOUNDARY_POINTS = 8000;
@@ -37,87 +45,256 @@ class OSMGeocodingService
     /**
      * Geocode a place name and return OSM data
      */
-    public function geocode(string $placeName, ?float $latitude = null, ?float $longitude = null): ?array
+    public function geocode(string $placeName, ?float $latitude = null, ?float $longitude = null, ?string $subtype = null): ?array
     {
-        // Skip continents as they're too broad for meaningful geocoding
-        $continents = [
-            'Africa', 'Asia', 'Europe', 'North America', 'South America', 
-            'Antarctica', 'Australia', 'Oceania'
+        $match = $this->findBestMatch($this->queryBuilder->fromName($placeName, $latitude, $longitude, $subtype));
+
+        return $match['osm_data'] ?? null;
+    }
+
+    /**
+     * Geocode using hints from a place span (subtype, coordinates, cleaned name).
+     *
+     * @return array{osm_data: array, score: float, auto_accepted: bool}|null
+     */
+    public function findBestMatchForSpan(\App\Models\Span $span): ?array
+    {
+        return $this->findBestMatch($this->queryBuilder->fromSpan($span));
+    }
+
+    /**
+     * Search and score candidates for a place span (for disambiguation UIs).
+     *
+     * @return array{query: PlaceGeocodeQuery, candidates: list<array<string, mixed>>}
+     */
+    public function searchForSpan(\App\Models\Span $span, ?string $overrideName = null, int $limit = 10): array
+    {
+        $query = $this->queryBuilder->fromSpan($span, $overrideName);
+
+        return [
+            'query' => $query,
+            'candidates' => $this->searchScored($query, $limit),
         ];
-        
-        if (in_array(trim($placeName), $continents)) {
-            Log::info('Skipping continent geocoding', [
-                'place_name' => $placeName,
-                'reason' => 'Continents are too broad for meaningful hierarchy'
+    }
+
+    /**
+     * Classify a place query: auto-accept, needs a human, skip, or no match.
+     *
+     * @return array{
+     *     decision: 'auto_accept'|'needs_disambiguation'|'no_match'|'skip'|'error',
+     *     reason: string,
+     *     match: array{osm_data: array, score: float, auto_accepted: bool}|null,
+     *     candidate_count: int,
+     *     choices?: list<array<string, mixed>>,
+     *     raw_choices?: list<array{raw: array<string, mixed>, score: float, reasons: list<string>}>
+     * }
+     */
+    public function evaluateQuery(PlaceGeocodeQuery $query, bool $keepChoices = false): array
+    {
+        if ($query->shouldSkip) {
+            Log::info('Skipping geocoding', [
+                'place_name' => $query->originalName,
+                'reason' => $query->skipReason,
             ]);
-            return null;
+
+            return [
+                'decision' => 'skip',
+                'reason' => $query->skipReason,
+                'match' => null,
+                'candidate_count' => 0,
+            ];
         }
-        
-        $cacheKey = 'osm_geocode_' . md5(strtolower(trim($placeName)));
-        if ($latitude !== null && $longitude !== null) {
-            $cacheKey .= '_' . round($latitude, 4) . '_' . round($longitude, 4);
-        }
-        
-        // Check cache first
+
+        $cacheKey = $this->matchCacheKey($query);
         if (Cache::has($cacheKey)) {
-            return Cache::get($cacheKey);
+            $cached = Cache::get($cacheKey);
+            if (is_array($cached) && isset($cached['osm_data'])) {
+                return [
+                    'decision' => 'auto_accept',
+                    'reason' => 'Unambiguous match',
+                    'match' => $cached,
+                    'candidate_count' => 1,
+                ];
+            }
         }
 
         try {
-            // Request multiple results so we can prefer a boundary (has admin_level) over a node
-            $response = $this->makeNominatimRequest($placeName, 10, $latitude, $longitude);
-            
-            if (empty($response)) {
-                // If no results, try progressive fallback searches
-                $fallbackResult = $this->tryFallbackSearches($placeName, $latitude, $longitude);
-                if ($fallbackResult) {
-                    // Cache the fallback result
-                    Cache::put($cacheKey, $fallbackResult, self::CACHE_TTL);
-                    return $fallbackResult;
-                }
-                Log::info('OSM geocode returned no results', [
-                    'place_name' => $placeName,
-                    'latitude' => $latitude,
-                    'longitude' => $longitude,
-                ]);
-                return null;
+            $scored = $this->fetchScoredCandidates($query, 10);
+            if ($scored === []) {
+                return [
+                    'decision' => 'no_match',
+                    'reason' => 'No Nominatim results',
+                    'match' => null,
+                    'candidate_count' => 0,
+                ];
             }
 
-            // Prefer first result that has admin_level (a boundary); otherwise use first result
-            $result = $response[0];
-            foreach ($response as $candidate) {
-                if (isset($candidate['extratags']['admin_level'])) {
-                    $result = $candidate;
-                    break;
-                }
-            }
-            
-            $osmData = $this->formatOsmData($result);
-            
-            // Also check if the result is a continent and skip it
-            if (isset($osmData['place_type']) && $osmData['place_type'] === 'continent') {
-                Log::info('Skipping continent result from geocoding', [
-                    'place_name' => $placeName,
-                    'result_type' => 'continent',
-                    'reason' => 'Continents are too broad for meaningful hierarchy'
+            $accepted = $this->candidateScorer->pickAutoAccept($scored, $query);
+            if (!$accepted) {
+                $reason = count($scored) > 1
+                    ? 'Multiple plausible matches'
+                    : 'Best match is below auto-accept confidence';
+
+                Log::info('OSM geocode did not auto-accept a result', [
+                    'place_name' => $query->originalName,
+                    'cleaned' => $query->cleanedName,
+                    'candidate_count' => count($scored),
+                    'top_score' => $scored[0]['score'] ?? null,
+                    'top_type' => $scored[0]['raw']['type'] ?? null,
+                    'reason' => $reason,
                 ]);
-                return null;
+
+                $result = [
+                    'decision' => 'needs_disambiguation',
+                    'reason' => $reason,
+                    'match' => null,
+                    'candidate_count' => count($scored),
+                    'choices' => $this->lightweightChoices($scored),
+                ];
+                if ($keepChoices) {
+                    $result['raw_choices'] = $scored;
+                }
+
+                return $result;
             }
-            
-            // Cache the result
-            Cache::put($cacheKey, $osmData, self::CACHE_TTL);
-            
-            return $osmData;
-            
+
+            $osmData = $this->formatOsmData($accepted['raw']);
+            if (($osmData['place_type'] ?? null) === 'continent') {
+                return [
+                    'decision' => 'skip',
+                    'reason' => 'Continents and oceans are too broad to geocode usefully',
+                    'match' => null,
+                    'candidate_count' => count($scored),
+                ];
+            }
+
+            $match = [
+                'osm_data' => $osmData,
+                'score' => $accepted['score'],
+                'auto_accepted' => true,
+            ];
+            Cache::put($cacheKey, $match, self::CACHE_TTL);
+
+            return [
+                'decision' => 'auto_accept',
+                'reason' => 'Unambiguous match',
+                'match' => $match,
+                'candidate_count' => count($scored),
+            ];
         } catch (\Exception $e) {
-            Log::error('OSM geocoding failed for: ' . $placeName, [
+            Log::error('OSM geocoding failed for: ' . $query->originalName, [
                 'error' => $e->getMessage(),
-                'place_name' => $placeName,
-                'trace' => $e->getTraceAsString(),
+                'place_name' => $query->originalName,
             ]);
-            
-            return null;
+
+            return [
+                'decision' => 'error',
+                'reason' => $e->getMessage(),
+                'match' => null,
+                'candidate_count' => 0,
+            ];
         }
+    }
+
+    /**
+     * @return array{osm_data: array, score: float, auto_accepted: bool}|null
+     */
+    public function findBestMatch(PlaceGeocodeQuery $query): ?array
+    {
+        $evaluation = $this->evaluateQuery($query);
+
+        return $evaluation['decision'] === 'auto_accept' ? $evaluation['match'] : null;
+    }
+
+    /**
+     * @return array{
+     *     decision: 'auto_accept'|'needs_disambiguation'|'no_match'|'skip'|'error',
+     *     reason: string,
+     *     match: array{osm_data: array, score: float, auto_accepted: bool}|null,
+     *     candidate_count: int
+     * }
+     */
+    public function evaluateSpan(\App\Models\Span $span, bool $keepChoices = false): array
+    {
+        return $this->evaluateQuery($this->queryBuilder->fromSpan($span), $keepChoices);
+    }
+
+    /**
+     * Scored Nominatim choices for a place, including the raw rows so one can be saved later.
+     *
+     * @return array{choices: list<array<string, mixed>>, raw_choices: list<array{raw: array<string, mixed>, score: float, reasons: list<string>}>}
+     */
+    public function choicesForSpan(\App\Models\Span $span, ?string $overrideName = null, int $limit = 8): array
+    {
+        $query = $this->queryBuilder->fromSpan($span, $overrideName);
+        $scored = $query->shouldSkip ? [] : $this->fetchScoredCandidates($query, $limit);
+
+        return [
+            'choices' => $this->lightweightChoices($scored),
+            'raw_choices' => $scored,
+        ];
+    }
+
+    /**
+     * @param  array{raw: array<string, mixed>, score: float, reasons: list<string>}  $scoredItem
+     * @return array<string, mixed>
+     */
+    public function osmDataFromScored(array $scoredItem): array
+    {
+        return $this->formatOsmData($scoredItem['raw']);
+    }
+
+    /**
+     * @param  list<array{raw: array<string, mixed>, score: float, reasons: list<string>}>  $scored
+     * @return list<array<string, mixed>>
+     */
+    private function lightweightChoices(array $scored): array
+    {
+        $choices = [];
+        foreach ($scored as $item) {
+            $raw = $item['raw'];
+            $choices[] = [
+                'display_name' => $raw['display_name'] ?? ($raw['name'] ?? 'Unknown'),
+                'name' => $raw['name'] ?? null,
+                'type' => $raw['type'] ?? ($raw['class'] ?? 'location'),
+                'score' => round((float) ($item['score'] ?? 0), 3),
+                'latitude' => isset($raw['lat']) ? (float) $raw['lat'] : null,
+                'longitude' => isset($raw['lon']) ? (float) $raw['lon'] : null,
+            ];
+        }
+
+        return $choices;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function searchScored(PlaceGeocodeQuery $query, int $limit = 10): array
+    {
+        if ($query->shouldSkip) {
+            return [];
+        }
+
+        $scored = $this->fetchScoredCandidates($query, $limit);
+        $candidates = [];
+        foreach (array_slice($scored, 0, $limit) as $item) {
+            $raw = $item['raw'];
+            $candidates[] = [
+                'lat' => $raw['lat'] ?? null,
+                'lon' => $raw['lon'] ?? null,
+                'osm_type' => $raw['osm_type'] ?? 'node',
+                'osm_id' => $raw['osm_id'] ?? null,
+                'display_name' => $raw['display_name'] ?? ($raw['name'] ?? 'Unknown'),
+                'name' => $raw['name'] ?? null,
+                'type' => $raw['type'] ?? ($raw['class'] ?? 'location'),
+                'class' => $raw['class'] ?? null,
+                'geojson' => $raw['geojson'] ?? null,
+                'score' => round($item['score'], 3),
+                'reasons' => $item['reasons'],
+            ];
+        }
+
+        return $candidates;
     }
 
     /**
@@ -239,41 +416,254 @@ class OSMGeocodingService
     /**
      * Search for multiple matches (for disambiguation)
      */
-    public function search(string $placeName, int $limit = 5, ?float $latitude = null, ?float $longitude = null): array
+    public function search(string $placeName, int $limit = 5, ?float $latitude = null, ?float $longitude = null, ?string $subtype = null): array
     {
-        $cacheKey = 'osm_search_' . md5(strtolower(trim($placeName)) . '_' . $limit);
-        if ($latitude !== null && $longitude !== null) {
-            $cacheKey .= '_' . round($latitude, 4) . '_' . round($longitude, 4);
-        }
-        
-        // Check cache first
-        if (Cache::has($cacheKey)) {
-            return Cache::get($cacheKey);
+        $query = $this->queryBuilder->fromName($placeName, $latitude, $longitude, $subtype);
+        $results = [];
+        foreach (array_slice($this->fetchScoredCandidates($query, $limit), 0, $limit) as $item) {
+            try {
+                $formatted = $this->formatOsmData($item['raw']);
+                if (($formatted['place_type'] ?? null) !== 'continent') {
+                    $results[] = $formatted;
+                }
+            } catch (\Exception $e) {
+                continue;
+            }
         }
 
-        try {
-            $response = $this->makeNominatimRequest($placeName, $limit, $latitude, $longitude);
-            
-            $results = array_map([$this, 'formatOsmData'], $response);
-            
-            // Filter out continent results
-            $results = array_filter($results, function($result) {
-                return !isset($result['place_type']) || $result['place_type'] !== 'continent';
-            });
-            
-            // Cache the results
-            Cache::put($cacheKey, $results, self::CACHE_TTL);
-            
-            return $results;
-            
-        } catch (\Exception $e) {
-            Log::error('OSM search failed for: ' . $placeName, [
-                'error' => $e->getMessage(),
-                'place_name' => $placeName
-            ]);
-            
+        return $results;
+    }
+
+    /**
+     * @return list<array{raw: array<string, mixed>, score: float, reasons: list<string>}>
+     */
+    private function fetchScoredCandidates(PlaceGeocodeQuery $query, int $limit): array
+    {
+        $rawResults = [];
+        $baseUrl = $this->getNominatimBaseUrl();
+
+        $structured = $query->structuredParams();
+        if ($structured !== []) {
+            $rawResults = $this->mergeNominatimResults(
+                $rawResults,
+                $this->searchNominatim($structured, $limit, $baseUrl)
+            );
+        }
+
+        if ($query->looksLikeLondon() && $query->street && !$this->resultsMentionStreet($rawResults, $query)) {
+            $streetLine = trim(($query->houseNumber ? $query->houseNumber.' ' : '').$query->street);
+            $rawResults = $this->mergeNominatimResults(
+                $rawResults,
+                $this->searchNominatim([
+                    'street' => $streetLine,
+                    'city' => 'London',
+                    'country' => 'United Kingdom',
+                ], $limit, $baseUrl)
+            );
+        }
+
+        if ($query->houseName && !$this->hasPreferredAddressHit($rawResults)) {
+            $houseQuery = $this->houseNameSearchStrings($query)[0] ?? null;
+            if ($houseQuery !== null) {
+                $rawResults = $this->mergeNominatimResults(
+                    $rawResults,
+                    $this->searchNominatim(['q' => $houseQuery], $limit, $baseUrl)
+                );
+            }
+        }
+
+        $needsFreeText = $query->street
+            ? !$this->resultsMentionStreet($rawResults, $query)
+            : $rawResults === [];
+        if ($needsFreeText) {
+            foreach ($query->searchStrings() as $searchString) {
+                $rawResults = $this->mergeNominatimResults(
+                    $rawResults,
+                    $this->searchNominatim(['q' => $searchString], $limit, $baseUrl)
+                );
+                $found = $query->street
+                    ? $this->resultsMentionStreet($rawResults, $query)
+                    : $rawResults !== [];
+                if ($found) {
+                    break;
+                }
+            }
+        }
+
+        if ($query->street && $this->resultsMentionStreet($rawResults, $query)) {
+            $rawResults = array_values(array_filter(
+                $rawResults,
+                fn ($raw) => is_array($raw) && $this->resultsMentionStreet([$raw], $query)
+            ));
+        } elseif ($query->street) {
+            $rawResults = [];
+        }
+
+        if ($rawResults === [] && $query->latitude !== null && $query->longitude !== null) {
+            $zoom = $query->looksLikeAddress() ? 18 : 10;
+            $reverse = $this->reverseAt($query->latitude, $query->longitude, $zoom);
+            if (is_array($reverse) && !isset($reverse['error'])
+                && (!$query->street || $this->resultsMentionStreet([$reverse], $query))) {
+                $rawResults[] = $reverse;
+            }
+        }
+
+        return $this->candidateScorer->score($rawResults, $query);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function houseNameSearchStrings(PlaceGeocodeQuery $query): array
+    {
+        if (!$query->houseName) {
             return [];
         }
+
+        $houseName = strtolower($query->houseName);
+
+        return array_values(array_filter(
+            $query->searchStrings(),
+            fn (string $searchString) => str_contains(strtolower($searchString), $houseName)
+        ));
+    }
+
+    /**
+     * @param list<array<string, mixed>> $rawResults
+     */
+    /**
+     * A borough or suburb is not a match for a street we asked for.
+     *
+     * @param list<array<string, mixed>> $rawResults
+     */
+    private function resultsMentionStreet(array $rawResults, PlaceGeocodeQuery $query): bool
+    {
+        if ($query->street === null || $query->street === '') {
+            return $rawResults !== [];
+        }
+
+        $street = strtolower($query->street);
+        foreach ($rawResults as $raw) {
+            if (!is_array($raw)) {
+                continue;
+            }
+            $address = is_array($raw['address'] ?? null) ? $raw['address'] : [];
+            $haystack = strtolower(implode(' ', array_filter([
+                (string) ($raw['display_name'] ?? ''),
+                (string) ($raw['name'] ?? ''),
+                (string) ($address['road'] ?? ''),
+                (string) ($address['pedestrian'] ?? ''),
+                (string) ($address['footway'] ?? ''),
+            ])));
+            if ($haystack !== '' && str_contains($haystack, $street)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function hasPreferredAddressHit(array $rawResults): bool
+    {
+        foreach ($rawResults as $raw) {
+            if (!is_array($raw)) {
+                continue;
+            }
+            $type = strtolower((string) ($raw['type'] ?? ''));
+            $class = strtolower((string) ($raw['class'] ?? ''));
+            if ($class === 'building' || in_array($type, [
+                'house', 'building', 'residential', 'yes', 'apartments', 'detached',
+                'terrace', 'semidetached_house', 'office', 'address',
+            ], true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param list<array<string, mixed>> $existing
+     * @param list<array<string, mixed>> $incoming
+     * @return list<array<string, mixed>>
+     */
+    private function mergeNominatimResults(array $existing, array $incoming): array
+    {
+        $merged = [];
+        foreach (array_merge($existing, $incoming) as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $key = strtolower((string) ($row['osm_type'] ?? '') . ':' . (string) ($row['osm_id'] ?? ''));
+            if ($key === ':' || isset($merged[$key])) {
+                continue;
+            }
+            $merged[$key] = $row;
+        }
+
+        return array_values($merged);
+    }
+
+    /**
+     * @param array<string, scalar> $searchParams
+     * @return list<array<string, mixed>>
+     */
+    private function searchNominatim(array $searchParams, int $limit, string $baseUrl): array
+    {
+        $params = array_merge([
+            'format' => 'json',
+            'limit' => $limit,
+            'addressdetails' => 1,
+            'extratags' => 1,
+            'namedetails' => 1,
+            'polygon_geojson' => 1,
+            'polygon_threshold' => $this->getPolygonThreshold(),
+        ], $searchParams);
+
+        $attempts = 0;
+        while ($attempts < self::MAX_RETRIES) {
+            try {
+                $response = Http::timeout(10)
+                    ->withHeaders([
+                        'User-Agent' => config('app.user_agent'),
+                        'Accept-Language' => 'en',
+                    ])
+                    ->get(rtrim($baseUrl, '/') . '/search', $params);
+
+                if ($response->successful()) {
+                    $json = $response->json();
+
+                    return is_array($json) ? $json : [];
+                }
+
+                if ($response->status() === 429) {
+                    sleep((self::RETRY_DELAY * 2) ** $attempts);
+                }
+            } catch (\Exception $e) {
+                Log::warning('OSM request failed, attempt ' . ($attempts + 1), [
+                    'error' => $e->getMessage(),
+                    'params' => $searchParams,
+                    'base_url' => $baseUrl,
+                ]);
+            }
+
+            $attempts++;
+            if ($attempts < self::MAX_RETRIES) {
+                sleep(self::RETRY_DELAY);
+            }
+        }
+
+        return [];
+    }
+
+    private function matchCacheKey(PlaceGeocodeQuery $query): string
+    {
+        return 'osm_geocode_v2_' . md5(json_encode([
+            $query->cleanedName,
+            $query->subtype,
+            $query->latitude !== null ? round($query->latitude, 4) : null,
+            $query->longitude !== null ? round($query->longitude, 4) : null,
+        ]));
     }
 
     /**
@@ -1199,18 +1589,12 @@ class OSMGeocodingService
 
     /**
      * Lookup OSM entity by type and ID using Nominatim lookup API.
-     *
-     * @param bool $usePublicNominatim When true, use the public Nominatim (nominatim.openstreetmap.org)
-     *                                 so results are worldwide. When false, use config (e.g. local Nominatim for admin OSM data).
      */
-    public function lookupByOsmId(string $osmType, int $osmId, bool $usePublicNominatim = false): ?array
+    public function lookupByOsmId(string $osmType, int $osmId): ?array
     {
-        $baseUrl = $usePublicNominatim
-            ? self::DEFAULT_NOMINATIM_BASE_URL
-            : $this->getNominatimBaseUrl();
+        $baseUrl = $this->getNominatimBaseUrl();
         $threshold = $this->getPolygonThreshold();
-        // Include polygon params in key so we don't serve stale cache
-        $cacheKey = 'osm_lookup_' . $osmType . '_' . $osmId . ($usePublicNominatim ? '_public' : '') . '_polygon_t' . $threshold;
+        $cacheKey = 'osm_lookup_' . $osmType . '_' . $osmId . '_polygon_t' . $threshold;
         
         // Check cache first
         if (Cache::has($cacheKey)) {
@@ -1290,7 +1674,7 @@ class OSMGeocodingService
         string $displayName = '',
         string $placeType = ''
     ): array {
-        $nominatimResult = $this->lookupByOsmId($osmType, $osmId, true);
+        $nominatimResult = $this->lookupByOsmId($osmType, $osmId);
 
         if ($nominatimResult === null) {
             $reverseResult = Http::withHeaders([

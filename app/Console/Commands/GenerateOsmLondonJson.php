@@ -8,11 +8,7 @@ use Illuminate\Support\Facades\Config;
 
 /**
  * Generate storage/app/osm/london-major-locations.json by querying
- * the configured Nominatim instance (e.g. local Greater London PBF).
- *
- * Set NOMINATIM_BASE_URL to your local instance (e.g. http://nominatim:8080
- * from app container, or http://localhost:7001 from host) so you don't hit
- * public API rate limits.
+ * public Nominatim (the same host used in production).
  */
 class GenerateOsmLondonJson extends Command
 {

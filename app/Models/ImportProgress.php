@@ -75,14 +75,89 @@ class ImportProgress extends Model
     }
 
     /**
+     * Find plaque residence connection job progress for the given user.
+     */
+    public static function forPlaqueResidenceConnections(string $userId): ?self
+    {
+        return self::where('import_type', 'plaque_residence_connections')
+            ->where('user_id', $userId)
+            ->first();
+    }
+
+    /**
+     * Find private individual connection fix progress for the given user.
+     */
+    public static function forPrivateIndividualConnections(string $userId): ?self
+    {
+        return self::where('import_type', 'private_individual_connections')
+            ->where('user_id', $userId)
+            ->first();
+    }
+
+    public static function forUnambiguousPlaceGeocode(string $userId): ?self
+    {
+        return self::where('import_type', 'unambiguous_place_geocode')
+            ->where('user_id', $userId)
+            ->first();
+    }
+
+    /**
+     * Find Desert Island Discs bulk import progress for the given user.
+     */
+    public static function forDesertIslandDiscs(string $userId): ?self
+    {
+        return self::where('import_type', 'desert_island_discs')
+            ->where('user_id', $userId)
+            ->first();
+    }
+
+    /**
+     * Find Desert Island Discs enrichment progress for the given user.
+     */
+    public static function forDesertIslandDiscsEnrich(string $userId): ?self
+    {
+        return self::where('import_type', 'desert_island_discs_enrich')
+            ->where('user_id', $userId)
+            ->first();
+    }
+
+    public static function forSpanImprovement(string $userId): ?self
+    {
+        return self::where('import_type', 'span_improvement')
+            ->where('user_id', $userId)
+            ->first();
+    }
+
+    public static function forMusicBrainz(string $userId): ?self
+    {
+        return self::where('import_type', 'musicbrainz')
+            ->where('user_id', $userId)
+            ->first();
+    }
+
+    /**
      * Update progress with merge semantics for metadata fields.
      */
     public function mergeProgress(array $data): void
     {
+        if ($this->exists) {
+            $fresh = static::query()->whereKey($this->getKey())->first();
+            if ($fresh) {
+                $this->setRawAttributes($fresh->getAttributes(), true);
+                $this->syncOriginal();
+            }
+        }
+
         $metadata = $this->metadata ?? [];
+        $cancelLocked = (bool) ($metadata['cancel_requested'] ?? false) || $this->status === 'cancelled';
+
+        // A worker that loaded this row before cancel must not resume or finish the run.
+        if ($cancelLocked && in_array($data['status'] ?? null, ['running', 'completed', 'failed'], true)) {
+            return;
+        }
 
         $dbFields = ['total_items', 'processed_items', 'created_items', 'skipped_items', 'error_count', 'status', 'error_message'];
-        $metadataFields = ['current_plaque', 'batch_progress', 'batch_size', 'last_activity', 'progress_percentage', 'cancel_requested', 'cancelled_at', 'failed_at'];
+        $metadataFields = ['current_plaque', 'current_item', 'batch_progress', 'batch_size', 'last_activity', 'progress_percentage', 'cancel_requested', 'cancelled_at', 'failed_at', 'created_keys', 'fixed_ids', 'fixed_individuals', 'needs_disambiguation', 'no_match', 'recent_people', 'recent_artists', 'activity_log', 'worker_hostname', 'current_improver', 'ai_tokens_used', 'ai_token_budget', 'queue_counts'];
 
         foreach ($data as $key => $value) {
             if (in_array($key, $dbFields)) {
@@ -98,6 +173,21 @@ class ImportProgress extends Model
         if (isset($data['completed_at'])) {
             $val = $data['completed_at'];
             $this->completed_at = $val instanceof \DateTimeInterface ? $val : \Carbon\Carbon::parse($val);
+        }
+
+        if (
+            empty($metadata['worker_hostname'])
+            && app()->runningInConsole()
+            && ($this->status === 'running' || ($data['status'] ?? null) === 'running')
+        ) {
+            $metadata['worker_hostname'] = gethostname();
+        }
+
+        if ($cancelLocked) {
+            $metadata['cancel_requested'] = true;
+            if ($this->status === 'running') {
+                $this->status = 'cancelled';
+            }
         }
 
         $this->metadata = $metadata;

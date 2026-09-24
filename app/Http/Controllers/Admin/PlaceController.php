@@ -3,9 +3,13 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\GeocodeUnambiguousPlacesJob;
+use App\Models\ImportProgress;
 use App\Models\Span;
 use App\Services\PlaceGeocodingWorkflowService;
 use App\Services\OSMGeocodingService;
+use App\Services\QueueWorkerControlService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -139,34 +143,186 @@ class PlaceController extends Controller
     }
 
     /**
-     * Batch geocode multiple places
+     * Start a background geocode of unambiguous places only.
+     * Ambiguous matches are left for the disambiguation list.
      */
     public function batchGeocode(Request $request)
     {
         $request->validate([
-            'span_ids' => 'required|array',
-            'span_ids.*' => 'required|uuid|exists:spans,id'
+            'span_ids' => 'nullable|array',
+            'span_ids.*' => 'required|uuid|exists:spans,id',
         ]);
 
         $spanIds = $request->input('span_ids');
-        $results = $this->geocodingWorkflow->batchProcess($spanIds);
+        $started = $this->dispatchUnambiguousGeocode(
+            (string) $request->user()->id,
+            is_array($spanIds) && $spanIds !== [] ? array_values($spanIds) : null
+        );
 
-        // Log each successful place individually with batch method indicator
-        if (!empty($results['successful_spans'])) {
-            foreach ($results['successful_spans'] as $span) {
-                $this->addToImportLog($span->name, 'batch', $span->id);
-            }
+        if ($request->expectsJson()) {
+            return response()->json($started, $started['success'] ? 200 : 409);
         }
 
-        $message = "Batch processing complete: {$results['success']} successful, {$results['failed']} failed, {$results['skipped']} skipped.";
-        
-        if (!empty($results['errors'])) {
-            Log::error('Batch geocoding errors', $results['errors']);
-            $message .= ' Check logs for details.';
-        }
+        $flash = $started['success'] ? 'success' : 'error';
 
         return redirect()->route('admin.places.index')
-            ->with('success', $message);
+            ->with($flash, $started['message']);
+    }
+
+    public function unambiguousGeocodeStatus(Request $request): JsonResponse
+    {
+        $progress = ImportProgress::forUnambiguousPlaceGeocode((string) $request->user()->id);
+        if (! $progress) {
+            return response()->json([
+                'success' => true,
+                'running' => false,
+                'progress' => null,
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'running' => $progress->status === 'running',
+            'progress' => $progress->toJobProgressArray(),
+        ]);
+    }
+
+    public function cancelUnambiguousGeocode(Request $request, QueueWorkerControlService $workers): JsonResponse
+    {
+        $progress = ImportProgress::forUnambiguousPlaceGeocode((string) $request->user()->id);
+        if (! $progress || $progress->status !== 'running') {
+            return response()->json([
+                'success' => true,
+                'message' => 'Place geocoding is not running.',
+            ]);
+        }
+
+        $result = $workers->forceStopImport($progress);
+
+        return response()->json([
+            'success' => true,
+            'message' => $result['message'],
+        ]);
+    }
+
+    /**
+     * @param  list<string>|null  $spanIds
+     * @return array{success: bool, message: string}
+     */
+    private function dispatchUnambiguousGeocode(string $userId, ?array $spanIds): array
+    {
+        $existing = ImportProgress::forUnambiguousPlaceGeocode($userId);
+        if ($existing && $existing->status === 'running') {
+            return [
+                'success' => false,
+                'message' => 'An unambiguous geocode job is already running.',
+            ];
+        }
+
+        ImportProgress::updateOrCreate(
+            [
+                'import_type' => GeocodeUnambiguousPlacesJob::IMPORT_TYPE,
+                'plaque_type' => null,
+                'user_id' => $userId,
+            ],
+            [
+                'total_items' => 0,
+                'processed_items' => 0,
+                'created_items' => 0,
+                'skipped_items' => 0,
+                'error_count' => 0,
+                'status' => 'running',
+                'started_at' => now(),
+                'completed_at' => null,
+                'error_message' => null,
+                'metadata' => [],
+            ]
+        );
+
+        GeocodeUnambiguousPlacesJob::dispatch($userId, $spanIds);
+
+        $scope = $spanIds === null
+            ? 'all places that still need geocoding'
+            : count($spanIds) . ' selected place' . (count($spanIds) === 1 ? '' : 's');
+
+        return [
+            'success' => true,
+            'message' => "Started auto-geocoding {$scope}. Unambiguous matches will be written; anything that needs a human stays on this list.",
+        ];
+    }
+
+    public function geocodeQueue(): JsonResponse
+    {
+        $places = Span::whereIn('id', $this->geocodingWorkflow->idsNeedingGeocoding())
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        return response()->json([
+            'places' => $places->map(fn (Span $place) => [
+                'id' => $place->id,
+                'name' => $place->name,
+            ])->values(),
+        ]);
+    }
+
+    public function geocodeStep(Span $span): JsonResponse
+    {
+        if ($span->type_id !== 'place') {
+            abort(404);
+        }
+
+        $outcome = $this->geocodingWorkflow->geocodeInteractively($span);
+
+        return response()->json([
+            'span_id' => $span->id,
+            'name' => $span->name,
+            'decision' => $outcome['decision'],
+            'reason' => $outcome['reason'],
+            'choices' => $outcome['choices'],
+        ]);
+    }
+
+    public function geocodeChoices(Request $request, Span $span): JsonResponse
+    {
+        if ($span->type_id !== 'place') {
+            abort(404);
+        }
+
+        $query = trim((string) $request->input('query', $span->name));
+        if ($query === '') {
+            return response()->json([
+                'choices' => [],
+            ]);
+        }
+
+        return response()->json([
+            'choices' => $this->geocodingWorkflow->searchChoices($span, $query),
+        ]);
+    }
+
+    public function resolveChoice(Request $request, Span $span): JsonResponse
+    {
+        if ($span->type_id !== 'place') {
+            abort(404);
+        }
+
+        $index = $request->validate([
+            'index' => 'required|integer|min:0',
+        ])['index'];
+
+        if (! $this->geocodingWorkflow->resolveChoice($span, (int) $index)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'That match is no longer available. Search again, or skip this place.',
+            ], 422);
+        }
+
+        $this->addToImportLog($span->name, 'manual', $span->id);
+
+        return response()->json([
+            'success' => true,
+            'message' => "Saved a location for {$span->name}.",
+        ]);
     }
 
     /**
@@ -215,9 +371,22 @@ class PlaceController extends Controller
         }
 
         $query = $request->input('query', $span->name);
-        $matches = $this->osmService->search($query, 10);
-        
-        return response()->json($matches);
+        $search = $this->osmService->searchForSpan($span, $query, 15);
+        $placeQuery = $search['query'];
+
+        return response()->json([
+            'suggested_query' => $placeQuery->searchStrings()[0] ?? $placeQuery->cleanedName,
+            'cleaned_name' => $placeQuery->cleanedName,
+            'hints' => [
+                'house_name' => $placeQuery->houseName,
+                'street' => $placeQuery->street,
+                'house_number' => $placeQuery->houseNumber,
+                'locality' => $placeQuery->locality,
+                'region' => $placeQuery->region,
+                'country' => $placeQuery->country,
+            ],
+            'candidates' => $search['candidates'],
+        ]);
     }
 
     /**

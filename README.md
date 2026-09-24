@@ -21,40 +21,25 @@ All emails sent by the application will be captured in Mailpit, so you can test 
 
 ### Queue Workers
 
-Queue workers run by default (`docker compose up`). Jobs such as the blue plaque import run in the background: the POST returns immediately, progress is visible via polling, and imports survive page refreshes and request timeouts.
+Queue workers run by default (`docker compose up`). Jobs such as the blue plaque import, Desert Island Discs bulk import, and MusicBrainz discography import run in the background: the POST returns immediately, progress is visible via polling, and imports survive page refreshes and request timeouts.
 
-Manage workers at **Admin → Workers** (`/admin/workers`): view queue health, restart workers, and see active jobs.
+Manage workers at **Admin → Workers** (`/admin/workers`): view queue health, restart workers, force-stop an individual worker (so Desert Island Discs and MusicBrainz can be halted independently), and see active jobs.
 
-### Local Nominatim (London OSM / geocoding)
+### Geocoding (Nominatim)
 
-A Nominatim instance can run in Docker for London OSM data and experiments (e.g. generating the JSON for `/admin/osmdata` without hitting the public API).
+The app uses the public OpenStreetMap Nominatim API (`https://nominatim.openstreetmap.org`) in local Docker and in production, so geocoding results can be reproduced after deploy. Do not set `NOMINATIM_BASE_URL` to a local instance if you want that parity.
 
-**Data:** Uses the Greater London PBF at `temp/greater-london-260201.osm.pbf`. Ensure that file exists (or change the `nominatim` service in `docker-compose.yml` to use `PBF_URL` and a Geofabrik URL such as `https://download.geofabrik.de/europe/united-kingdom/england/greater-london-latest.osm.pbf`).
+Public Nominatim allows about **1 request per second**. Interactive search is fine; bulk jobs and `osm:generate-london-json` wait between requests. Always send a real User-Agent (the app already does).
 
-**Start:**  
-`docker compose up -d nominatim`
+Point geocoding comes from Nominatim search. Polygons for boroughs and regions come from Nominatim `polygon_geojson` (simplified) and, when needed, Overpass.
 
-**First run:** The container runs a one-off import (often 10–60 minutes for the London extract). Watch logs:
-
-`docker compose logs -f nominatim`
-
-When the import finishes, the API process starts and listens on port 8080 inside the container.
-
-**API:**  
-- From the host: **http://localhost:7001**  
-- From the app container: **http://nominatim:8080**
-
-Try: `http://localhost:7001/search?q=Camden` or `http://localhost:7001/status` (should return `OK` when ready).
-
-To use this instance in the app for geocoding, set `NOMINATIM_BASE_URL` in `.env` (e.g. `http://nominatim:8080` when the app runs in Docker) and point `OSMGeocodingService` at that base URL.
-
-**Generate the OSM JSON for `/admin/osmdata`:** Once Nominatim is ready, run from the app container (so it can reach `nominatim:8080`):
+**Generate the OSM JSON for `/admin/osmdata`:**
 
 ```bash
 docker compose exec app php artisan osm:generate-london-json
 ```
 
-This queries local Nominatim for London boroughs, major stations, and airports (see `config/osm_london_locations.php`) and writes `storage/app/osm/london-major-locations.json`. Use `--dry-run` to print results without writing, or `--limit=5` to test with a small batch.
+This queries public Nominatim for London boroughs, major stations, and airports (see `config/osm_london_locations.php`) and writes `storage/app/osm/london-major-locations.json`. Use `--dry-run` to print results without writing, or `--limit=5` to test with a small batch.
 
 ### Production / timeouts (Railway or similar)
 

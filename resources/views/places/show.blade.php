@@ -950,7 +950,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var regeocodePlaceName = @json($span->name ?? '');
     var regeocodeUpdateUrl = '{{ $span ? route("admin.places.update-from-nominatim", $span->id) : "" }}';
     var regeocodeCsrf = '{{ csrf_token() }}';
-    var regeocodePolygonThreshold = '{{ config("services.nominatim_polygon_threshold", 0.0005) }}';
+    var regeocodeSearchMatchesUrl = '{{ $span ? route("admin.places.search-matches", $span->id) : "" }}';
     var regeocodeSearchSpinnerHtml = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary" role="status"><span class="visually-hidden">Searching...</span></div><p class="mt-2 text-muted small mb-0">Searching Nominatim...</p></div>';
     var regeocodeUseThisIdleHtml = 'Use this';
     var regeocodeUseThisLoadingHtml = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Updating...';
@@ -1037,12 +1037,16 @@ document.addEventListener('DOMContentLoaded', function() {
             var osmType = result.osm_type || 'node';
             var placeType = result.type || result.class || 'location';
             var displayName = result.display_name || result.name || 'Unknown';
+            var score = result.score;
             var hasBoundary = !!result.geojson;
             html += '<div class="list-group-item d-flex justify-content-between align-items-start">';
             html += '<div class="flex-grow-1 small">';
             html += '<div class="fw-semibold">' + escapeHtml(displayName) + '</div>';
             html += '<span class="badge bg-secondary me-1">' + escapeHtml(placeType) + '</span>';
             html += '<span class="badge bg-info text-dark me-1">' + escapeHtml(osmType) + ' ' + result.osm_id + '</span>';
+            if (typeof score === 'number') {
+                html += '<span class="badge bg-light text-dark border me-1">' + score.toFixed(2) + '</span>';
+            }
             if (hasBoundary) {
                 html += '<span class="badge bg-success me-1">boundary</span>';
             }
@@ -1075,22 +1079,21 @@ document.addEventListener('DOMContentLoaded', function() {
         setRegeocodeSearchLoading(true);
         $resultsEl.html(regeocodeSearchSpinnerHtml);
         $.ajax({
-            url: 'https://nominatim.openstreetmap.org/search',
+            url: regeocodeSearchMatchesUrl,
             method: 'GET',
             dataType: 'json',
-            headers: { 'Accept-Language': 'en' },
             data: {
-                q: query,
-                format: 'json',
-                limit: '15',
-                addressdetails: '1',
-                extratags: '1',
-                namedetails: '1',
-                polygon_geojson: '1',
-                polygon_threshold: regeocodePolygonThreshold
+                query: query
             }
-        }).done(function(data) {
+        }).done(function(payload) {
             setRegeocodeSearchLoading(false);
+            var data = payload && payload.candidates ? payload.candidates : payload;
+            if (payload && payload.suggested_query && !$searchInput.data('cleaned-once')) {
+                $searchInput.data('cleaned-once', true);
+                if (payload.suggested_query && payload.suggested_query !== query) {
+                    $searchInput.val(payload.suggested_query);
+                }
+            }
             if (!data || data.length === 0) {
                 $resultsEl.html('<p class="text-muted small mb-0">No results. Try a different query (e.g. add country or region).</p>');
                 return;
@@ -1119,8 +1122,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 $resultsEl.html('<p class="text-muted small mb-0">No results match the selected type. Try "Any" or a different query.</p>');
                 return;
             }
-            var order = { relation: 0, way: 1, node: 2 };
             data.sort(function(a, b) {
+                if (typeof a.score === 'number' && typeof b.score === 'number' && a.score !== b.score) {
+                    return b.score - a.score;
+                }
+                var order = { relation: 0, way: 1, node: 2 };
                 var aOrder = order[a.osm_type] !== undefined ? order[a.osm_type] : 3;
                 var bOrder = order[b.osm_type] !== undefined ? order[b.osm_type] : 3;
                 if (aOrder !== bOrder) {

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Jobs\BulkDeleteZeroConnectionDuplicatesJob;
 use App\Models\Span;
 use App\Models\Connection;
+use App\Services\PlaceDuplicateDetectionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -33,8 +34,15 @@ class MergeController extends Controller
         $zeroConnectionDuplicateGroups = $this->getZeroConnectionDuplicateGroups($availableSpanTypes);
         // Exact duplicate groups (at least one span has connections) - merge workflow; exclude zero-connection groups
         $exactDuplicateGroups = $this->getExactDuplicateGroups($availableSpanTypes);
+        $osmDuplicateGroups = app(PlaceDuplicateDetectionService::class)->getSameOsmIdentityGroups();
 
-        return view('admin.merge.index', compact('similarSpans', 'availableSpanTypes', 'exactDuplicateGroups', 'zeroConnectionDuplicateGroups'));
+        return view('admin.merge.index', compact(
+            'similarSpans',
+            'availableSpanTypes',
+            'exactDuplicateGroups',
+            'zeroConnectionDuplicateGroups',
+            'osmDuplicateGroups'
+        ));
     }
 
     /**

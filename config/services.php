@@ -40,6 +40,12 @@ return [
         'model' => env('ANTHROPIC_MODEL', 'claude-sonnet-5'),
     ],
 
+    'improvement' => [
+        'ai_daily_token_budget' => (int) env('IMPROVEMENT_AI_DAILY_TOKEN_BUDGET', 0),
+        'max_child_spans' => (int) env('IMPROVEMENT_MAX_CHILD_SPANS', 3),
+        'max_new_spans_per_run' => (int) env('IMPROVEMENT_MAX_NEW_SPANS_PER_RUN', 25),
+    ],
+
     'slack' => [
         // Incoming Webhook (current setup)
         'webhook_url' => env('SLACK_WEBHOOK_URL'),
@@ -69,17 +75,27 @@ return [
 
     'osm_import_data_path' => env('OSM_IMPORT_DATA_PATH', 'osm/london-major-locations.json'),
 
-    // Use local Nominatim when running in Docker (docker-compose nominatim service).
-    // Set NOMINATIM_BASE_URL in .env to override (e.g. from host use http://localhost:7001).
-    'nominatim_base_url' => env('NOMINATIM_BASE_URL')
-        ?: (env('DOCKER_CONTAINER') ? 'http://nominatim:8080' : 'https://nominatim.openstreetmap.org'),
+    // Public Nominatim — same host locally and in production.
+    'nominatim_base_url' => rtrim(
+        env('NOMINATIM_BASE_URL') ?: 'https://nominatim.openstreetmap.org',
+        '/'
+    ),
 
     // Simplify polygon output so large boundaries (e.g. Greater London) fit within MAX_BOUNDARY_POINTS.
-    // Tolerance in degrees; 0.0005 yields ~683 points for London (storable in both local and prod).
+    // Tolerance in degrees; 0.0005 yields ~683 points for London.
     'nominatim_polygon_threshold' => (float) env('NOMINATIM_POLYGON_THRESHOLD', 0.0005),
 
     'mailersend' => [
         'api_key' => env('MAILERSEND_API_KEY'),
+    ],
+
+    'desert_island_discs' => [
+        'csv_url' => env(
+            'DESERT_ISLAND_DISCS_CSV_URL',
+            'https://raw.githubusercontent.com/Praful/desert-island-discs/main/output/desert-island-discs-episodes.csv'
+        ),
+        'local_path' => env('DESERT_ISLAND_DISCS_CSV_PATH', 'imports/desert-island-discs-episodes.csv'),
+        'cache_ttl' => (int) env('DESERT_ISLAND_DISCS_CACHE_TTL', 3600),
     ],
 
 ];
