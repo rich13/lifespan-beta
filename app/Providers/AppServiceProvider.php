@@ -6,6 +6,7 @@ use Illuminate\Support\ServiceProvider;
 use App\Services\Temporal\TemporalService;
 use App\Services\Temporal\PrecisionValidator;
 use App\Services\Connection\ConnectionConstraintService;
+use App\Services\ImprovementCreationPolicy;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\Log;
@@ -39,6 +40,8 @@ class AppServiceProvider extends ServiceProvider
                 $app->make(PrecisionValidator::class)
             );
         });
+
+        $this->app->singleton(ImprovementCreationPolicy::class);
     }
 
     /**

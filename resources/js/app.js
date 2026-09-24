@@ -84,6 +84,9 @@ import './mobile-right-nav';
 import './admin-mode-toggle';
 
 // Import page-specific scripts
+import './desert-island-discs-explorer';
+import './improvement-coordinator';
+import './place-geocode-assistant';
 import './spans/show';
 import './spans/index';
 import './spans/edit';

@@ -5,7 +5,7 @@ namespace App\Helpers;
 class GitVersionHelper
 {
     private const VERSION_PREFIX = 'Lifespan Prototype';
-    private const VERSION_NUMBER = '0.975'; // Update this when deploying
+    private const VERSION_NUMBER = '0.976'; // Update this when deploying
 
     /**
      * Git lookups are only needed when About is opened; keep them for the request.

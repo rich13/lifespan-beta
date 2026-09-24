@@ -73,6 +73,10 @@ class Span extends Model
 {
     use HasUuids, HasFactory, HasSpanCapabilities, HasFamilyCapabilities, HasGeospatialCapabilities, HasBandCapabilities, Versionable;
 
+    public const IMPROVEMENT_AUTO = 'auto';
+
+    public const IMPROVEMENT_DEFER = 'defer';
+
     /**
      * The attributes that are mass assignable.
      *
@@ -104,6 +108,9 @@ class Span extends Model
         'filter_type',
         'filter_criteria',
         'is_predefined',
+        'improvement_mode',
+        'improvement_generation',
+        'improvement_parent_id',
     ];
 
     /**
@@ -132,6 +139,17 @@ class Span extends Model
         'access_level' => 'string',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
+        'improvement_generation' => 'integer',
+    ];
+
+    /**
+     * Generated from place metadata for map lookups. Not part of the span payload.
+     *
+     * @var array<int, string>
+     */
+    protected $hidden = [
+        'place_latitude',
+        'place_longitude',
     ];
 
     /**
