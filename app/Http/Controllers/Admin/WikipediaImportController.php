@@ -179,12 +179,38 @@ class WikipediaImportController extends Controller
     public function startBackgroundImport(Request $request)
     {
         $retrySkipped = filter_var($request->input('retry_skipped', false), FILTER_VALIDATE_BOOLEAN);
+        $userId = (string) $request->user()->id;
 
-        ImportProgress::where('import_type', 'wikipedia_public_figures')
-            ->where('user_id', auth()->id())
-            ->delete();
+        $existing = ImportProgress::forWikipediaPublicFigures($userId);
+        if ($existing && $existing->status === 'running') {
+            return response()->json([
+                'success' => false,
+                'message' => 'A Wikipedia import is already running.',
+            ], 409);
+        }
 
-        ImportWikipediaPublicFiguresJob::dispatch((string) auth()->id(), $retrySkipped);
+        ImportProgress::updateOrCreate(
+            [
+                'import_type' => ImportWikipediaPublicFiguresJob::IMPORT_TYPE,
+                'plaque_type' => null,
+                'user_id' => $userId,
+            ],
+            [
+                'total_items' => 0,
+                'processed_items' => 0,
+                'created_items' => 0,
+                'skipped_items' => 0,
+                'error_count' => 0,
+                'status' => 'running',
+                'started_at' => now(),
+                'completed_at' => null,
+                'error_message' => null,
+                'metadata' => [],
+            ]
+        );
+
+        ImportWikipediaPublicFiguresJob::releaseUniquenessFor($userId);
+        ImportWikipediaPublicFiguresJob::dispatch($userId, $retrySkipped);
 
         return response()->json([
             'success' => true,
@@ -199,7 +225,7 @@ class WikipediaImportController extends Controller
      */
     public function cancelBackgroundImport(Request $request)
     {
-        $progress = ImportProgress::forWikipediaPublicFigures((string) auth()->id());
+        $progress = ImportProgress::forWikipediaPublicFigures((string) $request->user()->id);
         if ($progress) {
             $progress->mergeProgress([
                 'cancel_requested' => true,
@@ -219,8 +245,8 @@ class WikipediaImportController extends Controller
      */
     public function getBackgroundStatus(Request $request)
     {
-        $progress = ImportProgress::forWikipediaPublicFigures((string) auth()->id());
-        if ($progress && in_array($progress->status, ['running', 'completed', 'failed', 'cancelled'])) {
+        $progress = ImportProgress::forWikipediaPublicFigures((string) $request->user()->id);
+        if ($progress && in_array($progress->status, ['running', 'completed', 'failed', 'cancelled'], true)) {
             $jobProgress = $progress->toJobProgressArray();
 
             $withDescriptionMissingWikiSource = Span::where('type_id', 'person')
@@ -246,6 +272,7 @@ class WikipediaImportController extends Controller
                 'success' => true,
                 'background_job' => true,
                 'job_status' => $progress->status,
+                'is_importing' => $progress->status === 'running',
                 'job_progress' => $jobProgress,
                 'stats' => [
                     'total_need_wiki_source' => $withDescriptionMissingWikiSource,
@@ -257,6 +284,7 @@ class WikipediaImportController extends Controller
         return response()->json([
             'success' => true,
             'background_job' => false,
+            'is_importing' => false,
         ]);
     }
 

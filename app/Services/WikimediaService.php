@@ -17,6 +17,8 @@ class WikimediaService
     protected const CACHE_TTL_WIKIDATA_ENTITY_ID = 604800; // 7 days
     protected const CACHE_TTL_WIKIDATA_LABELS = 2592000; // 30 days (labels change very rarely)
 
+    private ?WikidataSpanTypeResolver $spanTypeResolver = null;
+
     /**
      * Search for an entity on Wikidata
      */
@@ -242,7 +244,7 @@ class WikimediaService
         $wikipediaTitle = $this->extractWikipediaTitleFromSources($span->sources ?? []);
         if ($wikipediaTitle) {
             $result = $this->getDescriptionFromWikipediaByTitle($wikipediaTitle, $span);
-            if ($result) {
+            if ($result && $this->resultFitsSpan($span, $result)) {
                 return $result;
             }
         }
@@ -284,7 +286,7 @@ class WikimediaService
      */
     protected function getDescriptionFromWikipediaByTitle(string $pageTitle, \App\Models\Span $span): ?array
     {
-        $cacheKey = 'wikipedia_description_by_title:' . md5($pageTitle . '|' . ($span->type_id ?? ''));
+        $cacheKey = 'wikipedia_description_by_title_v3:' . md5($pageTitle . '|' . ($span->type_id ?? ''));
         return Cache::remember($cacheKey, self::CACHE_TTL_WIKIPEDIA_ARTICLE, function () use ($pageTitle, $span) {
             try {
                 $titleWithUnderscores = str_replace(' ', '_', $pageTitle);
@@ -298,6 +300,10 @@ class WikimediaService
                 }
 
                 $data = $response->json();
+                if (($data['type'] ?? '') === 'disambiguation') {
+                    return null;
+                }
+
                 $extract = $data['extract'] ?? $data['description'] ?? null;
                 $wikipediaUrl = $data['content_urls']['desktop']['page'] ?? null;
 
@@ -310,20 +316,30 @@ class WikimediaService
                     return null;
                 }
 
-                $dates = null;
-                if ($span->type_id === 'person') {
+                $entity = null;
+                $entityId = $data['wikibase_item'] ?? null;
+                if (! $entityId && $span->type_id === 'person') {
                     $entityId = $this->getWikidataEntityIdFromWikipediaTitle($pageTitle);
-                    if ($entityId) {
-                        $entity = $this->getWikidataEntity($entityId);
-                        $dates = $this->extractDatesFromEntity($entity);
-                    }
+                }
+                if ($entityId) {
+                    $entity = $this->getWikidataEntity($entityId);
                 }
 
-                return [
+                $classification = $this->spanTypeResolver()->resolve($entity);
+                $dates = null;
+                if ($span->type_id === 'person' || ($classification['status'] ?? '') === 'matched') {
+                    $dates = $this->datesForClassification($entity, $classification);
+                }
+                $facts = $span->type_id === 'person' ? $this->buildPersonFacts($entity, $data) : [];
+
+                return array_merge([
                     'description' => $cleanExtract,
                     'wikipedia_url' => $wikipediaUrl,
                     'dates' => $dates,
-                ];
+                    'classification' => $classification,
+                    'matched_title' => $pageTitle,
+                    'wikidata_label' => is_array($entity) ? ($entity['labels']['en']['value'] ?? null) : null,
+                ], $facts);
             } catch (\Exception $e) {
                 Log::warning('Failed to get description from Wikipedia by title', [
                     'page_title' => $pageTitle,
@@ -383,7 +399,7 @@ class WikimediaService
                     }
 
                     $result = $this->getDescriptionFromWikipediaByTitle($title, $span);
-                    if ($result) {
+                    if ($result && $this->resultFitsSpan($span, $result)) {
                         return $result;
                     }
                 }
@@ -433,35 +449,51 @@ class WikimediaService
                 // Get the Wikidata entity first
                 $entity = $this->getWikidataEntity($entityId);
                 $wikipediaUrl = $this->getWikipediaUrl($entity);
-                
-                // Extract dates if this is a person
+                $classification = $this->spanTypeResolver()->resolve($entity);
                 $dates = null;
-                if ($span->type_id === 'person') {
-                    $dates = $this->extractDatesFromEntity($entity);
+                if ($span->type_id === 'person' || ($classification['status'] ?? '') === 'matched') {
+                    $dates = $this->datesForClassification($entity, $classification);
                 }
-                
-                // Try Wikipedia extract first (richer content)
+
                 $extract = $this->getWikipediaExtract($entityId);
+                $facts = $span->type_id === 'person' ? $this->buildPersonFacts($entity) : [];
+                $identity = [
+                    'classification' => $classification,
+                    'matched_title' => is_array($entity)
+                        ? ($entity['sitelinks']['enwiki']['title'] ?? ($searchResult['label'] ?? null))
+                        : ($searchResult['label'] ?? null),
+                    'wikidata_label' => is_array($entity)
+                        ? ($entity['labels']['en']['value'] ?? ($searchResult['label'] ?? null))
+                        : ($searchResult['label'] ?? null),
+                ];
+
                 if ($extract) {
                     $cleanExtract = $this->cleanExtract($extract);
                     if (!empty($cleanExtract)) {
-                        return [
+                        $payload = array_merge([
                             'description' => $cleanExtract,
                             'wikipedia_url' => $wikipediaUrl,
-                            'dates' => $dates
-                        ];
+                            'dates' => $dates,
+                        ], $identity, $facts);
+                        if ($this->resultFitsSpan($span, $payload)) {
+                            return $payload;
+                        }
+
+                        continue;
                     }
                 }
-                
-                // Fallback to Wikidata description if no Wikipedia extract
+
                 if ($entity && isset($entity['descriptions']['en']['value'])) {
                     $description = $entity['descriptions']['en']['value'];
                     if (!empty($description)) {
-                        return [
+                        $payload = array_merge([
                             'description' => $this->cleanDescription($description),
                             'wikipedia_url' => $wikipediaUrl,
-                            'dates' => $dates
-                        ];
+                            'dates' => $dates,
+                        ], $identity, $facts);
+                        if ($this->resultFitsSpan($span, $payload)) {
+                            return $payload;
+                        }
                     }
                 }
             }
@@ -471,9 +503,319 @@ class WikimediaService
     }
 
     /**
+     * A non-person Wikidata item is only used when its title or label is this span's name.
+     * Anything unresolved is kept, so an ordinary person import still proceeds.
+     *
+     * @param  array<string, mixed>  $result
+     */
+    public function resultFitsSpan(\App\Models\Span $span, array $result): bool
+    {
+        $classification = $result['classification'] ?? ['status' => 'unknown'];
+        $status = $classification['status'] ?? 'unknown';
+
+        if ($status === 'disambiguation' || $status === 'ambiguous') {
+            return false;
+        }
+
+        if ($status !== 'matched') {
+            return true;
+        }
+
+        $typeId = $classification['type_id'] ?? null;
+        if (! is_string($typeId) || $typeId === '' || $typeId === 'person' || $typeId === $span->type_id) {
+            return true;
+        }
+
+        return $this->recordedNameMatches($span->name, $result);
+    }
+
+    /**
+     * @param  array<string, mixed>  $result
+     */
+    public function recordedNameMatches(string $spanName, array $result): bool
+    {
+        $span = $this->normaliseComparableName($spanName);
+        if ($span === '') {
+            return false;
+        }
+
+        foreach (['matched_title', 'wikidata_label'] as $key) {
+            $candidate = $this->normaliseComparableName((string) ($result[$key] ?? ''));
+            if ($candidate !== '' && $candidate === $span) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function normaliseComparableName(string $name): string
+    {
+        $name = str_replace('_', ' ', urldecode($name));
+        $name = preg_replace('/\s*\([^)]*\)\s*$/u', '', $name) ?? $name;
+        $name = preg_replace('/\s+/u', ' ', trim($name)) ?? $name;
+
+        return mb_strtolower($name);
+    }
+
+    /**
+     * @param  array<string, mixed>  $classification
+     */
+    protected function datesForClassification(?array $entity, array $classification): ?array
+    {
+        if (($classification['status'] ?? '') === 'matched') {
+            return match ($classification['type_id'] ?? '') {
+                'band' => $this->extractDatesFromEntity($entity, 'P571', 'P576'),
+                'thing' => $this->extractDatesFromEntity($entity, 'P577', null),
+                default => $this->extractDatesFromEntity($entity),
+            };
+        }
+
+        return $this->extractDatesFromEntity($entity);
+    }
+
+    private function spanTypeResolver(): WikidataSpanTypeResolver
+    {
+        return $this->spanTypeResolver ??= new WikidataSpanTypeResolver($this);
+    }
+
+    /**
+     * Person fields already present on the Wikidata entity and Wikipedia summary.
+     *
+     * @return array{
+     *     wikidata_id: ?string,
+     *     birth_name: ?string,
+     *     occupation: ?string,
+     *     nationality: ?string,
+     *     gender: ?string,
+     *     official_website: ?string,
+     *     image: ?array{original_url: string, thumbnail_url: string}
+     * }
+     */
+    protected function buildPersonFacts(?array $entity, ?array $summary = null): array
+    {
+        $occupationIds = $this->itemClaimIds($entity, 'P106', 3);
+        $nationalityIds = $this->itemClaimIds($entity, 'P27', 2);
+        $labels = $this->getLabelsForEntities(array_merge($occupationIds, $nationalityIds));
+        $website = $this->stringClaim($entity, 'P856');
+        if ($website && ! filter_var($website, FILTER_VALIDATE_URL)) {
+            $website = null;
+        }
+
+        return [
+            'wikidata_id' => (is_array($entity) ? ($entity['id'] ?? null) : null) ?? ($summary['wikibase_item'] ?? null),
+            'birth_name' => $this->monolingualClaim($entity, 'P1477'),
+            'occupation' => $this->joinLabels($occupationIds, $labels),
+            'nationality' => $this->joinLabels($nationalityIds, $labels),
+            'gender' => $this->genderFromEntity($entity),
+            'official_website' => $website,
+            'image' => $this->imageFromSummary($summary),
+        ];
+    }
+
+    /**
+     * Map Wikidata sex or gender (P21) onto male, female, or other.
+     * A preferred value wins. Conflicting values are left unset.
+     */
+    protected function genderFromEntity(?array $entity): ?string
+    {
+        $ids = $this->itemClaimIds($entity, 'P21', 5);
+        if ($ids === []) {
+            return null;
+        }
+
+        $known = [
+            'Q6581097' => 'male',
+            'Q2449503' => 'male',
+            'Q6581072' => 'female',
+            'Q1052281' => 'female',
+            'Q1097630' => 'other',
+            'Q48270' => 'other',
+            'Q12964198' => 'other',
+            'Q18116794' => 'other',
+        ];
+
+        $unmapped = [];
+        $genders = [];
+        foreach ($ids as $id) {
+            if (isset($known[$id])) {
+                $genders[] = $known[$id];
+            } else {
+                $unmapped[] = $id;
+            }
+        }
+
+        if ($unmapped !== []) {
+            $labels = $this->getLabelsForEntities($unmapped);
+            foreach ($unmapped as $id) {
+                $mapped = $this->genderFromLabel($labels[$id] ?? '');
+                if ($mapped !== null) {
+                    $genders[] = $mapped;
+                }
+            }
+        }
+
+        $genders = array_values(array_unique($genders));
+
+        return count($genders) === 1 ? $genders[0] : null;
+    }
+
+    protected function genderFromLabel(string $label): ?string
+    {
+        $label = mb_strtolower(trim($label));
+        if ($label === '') {
+            return null;
+        }
+
+        if (in_array($label, ['male', 'transgender male', 'trans man', 'transgender man', 'cisgender male'], true)) {
+            return 'male';
+        }
+
+        if (in_array($label, ['female', 'transgender female', 'trans woman', 'transgender woman', 'cisgender female'], true)) {
+            return 'female';
+        }
+
+        foreach (['non-binary', 'nonbinary', 'genderqueer', 'genderfluid', 'gender fluid', 'intersex', 'agender', 'two-spirit', 'third gender'] as $phrase) {
+            if (str_contains($label, $phrase)) {
+                return 'other';
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    protected function rankedClaims(?array $entity, string $property): array
+    {
+        $claims = $entity['claims'][$property] ?? [];
+        if (! is_array($claims)) {
+            return [];
+        }
+
+        $active = array_values(array_filter(
+            $claims,
+            fn ($claim) => is_array($claim) && ($claim['rank'] ?? 'normal') !== 'deprecated'
+        ));
+        $preferred = array_values(array_filter(
+            $active,
+            fn ($claim) => ($claim['rank'] ?? '') === 'preferred'
+        ));
+
+        return $preferred !== [] ? $preferred : $active;
+    }
+
+    protected function monolingualClaim(?array $entity, string $property, string $language = 'en'): ?string
+    {
+        $fallback = null;
+        foreach ($this->rankedClaims($entity, $property) as $claim) {
+            $value = $claim['mainsnak']['datavalue']['value'] ?? null;
+            if (! is_array($value) || ! is_string($value['text'] ?? null) || trim($value['text']) === '') {
+                continue;
+            }
+            $text = trim($value['text']);
+            if (($value['language'] ?? '') === $language) {
+                return $text;
+            }
+            $fallback ??= $text;
+        }
+
+        return $fallback;
+    }
+
+    /**
+     * @return list<string>
+     */
+    protected function itemClaimIds(?array $entity, string $property, int $limit): array
+    {
+        $ids = [];
+        foreach ($this->rankedClaims($entity, $property) as $claim) {
+            $id = $claim['mainsnak']['datavalue']['value']['id'] ?? null;
+            if (! is_string($id) || $id === '') {
+                continue;
+            }
+            $ids[] = $id;
+            if (count($ids) >= $limit) {
+                break;
+            }
+        }
+
+        return $ids;
+    }
+
+    protected function stringClaim(?array $entity, string $property): ?string
+    {
+        foreach ($this->rankedClaims($entity, $property) as $claim) {
+            $value = $claim['mainsnak']['datavalue']['value'] ?? null;
+            if (is_string($value) && trim($value) !== '') {
+                return trim($value);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  list<string>  $ids
+     * @param  array<string, string>  $labels
+     */
+    protected function joinLabels(array $ids, array $labels): ?string
+    {
+        $names = [];
+        foreach ($ids as $id) {
+            $label = trim((string) ($labels[$id] ?? ''));
+            if ($label !== '') {
+                $names[] = $label;
+            }
+        }
+
+        if ($names === []) {
+            return null;
+        }
+
+        return mb_substr(implode(', ', $names), 0, 255);
+    }
+
+    /**
+     * @return array{original_url: string, thumbnail_url: string}|null
+     */
+    protected function imageFromSummary(?array $summary): ?array
+    {
+        if (! $summary) {
+            return null;
+        }
+
+        $original = $this->cleanImageUrl($summary['originalimage']['source'] ?? null);
+        $thumbnail = $this->cleanImageUrl($summary['thumbnail']['source'] ?? null);
+        if (! $original && ! $thumbnail) {
+            return null;
+        }
+
+        return [
+            'original_url' => $original ?: $thumbnail,
+            'thumbnail_url' => $thumbnail ?: $original,
+        ];
+    }
+
+    protected function cleanImageUrl(mixed $url): ?string
+    {
+        if (! is_string($url) || $url === '') {
+            return null;
+        }
+
+        $parts = parse_url($url);
+        if (! is_array($parts) || empty($parts['scheme']) || empty($parts['host'])) {
+            return null;
+        }
+
+        return $parts['scheme'].'://'.$parts['host'].($parts['path'] ?? '');
+    }
+
+    /**
      * Extract dates from Wikidata entity
      */
-    protected function extractDatesFromEntity(?array $entity): ?array
+    protected function extractDatesFromEntity(?array $entity, string $startProperty = 'P569', ?string $endProperty = 'P570'): ?array
     {
         if (!$entity || !isset($entity['claims'])) {
             return null;
@@ -490,33 +832,25 @@ class WikimediaService
             'end_precision' => 'year'
         ];
 
-        // Extract birth date (P569)
-        if (isset($entity['claims']['P569'])) {
-            $birthClaim = $entity['claims']['P569'][0] ?? null;
-            if ($birthClaim && isset($birthClaim['mainsnak']['datavalue']['value'])) {
-                $birthValue = $birthClaim['mainsnak']['datavalue']['value'];
-                $parsedBirth = $this->parseWikidataDate($birthValue);
-                if ($parsedBirth) {
-                    $dates['start_year'] = $parsedBirth['year'];
-                    $dates['start_month'] = $parsedBirth['month'];
-                    $dates['start_day'] = $parsedBirth['day'];
-                    $dates['start_precision'] = $parsedBirth['precision'];
-                }
+        $startClaim = $entity['claims'][$startProperty][0] ?? null;
+        if ($startClaim && isset($startClaim['mainsnak']['datavalue']['value']) && is_array($startClaim['mainsnak']['datavalue']['value'])) {
+            $parsedStart = $this->parseWikidataDate($startClaim['mainsnak']['datavalue']['value']);
+            if ($parsedStart) {
+                $dates['start_year'] = $parsedStart['year'];
+                $dates['start_month'] = $parsedStart['month'];
+                $dates['start_day'] = $parsedStart['day'];
+                $dates['start_precision'] = $parsedStart['precision'];
             }
         }
 
-        // Extract death date (P570)
-        if (isset($entity['claims']['P570'])) {
-            $deathClaim = $entity['claims']['P570'][0] ?? null;
-            if ($deathClaim && isset($deathClaim['mainsnak']['datavalue']['value'])) {
-                $deathValue = $deathClaim['mainsnak']['datavalue']['value'];
-                $parsedDeath = $this->parseWikidataDate($deathValue);
-                if ($parsedDeath) {
-                    $dates['end_year'] = $parsedDeath['year'];
-                    $dates['end_month'] = $parsedDeath['month'];
-                    $dates['end_day'] = $parsedDeath['day'];
-                    $dates['end_precision'] = $parsedDeath['precision'];
-                }
+        $endClaim = $endProperty ? ($entity['claims'][$endProperty][0] ?? null) : null;
+        if ($endClaim && isset($endClaim['mainsnak']['datavalue']['value']) && is_array($endClaim['mainsnak']['datavalue']['value'])) {
+            $parsedEnd = $this->parseWikidataDate($endClaim['mainsnak']['datavalue']['value']);
+            if ($parsedEnd) {
+                $dates['end_year'] = $parsedEnd['year'];
+                $dates['end_month'] = $parsedEnd['month'];
+                $dates['end_day'] = $parsedEnd['day'];
+                $dates['end_precision'] = $parsedEnd['precision'];
             }
         }
 

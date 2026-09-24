@@ -98,6 +98,7 @@
                     </h5>
                 </div>
                 <div class="card-body">
+                    <p class="text-muted small">A public figure whose article is clearly the same name, and which Wikidata describes as a band, book, film, album, or song, is corrected to that type. The article, dates, and lead image are stored with it. An unclear match stays a person.</p>
                     <div class="table-responsive">
                         <table class="table table-striped table-hover">
                             <thead>
@@ -317,11 +318,20 @@ $(document).ready(function() {
     loadImportStatus();
 });
 
+function escapeHtml(value) {
+    return $('<div>').text(value == null ? '' : String(value)).html();
+}
+
+function setBackgroundControls(running) {
+    $('#importBackgroundBtn, #importBackgroundRetryBtn, #autoImportBtn').prop('disabled', running);
+}
+
 function startBackgroundJobPolling() {
-    if (backgroundJobPollInterval) clearInterval(backgroundJobPollInterval);
-    loadImportStatus();
+    if (backgroundJobPollInterval) {
+        return;
+    }
     backgroundJobPollInterval = setInterval(function() {
-        loadImportStatus(true);
+        loadImportStatus();
     }, 2000);
 }
 
@@ -332,20 +342,42 @@ function stopBackgroundJobPolling() {
     }
 }
 
-function loadImportStatus(isPolling = false) {
+function currentItemLine(jp, running) {
+    const raw = jp.current_item || jp.current_plaque || '';
+    if (!raw) {
+        return '';
+    }
+    const name = String(raw).replace(/^Working on:\s*/i, '');
+    if (running) {
+        let age = '';
+        if (jp.last_activity) {
+            const ageSec = Math.round((Date.now() - new Date(jp.last_activity)) / 1000);
+            if (ageSec > 15) {
+                age = `(last update ${ageSec}s ago)`;
+            }
+        }
+        return `<p class="mb-1 small text-muted"><em>Working on: ${escapeHtml(name)}</em> ${age}</p>`;
+    }
+    return `<p class="mb-1 small text-muted"><em>Last: ${escapeHtml(name)}</em></p>`;
+}
+
+function loadImportStatus() {
     $.get('{{ route("admin.import.wikipedia.background-status") }}')
         .done(function(response) {
+            const running = !!(response.is_importing || response.job_status === 'running');
+            setBackgroundControls(running);
+
+            if (running) {
+                startBackgroundJobPolling();
+            } else {
+                stopBackgroundJobPolling();
+            }
+
             if (response.success && response.background_job && response.job_progress) {
                 const jp = response.job_progress;
                 const pct = jp.progress_percentage || 0;
-                const statusLabel = response.job_status === 'running' ? '(in progress)' : response.job_status;
-                const alertClass = response.job_status === 'running' ? 'info' : response.job_status === 'completed' ? 'success' : response.job_status === 'cancelled' ? 'warning' : 'warning';
-                const currentPerson = jp.current_plaque ? jp.current_plaque : '';
-                const lastActivity = jp.last_activity ? (() => {
-                    const d = new Date(jp.last_activity);
-                    const ageSec = Math.round((Date.now() - d) / 1000);
-                    return ageSec > 15 ? `(last update ${ageSec}s ago)` : '';
-                })() : '';
+                const statusLabel = running ? '(in progress)' : response.job_status;
+                const alertClass = running ? 'info' : response.job_status === 'completed' ? 'success' : response.job_status === 'cancelled' ? 'warning' : 'warning';
                 const stats = response.stats || {};
                 const totalNeedWiki = stats.total_need_wiki_source;
                 const previouslySkipped = stats.previously_skipped;
@@ -353,15 +385,12 @@ function loadImportStatus(isPolling = false) {
                     ? ` <span class="text-muted small">(${totalNeedWiki} total need Wikipedia source; ${previouslySkipped} previously skipped)</span>`
                     : '';
 
-                if (response.job_status === 'completed' || response.job_status === 'failed' || response.job_status === 'cancelled') {
-                    stopBackgroundJobPolling();
-                    if (response.job_status === 'completed' || response.job_status === 'cancelled') {
-                        refreshStats();
-                    }
+                if (response.job_status === 'completed' || response.job_status === 'cancelled') {
+                    refreshStats();
                 }
 
                 if (response.job_status === 'failed' && jp.error) {
-                    $('#importStatusContent').html(`<div class="alert alert-danger mb-0"><i class="bi bi-x-circle me-2"></i>Import failed: ${jp.error}</div>`);
+                    $('#importStatusContent').html(`<div class="alert alert-danger mb-0"><i class="bi bi-x-circle me-2"></i>Import failed: ${escapeHtml(jp.error)}</div>`);
                     return;
                 }
 
@@ -370,6 +399,7 @@ function loadImportStatus(isPolling = false) {
                         <div class="alert alert-warning mb-0">
                             <i class="bi bi-slash-circle me-2"></i><strong>Import cancelled.</strong>
                             <p class="mb-0 mt-2">Stopped at ${jp.processed || 0} of ${jp.total || 0} eligible (Created: ${jp.created || 0}, Skipped: ${jp.skipped || 0}, Errors: ${jp.errors || 0})</p>
+                            ${currentItemLine(jp, false)}
                             ${clarifyText ? `<p class="mb-0 mt-1 small">${clarifyText}</p>` : ''}
                         </div>
                     `);
@@ -380,13 +410,13 @@ function loadImportStatus(isPolling = false) {
                     <div class="alert alert-${alertClass} mb-0">
                         <div class="d-flex justify-content-between align-items-start">
                             <h6 class="mb-0"><i class="bi bi-cloud-upload me-2"></i>Background Import ${statusLabel}</h6>
-                            ${response.job_status === 'running' ? '<button type="button" class="btn btn-sm btn-outline-danger" id="cancelBackgroundBtn"><i class="bi bi-x-circle me-1"></i>Cancel</button>' : ''}
+                            ${running ? '<button type="button" class="btn btn-sm btn-outline-danger" id="cancelBackgroundBtn"><i class="bi bi-x-circle me-1"></i>Cancel</button>' : ''}
                         </div>
                         <p class="mb-2 mt-2"><strong>${jp.processed || 0}</strong> of <strong>${jp.total || 0}</strong> eligible public figures (${pct}% complete)${clarifyText}</p>
-                        ${currentPerson ? `<p class="mb-1 small text-muted"><em>${currentPerson}</em> ${lastActivity}</p>` : ''}
+                        ${currentItemLine(jp, running)}
                         <p class="mb-0 small">Created: ${jp.created || 0} | Skipped: ${jp.skipped || 0} | Errors: ${jp.errors || 0}</p>
                         <div class="progress mt-2" style="height: 20px;">
-                            <div class="progress-bar progress-bar-striped ${response.job_status === 'running' ? 'progress-bar-animated' : ''}" style="width: ${pct}%">${pct}%</div>
+                            <div class="progress-bar progress-bar-striped ${running ? 'progress-bar-animated' : ''}" style="width: ${pct}%">${pct}%</div>
                         </div>
                     </div>
                 `);
@@ -405,10 +435,9 @@ function startBackgroundImport(retrySkipped) {
         ? 'Re-process previously skipped public figures? This will retry ~' + (document.getElementById('withDescriptionMissingWikiSource')?.textContent || '?') + ' that were skipped before. You can leave this page and check back later.'
         : 'Start import in background? This will process all public figures needing Wikipedia info (excluding previously skipped). You can leave this page and check back later.';
     if (!confirm(msg)) return;
-    const $btns = $('#importBackgroundBtn, #importBackgroundRetryBtn').prop('disabled', true);
+    setBackgroundControls(true);
     const $clicked = retrySkipped ? $('#importBackgroundRetryBtn') : $('#importBackgroundBtn');
     $clicked.html('<i class="bi bi-hourglass-split me-2"></i>Starting...');
-    startBackgroundJobPolling();
     $.post('{{ route("admin.import.wikipedia.import-background") }}', {
         _token: $('meta[name="csrf-token"]').attr('content'),
         retry_skipped: retrySkipped ? 1 : 0
@@ -416,20 +445,24 @@ function startBackgroundImport(retrySkipped) {
         .done(function(response) {
             if (!response.success) {
                 alert(response.message || 'Failed to start import');
+                return;
             }
+            startBackgroundJobPolling();
         })
         .fail(function(xhr) {
+            const message = xhr.responseJSON?.message || 'Unknown error';
             if (xhr.status === 0) {
                 alert('Request was interrupted. The import may have started – check the status above.');
-                loadImportStatus();
+            } else if (xhr.status === 409) {
+                alert(message);
             } else {
-                alert('Failed to start import: ' + (xhr.responseJSON?.message || 'Unknown error'));
+                alert('Failed to start import: ' + message);
             }
         })
         .always(function() {
-            $btns.prop('disabled', false);
             $('#importBackgroundBtn').html('<i class="bi bi-cloud-upload me-2"></i>Import in Background');
             $('#importBackgroundRetryBtn').html('<i class="bi bi-arrow-repeat me-2"></i>Import (Retry Skipped)');
+            loadImportStatus();
         });
 }
 
@@ -446,8 +479,8 @@ $(document).on('click', '#cancelBackgroundBtn', function() {
     const $btn = $(this).prop('disabled', true).html('<i class="bi bi-hourglass-split me-1"></i>Cancelling...');
     $('#importStatusContent').find('.alert').first().append('<p class="mb-0 small text-warning mt-2"><i class="bi bi-info-circle me-1"></i>Cancel requested – polling for status…</p>');
     $.post('{{ route("admin.import.wikipedia.cancel-background") }}', { _token: $('meta[name="csrf-token"]').attr('content') })
-        .done(function() { loadImportStatus(true); })
-        .fail(function() { loadImportStatus(true); })
+        .done(function() { loadImportStatus(); })
+        .fail(function() { loadImportStatus(); })
         .always(function() { $btn.prop('disabled', false).html('<i class="bi bi-x-circle me-1"></i>Cancel'); });
 });
 
