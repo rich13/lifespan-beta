@@ -1,778 +1,721 @@
 @extends('layouts.app')
 
+@section('title', 'Desert Island Discs Import')
+
 @section('content')
-<div class="container-fluid">
-    <div class="row">
+<div class="container">
+    <div class="row justify-content-center">
         <div class="col-12">
-            <h1 class="h3 mb-4">Simple Desert Island Discs Import</h1>
-            
-            <div class="alert alert-warning" role="alert">
-                <strong>Note:</strong> This simplified importer creates placeholders only. No external lookups (MusicBrainz, Wikipedia) are performed.
-            </div>
-        </div>
-    </div>
+            <nav aria-label="breadcrumb" class="mb-3">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ route('admin.dashboard') }}">Admin</a></li>
+                    <li class="breadcrumb-item"><a href="{{ route('admin.import.index') }}">Import</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">Desert Island Discs</li>
+                </ol>
+            </nav>
 
-    <div class="row">
-        <!-- Main Content Column -->
-        <div class="col-lg-8">
-            <!-- CSV Upload Section -->
-            <div class="card mb-4">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">1. Upload CSV File</h5>
-                </div>
-                <div class="card-body">
-                    <div class="mb-3">
-                        <label for="csv_file" class="form-label">
-                            Upload CSV File (max 10MB)
-                        </label>
-                        <input 
-                            type="file" 
-                            id="csv_file" 
-                            name="csv_file" 
-                            class="form-control"
-                            accept=".csv,.txt"
-                        />
-                        <div class="form-text">
-                            Upload your CSV file with headers. The file should contain columns like: Castaway, Job, Book, Date first broadcast, Artist 1, Song 1, etc.
-                        </div>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <button type="button" class="btn btn-primary" onclick="uploadCsv()">
-                            <i class="bi bi-upload me-2"></i>Upload CSV
-                        </button>
-                    </div>
-                    
-                    <div id="upload_status" class="d-none">
-                        <div class="alert alert-info">
-                            <i class="bi bi-info-circle me-2"></i>
-                            <span id="upload_message">Uploading...</span>
-                        </div>
-                    </div>
-                    
-                    <hr>
-                    
-                    <div class="mb-3">
-                        <label class="form-label">
-                            Or paste CSV data (for small files only)
-                        </label>
-                        <textarea 
-                            id="csv_data" 
-                            name="csv_data" 
-                            rows="5" 
-                            class="form-control"
-                            placeholder="Castaway,Job,Book,Date first broadcast,Artist 1,Song 1,Artist 2,Song 2,..."
-                        >{{ $csvContent }}</textarea>
-                        <div class="form-text">
-                            <strong>Warning:</strong> For large CSV files, use the file upload above to avoid request size limits.
-                        </div>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <button type="button" class="btn btn-secondary" onclick="previewData()">
-                            <i class="bi bi-eye me-2"></i>Preview (Text)
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- File Upload Preview Section -->
-            <div id="file_preview_section" class="card mb-4 d-none">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">2. Data Preview (File Upload)</h5>
-                </div>
-                <div class="card-body">
-                    <div id="file_info" class="mb-3"></div>
-                    <div id="file_preview_content"></div>
-                    <div class="mt-3">
-                        <button type="button" class="btn btn-primary" onclick="loadNextChunk()" id="load_more_btn">
-                            <i class="bi bi-arrow-down me-2"></i>Load More Rows
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Preview Section -->
-            <div id="preview_section" class="card mb-4 d-none">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">2. Data Preview (Text)</h5>
-                </div>
-                <div class="card-body">
-                    <div id="preview_content"></div>
-                </div>
-            </div>
-
-            <!-- Dry Run Results -->
-            <div id="dry_run_section" class="card mb-4 d-none">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">3. Dry Run Results</h5>
-                </div>
-                <div class="card-body">
-                    <div id="dry_run_content"></div>
-                </div>
-            </div>
-
-            <!-- Import Results -->
-            <div id="import_results_section" class="card mb-4 d-none">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">4. Import Results</h5>
-                </div>
-                <div class="card-body">
-                    <div id="import_results_content"></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Sidebar Column -->
-        <div class="col-lg-4">
-            <!-- Row Selection Section -->
-            <div id="row_selection_section" class="card mb-4 d-none">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">Row Selection</h5>
-                </div>
-                <div class="card-body">
-                    <div class="mb-3">
-                        <label for="row_number" class="form-label">Row Number</label>
-                        <input 
-                            type="number" 
-                            id="row_number" 
-                            name="row_number" 
-                            class="form-control" 
-                            min="1" 
-                            value="1"
-                        />
-                        <div class="form-text">Showing <span id="total_rows_display">of 0</span> total rows</div>
-                    </div>
-                    
-                    <div class="d-grid gap-2">
-                        <button type="button" class="btn btn-info" onclick="dryRun()">
-                            <i class="bi bi-search me-2"></i>Dry Run
-                        </button>
-                        <button type="button" class="btn btn-success" onclick="importRow()">
-                            <i class="bi bi-download me-2"></i>Import Row
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- File Upload Row Selection -->
-            <div id="file_row_selection" class="card mb-4 d-none">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">Row Selection (File Upload)</h5>
-                </div>
-                <div class="card-body">
-                    <div class="mb-3">
-                        <label for="file_row_number" class="form-label">Row Number</label>
-                        <input 
-                            type="number" 
-                            id="file_row_number" 
-                            name="file_row_number" 
-                            class="form-control" 
-                            min="1" 
-                            value="1"
-                        />
-                        <div class="form-text">Showing <span id="file_total_rows_display">of 0</span> total rows</div>
-                    </div>
-                    
-                    <div class="d-grid gap-2">
-                        <button type="button" class="btn btn-info" onclick="dryRunFile()">
-                            <i class="bi bi-search me-2"></i>Dry Run
-                        </button>
-                        <button type="button" class="btn btn-success" onclick="importFileRow()">
-                            <i class="bi bi-download me-2"></i>Import Row
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Help Section -->
             <div class="card">
                 <div class="card-header">
-                    <h5 class="card-title mb-0">Help</h5>
+                    <h3 class="card-title">
+                        <i class="bi bi-music-note-beamed me-2"></i>
+                        Desert Island Discs bulk import
+                    </h3>
                 </div>
                 <div class="card-body">
-                    <h6>CSV Format</h6>
-                    <p class="small">Your CSV should have these columns:</p>
-                    <ul class="small">
-                        <li><strong>Castaway</strong> - Name of the person</li>
-                        <li><strong>Job</strong> - Their profession</li>
-                        <li><strong>Book</strong> - Their chosen book</li>
-                        <li><strong>Date first broadcast</strong> - Broadcast date</li>
-                        <li><strong>Artist 1-8</strong> - Artist names</li>
-                        <li><strong>Song 1-8</strong> - Song titles</li>
-                    </ul>
-                    
-                    <h6>Process</h6>
-                    <ol class="small">
-                        <li>Upload your CSV file</li>
-                        <li>Preview the data</li>
-                        <li>Select a row to import</li>
-                        <li>Run a dry run to see what will be created</li>
-                        <li>Import the row</li>
-                    </ol>
+                    <div class="alert alert-info">
+                        <h5><i class="bi bi-info-circle me-2"></i>About this importer</h5>
+                        <p class="mb-2">
+                            Fetches Praful’s episode CSV and creates one public placeholder set per BBC programme.
+                            Created/Skipped counts <strong>episodes</strong> by BBC programme id — a first run of
+                            a few thousand rows should create almost everything. Re-running then skips those ids.
+                            Existing episode sets from earlier importers are reused and tagged with the programme id,
+                            not duplicated.
+                        </p>
+                        <p class="mb-0">
+                            People, artists, tracks, and books are reused by name (case-insensitive), so they are
+                            not counted as skipped. After a successful import, Wikipedia (people and books) and
+                            MusicBrainz (artists and tracks) run as a follow-up job.
+                        </p>
+                    </div>
+
+                    <div id="alertsContainer"></div>
+
+                    <div class="row mb-4" id="importStatusSection">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0">Import Status</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div id="importStatusContent">
+                                        <div class="text-center">
+                                            <div class="spinner-border text-primary" role="status">
+                                                <span class="visually-hidden">Loading...</span>
+                                            </div>
+                                            <p class="mt-2 text-muted">Loading import status...</p>
+                                        </div>
+                                    </div>
+                                    <div id="enrichStatusContent" class="mt-3"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mb-4">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0">Import Controls</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-4 mb-2">
+                                            <button type="button" class="btn btn-success w-100" id="importAllBtn">
+                                                <i class="bi bi-play-fill me-2"></i>
+                                                Import All Episodes
+                                            </button>
+                                        </div>
+                                        <div class="col-md-4 mb-2">
+                                            <button type="button" class="btn btn-outline-success w-100" id="importBackgroundBtn">
+                                                <i class="bi bi-cloud-upload me-2"></i>
+                                                Import in Background
+                                            </button>
+                                        </div>
+                                        <div class="col-md-4 mb-2">
+                                            <button type="button" class="btn btn-outline-danger w-100 d-none" id="cancelImportBtn">
+                                                <i class="bi bi-x-circle me-2"></i>
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mb-4">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0">
+                                        <i class="bi bi-search me-2"></i>
+                                        Import a single episode
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <p class="text-muted small mb-3">
+                                        Search the CSV by castaway, programme id, or broadcast date and import one episode
+                                        without running the full importer.
+                                    </p>
+                                    <div class="row align-items-end">
+                                        <div class="col-md-6 mb-2">
+                                            <label for="episodeSearchQuery" class="form-label">Search term</label>
+                                            <input type="text"
+                                                   class="form-control"
+                                                   id="episodeSearchQuery"
+                                                   placeholder="e.g. David Attenborough, m002lpnf"
+                                                   maxlength="200">
+                                        </div>
+                                        <div class="col-md-3 mb-2">
+                                            <button type="button" class="btn btn-outline-primary w-100" id="searchEpisodeBtn">
+                                                <i class="bi bi-search me-2"></i>Search
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div id="searchEpisodeResults" class="mt-3 d-none">
+                                        <h6 class="mb-2">Results</h6>
+                                        <div id="searchEpisodeResultsList"></div>
+                                    </div>
+                                    <div id="searchEpisodeEmpty" class="mt-3 alert alert-info d-none">
+                                        No episodes found for that search.
+                                    </div>
+                                    <div id="searchEpisodeError" class="mt-3 alert alert-danger d-none"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mb-4 d-none" id="progressSection">
+                        <div class="col-md-8">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0">
+                                        <i class="bi bi-arrow-repeat me-2" id="progressSpinner"></i>
+                                        Import Progress
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="progress mb-3">
+                                        <div class="progress-bar progress-bar-striped progress-bar-animated" id="progressBar" role="progressbar">0%</div>
+                                    </div>
+                                    <p class="mb-1" id="statusText">Preparing…</p>
+                                    <p class="mb-2 fw-semibold" id="currentPersonText"></p>
+                                    <p class="mb-0 small text-muted" id="countsText"></p>
+                                    <div class="mt-3">
+                                        <h6 class="small text-muted mb-2">Recent episodes</h6>
+                                        <div id="didActivityLog" class="list-group list-group-flush did-activity-log"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mb-4 d-none" id="statsSection">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0">Imported so far</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row" id="statsContent"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
+@endsection
 
-<script>
-let csvData = '';
-let totalRows = 0;
-let currentChunk = 1;
-let chunkSize = 10;
-let hasMoreChunks = true;
-
-function scrollToSection(sectionId) {
-    const section = document.getElementById(sectionId);
-    if (section && !section.classList.contains('d-none')) {
-        section.scrollIntoView({ behavior: 'smooth' });
-    }
+@push('styles')
+<style>
+.did-activity-log {
+    max-height: 16rem;
+    overflow-y: auto;
 }
+</style>
+@endpush
 
-function uploadCsv() {
-    const fileInput = document.getElementById('csv_file');
-    const file = fileInput.files[0];
-    
-    if (!file) {
-        alert('Please select a CSV file');
+@push('scripts')
+<script>
+let isProcessing = false;
+let currentOffset = 0;
+let cumulativeProcessed = 0;
+let cumulativeCreated = 0;
+let cumulativeSkipped = 0;
+let cumulativeErrors = 0;
+let backgroundJobPollInterval = null;
+let foregroundPeople = [];
+
+$(document).ready(function() {
+    $.ajaxSetup({
+        headers: {
+            'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+        }
+    });
+
+    loadImportStatus();
+    loadStats();
+
+    $('#importAllBtn').click(function() {
+        if (isProcessing) {
+            return;
+        }
+        if (!confirm('This will import all Desert Island Discs episodes from the CSV. Continue?')) {
+            return;
+        }
+        startImport(0);
+    });
+
+    $('#importBackgroundBtn').click(function() {
+        if (isProcessing) {
+            return;
+        }
+        if (!confirm('Start import in background? Wikipedia and MusicBrainz enrichment will follow automatically.')) {
+            return;
+        }
+
+        $(this).prop('disabled', true).html('<i class="bi bi-hourglass-split me-2"></i>Starting...');
+
+        $.post('{{ route("admin.import.simple-desert-island-discs.import-background") }}')
+            .done(function(response) {
+                if (!response.success) {
+                    alert(response.message || 'Failed to start import');
+                    return;
+                }
+                startBackgroundJobPolling();
+                loadImportStatus();
+            })
+            .fail(function(xhr) {
+                alert('Failed to start import: ' + (xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Unknown error'));
+            })
+            .always(function() {
+                $('#importBackgroundBtn').prop('disabled', false).html('<i class="bi bi-cloud-upload me-2"></i>Import in Background');
+            });
+    });
+
+    $('#cancelImportBtn').click(function() {
+        if (!confirm('Cancel the import? It will stop after the current batch.')) {
+            return;
+        }
+        isProcessing = false;
+        $.post('{{ route("admin.import.simple-desert-island-discs.cancel-background") }}')
+            .done(function() {
+                loadImportStatus(true);
+            })
+            .fail(function(xhr) {
+                showError('Failed to cancel import: ' + (xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Unknown error'));
+            });
+    });
+
+    $('#searchEpisodeBtn').click(function() {
+        searchEpisodes();
+    });
+
+    $('#episodeSearchQuery').on('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            searchEpisodes();
+        }
+    });
+
+    $(document).on('click', '#cancelBackgroundBtn', function() {
+        if (!confirm('Cancel the background import? It will stop after the current batch.')) {
+            return;
+        }
+        const $btn = $(this);
+        $btn.prop('disabled', true).html('<i class="bi bi-hourglass-split me-1"></i>Cancelling...');
+
+        $.post('{{ route("admin.import.simple-desert-island-discs.cancel-background") }}')
+            .done(function(response) {
+                if (response.success) {
+                    loadImportStatus(true);
+                }
+            })
+            .fail(function(xhr) {
+                showError('Failed to cancel import: ' + (xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Unknown error'));
+            });
+    });
+
+    $(document).on('click', '.import-single-episode-btn', function() {
+        const episodeIndex = $(this).data('episode-index');
+        const $btn = $(this);
+        const $item = $btn.closest('.list-group-item');
+        $btn.prop('disabled', true).html('<i class="bi bi-hourglass-split me-1"></i>Importing...');
+
+        $.post('{{ route("admin.import.simple-desert-island-discs.process-single") }}', {
+            episode_index: episodeIndex
+        })
+            .done(function(response) {
+                if (response.success) {
+                    const details = response.details || {};
+                    if (details.skipped) {
+                        $btn.removeClass('btn-success').addClass('btn-secondary').html('<i class="bi bi-check2 me-1"></i>Already in database');
+                    } else {
+                        $btn.removeClass('btn-success').addClass('btn-secondary').html('<i class="bi bi-check2 me-1"></i>Imported');
+                    }
+
+                    if (details.set_id) {
+                        const url = '{{ url("/spans") }}/' + details.set_id;
+                        $item.append('<br><small><a href="' + url + '" target="_blank">View episode set</a></small>');
+                    }
+                    loadStats();
+                } else {
+                    $btn.prop('disabled', false).html('<i class="bi bi-download me-1"></i>Import');
+                    alert(response.message || 'Import failed');
+                }
+            })
+            .fail(function(xhr) {
+                $btn.prop('disabled', false).html('<i class="bi bi-download me-1"></i>Import');
+                alert('Import failed: ' + (xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Unknown error'));
+            });
+    });
+});
+
+function searchEpisodes() {
+    const query = $.trim($('#episodeSearchQuery').val());
+    const $btn = $('#searchEpisodeBtn');
+    $('#searchEpisodeResults').addClass('d-none');
+    $('#searchEpisodeEmpty').addClass('d-none');
+    $('#searchEpisodeError').addClass('d-none').text('');
+
+    if (!query) {
+        $('#searchEpisodeError').text('Enter a search term.').removeClass('d-none');
         return;
     }
-    
-    const formData = new FormData();
-    formData.append('csv_file', file);
-    
-    // Show upload status
-    document.getElementById('upload_status').classList.remove('d-none');
-    document.getElementById('upload_message').textContent = 'Uploading...';
-    
-    fetch('/admin/import/simple-desert-island-discs/upload', {
-        method: 'POST',
-        headers: {
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-        },
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            document.getElementById('upload_message').textContent = `Uploaded: ${data.filename} (${data.total_rows} rows)`;
-            document.getElementById('upload_status').classList.remove('alert-info');
-            document.getElementById('upload_status').classList.add('alert-success');
-            
-            // Load first chunk
-            loadFirstChunk();
-        } else {
-            document.getElementById('upload_message').textContent = 'Error: ' + data.message;
-            document.getElementById('upload_status').classList.remove('alert-info');
-            document.getElementById('upload_status').classList.add('alert-danger');
-        }
-    })
-    .catch(error => {
-        console.error('Upload Error:', error);
-        
-        // Check for 413 Payload Too Large error
-        if (error.name === 'TypeError' && error.message.includes('Load failed')) {
-            // This is likely a 413 error
-            const errorMessage = 'File too large (413 Payload Too Large). The server rejected the upload due to size limits.';
-            console.error('413 Payload Too Large Error detected:', {
-                error: error,
-                fileSize: file.size,
-                fileName: file.name,
-                timestamp: new Date().toISOString()
-            });
-            
-            // Log to server for debugging
-            fetch('/admin/import/simple-desert-island-discs/log-error', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-                },
-                body: JSON.stringify({
-                    error_type: '413_payload_too_large',
-                    error_message: error.message,
-                    file_size: file.size,
-                    file_name: file.name,
-                    user_agent: navigator.userAgent,
-                    timestamp: new Date().toISOString()
-                })
-            }).catch(logError => {
-                console.error('Failed to log error to server:', logError);
-            });
-            
-            document.getElementById('upload_message').textContent = errorMessage;
-        } else {
-            document.getElementById('upload_message').textContent = 'Upload failed: ' + (error.message || 'Unknown error');
-        }
-        
-        document.getElementById('upload_status').classList.remove('alert-info');
-        document.getElementById('upload_status').classList.add('alert-danger');
-    });
-}
 
-function loadFirstChunk() {
-    currentChunk = 1;
-    loadChunk();
-}
+    $btn.prop('disabled', true).html('<i class="bi bi-hourglass-split me-2"></i>Searching...');
 
-function loadNextChunk() {
-    currentChunk++;
-    loadChunk();
-}
-
-function loadChunk() {
-    const startRow = (currentChunk - 1) * chunkSize + 1;
-    
-    fetch('/admin/import/simple-desert-island-discs/preview-chunk', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-        },
-        body: JSON.stringify({ 
-            start_row: startRow,
-            chunk_size: chunkSize
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            displayFileInfo(data);
-            displayFilePreview(data.preview, data);
-            totalRows = data.total_rows;
-            hasMoreChunks = data.has_more;
-            
-            // Show/hide load more button
-            const loadMoreBtn = document.getElementById('load_more_btn');
-            if (hasMoreChunks) {
-                loadMoreBtn.classList.remove('d-none');
-                loadMoreBtn.textContent = `Load More Rows (${data.end_row + 1}-${Math.min(data.end_row + chunkSize, totalRows)})`;
-            } else {
-                loadMoreBtn.classList.add('d-none');
+    $.post('{{ route("admin.import.simple-desert-island-discs.search-episode") }}', { query: query })
+        .done(function(response) {
+            if (!response.success) {
+                $('#searchEpisodeError').text(response.message || 'Search failed').removeClass('d-none');
+                return;
             }
-            
-            document.getElementById('file_preview_section').classList.remove('d-none');
-            document.getElementById('file_row_selection').classList.remove('d-none');
-            document.getElementById('file_total_rows_display').textContent = `of ${totalRows}`;
-            
-            // Scroll to preview section
-            setTimeout(() => scrollToSection('file_preview_section'), 100);
-        } else {
-            alert('Error: ' + data.message);
-        }
-    })
-    .catch(error => {
-        console.error('Preview Chunk Error:', error);
-        
-        // Check for 413 Payload Too Large error
-        if (error.name === 'TypeError' && error.message.includes('Load failed')) {
-            // This is likely a 413 error
-            const errorMessage = 'Preview failed: File too large (413 Payload Too Large). The server rejected the request due to size limits.';
-            console.error('413 Payload Too Large Error in preview:', {
-                error: error,
-                chunk: currentChunk,
-                chunkSize: chunkSize,
-                timestamp: new Date().toISOString()
+
+            const matches = response.matches || [];
+            if (matches.length === 0) {
+                $('#searchEpisodeEmpty').removeClass('d-none');
+                return;
+            }
+
+            let html = '<div class="list-group">';
+            matches.forEach(function(m) {
+                const title = $('<div>').text(m.title || 'Untitled').html();
+                const published = m.published ? m.published : 'Unknown date';
+                const programmeId = m.id ? m.id : '';
+                const url = m.url || null;
+                html += `
+                    <div class="list-group-item list-group-item-action" data-episode-index="${m.index}">
+                        <div class="d-flex w-100 justify-content-between align-items-start flex-wrap">
+                            <div class="mb-1">
+                                <strong>${title}</strong>
+                                <br><small class="text-muted">${published}${programmeId ? ' · ' + programmeId : ''}</small>
+                                ${url ? '<br><small class="text-muted"><a href="' + url + '" target="_blank">BBC programme</a></small>' : ''}
+                            </div>
+                            <button type="button" class="btn btn-sm btn-success import-single-episode-btn" data-episode-index="${m.index}">
+                                <i class="bi bi-download me-1"></i>Import
+                            </button>
+                        </div>
+                    </div>
+                `;
             });
-            
-            // Log to server for debugging
-            fetch('/admin/import/simple-desert-island-discs/log-error', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-                },
-                body: JSON.stringify({
-                    error_type: '413_payload_too_large_preview',
-                    error_message: error.message,
-                    chunk: currentChunk,
-                    chunk_size: chunkSize,
-                    user_agent: navigator.userAgent,
-                    timestamp: new Date().toISOString()
-                })
-            }).catch(logError => {
-                console.error('Failed to log error to server:', logError);
-            });
-            
-            alert(errorMessage);
-        } else {
-            alert('Error loading preview: ' + (error.message || 'Unknown error'));
-        }
-    });
+            html += '</div>';
+            $('#searchEpisodeResultsList').html(html);
+            $('#searchEpisodeResults').removeClass('d-none');
+        })
+        .fail(function(xhr) {
+            $('#searchEpisodeError').text('Search failed: ' + (xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Unknown error')).removeClass('d-none');
+        })
+        .always(function() {
+            $btn.prop('disabled', false).html('<i class="bi bi-search me-2"></i>Search');
+        });
 }
 
-function displayFileInfo(data) {
-    const infoDiv = document.getElementById('file_info');
-    infoDiv.innerHTML = `
-        <div class="alert alert-info">
-            <strong>File:</strong> ${data.filename || 'Unknown'}<br>
-            <strong>Total Rows:</strong> ${data.total_rows}<br>
-            <strong>Showing:</strong> Rows ${data.start_row}-${data.end_row}
+function escapeText(text) {
+    return $('<div>').text(text == null ? '' : String(text)).html();
+}
+
+function currentItemLine(item, running) {
+    if (!item) {
+        return '';
+    }
+    const label = running ? 'Now' : 'Last';
+    return `<p class="mb-0 mt-2"><strong>${label}:</strong> ${escapeText(item)}</p>`;
+}
+
+function actionBadge(action) {
+    if (action === 'created') {
+        return '<span class="badge bg-success">Created</span>';
+    }
+    if (action === 'skipped') {
+        return '<span class="badge bg-secondary">Skipped</span>';
+    }
+    if (action === 'error') {
+        return '<span class="badge bg-danger">Error</span>';
+    }
+    return '<span class="badge bg-light text-dark">' + escapeText(action || '') + '</span>';
+}
+
+function recentPeopleMarkup(people) {
+    if (!people || !people.length) {
+        return '<p class="text-muted small mb-0">Waiting for the first episode…</p>';
+    }
+
+    let html = '';
+    people.slice().reverse().forEach(function(person) {
+        html += `
+            <div class="list-group-item px-0 py-2 d-flex justify-content-between align-items-center">
+                <span>${escapeText(person.name)}</span>
+                ${actionBadge(person.action)}
+            </div>
+        `;
+    });
+    return html;
+}
+
+function recentPeopleSection(people, running) {
+    if (!people || !people.length) {
+        if (!running) {
+            return '';
+        }
+
+        return `
+            <h6 class="small text-muted mb-2">Recent episodes</h6>
+            <div class="list-group list-group-flush did-activity-log">
+                <p class="text-muted small mb-0">Waiting for the first episode…</p>
+            </div>
+        `;
+    }
+
+    return `
+        <h6 class="small text-muted mb-2">Recent episodes</h6>
+        <div class="list-group list-group-flush did-activity-log">
+            ${recentPeopleMarkup(people)}
         </div>
     `;
 }
 
-function displayFilePreview(preview, data) {
-    const content = document.getElementById('file_preview_content');
-    let html = '<div class="table-responsive"><table class="table table-striped">';
-    
-    // Headers
-    html += '<thead class="table-light">';
-    html += '<tr>';
-    html += '<th>Row</th>';
-    html += '<th>Castaway</th>';
-    html += '<th>Job</th>';
-    html += '<th>Book</th>';
-    html += '<th>Broadcast Date</th>';
-    html += '<th>Songs</th>';
-    html += '</tr>';
-    html += '</thead><tbody>';
-    
-    preview.forEach(row => {
-        html += '<tr>';
-        html += `<td>${row.row_number}</td>`;
-        html += `<td>${row.castaway}</td>`;
-        html += `<td>${row.job}</td>`;
-        html += `<td>${row.book}</td>`;
-        html += `<td>${row.broadcast_date}</td>`;
-        html += `<td>${row.songs_count}</td>`;
-        html += '</tr>';
-    });
-    
-    html += '</tbody></table></div>';
-    content.innerHTML = html;
+function renderActivityLog($container, people) {
+    $container.html(recentPeopleMarkup(people));
 }
 
-function dryRunFile() {
-    const rowNumber = document.getElementById('file_row_number').value;
-    if (!rowNumber || rowNumber < 1 || rowNumber > totalRows) {
-        alert('Please enter a valid row number');
+function startBackgroundJobPolling() {
+    if (backgroundJobPollInterval) {
+        return;
+    }
+    backgroundJobPollInterval = setInterval(function() {
+        loadImportStatus(true);
+    }, 1000);
+}
+
+function stopBackgroundJobPolling() {
+    if (backgroundJobPollInterval) {
+        clearInterval(backgroundJobPollInterval);
+        backgroundJobPollInterval = null;
+    }
+}
+
+function renderEnrichStatus(response) {
+    if (!response.enrich_job || !response.enrich_progress) {
+        $('#enrichStatusContent').empty();
         return;
     }
 
-    fetch('/admin/import/simple-desert-island-discs/dry-run-chunk', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-        },
-        body: JSON.stringify({ 
-            row_number: parseInt(rowNumber)
+    const ep = response.enrich_progress;
+    const pct = ep.progress_percentage || 0;
+    const statusLabel = response.enrich_status === 'running' ? '(in progress)' : response.enrich_status;
+    const alertClass = response.enrich_status === 'running'
+        ? 'info'
+        : response.enrich_status === 'completed'
+            ? 'success'
+            : response.enrich_status === 'cancelled'
+                ? 'warning'
+                : 'warning';
+
+    $('#enrichStatusContent').html(`
+        <div class="alert alert-${alertClass} mb-0">
+            <h5 class="mb-2"><i class="bi bi-search me-2"></i>Wikipedia / MusicBrainz enrichment ${statusLabel}</h5>
+            <p class="mb-2">
+                <strong>${ep.processed || 0}</strong> of <strong>${ep.total || 0}</strong> spans
+                (${pct}% complete)
+            </p>
+            <p class="mb-0 small">
+                Enriched: ${ep.created || 0} | Skipped: ${ep.skipped || 0} | Errors: ${ep.errors || 0}
+            </p>
+            ${currentItemLine(ep.current_item, response.enrich_status === 'running')}
+        </div>
+    `);
+
+    if (response.enrich_status === 'running' && !backgroundJobPollInterval) {
+        startBackgroundJobPolling();
+    }
+}
+
+function loadImportStatus(isPolling) {
+    $.get('{{ route("admin.import.simple-desert-island-discs.status") }}')
+        .done(function(response) {
+            if (!response.success) {
+                $('#importStatusContent').html(`
+                    <div class="alert alert-warning mb-0">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        Could not load import status: ${response.message || 'Unknown error'}
+                    </div>
+                `);
+                return;
+            }
+
+            if (response.background_job && response.job_progress) {
+                const jp = response.job_progress;
+                const pct = jp.progress_percentage || 0;
+                const statusLabel = response.job_status === 'running' ? '(in progress)' : response.job_status;
+                const alertClass = response.job_status === 'running'
+                    ? 'info'
+                    : response.job_status === 'completed'
+                        ? 'success'
+                        : response.job_status === 'cancelled'
+                            ? 'warning'
+                            : 'warning';
+
+                $('#importStatusContent').html(`
+                    <div class="alert alert-${alertClass} mb-3">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <h5 class="mb-0"><i class="bi bi-cloud-upload me-2"></i>Background Import ${statusLabel}</h5>
+                            ${response.job_status === 'running'
+                                ? '<button type="button" class="btn btn-sm btn-outline-danger" id="cancelBackgroundBtn"><i class="bi bi-x-circle me-1"></i>Cancel</button>'
+                                : ''}
+                        </div>
+                        <p class="mb-2 mt-2">
+                            <strong>${jp.processed || 0}</strong> of <strong>${jp.total || 0}</strong> episodes
+                            (${pct}% complete)
+                        </p>
+                        <p class="mb-0 small">
+                            Created: ${jp.created || 0} | Skipped: ${jp.skipped || 0} | Errors: ${jp.errors || 0}
+                        </p>
+                        ${currentItemLine(jp.current_item, response.job_status === 'running')}
+                    </div>
+                    <div class="progress mb-3">
+                        <div class="progress-bar progress-bar-striped ${response.job_status === 'running' ? 'progress-bar-animated' : ''}" role="progressbar">${pct}%</div>
+                    </div>
+                    ${recentPeopleSection(jp.recent_people || [], response.job_status === 'running')}
+                `);
+                $('#importStatusContent .progress-bar').css('width', pct + '%');
+
+                if (response.job_status === 'running' && !backgroundJobPollInterval) {
+                    startBackgroundJobPolling();
+                }
+
+                if (response.job_status === 'completed' || response.job_status === 'failed' || response.job_status === 'cancelled') {
+                    if (response.enrich_status !== 'running') {
+                        stopBackgroundJobPolling();
+                    }
+                    if (response.job_status === 'completed' || response.job_status === 'cancelled') {
+                        loadStats();
+                    }
+                }
+            } else {
+                const imported = response.total_imported_episodes || 0;
+                const total = response.total_available_episodes || imported;
+                const pct = response.import_progress_percentage || (total > 0 ? Math.round((imported / total) * 100) : 0);
+
+                $('#importStatusContent').html(`
+                    <div class="alert alert-info mb-3">
+                        <h5><i class="bi bi-info-circle me-2"></i>Import Progress</h5>
+                        <p class="mb-2">
+                            <strong>${imported}</strong> of <strong>${total}</strong> episodes imported
+                            (${pct}% complete)
+                        </p>
+                    </div>
+                    <div class="progress mb-0">
+                        <div class="progress-bar progress-bar-striped" role="progressbar">${pct}%</div>
+                    </div>
+                `);
+                $('#importStatusContent .progress-bar').css('width', pct + '%');
+            }
+
+            renderEnrichStatus(response);
         })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            displayDryRun(data.dry_run);
-            document.getElementById('dry_run_section').classList.remove('d-none');
-            // Scroll to dry run section
-            setTimeout(() => scrollToSection('dry_run_section'), 100);
-        } else {
-            alert('Error: ' + data.message);
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Error performing dry run');
-    });
-}
-
-function importFileRow() {
-    const rowNumber = document.getElementById('file_row_number').value;
-    if (!rowNumber || rowNumber < 1 || rowNumber > totalRows) {
-        alert('Please enter a valid row number');
-        return;
-    }
-
-    if (!confirm(`Are you sure you want to import row ${rowNumber}? This will create placeholders for all items.`)) {
-        return;
-    }
-
-    fetch('/admin/import/simple-desert-island-discs/import-chunk', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-        },
-        body: JSON.stringify({ 
-            row_number: parseInt(rowNumber)
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            displayImportResults(data);
-            document.getElementById('import_results_section').classList.remove('d-none');
-            // Scroll to results section
-            setTimeout(() => scrollToSection('import_results_section'), 100);
-        } else {
-            alert('Error: ' + data.message);
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Error importing row');
-    });
-}
-
-function previewData() {
-    csvData = document.getElementById('csv_data').value.trim();
-    if (!csvData) {
-        alert('Please enter CSV data');
-        return;
-    }
-
-    fetch('/admin/import/simple-desert-island-discs/preview', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-        },
-        body: JSON.stringify({ csv_data: csvData })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            displayPreview(data.preview);
-            totalRows = data.total_rows;
-            document.getElementById('total_rows_display').textContent = `of ${totalRows}`;
-            document.getElementById('row_selection_section').classList.remove('d-none');
-            document.getElementById('preview_section').classList.remove('d-none');
-            // Scroll to preview section
-            setTimeout(() => scrollToSection('preview_section'), 100);
-        } else {
-            alert('Error: ' + data.message);
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Error previewing data');
-    });
-}
-
-function displayPreview(preview) {
-    const content = document.getElementById('preview_content');
-    let html = '<div class="table-responsive"><table class="table table-striped">';
-    
-    // Headers
-    html += '<thead class="table-light">';
-    html += '<tr>';
-    html += '<th>Row</th>';
-    html += '<th>Castaway</th>';
-    html += '<th>Job</th>';
-    html += '<th>Book</th>';
-    html += '<th>Broadcast Date</th>';
-    html += '<th>Songs</th>';
-    html += '</tr>';
-    html += '</thead><tbody>';
-    
-    preview.forEach(row => {
-        html += '<tr>';
-        html += `<td>${row.row_number}</td>`;
-        html += `<td>${row.castaway}</td>`;
-        html += `<td>${row.job}</td>`;
-        html += `<td>${row.book}</td>`;
-        html += `<td>${row.broadcast_date}</td>`;
-        html += `<td>${row.songs_count}</td>`;
-        html += '</tr>';
-    });
-    
-    html += '</tbody></table></div>';
-    content.innerHTML = html;
-}
-
-function dryRun() {
-    const rowNumber = document.getElementById('row_number').value;
-    if (!rowNumber || rowNumber < 1 || rowNumber > totalRows) {
-        alert('Please enter a valid row number');
-        return;
-    }
-
-    fetch('/admin/import/simple-desert-island-discs/dry-run', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-        },
-        body: JSON.stringify({ 
-            csv_data: csvData,
-            row_number: parseInt(rowNumber)
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            displayDryRun(data.dry_run);
-            document.getElementById('dry_run_section').classList.remove('d-none');
-            // Scroll to dry run section
-            setTimeout(() => scrollToSection('dry_run_section'), 100);
-        } else {
-            alert('Error: ' + data.message);
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Error performing dry run');
-    });
-}
-
-function displayDryRun(dryRun) {
-    const content = document.getElementById('dry_run_content');
-    let html = '<div class="row">';
-    
-    // Castaway
-    html += '<div class="col-md-6 mb-3">';
-    html += '<div class="border-start border-primary border-4 ps-3">';
-    html += '<h6 class="fw-bold">Castaway</h6>';
-    html += `<p class="mb-1"><strong>Name:</strong> ${dryRun.castaway.name}</p>`;
-    html += `<p class="mb-1"><strong>Job:</strong> ${dryRun.castaway.job || 'No job specified'}</p>`;
-    html += `<p class="mb-0"><strong>Action:</strong> <span class="text-primary">${dryRun.castaway.action}</span></p>`;
-    html += '</div></div>';
-    
-    // Book
-    if (dryRun.book) {
-        html += '<div class="col-md-6 mb-3">';
-        html += '<div class="border-start border-success border-4 ps-3">';
-        html += '<h6 class="fw-bold">Book</h6>';
-        html += `<p class="mb-1"><strong>Title:</strong> ${dryRun.book.title}</p>`;
-        html += `<p class="mb-1"><strong>Book Action:</strong> <span class="text-success">${dryRun.book.action}</span></p>`;
-        if (dryRun.book.author) {
-            html += `<p class="mb-1"><strong>Author:</strong> ${dryRun.book.author}</p>`;
-            html += `<p class="mb-0"><strong>Author Action:</strong> <span class="text-success">${dryRun.book.author_action}</span></p>`;
-        }
-        html += '</div></div>';
-    }
-    
-    // Set
-    html += '<div class="col-md-6 mb-3">';
-    html += '<div class="border-start border-info border-4 ps-3">';
-    html += '<h6 class="fw-bold">Desert Island Discs Set</h6>';
-    html += `<p class="mb-1"><strong>Name:</strong> ${dryRun.set.name}</p>`;
-    html += `<p class="mb-0"><strong>Action:</strong> <span class="text-info">${dryRun.set.action}</span></p>`;
-    html += '</div></div>';
-    
-    html += '</div>';
-    
-    // Songs
-    if (dryRun.songs.length > 0) {
-        html += '<div class="mt-3">';
-        html += '<h6 class="fw-bold">Songs</h6>';
-        html += '<div class="row">';
-        dryRun.songs.forEach(song => {
-            html += '<div class="col-md-6 mb-2">';
-            html += '<div class="bg-light p-3 rounded">';
-            html += `<p class="mb-1"><strong>Position ${song.position}:</strong></p>`;
-            html += `<p class="mb-1"><strong>Artist:</strong> ${song.artist.name} <span class="text-warning">(${song.artist.action})</span></p>`;
-            html += `<p class="mb-0"><strong>Track:</strong> ${song.track.name} <span class="text-warning">(${song.track.action})</span></p>`;
-            html += '</div></div>';
+        .fail(function(xhr) {
+            $('#importStatusContent').html(`
+                <div class="alert alert-warning mb-0">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    Could not load import status: ${xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Unknown error'}
+                </div>
+            `);
         });
-        html += '</div></div>';
-    }
-    
-    // Connections
-    if (dryRun.connections && dryRun.connections.length > 0) {
-        html += '<div class="mt-4">';
-        html += '<h6 class="fw-bold">Connections to be created:</h6>';
-        html += '<div class="table-responsive">';
-        html += '<table class="table table-sm table-bordered">';
-        html += '<thead class="table-light">';
-        html += '<tr><th>From</th><th>Type</th><th>To</th><th>Description</th><th>Date</th></tr>';
-        html += '</thead><tbody>';
-        
-        dryRun.connections.forEach(connection => {
-            html += '<tr>';
-            html += `<td>${connection.from}</td>`;
-            html += `<td><span class="badge bg-primary">${connection.type}</span></td>`;
-            html += `<td>${connection.to}</td>`;
-            html += `<td>${connection.description}</td>`;
-            html += `<td>${connection.date || '-'}</td>`;
-            html += '</tr>';
-        });
-        
-        html += '</tbody></table>';
-        html += '</div></div>';
-    }
-    
-    content.innerHTML = html;
 }
 
-function importRow() {
-    const rowNumber = document.getElementById('row_number').value;
-    if (!rowNumber || rowNumber < 1 || rowNumber > totalRows) {
-        alert('Please enter a valid row number');
-        return;
-    }
-
-    if (!confirm(`Are you sure you want to import row ${rowNumber}? This will create placeholders for all items.`)) {
-        return;
-    }
-
-    fetch('/admin/import/simple-desert-island-discs/import', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-        },
-        body: JSON.stringify({ 
-            csv_data: csvData,
-            row_number: parseInt(rowNumber)
+function loadStats() {
+    $.get('{{ route("admin.import.simple-desert-island-discs.stats") }}')
+        .done(function(response) {
+            if (!response.success) {
+                $('#statsSection').addClass('d-none');
+                return;
+            }
+            const stats = response.stats;
+            $('#statsSection').removeClass('d-none');
+            $('#statsContent').html(`
+                <div class="col-md-4">
+                    <div class="text-center">
+                        <div class="h4 text-primary">${stats.total_episodes}</div>
+                        <small class="text-muted">Episodes</small>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="text-center">
+                        <div class="h4 text-success">${stats.total_people}</div>
+                        <small class="text-muted">People</small>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="text-center">
+                        <div class="h4 text-warning">${stats.total_connections}</div>
+                        <small class="text-muted">Connections</small>
+                    </div>
+                </div>
+            `);
         })
+        .fail(function() {
+            $('#statsSection').addClass('d-none');
+        });
+}
+
+function startImport(startOffset) {
+    isProcessing = true;
+    currentOffset = startOffset;
+    cumulativeProcessed = 0;
+    cumulativeCreated = 0;
+    cumulativeSkipped = 0;
+    cumulativeErrors = 0;
+
+    foregroundPeople = [];
+    $('#progressSection').removeClass('d-none');
+    $('#cancelImportBtn').removeClass('d-none');
+    $('#currentPersonText').text('');
+    renderActivityLog($('#didActivityLog'), []);
+    processNextBatch();
+}
+
+function processNextBatch() {
+    if (!isProcessing) {
+        return;
+    }
+
+    const batchSize = 20;
+    $('#statusText').text('Processing episodes...');
+
+    $.ajax({
+        url: '{{ route("admin.import.simple-desert-island-discs.process-batch") }}',
+        method: 'POST',
+        data: {
+            batch_size: batchSize,
+            offset: currentOffset
+        },
+        timeout: 120000
     })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            displayImportResults(data);
-            document.getElementById('import_results_section').classList.remove('d-none');
-            // Scroll to results section
-            setTimeout(() => scrollToSection('import_results_section'), 100);
-        } else {
-            alert('Error: ' + data.message);
+    .done(function(response) {
+        if (!response.success) {
+            showError('Import failed: ' + (response.message || 'Unknown error'));
+            isProcessing = false;
+            return;
         }
+
+        const data = response.data;
+        cumulativeProcessed += data.processed || 0;
+        cumulativeCreated += data.created || 0;
+        cumulativeSkipped += data.skipped || 0;
+        cumulativeErrors += (data.errors || []).length;
+
+        const pct = data.progress_percentage || 0;
+        $('#progressBar').css('width', pct + '%').text(pct + '%');
+        $('#countsText').text('Created: ' + cumulativeCreated + ' | Skipped: ' + cumulativeSkipped + ' | Errors: ' + cumulativeErrors);
+        if (data.current_item) {
+            $('#currentPersonText').text(data.current_item);
+            $('#statusText').text(data.current_item);
+        }
+        if (Array.isArray(data.recent_people) && data.recent_people.length) {
+            foregroundPeople = foregroundPeople.concat(data.recent_people).slice(-40);
+            renderActivityLog($('#didActivityLog'), foregroundPeople);
+        }
+
+        if (data.is_last_batch) {
+            isProcessing = false;
+            $('#statusText').text('Import complete. Enrichment will continue in the background.');
+            $('#cancelImportBtn').addClass('d-none');
+            loadImportStatus();
+            loadStats();
+            startBackgroundJobPolling();
+            return;
+        }
+
+        currentOffset = data.next_offset;
+        processNextBatch();
     })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Error importing row');
+    .fail(function(xhr) {
+        showError('Import failed: ' + (xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Unknown error'));
+        isProcessing = false;
     });
 }
 
-function displayImportResults(data) {
-    const content = document.getElementById('import_results_content');
-    let html = '';
-    
-    html += '<div class="alert alert-success" role="alert">';
-    html += `<strong>Success!</strong> ${data.message}`;
-    html += '</div>';
-    
-    if (data.data) {
-        html += '<div class="border-start border-success border-4 ps-3">';
-        html += '<h6 class="fw-bold">Created Items:</h6>';
-        
-        if (data.data.castaway) {
-            html += `<p class="mb-1"><strong>Castaway:</strong> ${data.data.castaway.name} (ID: ${data.data.castaway.id})</p>`;
-        }
-        
-        if (data.data.book) {
-            html += `<p class="mb-1"><strong>Book:</strong> ${data.data.book.name} (ID: ${data.data.book.id})</p>`;
-        }
-        
-        if (data.data.set) {
-            html += `<p class="mb-1"><strong>Set:</strong> ${data.data.set.name} (ID: ${data.data.set.id})</p>`;
-        }
-        
-        if (data.data.songs && data.data.songs.length > 0) {
-            html += '<p class="mb-1"><strong>Songs:</strong></p>';
-            html += '<ul class="list-unstyled ms-3">';
-            data.data.songs.forEach(song => {
-                html += `<li>• ${song.artist.name} - ${song.track.name}</li>`;
-            });
-            html += '</ul>';
-        }
-        
-        html += '</div>';
-    }
-    
-    content.innerHTML = html;
+function showError(message) {
+    $('#alertsContainer').html(`
+        <div class="alert alert-danger alert-dismissible fade show">
+            ${$('<div>').text(message).html()}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `);
 }
 </script>
-@endsection 
+@endpush
