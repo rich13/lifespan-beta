@@ -218,7 +218,10 @@ Route::middleware('web')->group(function () {
     Route::prefix('explore')->group(function () {
         Route::get('/', [SpanController::class, 'explore'])->name('explore.index');
         Route::get('/desert-island-discs', [SpanController::class, 'desertIslandDiscs'])->name('explore.desert-island-discs');
+        Route::get('/desert-island-discs/{span}', [SpanController::class, 'desertIslandDiscsSet'])->name('explore.desert-island-discs.set');
         Route::get('/plaques', [SpanController::class, 'explorePlaques'])->name('explore.plaques');
+        Route::get('/plaques/markers', [SpanController::class, 'explorePlaqueMarkers'])->name('explore.plaques.markers');
+        Route::get('/plaques/{span}/summary', [SpanController::class, 'explorePlaqueSummary'])->name('explore.plaques.summary');
         Route::middleware(['auth', 'admin'])->group(function () {
             Route::get('/plaques/{span}/virtual-plaque', [\App\Http\Controllers\ExplorePlaqueVirtualPlaqueController::class, 'status'])
                 ->name('explore.plaques.virtual-plaque.status');
@@ -1265,6 +1268,9 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                 Route::post('/clear-queue', [App\Http\Controllers\Admin\WorkersController::class, 'clearQueue'])->name('clear-queue');
                 Route::post('/stop-queue', [App\Http\Controllers\Admin\WorkersController::class, 'stopQueue'])->name('stop-queue');
                 Route::post('/start-queue', [App\Http\Controllers\Admin\WorkersController::class, 'startQueue'])->name('start-queue');
+                Route::post('/stop-worker', [App\Http\Controllers\Admin\WorkersController::class, 'stopWorker'])->name('stop-worker');
+                Route::post('/start-worker', [App\Http\Controllers\Admin\WorkersController::class, 'startWorker'])->name('start-worker');
+                Route::post('/force-stop-import', [App\Http\Controllers\Admin\WorkersController::class, 'forceStopImport'])->name('force-stop-import');
                 Route::post('/flush-failed', [App\Http\Controllers\Admin\WorkersController::class, 'flushFailed'])->name('flush-failed');
                 Route::post('/failed/{uuid}/retry', [App\Http\Controllers\Admin\WorkersController::class, 'retryFailedJob'])->name('retry-failed');
             });
@@ -1304,6 +1310,9 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                 // MusicBrainz Import
                 Route::prefix('musicbrainz')->name('musicbrainz.')->group(function () {
                     Route::get('/', [MusicBrainzImportController::class, 'index'])->name('index');
+                    Route::get('/status', [MusicBrainzImportController::class, 'status'])->name('status');
+                    Route::post('/import-background', [MusicBrainzImportController::class, 'startBackgroundImport'])->name('import-background');
+                    Route::post('/cancel', [MusicBrainzImportController::class, 'cancelBackgroundImport'])->name('cancel');
                     Route::post('/search', [MusicBrainzImportController::class, 'search'])->name('search');
                     Route::post('/discography', [MusicBrainzImportController::class, 'showDiscography'])->name('show-discography');
                     Route::post('/tracks', [MusicBrainzImportController::class, 'showTracks'])->name('show-tracks');
@@ -1354,27 +1363,26 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                     ->name('desert-island-discs.step5');
                 
                 // Simple Desert Island Discs Import (placeholder-only)
-                Route::get('/simple-desert-island-discs', [App\Http\Controllers\Admin\SimpleDesertIslandDiscsImportController::class, 'index'])
-                    ->name('simple-desert-island-discs.index');
-                Route::post('/simple-desert-island-discs/upload', [App\Http\Controllers\Admin\SimpleDesertIslandDiscsImportController::class, 'uploadCsv'])
-                    ->name('simple-desert-island-discs.upload');
-                Route::get('/simple-desert-island-discs/info', [App\Http\Controllers\Admin\SimpleDesertIslandDiscsImportController::class, 'getCsvInfo'])
-                    ->name('simple-desert-island-discs.info');
-                Route::post('/simple-desert-island-discs/preview-chunk', [App\Http\Controllers\Admin\SimpleDesertIslandDiscsImportController::class, 'previewChunk'])
-                    ->name('simple-desert-island-discs.preview-chunk');
-                Route::post('/simple-desert-island-discs/dry-run-chunk', [App\Http\Controllers\Admin\SimpleDesertIslandDiscsImportController::class, 'dryRunChunk'])
-                    ->name('simple-desert-island-discs.dry-run-chunk');
-                Route::post('/simple-desert-island-discs/import-chunk', [App\Http\Controllers\Admin\SimpleDesertIslandDiscsImportController::class, 'importChunk'])
-                    ->name('simple-desert-island-discs.import-chunk');
-                Route::post('/simple-desert-island-discs/log-error', [App\Http\Controllers\Admin\SimpleDesertIslandDiscsImportController::class, 'logError'])
-                    ->name('simple-desert-island-discs.log-error');
-                // Legacy routes for backward compatibility
-                Route::post('/simple-desert-island-discs/preview', [App\Http\Controllers\Admin\SimpleDesertIslandDiscsImportController::class, 'preview'])
-                    ->name('simple-desert-island-discs.preview');
-                Route::post('/simple-desert-island-discs/dry-run', [App\Http\Controllers\Admin\SimpleDesertIslandDiscsImportController::class, 'dryRun'])
-                    ->name('simple-desert-island-discs.dry-run');
-                Route::post('/simple-desert-island-discs/import', [App\Http\Controllers\Admin\SimpleDesertIslandDiscsImportController::class, 'import'])
-                    ->name('simple-desert-island-discs.import');
+                Route::prefix('simple-desert-island-discs')->name('simple-desert-island-discs.')->group(function () {
+                    Route::get('/', [App\Http\Controllers\Admin\SimpleDesertIslandDiscsImportController::class, 'index'])
+                        ->name('index');
+                    Route::post('/search-episode', [App\Http\Controllers\Admin\SimpleDesertIslandDiscsImportController::class, 'searchEpisode'])
+                        ->name('search-episode');
+                    Route::post('/process-single', [App\Http\Controllers\Admin\SimpleDesertIslandDiscsImportController::class, 'processSingle'])
+                        ->name('process-single');
+                    Route::post('/process-batch', [App\Http\Controllers\Admin\SimpleDesertIslandDiscsImportController::class, 'processBatch'])
+                        ->name('process-batch');
+                    Route::post('/process-all', [App\Http\Controllers\Admin\SimpleDesertIslandDiscsImportController::class, 'processAll'])
+                        ->name('process-all');
+                    Route::post('/import-background', [App\Http\Controllers\Admin\SimpleDesertIslandDiscsImportController::class, 'startBackgroundImport'])
+                        ->name('import-background');
+                    Route::post('/cancel-background', [App\Http\Controllers\Admin\SimpleDesertIslandDiscsImportController::class, 'cancelBackgroundImport'])
+                        ->name('cancel-background');
+                    Route::get('/status', [App\Http\Controllers\Admin\SimpleDesertIslandDiscsImportController::class, 'status'])
+                        ->name('status');
+                    Route::get('/stats', [App\Http\Controllers\Admin\SimpleDesertIslandDiscsImportController::class, 'stats'])
+                        ->name('stats');
+                });
                 
                 // Parliament Explorer (must come before legacy routes to avoid conflicts)
                 Route::prefix('parliament')->name('parliament.')->group(function () {
@@ -1587,11 +1595,33 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                 ->name('tools.fix-public-figure-connections-batch-status');
             
             // Private Individual Connection Fixer
-            Route::get('/tools/fix-private-individual-connections', [\App\Http\Controllers\Admin\ToolsController::class, 'fixPrivateIndividualConnections'])
+            Route::get('/tools/fix-private-individual-connections', [\App\Http\Controllers\Admin\PrivateIndividualConnectionsController::class, 'index'])
                 ->name('tools.fix-private-individual-connections');
-            Route::post('/tools/fix-private-individual-connections', [\App\Http\Controllers\Admin\ToolsController::class, 'fixPrivateIndividualConnectionsAction'])
-                ->name('tools.fix-private-individual-connections-action');
+            Route::get('/tools/fix-private-individual-connections/scan', [\App\Http\Controllers\Admin\PrivateIndividualConnectionsController::class, 'scan'])
+                ->name('tools.fix-private-individual-connections.scan');
+            Route::get('/tools/fix-private-individual-connections/stats', [\App\Http\Controllers\Admin\PrivateIndividualConnectionsController::class, 'stats'])
+                ->name('tools.fix-private-individual-connections.stats');
+            Route::post('/tools/fix-private-individual-connections/start-background', [\App\Http\Controllers\Admin\PrivateIndividualConnectionsController::class, 'startBackgroundFix'])
+                ->name('tools.fix-private-individual-connections.start-background');
+            Route::post('/tools/fix-private-individual-connections/cancel-background', [\App\Http\Controllers\Admin\PrivateIndividualConnectionsController::class, 'cancelBackgroundFix'])
+                ->name('tools.fix-private-individual-connections.cancel-background');
+            Route::get('/tools/fix-private-individual-connections/status', [\App\Http\Controllers\Admin\PrivateIndividualConnectionsController::class, 'backgroundStatus'])
+                ->name('tools.fix-private-individual-connections.status');
             
+            // Plaque residence connections
+            Route::get('/tools/plaque-residence-connections', [\App\Http\Controllers\Admin\PlaqueResidenceConnectionsController::class, 'index'])
+                ->name('tools.plaque-residence-connections');
+            Route::get('/tools/plaque-residence-connections/scan', [\App\Http\Controllers\Admin\PlaqueResidenceConnectionsController::class, 'scan'])
+                ->name('tools.plaque-residence-connections.scan');
+            Route::post('/tools/plaque-residence-connections/create', [\App\Http\Controllers\Admin\PlaqueResidenceConnectionsController::class, 'create'])
+                ->name('tools.plaque-residence-connections.create');
+            Route::post('/tools/plaque-residence-connections/create-background', [\App\Http\Controllers\Admin\PlaqueResidenceConnectionsController::class, 'startBackgroundCreate'])
+                ->name('tools.plaque-residence-connections.create-background');
+            Route::post('/tools/plaque-residence-connections/cancel-background', [\App\Http\Controllers\Admin\PlaqueResidenceConnectionsController::class, 'cancelBackgroundCreate'])
+                ->name('tools.plaque-residence-connections.cancel-background');
+            Route::get('/tools/plaque-residence-connections/status', [\App\Http\Controllers\Admin\PlaqueResidenceConnectionsController::class, 'backgroundStatus'])
+                ->name('tools.plaque-residence-connections.status');
+
             // Data Fixer Tool
             Route::get('/tools/fixer', [\App\Http\Controllers\Admin\DataFixerController::class, 'index'])
                 ->name('tools.fixer');
@@ -1875,7 +1905,7 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                     $lng = (float) $request->get('lng');
                     $osmType = $request->get('osm_type');
                     $osmId = $request->get('osm_id');
-                    $nominatimResult = $osmService->lookupByOsmId($osmType, (int) $osmId, true);
+                    $nominatimResult = $osmService->lookupByOsmId($osmType, (int) $osmId);
                     if (!$nominatimResult) {
                         $reverseResult = \Illuminate\Support\Facades\Http::withHeaders([
                             'User-Agent' => config('app.user_agent'),
@@ -2049,8 +2079,10 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                 ->name('tools.merge-spans');
             Route::get('/tools/span-details', [App\Http\Controllers\Admin\ToolsController::class, 'getSpanDetails'])
                 ->name('tools.span-details');
-            Route::post('/tools/create-desert-island-discs', [App\Http\Controllers\Admin\ToolsController::class, 'createDesertIslandDiscs'])
+            Route::get('/tools/create-desert-island-discs', [App\Http\Controllers\Admin\ToolsController::class, 'showCreateDesertIslandDiscs'])
                 ->name('tools.create-desert-island-discs');
+            Route::post('/tools/create-desert-island-discs', [App\Http\Controllers\Admin\ToolsController::class, 'createDesertIslandDiscs'])
+                ->name('tools.create-desert-island-discs.store');
             Route::get('/tools/make-things-public', [App\Http\Controllers\Admin\ToolsController::class, 'showMakeThingsPublic'])
                 ->name('tools.make-things-public');
             Route::post('/tools/execute-make-things-public', [App\Http\Controllers\Admin\ToolsController::class, 'executeMakeThingsPublic'])
@@ -2079,6 +2111,18 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                     ->name('resolve');
                 Route::post('/batch-geocode', [\App\Http\Controllers\Admin\PlaceController::class, 'batchGeocode'])
                     ->name('batch-geocode');
+                Route::get('/geocode-queue', [\App\Http\Controllers\Admin\PlaceController::class, 'geocodeQueue'])
+                    ->name('geocode-queue');
+                Route::post('/{span}/geocode-step', [\App\Http\Controllers\Admin\PlaceController::class, 'geocodeStep'])
+                    ->name('geocode-step');
+                Route::get('/{span}/geocode-choices', [\App\Http\Controllers\Admin\PlaceController::class, 'geocodeChoices'])
+                    ->name('geocode-choices');
+                Route::post('/{span}/resolve-choice', [\App\Http\Controllers\Admin\PlaceController::class, 'resolveChoice'])
+                    ->name('resolve-choice');
+                Route::get('/unambiguous-geocode/status', [\App\Http\Controllers\Admin\PlaceController::class, 'unambiguousGeocodeStatus'])
+                    ->name('unambiguous-geocode.status');
+                Route::post('/unambiguous-geocode/cancel', [\App\Http\Controllers\Admin\PlaceController::class, 'cancelUnambiguousGeocode'])
+                    ->name('unambiguous-geocode.cancel');
                 Route::post('/{span}/import', [\App\Http\Controllers\Admin\PlaceController::class, 'import'])
                     ->name('import');
                 Route::post('/{span}/auto-geocode', [\App\Http\Controllers\Admin\PlaceController::class, 'autoGeocode'])
@@ -2124,6 +2168,13 @@ Route::post('/{span}/spanner/preview', [SpanController::class, 'previewSpreadshe
                     ->name('import');
                 Route::post('/preview', [App\Http\Controllers\Admin\DataImportController::class, 'preview'])
                     ->name('preview');
+            });
+
+            Route::prefix('improvement')->name('improvement.')->group(function () {
+                Route::get('/', [App\Http\Controllers\Admin\SpanImprovementController::class, 'index'])->name('index');
+                Route::post('/start', [App\Http\Controllers\Admin\SpanImprovementController::class, 'start'])->name('start');
+                Route::post('/stop', [App\Http\Controllers\Admin\SpanImprovementController::class, 'stop'])->name('stop');
+                Route::get('/status', [App\Http\Controllers\Admin\SpanImprovementController::class, 'status'])->name('status');
             });
 
             // System History

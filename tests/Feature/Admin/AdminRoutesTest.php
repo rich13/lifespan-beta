@@ -36,6 +36,17 @@ class AdminRoutesTest extends TestCase
 
         $response->assertStatus(200);
         $response->assertViewIs('admin.dashboard');
+        $response->assertSee('Data quality', false);
+        $response->assertSee('data-group="all"', false);
+        $response->assertSee('data-group="import-export"', false);
+        $response->assertSee('admin-tool-section--manage', false);
+        $response->assertDontSee('href="#manage"', false);
+        $response->assertSee(route('admin.merge.index'), false);
+        $response->assertSee(route('admin.tools.plaque-residence-connections'), false);
+        $response->assertSee(route('admin.tools.fix-private-individual-connections'), false);
+        $response->assertSee(route('admin.osmdata.index'), false);
+        $response->assertSee(route('admin.import.simple-desert-island-discs.index'), false);
+        $response->assertDontSee('name="person_search"', false);
     }
 
     public function test_import_index_requires_admin(): void
