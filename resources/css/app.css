@@ -288,3 +288,8 @@
     display: block;
     vertical-align: top;
 }
+
+.import-activity-log {
+    max-height: 16rem;
+    overflow-y: auto;
+}

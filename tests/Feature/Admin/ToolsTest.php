@@ -27,7 +27,12 @@ class ToolsTest extends TestCase
             ->get(route('admin.tools.index'));
 
         $response->assertStatus(200);
-        $response->assertViewIs('admin.tools.index');
+        $response->assertViewIs('admin.dashboard');
+        $response->assertSee('data-group="all"', false);
+        $response->assertSee(route('admin.merge.index'), false);
+        $response->assertSee(route('admin.tools.plaque-residence-connections'), false);
+        $response->assertSee(route('admin.import.simple-desert-island-discs.index'), false);
+        $response->assertDontSee('name="person_search"', false);
     }
 
     /** @test */
@@ -39,6 +44,17 @@ class ToolsTest extends TestCase
             ->get(route('admin.tools.index'));
 
         $response->assertStatus(403);
+    }
+
+    /** @test */
+    public function admin_can_access_create_desert_island_discs_tool()
+    {
+        $response = $this->actingAs($this->admin)
+            ->get(route('admin.tools.create-desert-island-discs'));
+
+        $response->assertStatus(200);
+        $response->assertViewIs('admin.tools.create-desert-island-discs');
+        $response->assertSee('Find a person', false);
     }
 
     /** @test */
@@ -218,5 +234,135 @@ class ToolsTest extends TestCase
             'id' => $connection->id,
             'connection_span_id' => $targetSpan->id,
         ]);
+    }
+
+    /** @test */
+    public function same_osm_place_section_groups_differently_named_places()
+    {
+        $unique = 'osm-dup-' . uniqid();
+        $osmId = (string) random_int(1_000_000_000, 2_000_000_000);
+        $otherOsmId = (string) random_int(2_000_000_001, 3_000_000_000);
+        $hackney = Span::factory()->create([
+            'name' => 'Hackney',
+            'slug' => $unique . '-hackney',
+            'type_id' => 'place',
+            'metadata' => $this->osmPlaceMetadata('relation', (int) $osmId, 'Hackney'),
+        ]);
+        $borough = Span::factory()->create([
+            'name' => 'London Borough of Hackney',
+            'slug' => $unique . '-lbh',
+            'type_id' => 'place',
+            'metadata' => $this->osmPlaceMetadata('R', $osmId, 'Hackney'),
+        ]);
+        Span::factory()->create([
+            'name' => 'Camden',
+            'slug' => $unique . '-camden',
+            'type_id' => 'place',
+            'metadata' => $this->osmPlaceMetadata('relation', (int) $otherOsmId, 'Camden'),
+        ]);
+
+        $response = $this->actingAs($this->admin)
+            ->get(route('admin.merge.index'));
+
+        $response->assertStatus(200);
+        $response->assertViewHas('osmDuplicateGroups');
+        $response->assertSee('Same OSM place');
+        $response->assertSee($unique . '-hackney');
+        $response->assertSee($unique . '-lbh');
+
+        $groups = $response->viewData('osmDuplicateGroups');
+        $group = $groups->first(fn ($g) => $g['osm_id'] === $osmId);
+        $this->assertNotNull($group);
+        $this->assertSame('relation', $group['osm_type']);
+        $this->assertCount(2, $group['spans']);
+        $this->assertEqualsCanonicalizing(
+            [$hackney->id, $borough->id],
+            $group['spans']->pluck('id')->all()
+        );
+        $this->assertNull($groups->first(fn ($g) => $g['osm_id'] === $otherOsmId));
+    }
+
+    /** @test */
+    public function same_osm_place_section_empty_when_osm_ids_differ()
+    {
+        $unique = 'osm-nodup-' . uniqid();
+        $osmIdA = (string) random_int(3_000_000_001, 3_500_000_000);
+        $osmIdB = (string) random_int(3_500_000_001, 4_000_000_000);
+        Span::factory()->create([
+            'name' => 'Hackney',
+            'slug' => $unique . '-a',
+            'type_id' => 'place',
+            'metadata' => $this->osmPlaceMetadata('relation', $osmIdA, 'Hackney'),
+        ]);
+        Span::factory()->create([
+            'name' => 'London Borough of Hackney',
+            'slug' => $unique . '-b',
+            'type_id' => 'place',
+            'metadata' => $this->osmPlaceMetadata('relation', $osmIdB, 'Hackney'),
+        ]);
+
+        $response = $this->actingAs($this->admin)
+            ->get(route('admin.merge.index'));
+
+        $response->assertStatus(200);
+        $groups = $response->viewData('osmDuplicateGroups');
+        $matching = $groups->filter(fn ($g) => in_array($g['osm_id'], [$osmIdA, $osmIdB], true));
+        $this->assertCount(0, $matching);
+    }
+
+    /** @test */
+    public function merging_same_osm_places_moves_connections_and_deletes_source()
+    {
+        $osmId = (string) random_int(4_000_000_001, 5_000_000_000);
+        $target = Span::factory()->create([
+            'name' => 'Hackney',
+            'slug' => 'osm-merge-target-' . uniqid(),
+            'type_id' => 'place',
+            'metadata' => $this->osmPlaceMetadata('relation', $osmId, 'Hackney'),
+        ]);
+        $source = Span::factory()->create([
+            'name' => 'London Borough of Hackney',
+            'slug' => 'osm-merge-source-' . uniqid(),
+            'type_id' => 'place',
+            'metadata' => $this->osmPlaceMetadata('relation', $osmId, 'Hackney'),
+        ]);
+        $person = Span::factory()->create(['type_id' => 'person', 'name' => 'Resident']);
+        $connectionType = ConnectionType::factory()->create(['type' => 'test-osm-merge-' . uniqid()]);
+        $connection = Connection::factory()->create([
+            'parent_id' => $person->id,
+            'child_id' => $source->id,
+            'type_id' => $connectionType->type,
+        ]);
+
+        $response = $this->actingAs($this->admin)
+            ->post(route('admin.merge.merge-spans'), [
+                'target_span_id' => $target->id,
+                'source_span_id' => $source->id,
+            ]);
+
+        $response->assertStatus(200);
+        $response->assertJson(['success' => true]);
+        $this->assertDatabaseMissing('spans', ['id' => $source->id]);
+        $this->assertDatabaseHas('spans', ['id' => $target->id, 'name' => 'Hackney']);
+        $this->assertDatabaseHas('connections', [
+            'id' => $connection->id,
+            'parent_id' => $person->id,
+            'child_id' => $target->id,
+        ]);
+    }
+
+    private function osmPlaceMetadata(string $osmType, mixed $osmId, string $canonicalName): array
+    {
+        $osm = [
+            'place_id' => 1,
+            'osm_type' => $osmType,
+            'osm_id' => $osmId,
+            'canonical_name' => $canonicalName,
+        ];
+
+        return [
+            'external_refs' => ['osm' => $osm],
+            'osm_data' => $osm,
+        ];
     }
 } 

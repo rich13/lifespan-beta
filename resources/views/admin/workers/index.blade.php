@@ -42,7 +42,7 @@
             </div>
 
             <div class="row mb-4" id="queueStats">
-                <div class="col-md-4 mb-3">
+                <div class="col-md-3 mb-3">
                     <div class="card bg-light h-100">
                         <div class="card-body">
                             <h6 class="text-muted mb-1">Queue Connection</h6>
@@ -50,7 +50,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="col-md-4 mb-3">
+                <div class="col-md-3 mb-3">
                     <div class="card bg-light h-100">
                         <div class="card-body">
                             <h6 class="text-muted mb-1">Pending Jobs</h6>
@@ -58,7 +58,15 @@
                         </div>
                     </div>
                 </div>
-                <div class="col-md-4 mb-3">
+                <div class="col-md-3 mb-3">
+                    <div class="card bg-light h-100">
+                        <div class="card-body">
+                            <h6 class="text-muted mb-1">Running Jobs</h6>
+                            <p class="mb-0 fs-4"><strong id="stat-running">{{ $stats['running_count'] ?? 0 }}</strong></p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-3">
                     <div class="card bg-light h-100">
                         <div class="card-body">
                             <h6 class="text-muted mb-1">Failed Jobs</h6>
@@ -68,27 +76,91 @@
                 </div>
             </div>
 
-            <h6 class="mb-2"><i class="bi bi-gear-wide-connected me-1"></i>Docker Control</h6>
+            <h6 class="mb-2"><i class="bi bi-gear-wide-connected me-1"></i>Workers</h6>
             @if ($stats['docker_control_available'] ?? false)
-            <div class="d-flex align-items-center gap-2 mb-2">
-                <span class="badge {{ ($stats['queue_container_running'] ?? false) ? 'bg-success' : 'bg-secondary' }}" id="queueContainerBadge">
-                    {{ ($stats['queue_container_running'] ?? false) ? 'Queue container: Running' : 'Queue container: Stopped' }}
-                </span>
-                @if ($stats['queue_container_running'] ?? false)
-                <button type="button" class="btn btn-outline-danger btn-sm" id="stopQueueBtn">
-                    <i class="bi bi-stop-circle me-1"></i>Stop Queue
-                </button>
-                @else
-                <button type="button" class="btn btn-outline-success btn-sm" id="startQueueBtn">
-                    <i class="bi bi-play-circle me-1"></i>Start Queue
-                </button>
-                @endif
+            <p class="text-muted small mb-2">Force-stop kills that worker immediately. The other worker keeps going, so Desert Island Discs and MusicBrainz can be separated.</p>
+            <div class="table-responsive mb-4">
+                <table class="table table-sm table-hover">
+                    <thead>
+                        <tr>
+                            <th>Worker</th>
+                            <th>Status</th>
+                            <th>Current job</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse ($stats['workers'] ?? [] as $worker)
+                        <tr>
+                            <td>
+                                {{ $worker['label'] }}
+                                <code class="small text-muted">{{ $worker['name'] }}</code>
+                            </td>
+                            <td>
+                                <span class="badge {{ $worker['running'] ? 'bg-success' : 'bg-secondary' }}">
+                                    {{ $worker['running'] ? 'Running' : 'Stopped' }}
+                                </span>
+                            </td>
+                            <td>
+                                @if ($worker['current_job'])
+                                    {{ $worker['current_job'] }}
+                                    @if ($worker['current_item'])
+                                        <span class="text-muted small">({{ $worker['current_item'] }})</span>
+                                    @endif
+                                @else
+                                    <span class="text-muted">—</span>
+                                @endif
+                            </td>
+                            <td>
+                                @if ($worker['running'])
+                                <button type="button" class="btn btn-outline-danger btn-sm force-stop-worker-btn" data-container="{{ $worker['name'] }}" data-label="{{ $worker['label'] }}">
+                                    <i class="bi bi-stop-circle me-1"></i>Force stop
+                                </button>
+                                @else
+                                <button type="button" class="btn btn-outline-success btn-sm start-worker-btn" data-container="{{ $worker['name'] }}" data-label="{{ $worker['label'] }}">
+                                    <i class="bi bi-play-circle me-1"></i>Start
+                                </button>
+                                @endif
+                            </td>
+                        </tr>
+                        @empty
+                        <tr>
+                            <td colspan="4" class="text-muted">No queue worker containers found.</td>
+                        </tr>
+                        @endforelse
+                    </tbody>
+                </table>
             </div>
-            <p class="text-muted small mb-0">With workers stopped, jobs run synchronously in web requests.</p>
             @else
-            <p class="text-muted small mb-0">
-                Queue workers run as a separate service. Use <strong>Restart Workers</strong> above to gracefully restart them. Container stop/start is available when the Docker socket is mounted (e.g. local development).
+            <p class="text-muted small mb-4">
+                Queue workers run as a separate service. Use <strong>Restart Workers</strong> above for a graceful restart, or force-stop an import below. Container stop/start is available when the Docker socket is mounted (e.g. local development).
             </p>
+            @endif
+
+            @if (!empty($stats['running_jobs'] ?? []))
+            <h6 class="mb-2 mt-4"><i class="bi bi-play-fill me-1"></i>Running Jobs</h6>
+            <div class="table-responsive mb-4">
+                <table class="table table-sm table-hover">
+                    <thead>
+                        <tr>
+                            <th>Job</th>
+                            <th>Queue</th>
+                            <th>Attempts</th>
+                            <th>Started</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach ($stats['running_jobs'] as $job)
+                        <tr>
+                            <td><code class="small">{{ $job['display_name'] }}</code></td>
+                            <td>{{ $job['queue'] }}</td>
+                            <td>{{ $job['attempts'] }}</td>
+                            <td>{{ $job['reserved_at'] ? \Carbon\Carbon::createFromTimestamp($job['reserved_at'])->diffForHumans() : '-' }}</td>
+                        </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
             @endif
 
             @if (!empty($stats['pending_jobs'] ?? []))
@@ -122,17 +194,30 @@
 
             @if (!empty($stats['active_imports']))
             <h6 class="mb-2 mt-4"><i class="bi bi-cloud-upload me-1"></i>Active Imports</h6>
+            <p class="text-muted small mb-2">Force-stop cancels one import and removes it from the queue. The other import keeps running.</p>
             <div class="table-responsive mb-4">
                 <table class="table table-sm">
                     <thead>
-                        <tr><th>Type</th><th>Progress</th><th>Started</th></tr>
+                        <tr>
+                            <th>Type</th>
+                            <th>Progress</th>
+                            <th>Current</th>
+                            <th>Started</th>
+                            <th>Action</th>
+                        </tr>
                     </thead>
                     <tbody>
                         @foreach ($stats['active_imports'] as $imp)
                         <tr>
-                            <td>{{ $imp['import_type'] }} / {{ $imp['plaque_type'] ?? '-' }}</td>
+                            <td>{{ $imp['label'] ?? $imp['import_type'] }}</td>
                             <td>{{ $imp['processed'] }} / {{ $imp['total'] }}</td>
+                            <td>{{ $imp['current_item'] ?? '—' }}</td>
                             <td>{{ $imp['started_at'] ? \Carbon\Carbon::parse($imp['started_at'])->diffForHumans() : '-' }}</td>
+                            <td>
+                                <button type="button" class="btn btn-outline-danger btn-sm force-stop-import-btn" data-progress-id="{{ $imp['id'] }}" data-label="{{ $imp['label'] ?? $imp['import_type'] }}">
+                                    <i class="bi bi-stop-circle me-1"></i>Force stop
+                                </button>
+                            </td>
                         </tr>
                         @endforeach
                     </tbody>
@@ -186,6 +271,7 @@ $(document).ready(function() {
                 if (res.success && res.stats) {
                     $('#stat-connection').text(res.stats.connection);
                     $('#stat-pending').text(res.stats.pending_count);
+                    $('#stat-running').text(res.stats.running_count);
                     const $failed = $('#stat-failed').text(res.stats.failed_count);
                     $failed.toggleClass('text-danger', res.stats.failed_count > 0);
                 }
@@ -247,12 +333,16 @@ $(document).ready(function() {
             });
     });
 
-    $('#stopQueueBtn').on('click', function() {
-        if (!confirm('Stop the queue container? Jobs will run synchronously until you start it again.')) return;
+    $(document).on('click', '.force-stop-worker-btn', function() {
+        const label = $(this).data('label') || 'this worker';
+        if (!confirm('Force-stop ' + label + '? This kills the job it is running immediately. The other worker keeps going.')) return;
         const $btn = $(this).prop('disabled', true);
-        $.post('{{ route("admin.workers.stop-queue") }}', { _token: $('meta[name="csrf-token"]').attr('content') })
+        $.post('{{ route("admin.workers.stop-worker") }}', {
+            _token: $('meta[name="csrf-token"]').attr('content'),
+            container: $(this).data('container')
+        })
             .done(function(res) {
-                alert(res.message || 'Queue stopped.');
+                alert(res.message || 'Worker stopped.');
                 location.reload();
             })
             .fail(function(xhr) {
@@ -261,11 +351,32 @@ $(document).ready(function() {
             });
     });
 
-    $('#startQueueBtn').on('click', function() {
+    $(document).on('click', '.start-worker-btn', function() {
         const $btn = $(this).prop('disabled', true);
-        $.post('{{ route("admin.workers.start-queue") }}', { _token: $('meta[name="csrf-token"]').attr('content') })
+        $.post('{{ route("admin.workers.start-worker") }}', {
+            _token: $('meta[name="csrf-token"]').attr('content'),
+            container: $(this).data('container')
+        })
             .done(function(res) {
-                alert(res.message || 'Queue started.');
+                alert(res.message || 'Worker started.');
+                location.reload();
+            })
+            .fail(function(xhr) {
+                alert('Failed: ' + (xhr.responseJSON?.message || 'Unknown error'));
+                $btn.prop('disabled', false);
+            });
+    });
+
+    $(document).on('click', '.force-stop-import-btn', function() {
+        const label = $(this).data('label') || 'this import';
+        if (!confirm('Force-stop ' + label + '? It will be cancelled and will not resume. The other import keeps running.')) return;
+        const $btn = $(this).prop('disabled', true);
+        $.post('{{ route("admin.workers.force-stop-import") }}', {
+            _token: $('meta[name="csrf-token"]').attr('content'),
+            progress_id: $(this).data('progress-id')
+        })
+            .done(function(res) {
+                alert(res.message || 'Import stopped.');
                 location.reload();
             })
             .fail(function(xhr) {

@@ -15,43 +15,24 @@ class ToolsController extends Controller
     /**
      * Show the admin tools page
      */
-    public function index(Request $request)
+    public function index()
     {
-        $stats = [
-            'total_spans' => Span::count(),
-            'total_users' => \App\Models\User::count(),
-            'total_connections' => Connection::count(),
-            'orphaned_spans' => 0, // TODO: Implement orphaned spans detection
-        ];
-
-        $wikipediaCachedDays = $this->countWikipediaCachedDays();
-        $wikipediaTotalDays = 366; // Always count leap years for completeness
-
-        return view('admin.tools.index', compact('stats', 'wikipediaCachedDays', 'wikipediaTotalDays'));
+        return view('admin.dashboard', app(DashboardController::class)->viewData());
     }
 
-
-
-
-
-
-
-
-
-
+    /**
+     * Show the Desert Island Discs set creator.
+     */
+    public function showCreateDesertIslandDiscs()
+    {
+        return view('admin.tools.create-desert-island-discs');
+    }
 
     /**
      * Create Desert Island Discs set for a person
      */
     public function createDesertIslandDiscs(Request $request)
     {
-        $stats = [
-            'total_spans' => Span::count(),
-            'total_users' => \App\Models\User::count(),
-            'total_connections' => Connection::count(),
-            'orphaned_spans' => 0, // TODO: Implement orphaned spans detection
-        ];
-
         try {
             // Handle search for people
             if ($request->has('person_search') && !empty($request->person_search)) {
@@ -61,7 +42,7 @@ class ToolsController extends Controller
                     ->limit(20)
                     ->get();
 
-                return view('admin.tools.index', compact('people', 'stats'));
+                return view('admin.tools.create-desert-island-discs', compact('people'));
             }
 
             // Handle creating the set
@@ -604,24 +585,6 @@ class ToolsController extends Controller
     }
 
     /**
-     * Count the number of cached Wikipedia On This Day days
-     */
-    private function countWikipediaCachedDays(): int
-    {
-        $count = 0;
-        for ($month = 1; $month <= 12; $month++) {
-            for ($day = 1; $day <= 31; $day++) {
-                if (!checkdate($month, $day, 2024)) continue;
-                $cacheKey = "wikipedia_onthisday_raw_{$month}_{$day}";
-                if (\Cache::has($cacheKey)) {
-                    $count++;
-                }
-            }
-        }
-        return $count;
-    }
-
-    /**
      * Show the person subtype management page
      */
     public function managePersonSubtypes(Request $request)
@@ -1076,129 +1039,6 @@ class ToolsController extends Controller
             'started_at' => $batchInfo['started_at'],
             'progress_percentage' => $batchInfo['status'] === 'completed' ? 100 : round(($batchInfo['current_batch'] / $batchInfo['total_batches']) * 100, 1)
         ]);
-    }
-    
-    /**
-     * Show the private individual connection fixer page
-     */
-    public function fixPrivateIndividualConnections(Request $request)
-    {
-        // Get all private individuals
-        $privateIndividuals = Span::where('type_id', 'person')
-            ->whereRaw("metadata->>'subtype' = 'private_individual'")
-            ->with(['owner', 'updater'])
-            ->orderBy('name')
-            ->get();
-        
-        $stats = [
-            'total_private_individuals' => $privateIndividuals->count(),
-            'private_individuals_with_public_connections' => 0,
-            'total_public_connections' => 0,
-            'fixed_connections' => 0
-        ];
-        
-        // Count private individuals with public connections
-        foreach ($privateIndividuals as $individual) {
-            $publicConnections = $this->getPublicConnectionsForSpan($individual);
-            if ($publicConnections->count() > 0) {
-                $stats['private_individuals_with_public_connections']++;
-                $stats['total_public_connections'] += $publicConnections->count();
-            }
-        }
-        
-        return view('admin.tools.fix-private-individual-connections', compact('privateIndividuals', 'stats'));
-    }
-    
-    /**
-     * Fix private individual connections (make them private)
-     */
-    public function fixPrivateIndividualConnectionsAction(Request $request)
-    {
-        $validated = $request->validate([
-            'individual_ids' => 'required|string',
-            'batch_size' => 'nullable|integer|min:1|max:100'
-        ]);
-        
-        $individualIds = explode(',', $validated['individual_ids']);
-        $batchSize = $validated['batch_size'] ?? 10; // Default batch size of 10
-        $totalIndividuals = count($individualIds);
-        $processedIndividuals = 0;
-        $fixedConnections = 0;
-        $errors = [];
-        
-        // Process in batches
-        $batches = array_chunk($individualIds, $batchSize);
-        
-        foreach ($batches as $batchIndex => $batch) {
-            $batchNumber = $batchIndex + 1;
-            $totalBatches = count($batches);
-            
-            Log::info("Processing batch {$batchNumber}/{$totalBatches} for private individual connections", [
-                'batch_size' => count($batch),
-                'total_individuals' => $totalIndividuals,
-                'processed_so_far' => $processedIndividuals
-            ]);
-            
-            foreach ($batch as $individualId) {
-                try {
-                    $individual = Span::find($individualId);
-                    
-                    if (!$individual) {
-                        $errors[] = "Private individual with ID {$individualId} not found.";
-                        continue;
-                    }
-                    
-                    // Verify this is actually a private individual
-                    $metadata = $individual->metadata ?? [];
-                    $subtype = $metadata['subtype'] ?? null;
-                    
-                    if ($subtype !== 'private_individual') {
-                        $errors[] = "Span '{$individual->name}' is not a private individual.";
-                        continue;
-                    }
-                    
-                    // Make the individual private if it isn't already
-                    if ($individual->access_level !== 'private') {
-                        $individual->access_level = 'private';
-                        $individual->save();
-                    }
-                    
-                    // Get all connections for this individual
-                    $subjectConnections = \App\Models\Connection::where('parent_id', $individual->id)->get();
-                    $objectConnections = \App\Models\Connection::where('child_id', $individual->id)->get();
-                    $allConnections = $subjectConnections->merge($objectConnections);
-                    
-                    foreach ($allConnections as $connection) {
-                        if ($connection->connectionSpan && $connection->connectionSpan->access_level !== 'private') {
-                            $connection->connectionSpan->access_level = 'private';
-                            $connection->connectionSpan->saveQuietly();
-                            $connection->connectionSpan->clearAllTimelineCaches();
-                            $fixedConnections++;
-                        }
-                    }
-                    
-                    // Clear timeline caches for the individual
-                    $individual->clearAllTimelineCaches();
-                    $processedIndividuals++;
-                    
-                } catch (\Exception $e) {
-                    $errors[] = "Failed to fix connections for {$individual->name}: " . $e->getMessage();
-                }
-            }
-            
-            // Add a small delay between batches to prevent overwhelming the system
-            if ($batchIndex < count($batches) - 1) {
-                usleep(100000); // 0.1 second delay
-            }
-        }
-        
-        $message = "Fixed {$fixedConnections} public connections for {$processedIndividuals} private individuals (processed in " . count($batches) . " batches).";
-        if (!empty($errors)) {
-            $message .= " Errors: " . implode(', ', $errors);
-        }
-        
-        return redirect()->route('admin.tools.fix-private-individual-connections')
-            ->with('status', $message);
     }
     
     /**

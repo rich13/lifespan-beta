@@ -20,6 +20,14 @@ class DashboardController extends Controller
 
     public function index(): View
     {
+        return view('admin.dashboard', $this->viewData());
+    }
+
+    /**
+     * Shared view data for the admin catalogue (dashboard and /admin/tools).
+     */
+    public function viewData(): array
+    {
         // Basic stats
         $stats = [
             'total_spans' => Span::count(),
@@ -92,10 +100,10 @@ class DashboardController extends Controller
             ->whereNull('end_year')
             ->count();
 
-        return view('admin.dashboard', [
+        return [
             'stats' => $stats,
             'spanTypeStats' => $spanTypeStats,
             'connectionTypeStats' => $connectionTypeStats,
-        ]);
+        ];
     }
 } 

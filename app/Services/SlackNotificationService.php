@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Connection;
 use App\Models\Span;
 use App\Models\User;
 use App\Notifications\Slack\SpanCreatedNotification;
@@ -308,6 +309,12 @@ class SlackNotificationService
             return false;
         }
 
+        // Bulk imports would otherwise send thousands of span create/update messages.
+        if ($span && in_array($eventType, ['span_created', 'span_updated'], true)
+            && $this->isAutomatedSpanChange($span)) {
+            return false;
+        }
+
         // Check span type filtering for span-related events
         if ($span && !$this->shouldNotifyForSpanType($span)) {
             return false;
@@ -349,6 +356,36 @@ class SlackNotificationService
         }
 
         return true;
+    }
+
+    /**
+     * Span create/update Slack is for manual UI edits, not imports or queue jobs.
+     */
+    protected function isAutomatedSpanChange(Span $span): bool
+    {
+        if (Connection::$skipCacheClearingDuringImport) {
+            return true;
+        }
+
+        if ($this->isBackgroundProcess()) {
+            return true;
+        }
+
+        $dataSource = $span->metadata['data_source'] ?? null;
+        if (is_string($dataSource) && trim($dataSource) !== '') {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Queue workers and artisan commands run in the console; PHPUnit does too,
+     * so tests are excluded here and covered by data_source / import-flag cases.
+     */
+    protected function isBackgroundProcess(): bool
+    {
+        return app()->runningInConsole() && ! app()->runningUnitTests();
     }
 
     /**

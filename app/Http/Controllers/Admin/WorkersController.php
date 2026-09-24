@@ -3,15 +3,17 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\ImportProgress;
+use App\Services\QueueWorkerControlService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Cache;
 
 class WorkersController extends Controller
 {
-    public function __construct()
-    {
+    public function __construct(
+        private readonly QueueWorkerControlService $workers
+    ) {
         $this->middleware(['auth', 'admin']);
     }
 
@@ -45,7 +47,6 @@ class WorkersController extends Controller
     {
         try {
             Artisan::call('queue:restart');
-            $output = Artisan::output();
 
             return response()->json([
                 'success' => true,
@@ -140,97 +141,88 @@ class WorkersController extends Controller
     }
 
     /**
-     * Stop the queue container (requires Docker socket).
+     * Force-stop one queue worker container.
+     */
+    public function stopWorker(Request $request)
+    {
+        $container = (string) $request->input('container', 'lifespan-queue');
+        $result = $this->workers->forceStopWorker($container);
+        $status = $result['success'] ? 200 : ($this->workers->isAllowedContainer($container) ? 500 : 422);
+
+        return response()->json([
+            'success' => $result['success'],
+            'message' => $result['message'],
+        ], $status);
+    }
+
+    /**
+     * Start one queue worker container.
+     */
+    public function startWorker(Request $request)
+    {
+        $container = (string) $request->input('container', 'lifespan-queue');
+        $result = $this->workers->startWorker($container);
+        $status = $result['success'] ? 200 : ($this->workers->isAllowedContainer($container) ? 500 : 422);
+
+        return response()->json([
+            'success' => $result['success'],
+            'message' => $result['message'],
+        ], $status);
+    }
+
+    /**
+     * Stop the default queue container (legacy alias for Worker 1).
      */
     public function stopQueue(Request $request)
     {
-        $result = $this->dockerControl('stop');
-        if ($result['success']) {
-            return response()->json(['success' => true, 'message' => 'Queue container stopped.']);
-        }
-        return response()->json(['success' => false, 'message' => $result['error'] ?? 'Failed'], 500);
+        $request->merge(['container' => $request->input('container', 'lifespan-queue')]);
+
+        return $this->stopWorker($request);
     }
 
     /**
-     * Start the queue container (local Docker only).
+     * Start the default queue container (legacy alias for Worker 1).
      */
     public function startQueue(Request $request)
     {
-        $result = $this->dockerControl('start');
-        if ($result['success']) {
-            return response()->json(['success' => true, 'message' => 'Queue container started.']);
-        }
-        return response()->json(['success' => false, 'message' => $result['error'] ?? 'Failed'], 500);
+        $request->merge(['container' => $request->input('container', 'lifespan-queue')]);
+
+        return $this->startWorker($request);
     }
 
     /**
-     * Stop or start the lifespan-queue container via Docker API.
+     * Force-stop a running import without taking the other imports down.
      */
-    private function dockerControl(string $action): array
+    public function forceStopImport(Request $request)
     {
-        $socket = '/var/run/docker.sock';
-        if (!file_exists($socket) || !is_readable($socket)) {
-            return ['success' => false, 'error' => 'Docker socket not available.'];
+        $progress = ImportProgress::find($request->input('progress_id'));
+        if (!$progress) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Import not found.',
+            ], 404);
         }
-        if (!in_array($action, ['start', 'stop'], true)) {
-            return ['success' => false, 'error' => 'Invalid action.'];
-        }
-        $url = "http://localhost/containers/lifespan-queue/{$action}";
-        $cmd = sprintf(
-            'curl -s -o /dev/null -w "%%{http_code}" -X POST --unix-socket %s %s',
-            escapeshellarg($socket),
-            escapeshellarg($url)
-        );
-        $output = [];
-        exec($cmd . ' 2>&1', $output, $code);
-        $httpCode = (int) trim(implode('', $output));
-        $success = $httpCode >= 200 && $httpCode < 300;
-        if (!$success && $httpCode === 0) {
-            $err = trim(implode(' ', $output)) ?: 'Could not reach Docker daemon.';
-            return ['success' => false, 'error' => $err];
-        }
-        if ($httpCode === 404) {
-            return ['success' => false, 'error' => 'Queue container not found. Is Docker running?'];
-        }
-        return ['success' => $success, 'error' => $success ? null : "Docker API returned {$httpCode}"];
-    }
 
-    private function canControlDocker(): bool
-    {
-        return file_exists('/var/run/docker.sock')
-            && is_readable('/var/run/docker.sock');
-    }
+        $result = $this->workers->forceStopImport($progress);
 
-    private function isQueueContainerRunning(): bool
-    {
-        if (!$this->canControlDocker()) {
-            return false;
-        }
-        $socket = '/var/run/docker.sock';
-        $cmd = sprintf(
-            'curl -s --unix-socket %s "http://localhost/containers/lifespan-queue/json" 2>/dev/null',
-            escapeshellarg($socket)
-        );
-        $json = shell_exec($cmd);
-        if (!$json) {
-            return false;
-        }
-        $data = json_decode($json, true);
-        return isset($data['State']['Running']) && $data['State']['Running'] === true;
+        return response()->json($result);
     }
 
     private function getQueueStats(): array
     {
         $connection = config('queue.default');
+        $workers = $this->workers->listWorkers();
         $stats = [
             'connection' => $connection,
-            'docker_control_available' => $this->canControlDocker(),
-            'queue_container_running' => $this->isQueueContainerRunning(),
+            'docker_control_available' => $this->workers->dockerAvailable(),
+            'queue_container_running' => collect($workers)->contains(fn ($worker) => $worker['running']),
+            'workers' => $workers,
             'pending_count' => 0,
             'running_count' => 0,
             'failed_count' => 0,
             'recent_failed' => [],
             'active_imports' => [],
+            'running_jobs' => [],
         ];
 
         if ($connection === 'database') {
@@ -249,6 +241,22 @@ class WorkersController extends Controller
                         'display_name' => $payload['displayName'] ?? 'Unknown',
                         'attempts' => $job->attempts,
                         'created_at' => $job->created_at,
+                    ];
+                })
+                ->all();
+            $stats['running_jobs'] = DB::table('jobs')
+                ->whereNotNull('reserved_at')
+                ->orderBy('id')
+                ->limit(50)
+                ->get(['id', 'queue', 'payload', 'attempts', 'reserved_at', 'created_at'])
+                ->map(function ($job) {
+                    $payload = json_decode($job->payload, true);
+                    return [
+                        'id' => $job->id,
+                        'queue' => $job->queue,
+                        'display_name' => $payload['displayName'] ?? 'Unknown',
+                        'attempts' => $job->attempts,
+                        'reserved_at' => $job->reserved_at,
                     ];
                 })
                 ->all();
@@ -275,13 +283,17 @@ class WorkersController extends Controller
             })
             ->all();
 
-        $stats['active_imports'] = \App\Models\ImportProgress::where('status', 'running')
+        $stats['active_imports'] = ImportProgress::where('status', 'running')
             ->get()
             ->map(fn ($p) => [
+                'id' => $p->id,
                 'import_type' => $p->import_type,
+                'label' => $this->workers->importLabel($p->import_type),
                 'plaque_type' => $p->plaque_type,
                 'processed' => $p->processed_items,
                 'total' => $p->total_items,
+                'current_item' => $p->metadata['current_item'] ?? $p->metadata['current_plaque'] ?? null,
+                'worker_hostname' => $p->metadata['worker_hostname'] ?? null,
                 'started_at' => $p->started_at?->toIso8601String(),
             ])
             ->all();

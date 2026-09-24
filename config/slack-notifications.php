@@ -32,6 +32,9 @@ return [
     |
     */
     'events' => [
+        // Span create/update only fires for manual UI edits. Imports, queue
+        // jobs, and spans with metadata.data_source are skipped so bulk
+        // imports cannot flood the channel.
         'span_created' => env('SLACK_NOTIFY_SPAN_CREATED', true),
         'span_updated' => env('SLACK_NOTIFY_SPAN_UPDATED', true),
         'user_registered' => env('SLACK_NOTIFY_USER_REGISTERED', true),
