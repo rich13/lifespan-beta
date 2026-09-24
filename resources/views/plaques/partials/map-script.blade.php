@@ -232,7 +232,6 @@ if (typeof window.initPlaquesMap === 'undefined') {
         addOtherPlaquesToggle();
         map.whenReady(function() {
             keepFocusInView(false);
-            loadMarkers();
         });
         map.on('moveend', scheduleLoadMarkers);
         $(window).on('resize', resizeMap);

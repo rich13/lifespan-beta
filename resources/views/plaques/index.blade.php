@@ -37,7 +37,7 @@
                             <input type="text" class="form-control" id="plaqueSearch" placeholder="Search plaques...">
                         </div>
                         <p class="text-muted small mb-0">
-                            <strong id="plaqueCount">{{ count($plaquesWithLocations) }}</strong> plaques found
+                            <strong id="plaqueCount">…</strong> <span id="plaqueCountLabel">plaques in view</span>
                         </p>
                     </div>
                 </div>
@@ -71,7 +71,7 @@
                         </div>
                         <div class="card-body">
                             <p class="card-text mb-2">
-                                <strong>{{ count($plaquesWithLocations) }}</strong> plaques found
+                                <strong id="plaqueMapCount">…</strong> plaques in view
                             </p>
                             <p class="card-text small text-muted mb-0">
                                 Click on markers or list items to view details
@@ -142,16 +142,19 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize the map centered on London
-    const map = L.map('map').setView([51.505, -0.09], 10);
+    const map = L.map('map').setView([51.505, -0.09], 14);
     
     // Add OpenStreetMap tiles
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
     
-    // Plaque data from the server
-    const plaques = @json($plaquesWithLocations);
+    let plaques = [];
     const isExplorePlaquesAdmin = @json(auth()->check() && auth()->user()->getEffectiveAdminStatus());
+    const markersUrl = @json(route('explore.plaques.markers'));
+    let loadId = 0;
+    let loadTimeout = null;
+    let suppressLoad = false;
     
     // Store markers and list items for highlighting
     const markers = new Map(); // Map of plaque ID to marker
@@ -195,6 +198,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Highlight marker (admins get virtual plaque on map instead of a pin)
         if (selectedMarker) {
+            suppressLoad = true;
             map.setView([plaque.latitude, plaque.longitude], 16);
 
             if (!isExplorePlaquesAdmin) {
@@ -226,8 +230,18 @@ document.addEventListener('DOMContentLoaded', function() {
             selectedListItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
         
-        // Show details
-        showPlaqueDetails(plaque);
+        if (plaque.detailsLoaded) {
+            showPlaqueDetails(plaque);
+        } else {
+            $.get(@json(url('/explore/plaques')) + '/' + plaqueId + '/summary').done(function(data) {
+                plaque.description = data.description || '';
+                plaque.photo_url = data.photo_url || null;
+                plaque.detailsLoaded = true;
+                if (selectedPlaqueId === plaqueId) {
+                    showPlaqueDetails(plaque);
+                }
+            });
+        }
 
         if (typeof window.loadVirtualPlaqueForPlaque === 'function') {
             window.loadVirtualPlaqueForPlaque(plaqueId);
@@ -302,31 +316,93 @@ document.addEventListener('DOMContentLoaded', function() {
         return div.innerHTML;
     }
     
-    // Search functionality
-    const plaqueSearch = document.getElementById('plaqueSearch');
-    if (plaqueSearch) {
-        plaqueSearch.addEventListener('input', function(e) {
-            const searchTerm = e.target.value.toLowerCase().trim();
-            
-            if (searchTerm === '') {
-                populatePlaquesList();
+    function updatePlaqueCounts(count, truncated, searching) {
+        $('#plaqueCount').text(count);
+        $('#plaqueMapCount').text(count);
+        $('#plaqueCountLabel').text(searching
+            ? (truncated ? 'matches (showing the first ' + count + ')' : 'matches')
+            : (truncated ? 'plaques in view (zoom in to see more)' : 'plaques in view'));
+    }
+
+    function renderPlaques(nextPlaques, truncated, searching) {
+        markers.forEach(function(marker) {
+            map.removeLayer(marker);
+        });
+        markers.clear();
+        listItems.clear();
+        plaques = nextPlaques;
+        updatePlaqueCounts(plaques.length, truncated, searching);
+        populatePlaquesList();
+        plaques.forEach(function(plaque) {
+            const plaqueId = plaque.id;
+            if (!plaqueId) {
                 return;
             }
-            
-            const filtered = plaques.filter(function(plaque) {
-                const nameMatch = plaque.name.toLowerCase().includes(searchTerm);
-                const descriptionMatch = (plaque.description || '').toLowerCase().includes(searchTerm);
-                const locationMatch = (plaque.location?.name || '').toLowerCase().includes(searchTerm);
-                const personMatch = (plaque.person_connections || []).some(function(person) {
-                    return person.name.toLowerCase().includes(searchTerm);
+            const marker = L.marker([plaque.latitude, plaque.longitude], { icon: defaultIcon })
+                .addTo(map)
+                .bindPopup(`
+                    <div>
+                        <h6>${escapeHtml(plaque.name)}</h6>
+                        ${plaque.location ? `<p class="mb-1 small">${escapeHtml(plaque.location.name || 'Unknown location')}</p>` : ''}
+                        <button class="btn btn-sm btn-primary mt-2" onclick="window.selectPlaqueById('${plaqueId}')">
+                            View Details
+                        </button>
+                    </div>
+                `)
+                .on('click', function() {
+                    highlightPlaque(plaqueId, plaque);
                 });
-                
-                return nameMatch || descriptionMatch || locationMatch || personMatch;
-            });
-            
-            populatePlaquesList(filtered);
+            markers.set(plaqueId, marker);
+        });
+        if (selectedPlaqueId && markers.has(selectedPlaqueId)) {
+            selectedMarker = markers.get(selectedPlaqueId);
+            selectedListItem = listItems.get(selectedPlaqueId);
+            if (selectedListItem) {
+                selectedListItem.classList.add('active', 'bg-primary', 'text-white');
+            }
+        }
+    }
+
+    function loadPlaques(params) {
+        const id = ++loadId;
+        const searching = !!(params.q && params.q.length);
+        $.get(markersUrl, params).done(function(data) {
+            if (id !== loadId || !data.plaques) {
+                return;
+            }
+            renderPlaques(data.plaques, !!data.truncated, searching);
         });
     }
+
+    function loadViewportPlaques() {
+        if ($('#plaqueSearch').val().trim() !== '') {
+            return;
+        }
+        const bounds = map.getBounds();
+        loadPlaques({
+            north: bounds.getNorth(),
+            south: bounds.getSouth(),
+            east: bounds.getEast(),
+            west: bounds.getWest()
+        });
+    }
+
+    function scheduleViewportLoad() {
+        clearTimeout(loadTimeout);
+        loadTimeout = setTimeout(loadViewportPlaques, 300);
+    }
+
+    $('#plaqueSearch').on('input', function() {
+        const searchTerm = $(this).val().trim();
+        clearTimeout(loadTimeout);
+        if (searchTerm === '') {
+            scheduleViewportLoad();
+            return;
+        }
+        loadTimeout = setTimeout(function() {
+            loadPlaques({ q: searchTerm });
+        }, 300);
+    });
     
     // Function to show plaque details
     function showPlaqueDetails(plaque) {
@@ -417,31 +493,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     };
     
-    // Create markers for each plaque
-    plaques.forEach(function(plaque) {
-        // Extract plaque ID - use top-level id (now added in controller)
-        const plaqueId = plaque.id;
-        if (!plaqueId) return; // Skip if no ID
-        
-        // Create marker with popup
-        const marker = L.marker([plaque.latitude, plaque.longitude], { icon: defaultIcon })
-            .addTo(map)
-            .bindPopup(`
-                <div>
-                    <h6>${escapeHtml(plaque.name)}</h6>
-                    ${plaque.location ? `<p class="mb-1 small">${escapeHtml(plaque.location.name || 'Unknown location')}</p>` : ''}
-                    <button class="btn btn-sm btn-primary mt-2" onclick="window.selectPlaqueById('${plaqueId}')">
-                        View Details
-                    </button>
-                </div>
-            `)
-            .on('click', function() {
-                highlightPlaque(plaqueId, plaque);
-            });
-        
-        markers.set(plaqueId, marker);
-    });
-    
     // Make selectPlaqueById available globally
     window.selectPlaqueById = function(plaqueId) {
         const plaque = plaques.find(function(p) {
@@ -452,16 +503,16 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     };
     
-    // Populate the plaques list
-    populatePlaquesList();
-    
-    // Fit map to show all markers if there are any
-    if (plaques.length > 0) {
-        const bounds = L.latLngBounds(plaques.map(function(p) {
-            return [p.latitude, p.longitude];
-        }));
-        map.fitBounds(bounds.pad(0.1));
-    }
+    map.on('moveend', function() {
+        if (suppressLoad) {
+            suppressLoad = false;
+            return;
+        }
+        scheduleViewportLoad();
+    });
+    map.whenReady(function() {
+        loadViewportPlaques();
+    });
 
     window.explorePlaquesMap = map;
     window.explorePlaquesHideSelectedMarker = function() {

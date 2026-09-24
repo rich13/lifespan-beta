@@ -26,6 +26,7 @@ use App\Services\ConfigurableStoryGeneratorService;
 use App\Services\RouteReservationService;
 use App\Services\YamlValidationService;
 use App\Services\SpreadsheetValidationService;
+use App\Services\DesertIslandDiscsExploreService;
 use App\Services\PlaqueVirtualPlaqueService;
 use App\Services\Lifespan\UrlDateParser;
 use App\Services\SpanTimelineSeedService;
@@ -67,7 +68,7 @@ class SpanController extends Controller
         // Require auth for all routes except public span viewing, connections, explore, and time-travel pages
         $this->middleware('auth')->except([
             'show', 'showJson', 'connectionsJson', 'plaque', 'plaqueConnection', 'plaqueConnections', 'plaquesIndex', 'plaquesSearch', 'plaquesMarkers',
-            'index', 'search', 'explore', 'exploreDate', 'desertIslandDiscs', 'explorePlaques', 'connectionTypes', 'connectionsByType',
+            'index', 'search', 'explore', 'exploreDate', 'desertIslandDiscs', 'desertIslandDiscsSet', 'explorePlaques', 'explorePlaqueMarkers', 'explorePlaqueSummary', 'connectionTypes', 'connectionsByType',
             'showConnection', 'showConnectionJson', 'showConnectionBySpanId', 'showConnectionBySpanIdJson', 'listConnections',
             'showTimeline', 'showAtDate', 'showAtDateCanonical', 'showAtDateWithAsOf', 'showAsOfDate',
         ]);
@@ -1140,64 +1141,34 @@ class SpanController extends Controller
 
         $limit = (int) config('plaques.map.max_markers', 250);
         $precision = $this->plaqueMarkerGridPrecision($zoom);
-        $ids = $this->plaqueMarkerIdsInBounds($north, $south, $east, $west, $precision, $limit);
+        $rows = $this->plaqueMarkerRowsInBounds($north, $south, $east, $west, $precision, $limit);
 
-        if ($ids->isEmpty()) {
-            return response()->json([
-                'success' => true,
-                'markers' => [],
-                'count' => 0,
-                'zoom' => $zoom,
-            ]);
-        }
-
-        $connections = Connection::query()
-            ->whereIn('id', $ids)
-            ->with(['subject', 'object', 'type', 'connectionSpan'])
-            ->get()
-            ->sortBy(fn (Connection $connection) => array_search($connection->id, $ids->all(), true))
-            ->values();
-
-        $markers = $connections->map(function (Connection $connection) {
-            $subject = $connection->subject;
-            $object = $connection->object;
-            $connType = $connection->type;
-            $connSpan = $connection->connectionSpan;
-            if (!$subject || !$object || !$connType || !$connSpan || !$connSpan->short_id) {
-                return null;
-            }
-
-            $placeSpan = $subject->type_id === 'place' ? $subject : ($object->type_id === 'place' ? $object : null);
-            $personSpan = $subject->type_id === 'person' ? $subject : ($object->type_id === 'person' ? $object : null);
-            if (!$placeSpan || !$personSpan) {
-                return null;
-            }
-
-            $coords = $placeSpan->getCoordinates();
-            if (!$coords || !isset($coords['latitude'], $coords['longitude'])) {
-                return null;
-            }
-
-            $isForward = $connection->parent_id === $personSpan->id;
-            $predicateKey = str_replace(' ', '-', $isForward ? $connType->forward_predicate : $connType->inverse_predicate);
-            $predicateText = config('plaques.predicate_mappings.' . $predicateKey)
-                ?? ($isForward ? $connType->forward_predicate : $connType->inverse_predicate);
+        $markers = $rows->map(function ($row) {
+            $personIsParent = (int) $row->person_is_parent === 1;
+            $predicateSource = $personIsParent ? $row->forward_predicate : $row->inverse_predicate;
+            $predicateKey = str_replace(' ', '-', (string) $predicateSource);
+            $subjectKey = $personIsParent
+                ? ($row->person_slug ?: $row->person_id)
+                : ($row->place_slug ?: $row->place_id);
+            $objectKey = $personIsParent
+                ? ($row->place_slug ?: $row->place_id)
+                : ($row->person_slug ?: $row->person_id);
 
             return [
-                'id' => $connection->id,
-                'latitude' => (float) $coords['latitude'],
-                'longitude' => (float) $coords['longitude'],
+                'id' => $row->id,
+                'latitude' => (float) $row->latitude,
+                'longitude' => (float) $row->longitude,
                 'url' => route('plaques.connection', [
-                    'subject' => $subject,
+                    'subject' => $subjectKey,
                     'predicate' => $predicateKey,
-                    'object' => $object,
-                    'shortId' => $connSpan->short_id,
+                    'object' => $objectKey,
+                    'shortId' => $row->short_id,
                 ]),
-                'person_name' => $personSpan->getDisplayTitle(),
-                'place_name' => $placeSpan->getDisplayTitle(),
-                'predicate' => $predicateText,
+                'person_name' => $row->person_name,
+                'place_name' => $row->place_name,
+                'predicate' => config('plaques.predicate_mappings.' . $predicateKey) ?? $predicateSource,
             ];
-        })->filter()->values();
+        })->values();
 
         return response()->json([
             'success' => true,
@@ -1229,9 +1200,12 @@ class SpanController extends Controller
     }
 
     /**
-     * @return \Illuminate\Support\Collection<int, string>
+     * Person–place connections whose place lies in the bounding box.
+     * Places are read from indexed coordinate columns, not metadata JSON.
+     *
+     * @return \Illuminate\Support\Collection<int, object>
      */
-    private function plaqueMarkerIdsInBounds(
+    private function plaqueMarkerRowsInBounds(
         float $north,
         float $south,
         float $east,
@@ -1239,58 +1213,90 @@ class SpanController extends Controller
         float $precision,
         int $limit
     ): \Illuminate\Support\Collection {
-        $latExpr = "CASE WHEN child_spans.type_id = 'place' THEN (child_spans.metadata->'coordinates'->>'latitude')::float ELSE (parent_spans.metadata->'coordinates'->>'latitude')::float END";
-        $lngExpr = "CASE WHEN child_spans.type_id = 'place' THEN (child_spans.metadata->'coordinates'->>'longitude')::float ELSE (parent_spans.metadata->'coordinates'->>'longitude')::float END";
+        $placesInBounds = function () use ($north, $south, $east, $west) {
+            $query = DB::table('spans as place')
+                ->select([
+                    'place.id',
+                    'place.name',
+                    'place.slug',
+                    'place.place_latitude as latitude',
+                    'place.place_longitude as longitude',
+                ])
+                ->where('place.type_id', 'place')
+                ->whereNotNull('place.place_latitude')
+                ->whereNotNull('place.place_longitude')
+                ->whereBetween('place.place_latitude', [$south, $north])
+                ->whereBetween('place.place_longitude', [$west, $east]);
 
-        $query = DB::table('connections')
-            ->join('spans as connection_spans', 'connection_spans.id', '=', 'connections.connection_span_id')
-            ->join('spans as parent_spans', 'parent_spans.id', '=', 'connections.parent_id')
-            ->join('spans as child_spans', 'child_spans.id', '=', 'connections.child_id')
-            ->whereNotNull('connection_spans.short_id')
-            ->where(function ($q) {
-                $q->where(function ($inner) {
-                    $inner->where('parent_spans.type_id', 'person')
-                        ->where('child_spans.type_id', 'place');
-                })->orWhere(function ($inner) {
-                    $inner->where('parent_spans.type_id', 'place')
-                        ->where('child_spans.type_id', 'person');
-                });
-            })
-            ->whereRaw("{$latExpr} IS NOT NULL")
-            ->whereRaw("{$lngExpr} IS NOT NULL")
-            ->whereRaw("{$latExpr} >= ?", [$south])
-            ->whereRaw("{$latExpr} <= ?", [$north])
-            ->whereRaw("{$lngExpr} >= ?", [$west])
-            ->whereRaw("{$lngExpr} <= ?", [$east]);
+            $this->constrainPlaqueMapSpanAccess($query, 'place');
 
-        $this->constrainPlaqueMapSpanAccess($query, 'parent_spans');
-        $this->constrainPlaqueMapSpanAccess($query, 'child_spans');
-        $this->constrainPlaqueMapSpanAccess($query, 'connection_spans');
+            return $query;
+        };
+
+        $personIsParent = $this->plaqueMarkerConnectionQuery($placesInBounds(), 'child_id', 'parent_id', 1);
+        $placeIsParent = $this->plaqueMarkerConnectionQuery($placesInBounds(), 'parent_id', 'child_id', 0);
+        $union = $personIsParent->unionAll($placeIsParent);
 
         if ($precision > 0) {
-            $base = (clone $query)->selectRaw(
-                "connections.id, round(({$latExpr}) / ?) as grid_lat, round(({$lngExpr}) / ?) as grid_lng",
-                [$precision, $precision]
-            );
+            $base = DB::query()
+                ->fromSub($union, 'markers')
+                ->selectRaw('markers.*, round(latitude / ?) as grid_lat, round(longitude / ?) as grid_lng', [
+                    $precision,
+                    $precision,
+                ]);
 
             return DB::query()
-                ->fromSub($base, 'plaque_markers')
-                ->selectRaw('DISTINCT ON (grid_lat, grid_lng) id')
+                ->fromSub($base, 'gridded')
+                ->selectRaw('DISTINCT ON (grid_lat, grid_lng) id, latitude, longitude, person_name, place_name, person_slug, person_id, place_slug, place_id, short_id, forward_predicate, inverse_predicate, person_is_parent')
                 ->orderBy('grid_lat')
                 ->orderBy('grid_lng')
                 ->orderBy('id')
                 ->limit($limit)
-                ->pluck('id')
-                ->unique()
-                ->values();
+                ->get();
         }
 
-        return $query->select('connections.id')
-            ->orderBy('connections.id')
+        return DB::query()
+            ->fromSub($union, 'markers')
+            ->orderBy('id')
             ->limit($limit)
-            ->pluck('id')
-            ->unique()
-            ->values();
+            ->get();
+    }
+
+    /**
+     * Join places in view to the person on the other side of the connection.
+     */
+    private function plaqueMarkerConnectionQuery($places, string $placeColumn, string $personColumn, int $personIsParent)
+    {
+        $query = DB::query()
+            ->fromSub($places, 'place')
+            ->join('connections', 'connections.'.$placeColumn, '=', 'place.id')
+            ->join('spans as person', function ($join) use ($personColumn) {
+                $join->on('person.id', '=', 'connections.'.$personColumn)
+                    ->where('person.type_id', 'person');
+            })
+            ->join('spans as connection_spans', 'connection_spans.id', '=', 'connections.connection_span_id')
+            ->join('connection_types', 'connection_types.type', '=', 'connections.type_id')
+            ->whereNotNull('connection_spans.short_id')
+            ->select([
+                'connections.id',
+                'place.latitude',
+                'place.longitude',
+                'person.name as person_name',
+                'place.name as place_name',
+                'person.slug as person_slug',
+                'person.id as person_id',
+                'place.slug as place_slug',
+                'place.id as place_id',
+                'connection_spans.short_id',
+                'connection_types.forward_predicate',
+                'connection_types.inverse_predicate',
+            ])
+            ->selectRaw('? as person_is_parent', [$personIsParent]);
+
+        $this->constrainPlaqueMapSpanAccess($query, 'person');
+        $this->constrainPlaqueMapSpanAccess($query, 'connection_spans');
+
+        return $query;
     }
 
     /**
@@ -4584,150 +4590,177 @@ class SpanController extends Controller
     }
 
     /**
-     * Display all Desert Island Discs sets.
+     * Browse Desert Island Discs by castaway, with covers and track notes.
      */
     public function desertIslandDiscs(Request $request): View
     {
-        $query = Span::query()
-            ->where('type_id', 'set')
-            ->where(function($q) {
-                $q->whereJsonContains('metadata->subtype', 'desertislanddiscs')
-                  ->orWhere('metadata->subtype', 'desertislanddiscs');
-            })
-            ->orderBy('name');
+        $castaways = app(DesertIslandDiscsExploreService::class)->catalogue(Auth::user());
+        $requested = $request->query('set');
+        $selectedSet = is_string($requested) && $castaways->contains('set_key', $requested)
+            ? $requested
+            : null;
 
-        $query->viewableBy(Auth::user());
-
-        $sets = $query->paginate(20);
-
-        // Use cached set contents for each set
-        $sets->getCollection()->transform(function ($set) {
-            $tracks = $set->getSetContents()->filter(function($item) {
-                return $item->type_id === 'thing' && 
-                       ($item->metadata['subtype'] ?? null) === 'track';
-            });
-            
-            // Preload album data for each track to avoid N+1 queries
-            $tracks->each(function($track) {
-                $track->cached_album = $track->getContainingAlbum();
-            });
-
-            $albumIds = $tracks->map(fn ($track) => $track->cached_album?->id)->filter()->unique()->values();
-            $creatorsByAlbumId = $albumIds->isEmpty()
-                ? collect()
-                : Connection::where('type_id', 'created')
-                    ->whereIn('child_id', $albumIds)
-                    ->whereHas('parent', function ($query) {
-                        $query->whereIn('type_id', ['person', 'band']);
-                    })
-                    ->with('parent')
-                    ->get()
-                    ->keyBy('child_id');
-
-            $tracks->each(function ($track) use ($creatorsByAlbumId) {
-                $track->cached_album_creator = $creatorsByAlbumId->get($track->cached_album?->id)?->parent;
-            });
-            
-            $set->preloaded_tracks = $tracks;
-            return $set;
-        });
-
-        \Illuminate\Support\Facades\Log::info('Desert Island Discs query', [
-            'sql' => $query->toSql(),
-            'bindings' => $query->getBindings(),
-            'count' => $sets->count(),
-            'total' => $sets->total(),
-            'is_authenticated' => Auth::check(),
-            'user_id' => Auth::id()
-        ]);
-
-        return view('desert-island-discs.index', compact('sets'));
+        return view('desert-island-discs.index', compact('castaways', 'selectedSet'));
     }
 
     /**
-     * Display all plaques on a map.
+     * Tracks, covers, and notes for one Desert Island Discs set.
+     */
+    public function desertIslandDiscsSet(Span $span): JsonResponse
+    {
+        $subtype = $span->getMeta('subtype');
+        if ($span->type_id !== 'set' || $subtype !== 'desertislanddiscs') {
+            abort(404);
+        }
+
+        if (! $span->hasPermission(Auth::user(), 'view')) {
+            abort(404);
+        }
+
+        return response()->json(
+            app(DesertIslandDiscsExploreService::class)->setPayload($span, Auth::user())
+        );
+    }
+
+    /**
+     * Plaque map. Markers for the current view are loaded separately.
      */
     public function explorePlaques(Request $request): View
     {
-        // Get all plaque spans
-        $query = Span::query()
+        return view('plaques.index');
+    }
+
+    /**
+     * Plaques with a location inside the map bounds, or matching a search.
+     * GET /explore/plaques/markers
+     */
+    public function explorePlaqueMarkers(Request $request): JsonResponse
+    {
+        $search = trim((string) $request->get('q', ''));
+        $limit = $search !== '' ? 40 : 300;
+
+        $query = DB::table('spans as places')
+            ->join('connections as located', function ($join) {
+                $join->on('located.child_id', '=', 'places.id')
+                    ->where('located.type_id', 'located');
+            })
+            ->join('spans as plaques', 'plaques.id', '=', 'located.parent_id')
+            ->leftJoin(DB::raw("LATERAL (
+                SELECT people.name AS person_name, people.slug AS person_slug, people.id AS person_id
+                FROM connections features
+                INNER JOIN spans people ON people.id = features.child_id AND people.type_id = 'person'
+                WHERE features.parent_id = plaques.id AND features.type_id = 'features'
+                ORDER BY people.name
+                LIMIT 1
+            ) AS person"), DB::raw('true'), '=', DB::raw('true'))
+            ->where('places.type_id', 'place')
+            ->whereNotNull('places.place_latitude')
+            ->whereNotNull('places.place_longitude')
+            ->where('plaques.type_id', 'thing')
+            ->whereRaw("plaques.metadata->>'subtype' = 'plaque'");
+
+        $viewableIds = Span::query()
             ->where('type_id', 'thing')
-            ->whereJsonContains('metadata->subtype', 'plaque')
-            ->orderBy('name');
+            ->whereRaw("metadata->>'subtype' = 'plaque'")
+            ->viewableBy(Auth::user())
+            ->select('spans.id');
+        $query->whereIn('plaques.id', $viewableIds);
 
-        $query->viewableBy(Auth::user());
-
-        $plaques = $query->get();
-
-        // Get location data for each plaque
-        $plaquesWithLocations = [];
-        foreach ($plaques as $plaque) {
-            // Find the location connection for this plaque
-            $locationConnection = Connection::where('type_id', 'located')
-                ->where('parent_id', $plaque->id)
-                ->with(['child'])
-                ->first();
-
-            if ($locationConnection && $locationConnection->child) {
-                $location = $locationConnection->child;
-                $metadata = $location->metadata ?? [];
-                
-                // Check if location has coordinates
-                $coordinates = $metadata['coordinates'] ?? null;
-                if ($coordinates && isset($coordinates['latitude']) && isset($coordinates['longitude'])) {
-                    // Get connections to people - plaque (parent) features person (child)
-                    $personConnections = Connection::where('type_id', 'features')
-                        ->where('parent_id', $plaque->id) // Plaque is the parent
-                        ->whereHas('child', function($query) {
-                            $query->where('type_id', 'person'); // Only get person connections, not photos
-                        })
-                        ->with(['child'])
-                        ->get();
-                    
-                    // Get connections to organisations - plaque (parent) features organisation (child)
-                    $organisationConnections = Connection::where('type_id', 'features')
-                        ->where('parent_id', $plaque->id) // Plaque is the parent
-                        ->whereHas('child', function($query) {
-                            $query->where('type_id', 'organisation');
-                        })
-                        ->with(['child'])
-                        ->get();
-                    
-                    $plaquesWithLocations[] = [
-                        'id' => $plaque->id, // Add ID at top level for easier access
-                        'plaque' => $plaque,
-                        'location' => [
-                            'name' => $location->name,
-                            'url' => route('spans.show', $location),
-                        ],
-                        'latitude' => (float) $coordinates['latitude'],
-                        'longitude' => (float) $coordinates['longitude'],
-                        'name' => $plaque->name,
-                        'description' => $plaque->description,
-                        'photo_url' => $this->resolvePlaquePhotoUrl($plaque),
-                        'url' => route('spans.show', $plaque),
-                        'person_connections' => $personConnections->map(function($conn) {
-                            return [
-                                'id' => $conn->child->id,
-                                'name' => $conn->child->name,
-                                'type' => $conn->child->type_id,
-                                'url' => route('spans.show', $conn->child)
-                            ];
-                        })->toArray(),
-                        'organisation_connections' => $organisationConnections->map(function($conn) {
-                            return [
-                                'id' => $conn->child->id,
-                                'name' => $conn->child->name,
-                                'type' => $conn->child->type_id,
-                                'url' => route('spans.show', $conn->child)
-                            ];
-                        })->toArray()
-                    ];
-                }
+        if ($search !== '') {
+            $like = '%'.$search.'%';
+            $query->where(function ($inner) use ($like) {
+                $inner->where('plaques.name', 'ilike', $like)
+                    ->orWhere('plaques.description', 'ilike', $like)
+                    ->orWhere('places.name', 'ilike', $like)
+                    ->orWhere('person.person_name', 'ilike', $like);
+            });
+        } else {
+            $validated = $request->validate([
+                'north' => 'required|numeric|between:-90,90',
+                'south' => 'required|numeric|between:-90,90',
+                'east' => 'required|numeric|between:-180,180',
+                'west' => 'required|numeric|between:-180,180',
+            ]);
+            $north = (float) $validated['north'];
+            $south = (float) $validated['south'];
+            $east = (float) $validated['east'];
+            $west = (float) $validated['west'];
+            if ($north <= $south || $east <= $west) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid bounding box coordinates',
+                ], 400);
             }
+            $query->whereBetween('places.place_latitude', [$south, $north])
+                ->whereBetween('places.place_longitude', [$west, $east]);
         }
 
-        return view('plaques.index', compact('plaquesWithLocations'));
+        $rows = $query
+            ->select([
+                'plaques.id',
+                'plaques.name',
+                'plaques.slug',
+                'places.name as place_name',
+                'places.slug as place_slug',
+                'places.id as place_id',
+                'places.place_latitude as latitude',
+                'places.place_longitude as longitude',
+                'person.person_name',
+                'person.person_slug',
+                'person.person_id',
+            ])
+            ->orderBy('plaques.name')
+            ->limit($limit + 1)
+            ->get();
+
+        $truncated = $rows->count() > $limit;
+        $rows = $rows->take($limit)->sortBy('name')->values();
+
+        $plaques = $rows->map(function ($row) {
+            $person = $row->person_name ? [[
+                'name' => $row->person_name,
+                'url' => route('spans.show', $row->person_slug ?: $row->person_id),
+            ]] : [];
+
+            return [
+                'id' => $row->id,
+                'name' => $row->name,
+                'latitude' => (float) $row->latitude,
+                'longitude' => (float) $row->longitude,
+                'url' => route('spans.show', $row->slug ?: $row->id),
+                'location' => [
+                    'name' => $row->place_name,
+                    'url' => route('spans.show', $row->place_slug ?: $row->place_id),
+                ],
+                'person_connections' => $person,
+            ];
+        })->values();
+
+        return response()->json([
+            'success' => true,
+            'plaques' => $plaques,
+            'count' => $plaques->count(),
+            'truncated' => $truncated,
+        ]);
+    }
+
+    /**
+     * Description and photo for one plaque, loaded when it is selected.
+     * GET /explore/plaques/{span}/summary
+     */
+    public function explorePlaqueSummary(Span $span): JsonResponse
+    {
+        $subtype = $span->metadata['subtype'] ?? null;
+        $isPlaque = $subtype === 'plaque' || (is_array($subtype) && in_array('plaque', $subtype, true));
+        if ($span->type_id !== 'thing' || !$isPlaque || !$span->isAccessibleBy(Auth::user())) {
+            abort(404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'description' => $span->description,
+            'photo_url' => $this->resolvePlaquePhotoUrl($span),
+        ]);
     }
 
     /**

@@ -30,6 +30,12 @@
     </li>
 
     <li class="nav-item">
+        <a class="nav-link {{ request()->routeIs('plaques.*') ? 'active' : '' }}" href="{{ route('plaques.index') }}">
+            <i class="bi bi-circle-fill me-1"></i> <span>Plaques</span>
+        </a>
+    </li>
+
+    <li class="nav-item">
         <a class="nav-link {{ request()->routeIs('photos.*') ? 'active' : '' }}" href="{{ route('photos.index') }}">
             <i class="bi bi-images me-1"></i> <span>Photos</span>
         </a>

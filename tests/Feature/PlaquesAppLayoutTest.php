@@ -35,6 +35,16 @@ class PlaquesAppLayoutTest extends TestCase
         $response->assertSee('id="main-content"', false);
         $response->assertSee('plaque-app-content', false);
         $response->assertSee('id="plaque-map"', false);
+        $content = $response->getContent();
+        $plaquesPos = strpos($content, 'href="'.e(route('plaques.index')).'"');
+        $photosPos = strpos($content, 'href="'.e(route('photos.index')).'"');
+        $this->assertNotFalse($plaquesPos);
+        $this->assertNotFalse($photosPos);
+        $this->assertLessThan($photosPos, $plaquesPos);
+        $this->assertMatchesRegularExpression(
+            '/class="nav-link\s+active"[^>]*href="'.preg_quote(e(route('plaques.index')), '/').'"|href="'.preg_quote(e(route('plaques.index')), '/').'"[^>]*class="nav-link\s+active"/',
+            $content
+        );
         $response->assertDontSee('Search for people');
         $response->assertDontSee('class="plaques-back-link"', false);
     }
