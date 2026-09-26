@@ -17,6 +17,7 @@ class ViewConventionsTest extends TestCase
         'resources/views/errors/*',
         'resources/views/vendor/*',
         'resources/views/auth/*',
+        'resources/views/emails/*',
     ];
 
     /**

@@ -5,6 +5,15 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @property string $import_type
+ * @property string|null $plaque_type
+ * @property string|null $user_id
+ * @property int $total_items
+ * @property int $processed_items
+ * @property string $status
+ * @property array|null $metadata
+ */
 class ImportProgress extends Model
 {
     protected $table = 'import_progress';

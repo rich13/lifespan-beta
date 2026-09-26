@@ -6,6 +6,12 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @property string $id
+ * @property string $span_id
+ * @property int|null $effective_year
+ * @property array|null $payload
+ */
 class SpanEpistemicRevision extends Model
 {
     use HasUuids;

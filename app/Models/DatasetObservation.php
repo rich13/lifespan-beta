@@ -6,6 +6,13 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @property int $id
+ * @property string $series_id
+ * @property mixed $t_start
+ * @property mixed $t_end
+ * @property mixed $value
+ */
 class DatasetObservation extends Model
 {
     use HasFactory;

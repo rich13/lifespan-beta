@@ -39,12 +39,12 @@ class ModelConventionsTest extends TestCase
                 continue;
             }
 
-            // UUID models must declare both properties
-            if (!$reflection->hasProperty('incrementing')) {
-                $violations[] = "{$modelClass} uses UUIDs but doesn't declare \$incrementing = false";
+            $instance = new $modelClass;
+            if ($instance->getIncrementing() !== false) {
+                $violations[] = "{$modelClass} uses HasUuids but getIncrementing() is not false";
             }
-            if (!$reflection->hasProperty('keyType')) {
-                $violations[] = "{$modelClass} uses UUIDs but doesn't declare \$keyType = 'string'";
+            if ($instance->getKeyType() !== 'string') {
+                $violations[] = "{$modelClass} uses HasUuids but getKeyType() is not string";
             }
         }
 
