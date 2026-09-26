@@ -227,7 +227,7 @@ function searchPrimeMinisters() {
     showLoading('Searching Prime Ministers...');
     
     $.ajax({
-        url: '{{ route("admin.prime-ministers.search") }}',
+        url: '{{ route("admin.import.prime-ministers.search") }}',
         method: 'POST',
         data: {
             search: searchTerm,
@@ -317,7 +317,7 @@ function selectPrimeMinister(parliamentId) {
     showLoading('Loading Prime Minister data...');
     
     $.ajax({
-        url: '{{ route("admin.prime-ministers.get-data") }}',
+        url: '{{ route("admin.import.prime-ministers.get-data") }}',
         method: 'POST',
         data: {
             parliament_id: parliamentId,
@@ -457,7 +457,7 @@ function previewImport() {
     showLoading('Generating preview...');
     
     $.ajax({
-        url: '{{ route("admin.prime-ministers.preview") }}',
+        url: '{{ route("admin.import.prime-ministers.preview") }}',
         method: 'POST',
         data: {
             parliament_id: selectedPrimeMinister.parliament_id,
@@ -524,7 +524,7 @@ function importPrimeMinister() {
     showLoading('Importing Prime Minister...');
     
     $.ajax({
-        url: '{{ route("admin.prime-ministers.import") }}',
+        url: '{{ route("admin.import.prime-ministers.import") }}',
         method: 'POST',
         data: {
             parliament_id: selectedPrimeMinister.parliament_id,
@@ -550,7 +550,7 @@ function importPrimeMinister() {
 
 function loadRecentImports() {
     $.ajax({
-        url: '{{ route("admin.prime-ministers.recent") }}',
+        url: '{{ route("admin.import.prime-ministers.recent") }}',
         method: 'GET',
         success: function(response) {
             if (response.success) {
@@ -590,7 +590,7 @@ function clearCache() {
     showLoading('Clearing cache...');
     
     $.ajax({
-        url: '{{ route("admin.prime-ministers.clear-cache") }}',
+        url: '{{ route("admin.import.prime-ministers.clear-cache") }}',
         method: 'POST',
         data: {
             _token: '{{ csrf_token() }}'
