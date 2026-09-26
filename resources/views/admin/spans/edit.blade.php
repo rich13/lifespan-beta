@@ -78,7 +78,7 @@
                             <label for="start_date" class="form-label">Start Date</label>
                             <input type="date" class="form-control @error('start_date') is-invalid @enderror" 
                                    id="start_date" name="start_date" 
-                                   value="{{ old('start_date', $span->start_date->format('Y-m-d')) }}" required>
+                                   value="{{ old('start_date', $span->start_date ? $span->start_date->format('Y-m-d') : '') }}" required>
                             @error('start_date')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
@@ -185,15 +185,14 @@
                                     <div class="form-check">
                                         <input type="checkbox" class="form-check-input" 
                                                id="group_read" name="group_read" value="1" 
-                                               {{ $span->canGroupRead() ? 'checked' : '' }}>
+                                               {{ $span->access_level === 'shared' ? 'checked' : '' }}>
                                         <label class="form-check-label" for="group_read">
                                             Group members can view
                                         </label>
                                     </div>
                                     <div class="form-check">
                                         <input type="checkbox" class="form-check-input" 
-                                               id="group_write" name="group_write" value="1" 
-                                               {{ $span->canGroupWrite() ? 'checked' : '' }}>
+                                               id="group_write" name="group_write" value="1">
                                         <label class="form-check-label" for="group_write">
                                             Group members can edit
                                         </label>

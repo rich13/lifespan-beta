@@ -217,6 +217,14 @@ class ConnectionController extends Controller
     }
 
     /**
+     * Display the connection using the edit form. There is no separate show view.
+     */
+    public function show(Connection $connection)
+    {
+        return $this->edit($connection);
+    }
+
+    /**
      * Show the form for editing the specified connection.
      */
     public function edit(Connection $connection)

@@ -90,7 +90,12 @@ class SpanController extends Controller
     {
         $types = SpanType::all();
         $users = User::all();
-        return view('admin.spans.edit', compact('span', 'types', 'users'));
+        $availableParents = Span::query()
+            ->where('id', '!=', $span->id)
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        return view('admin.spans.edit', compact('span', 'types', 'users', 'availableParents'));
     }
 
     public function update(Request $request, Span $span)
