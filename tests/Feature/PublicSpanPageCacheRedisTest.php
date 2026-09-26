@@ -140,18 +140,24 @@ class PublicSpanPageCacheRedisTest extends TestCase
             'connection_span_id' => $connectionSpan->id,
         ]);
 
-        $this->get(route('spans.show', ['subject' => $spanA->slug]))->assertStatus(200);
-        $this->get(route('spans.show', ['subject' => $spanB->slug]))->assertStatus(200);
+        $this->get(route('spans.show', ['subject' => $spanA->slug]))
+            ->assertHeader('X-Public-Span-Cache', 'MISS');
+        $this->get(route('spans.show', ['subject' => $spanA->slug]))
+            ->assertHeader('X-Public-Span-Cache', 'HIT');
+        $this->get(route('spans.show', ['subject' => $spanB->slug]))
+            ->assertHeader('X-Public-Span-Cache', 'MISS');
+        $this->get(route('spans.show', ['subject' => $spanB->slug]))
+            ->assertHeader('X-Public-Span-Cache', 'HIT');
 
         $spanA->update(['name' => 'Person A Updated']);
 
         $responseA = $this->get(route('spans.show', ['subject' => $spanA->slug]));
-        $responseA->assertStatus(200);
+        $responseA->assertHeader('X-Public-Span-Cache', 'MISS');
         $responseA->assertSee('Person A Updated');
 
         $responseB = $this->get(route('spans.show', ['subject' => $spanB->slug]));
-        $responseB->assertStatus(200);
-        $responseB->assertSee('Person B');
+        $responseB->assertHeader('X-Public-Span-Cache', 'MISS');
+        $responseB->assertSee('Person A Updated');
     }
 
     public function test_connection_create_invalidates_subject_and_object(): void
@@ -180,8 +186,14 @@ class PublicSpanPageCacheRedisTest extends TestCase
             'end_year' => 2010,
         ]);
 
-        $this->get(route('spans.show', ['subject' => $subject->slug]))->assertStatus(200);
-        $this->get(route('spans.show', ['subject' => $object->slug]))->assertStatus(200);
+        $this->get(route('spans.show', ['subject' => $subject->slug]))
+            ->assertHeader('X-Public-Span-Cache', 'MISS');
+        $this->get(route('spans.show', ['subject' => $subject->slug]))
+            ->assertHeader('X-Public-Span-Cache', 'HIT');
+        $this->get(route('spans.show', ['subject' => $object->slug]))
+            ->assertHeader('X-Public-Span-Cache', 'MISS');
+        $this->get(route('spans.show', ['subject' => $object->slug]))
+            ->assertHeader('X-Public-Span-Cache', 'HIT');
 
         Connection::create([
             'parent_id' => $subject->id,
@@ -190,8 +202,13 @@ class PublicSpanPageCacheRedisTest extends TestCase
             'connection_span_id' => $connectionSpan->id,
         ]);
 
-        $this->get(route('spans.show', ['subject' => $subject->slug]))->assertStatus(200);
-        $this->get(route('spans.show', ['subject' => $object->slug]))->assertStatus(200);
+        $responseSubject = $this->get(route('spans.show', ['subject' => $subject->slug]));
+        $responseSubject->assertHeader('X-Public-Span-Cache', 'MISS');
+        $responseSubject->assertSee('Object Organisation');
+
+        $responseObject = $this->get(route('spans.show', ['subject' => $object->slug]));
+        $responseObject->assertHeader('X-Public-Span-Cache', 'MISS');
+        $responseObject->assertSee('Subject Person');
     }
 
     public function test_connection_delete_invalidates_subject_and_object(): void
@@ -227,12 +244,23 @@ class PublicSpanPageCacheRedisTest extends TestCase
             'connection_span_id' => $connectionSpan->id,
         ]);
 
-        $this->get(route('spans.show', ['subject' => $subject->slug]))->assertStatus(200);
-        $this->get(route('spans.show', ['subject' => $object->slug]))->assertStatus(200);
+        $this->get(route('spans.show', ['subject' => $subject->slug]))
+            ->assertHeader('X-Public-Span-Cache', 'MISS');
+        $this->get(route('spans.show', ['subject' => $subject->slug]))
+            ->assertHeader('X-Public-Span-Cache', 'HIT');
+        $this->get(route('spans.show', ['subject' => $object->slug]))
+            ->assertHeader('X-Public-Span-Cache', 'MISS');
+        $this->get(route('spans.show', ['subject' => $object->slug]))
+            ->assertHeader('X-Public-Span-Cache', 'HIT');
 
         $connection->delete();
 
-        $this->get(route('spans.show', ['subject' => $subject->slug]))->assertStatus(200);
-        $this->get(route('spans.show', ['subject' => $object->slug]))->assertStatus(200);
+        $responseSubject = $this->get(route('spans.show', ['subject' => $subject->slug]));
+        $responseSubject->assertHeader('X-Public-Span-Cache', 'MISS');
+        $responseSubject->assertDontSee('Object Organisation');
+
+        $responseObject = $this->get(route('spans.show', ['subject' => $object->slug]));
+        $responseObject->assertHeader('X-Public-Span-Cache', 'MISS');
+        $responseObject->assertDontSee('Subject Person');
     }
 }

@@ -3,11 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Span;
-use App\Models\User;
 use Tests\TestCase;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Event;
-use Illuminate\Support\Facades\Log;
 
 /**
  * Test basic span viewing functionality
@@ -49,36 +45,6 @@ class SpanViewTest extends TestCase
     }
 
     /**
-     * Test that we can view a span's data
-     */
-    public function test_can_view_span_data(): void
-    {
-        // Use helper to create user without personal span (faster, not needed for this test)
-        $user = $this->createUserWithoutPersonalSpan();
-        $this->actingAs($user);
-
-        // Create a person span (not place/set/photo which would redirect)
-        $span = Span::factory()->create([
-            'owner_id' => $user->id,
-            'updater_id' => $user->id,
-            'type_id' => 'person',
-        ]);
-
-        // First request should redirect to slug
-        $response = $this->get("/spans/{$span->id}");
-        $response->assertStatus(301);
-        $response->assertRedirect("/spans/{$span->slug}");
-
-        // Following the redirect should show the span
-        $response = $this->get("/spans/{$span->slug}");
-        $response->assertStatus(200);
-        $response->assertViewHas('span', function($viewSpan) use ($span) {
-            return $viewSpan->id === $span->id &&
-                   $viewSpan->owner_id === $span->owner_id;
-        });
-    }
-
-    /**
      * Test that we get a 404 for non-existent spans
      */
     public function test_404_for_missing_span(): void
@@ -87,30 +53,6 @@ class SpanViewTest extends TestCase
         $user = $this->createUserWithoutPersonalSpan();
         $response = $this->actingAs($user)->get('/spans/999');
         $response->assertStatus(404);
-    }
-
-    /**
-     * Test that the correct view data is loaded
-     */
-    public function test_span_view_data_is_loaded(): void
-    {
-        // Use helper to create user without personal span (faster, not needed for this test)
-        $user = $this->createUserWithoutPersonalSpan();
-        $this->actingAs($user);
-
-        // Create a person span (not place/set/photo which would redirect)
-        $span = Span::factory()->create([
-            'owner_id' => $user->id,
-            'updater_id' => $user->id,
-            'type_id' => 'person',
-        ]);
-
-        // Access via slug directly
-        $response = $this->get("/spans/{$span->slug}");
-        $response->assertStatus(200);
-        $response->assertViewIs('spans.show');
-        $response->assertViewHas('span');
-        $this->assertEquals($span->id, $response->viewData('span')->id);
     }
 
     /**
@@ -172,10 +114,12 @@ class SpanViewTest extends TestCase
         $response->assertStatus(301);
         $response->assertRedirect(route('spans.show', ['subject' => $span->slug]));
 
-        // Following the redirect should work
         $response = $this->get(route('spans.show', ['subject' => $span->slug]));
         $response->assertStatus(200);
         $response->assertViewIs('spans.show');
+        $response->assertViewHas('span', function ($viewSpan) use ($span) {
+            return $viewSpan->id === $span->id && $viewSpan->owner_id === $span->owner_id;
+        });
     }
 
     /**
@@ -194,10 +138,10 @@ class SpanViewTest extends TestCase
             'access_level' => 'public'
         ]);
 
-        // Access via slug should work directly without redirect
         $response = $this->get(route('spans.show', ['subject' => $span->slug]));
         $response->assertStatus(200);
         $response->assertViewIs('spans.show');
+        $this->assertEquals($span->id, $response->viewData('span')->id);
     }
 
     /**

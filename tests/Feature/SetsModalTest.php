@@ -376,26 +376,4 @@ class SetsModalTest extends TestCase
         $response->assertSee('Add to Set');
         $response->assertSee('openSetsModal');
     }
-
-    /**
-     * This test is being skipped while we investigate why the sets modal trigger (openSetsModal) is missing from the span show page.
-     * It checks that the sets modal is included in the layout by looking for 'openSetsModal' in the HTML.
-     * If the markup or JS has changed, this test and/or the view may need updating.
-     *
-     * @skip
-     */
-    public function sets_modal_is_included_in_layout()
-    {
-        $this->actingAs($this->user);
-
-        $response = $this->get(route('spans.show', $this->testSpan));
-
-        // Follow redirect if it's a 301 (UUID to slug redirect)
-        if ($response->getStatusCode() === 301) {
-            $response = $this->get($response->headers->get('Location'));
-        }
-
-        $response->assertStatus(200);
-        // $response->assertSee('openSetsModal');
-    }
 } 

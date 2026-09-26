@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\Span;
-use App\Services\PlaceGeocodingWorkflowService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -139,12 +138,6 @@ class PlaceRegeocodeTest extends TestCase
             '*' => Http::response(['error' => 'Unable to geocode'], 200),
         ]);
 
-        $this->mock(PlaceGeocodingWorkflowService::class, function ($mock) {
-            $mock->shouldReceive('resolveWithMatch')
-                ->once()
-                ->andReturn(true);
-        });
-
         $response = $this->actingAs($admin)
             ->postJson(route('admin.places.update-from-nominatim', $place), [
                 'lat' => 51.5074,
@@ -161,6 +154,12 @@ class PlaceRegeocodeTest extends TestCase
             'message' => 'Place updated from selected result.',
         ]);
         $this->assertSame(route('places.show', $place->id), $response->json('redirect_url'));
+
+        $place->refresh();
+        $this->assertEquals(51.5074, $place->metadata['coordinates']['latitude']);
+        $this->assertEquals(-0.1278, $place->metadata['coordinates']['longitude']);
+        $this->assertSame(67890, $place->metadata['osm_data']['osm_id']);
+        $this->assertSame('relation', $place->metadata['osm_data']['osm_type']);
     }
 
     public function test_non_admin_cannot_update_place_from_nominatim(): void

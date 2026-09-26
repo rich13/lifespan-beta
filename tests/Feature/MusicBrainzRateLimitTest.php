@@ -16,9 +16,9 @@ class MusicBrainzRateLimitTest extends TestCase
         Cache::flush(); // Clear cache before each test
     }
 
-    public function test_rate_limiting_ensures_one_request_per_second()
+    public function test_each_search_writes_the_rate_limit_cache_key(): void
     {
-        // Mock the HTTP client to return successful responses
+        // The one-second delay is skipped when APP_ENV=testing, so this checks the cache write only.
         Http::fake([
             'https://musicbrainz.org/ws/2/artist*' => Http::response([
                 'artists' => [
@@ -33,15 +33,17 @@ class MusicBrainzRateLimitTest extends TestCase
         ]);
 
         $service = new MusicBrainzImportService();
-        
-        // Make two requests
+
         $service->searchArtist('Artist 1');
+        $firstTimestamp = Cache::get('musicbrainz_rate_limit');
+        $this->assertIsFloat($firstTimestamp);
+
         $service->searchArtist('Artist 2');
-        
+
         Http::assertSentCount(2);
-        
-        // Check that rate limiting cache was set after first request
-        $this->assertTrue(Cache::has('musicbrainz_rate_limit'));
+        $secondTimestamp = Cache::get('musicbrainz_rate_limit');
+        $this->assertIsFloat($secondTimestamp);
+        $this->assertGreaterThanOrEqual($firstTimestamp, $secondTimestamp);
     }
 
     public function test_rate_limit_retry_on_503_error()
@@ -118,14 +120,14 @@ class MusicBrainzRateLimitTest extends TestCase
         ]);
 
         $service = new MusicBrainzImportService();
-        
-        // This should throw an exception without retry
-        $this->expectException(\Exception::class);
-        $this->expectExceptionMessage('Failed to search MusicBrainz');
-        
-        $service->searchArtist('Test Artist');
-        
-        // Verify that only one request was made (no retry)
-        Http::assertSentCount(1);
+
+        try {
+            $service->searchArtist('Test Artist');
+            $this->fail('MusicBrainz search should throw when the API returns a non-rate-limit error.');
+        } catch (\Exception $e) {
+            $this->assertSame('Failed to search MusicBrainz', $e->getMessage());
+        } finally {
+            Http::assertSentCount(1);
+        }
     }
 } 

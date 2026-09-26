@@ -22,6 +22,8 @@ class GuestSpanAccessTest extends TestCase
         $response = $this->get(route('spans.show', $span));
 
         $response->assertOk();
+        $response->assertViewIs('spans.show');
+        $response->assertSee('Public Person');
     }
 
     public function test_guest_cannot_view_private_span(): void
@@ -66,6 +68,10 @@ class GuestSpanAccessTest extends TestCase
         $response = $this->get(route('photos.show', $photo));
 
         $response->assertOk();
+        $response->assertViewIs('photos.show');
+        $response->assertViewHas('photo', function ($viewPhoto) use ($photo) {
+            return $viewPhoto->id === $photo->id && $viewPhoto->name === 'Public Photo';
+        });
     }
 
     public function test_guest_cannot_view_private_photo(): void

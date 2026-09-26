@@ -116,21 +116,24 @@ class PublicSpanPageCacheTest extends TestCase
             'connection_span_id' => $connectionSpan->id,
         ]);
 
-        // Prime cache for both as guest
-        $this->get(route('spans.show', ['subject' => $spanA->slug]))->assertStatus(200);
-        $this->get(route('spans.show', ['subject' => $spanB->slug]))->assertStatus(200);
+        $this->get(route('spans.show', ['subject' => $spanA->slug]))
+            ->assertHeader('X-Public-Span-Cache', 'MISS');
+        $this->get(route('spans.show', ['subject' => $spanA->slug]))
+            ->assertHeader('X-Public-Span-Cache', 'HIT');
+        $this->get(route('spans.show', ['subject' => $spanB->slug]))
+            ->assertHeader('X-Public-Span-Cache', 'MISS');
+        $this->get(route('spans.show', ['subject' => $spanB->slug]))
+            ->assertHeader('X-Public-Span-Cache', 'HIT');
 
-        // Update A; observer invalidates A and B and dispatches rewarm job
         $spanA->update(['name' => 'Person A Updated']);
 
-        // Both pages should show fresh content (observer invalidated + job rewarmed)
         $responseA = $this->get(route('spans.show', ['subject' => $spanA->slug]));
-        $responseA->assertStatus(200);
+        $responseA->assertHeader('X-Public-Span-Cache', 'MISS');
         $responseA->assertSee('Person A Updated');
 
         $responseB = $this->get(route('spans.show', ['subject' => $spanB->slug]));
-        $responseB->assertStatus(200);
-        $responseB->assertSee('Person B');
+        $responseB->assertHeader('X-Public-Span-Cache', 'MISS');
+        $responseB->assertSee('Person A Updated');
     }
 
     public function test_connection_create_invalidates_subject_and_object(): void
@@ -159,11 +162,15 @@ class PublicSpanPageCacheTest extends TestCase
             'end_year' => 2010,
         ]);
 
-        // Prime cache for both
-        $this->get(route('spans.show', ['subject' => $subject->slug]))->assertStatus(200);
-        $this->get(route('spans.show', ['subject' => $object->slug]))->assertStatus(200);
+        $this->get(route('spans.show', ['subject' => $subject->slug]))
+            ->assertHeader('X-Public-Span-Cache', 'MISS');
+        $this->get(route('spans.show', ['subject' => $subject->slug]))
+            ->assertHeader('X-Public-Span-Cache', 'HIT');
+        $this->get(route('spans.show', ['subject' => $object->slug]))
+            ->assertHeader('X-Public-Span-Cache', 'MISS');
+        $this->get(route('spans.show', ['subject' => $object->slug]))
+            ->assertHeader('X-Public-Span-Cache', 'HIT');
 
-        // Create connection; observer invalidates both and dispatches rewarm
         Connection::create([
             'parent_id' => $subject->id,
             'child_id' => $object->id,
@@ -171,12 +178,13 @@ class PublicSpanPageCacheTest extends TestCase
             'connection_span_id' => $connectionSpan->id,
         ]);
 
-        // Subject page should show fresh content (connections list may include the new connection)
         $responseSubject = $this->get(route('spans.show', ['subject' => $subject->slug]));
-        $responseSubject->assertStatus(200);
+        $responseSubject->assertHeader('X-Public-Span-Cache', 'MISS');
+        $responseSubject->assertSee('Object Organisation');
 
         $responseObject = $this->get(route('spans.show', ['subject' => $object->slug]));
-        $responseObject->assertStatus(200);
+        $responseObject->assertHeader('X-Public-Span-Cache', 'MISS');
+        $responseObject->assertSee('Subject Person');
     }
 
     public function test_connection_delete_invalidates_subject_and_object(): void
@@ -212,16 +220,24 @@ class PublicSpanPageCacheTest extends TestCase
             'connection_span_id' => $connectionSpan->id,
         ]);
 
-        // Prime cache
-        $this->get(route('spans.show', ['subject' => $subject->slug]))->assertStatus(200);
-        $this->get(route('spans.show', ['subject' => $object->slug]))->assertStatus(200);
+        $this->get(route('spans.show', ['subject' => $subject->slug]))
+            ->assertHeader('X-Public-Span-Cache', 'MISS');
+        $this->get(route('spans.show', ['subject' => $subject->slug]))
+            ->assertHeader('X-Public-Span-Cache', 'HIT');
+        $this->get(route('spans.show', ['subject' => $object->slug]))
+            ->assertHeader('X-Public-Span-Cache', 'MISS');
+        $this->get(route('spans.show', ['subject' => $object->slug]))
+            ->assertHeader('X-Public-Span-Cache', 'HIT');
 
-        // Delete connection; observer invalidates both and dispatches rewarm
         $connection->delete();
 
-        // Both pages should still load with fresh content (cache was invalidated and rewarmed)
-        $this->get(route('spans.show', ['subject' => $subject->slug]))->assertStatus(200);
-        $this->get(route('spans.show', ['subject' => $object->slug]))->assertStatus(200);
+        $responseSubject = $this->get(route('spans.show', ['subject' => $subject->slug]));
+        $responseSubject->assertHeader('X-Public-Span-Cache', 'MISS');
+        $responseSubject->assertDontSee('Object Organisation');
+
+        $responseObject = $this->get(route('spans.show', ['subject' => $object->slug]));
+        $responseObject->assertHeader('X-Public-Span-Cache', 'MISS');
+        $responseObject->assertDontSee('Subject Person');
     }
 }
 
