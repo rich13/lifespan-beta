@@ -11,6 +11,12 @@ class AnniversaryHelper
     private static ?array $familyMemberIdsBySpanId = null;
 
     /**
+     * Oldest verified human lifespan is 122 years. A person with no end date
+     * who would be older than this is treated as missing a death date.
+     */
+    public const MAX_PLAUSIBLE_LIVING_AGE = 122;
+
+    /**
      * Calculate significance score for an anniversary
      * Higher scores indicate more significant milestones
      * Milestones: 1st, then 5th, 10th, 20th, 30th, 40th, 50th, etc.
@@ -112,6 +118,7 @@ class AnniversaryHelper
                 ->whereNotNull('start_month')
                 ->whereNotNull('start_day')
                 ->where('start_year', '<=', $targetDate->year)
+                ->where('start_year', '>=', $targetDate->year - self::MAX_PLAUSIBLE_LIVING_AGE)
                 ->whereNull('end_year'); // Only living people
             
             if ($requirePhoto) {
@@ -159,6 +166,10 @@ class AnniversaryHelper
                     }
                     
                     $ageAtNextBirthday = $nextBirthday->year - $span->start_year;
+                    if ($ageAtNextBirthday > self::MAX_PLAUSIBLE_LIVING_AGE) {
+                        continue;
+                    }
+
                     $daysUntilBirthday = $targetDate->diffInDays($nextBirthday);
                     
                     if ($daysUntilBirthday <= $daysAhead && $daysUntilBirthday >= 0) {
